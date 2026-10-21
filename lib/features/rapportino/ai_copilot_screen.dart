@@ -193,6 +193,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
   @override
   void dispose() {
+    _releaseMicrophone();
     _cancelThinkingTimers();
     _interruptSub?.cancel();
     _inputCtrl.dispose();
@@ -804,6 +805,21 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   bool get _needsLeaveConfirm =>
       !_forceLeave && (_recording || _failed != null || _messages.any((m) => !m.accepted));
 
+  /// Leaving (or being torn down) while recording must always release the microphone. Ticket-bound:
+  /// stop and keep the file (offered again on the next entry). Ticketless: it could never be
+  /// offered again, so cancel and delete it.
+  void _releaseMicrophone() {
+    if (!_recording) return;
+    _recording = false;
+    final voice = _voiceCtl;
+    if (voice == null) return;
+    if (widget.ticketId != null) {
+      unawaited(voice.stop().then((_) {}, onError: (_) {}));
+    } else {
+      unawaited(voice.cancel());
+    }
+  }
+
   void _releaseContextFree() {
     final id = _sessionId;
     if (widget.ticketId == null && id != null) {
@@ -840,10 +856,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     );
     if (ok != true || !mounted) return;
     _forceLeave = true;
-    if (_recording && widget.ticketId != null) {
-      // Saves the recording to the pending store (offered again on the next entry).
-      unawaited(_voiceCtl?.stop().then((_) {}, onError: (_) {}));
-    }
+    _releaseMicrophone();
     Navigator.of(context).pop();
   }
 

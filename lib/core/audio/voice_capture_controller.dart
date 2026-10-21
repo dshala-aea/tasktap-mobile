@@ -49,7 +49,9 @@ class VoiceCaptureController {
   Future<PendingRecording>? _finishing;
 
   Future<RecordingStartResult> start({String? ticketId}) async {
-    if (_recording) return RecordingStartResult.started;
+    // A recording still running here belongs to a screen that is gone (a screen only calls start
+    // when it is not recording itself): never adopt it, it carries the old ticket id.
+    if (_recording) await cancel();
     if (currentUserId() == null) return RecordingStartResult.notSignedIn;
     if (!await consentAccepted()) return RecordingStartResult.consentRequired;
     switch (await permissions.request()) {
@@ -72,6 +74,25 @@ class VoiceCaptureController {
       onDone: _finishAndNotify,
     );
     return RecordingStartResult.started;
+  }
+
+  /// Abandons the recording in progress: stops the recorder, closes its subscription, resets the
+  /// recording state and deletes the file it produced. Nothing is saved and nothing is emitted on
+  /// [completed]. A no-op when not recording.
+  Future<void> cancel() async {
+    if (!_recording) return;
+    _recording = false;
+    final sub = _sub;
+    _sub = null;
+    _finishing = null;
+    // Not awaited: nothing depends on the cancel completing.
+    unawaited(sub?.cancel());
+    try {
+      final file = await recorder.stop();
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // The recorder may already have ended (interruption); there is nothing to release.
+    }
   }
 
   /// Stops and persists the recording (file + idempotency key) so it survives a failed upload.

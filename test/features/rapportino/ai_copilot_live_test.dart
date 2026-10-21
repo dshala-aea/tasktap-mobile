@@ -199,6 +199,7 @@ class _FakeVoice extends VoiceCaptureController {
   RecordingStartResult startResult = RecordingStartResult.started;
   bool _rec = false;
   int stopCalls = 0;
+  int cancelCalls = 0;
   int _n = 0;
 
   @override
@@ -208,6 +209,12 @@ class _FakeVoice extends VoiceCaptureController {
   Future<RecordingStartResult> start({String? ticketId}) async {
     if (startResult == RecordingStartResult.started) _rec = true;
     return startResult;
+  }
+
+  @override
+  Future<void> cancel() async {
+    cancelCalls++;
+    _rec = false;
   }
 
   @override
@@ -1181,6 +1188,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('home-screen'), findsOneWidget);
+      expect(voice.cancelCalls, 1, reason: 'the microphone is released and nothing is saved');
       expect(voice.stopCalls, 0, reason: 'a recording that can never be offered again is not saved');
       expect(ai.abandoned, ['sess-new']);
       await _unmount(tester);
@@ -1199,6 +1207,7 @@ void main() {
       await tester.tap(find.text('Esci comunque'));
       await tester.pumpAndSettle();
       expect(voice.stopCalls, 1);
+      expect(voice.cancelCalls, 0);
       await _unmount(tester);
     });
 
@@ -1218,6 +1227,44 @@ void main() {
       expect(find.textContaining('non inviate'), findsNothing);
       expect(find.textContaining('Non ho sentito nulla'), findsOneWidget);
       await _unmount(tester);
+    });
+
+    testWidgets('Dispose_while_recording_releases_the_microphone_ticketless', (tester) async {
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(_FakeAi(), voice, ticketId: null));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+
+      await _unmount(tester);
+      expect(voice.cancelCalls, 1);
+      expect(voice.isRecording, isFalse);
+    });
+
+    testWidgets('Dispose_while_recording_keeps_a_ticket_bound_recording', (tester) async {
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(_FakeAi(), voice));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+
+      await _unmount(tester);
+      expect(voice.stopCalls, 1);
+      expect(voice.cancelCalls, 0);
+    });
+
+    testWidgets('after leaving, no double release on dispose', (tester) async {
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(_FakeAi(), voice, ticketId: null, pushed: true));
+      await _openPushed(tester);
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Esci'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Esci comunque'));
+      await tester.pumpAndSettle();
+      await _unmount(tester);
+      expect(voice.cancelCalls, 1);
     });
   });
 }

@@ -203,6 +203,44 @@ void main() {
     expect(recorder.stops, 1);
   });
 
+  test('Cancel_stops_the_recorder_and_leaves_no_pending_file', () async {
+    final c = controller();
+    await c.start(ticketId: null);
+    var completedEvents = 0;
+    final sub = c.completed.listen((_) => completedEvents++);
+
+    await c.cancel();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(recorder.stops, 1);
+    expect(recorder.started, isFalse);
+    expect(c.isRecording, isFalse);
+    expect(File('${tmp.path}/rec_1.m4a').existsSync(), isFalse, reason: 'the produced file is deleted');
+    expect(await store.list(userId: 'userA'), isEmpty);
+    expect(completedEvents, 0);
+    // The 9:30 limit of the cancelled recording must not fire later.
+    recorder.tick(maxRecordingLength);
+    await Future<void>.delayed(Duration.zero);
+    expect(recorder.stops, 1);
+    await sub.cancel();
+  });
+
+  test('Cancel_when_idle_does_nothing', () async {
+    final c = controller();
+    await c.cancel();
+    expect(recorder.stops, 0);
+  });
+
+  test('Start_over_a_stale_recording_cancels_it_first', () async {
+    final c = controller();
+    expect(await c.start(ticketId: 'T1'), RecordingStartResult.started);
+    expect(await c.start(ticketId: 'T2'), RecordingStartResult.started);
+    expect(recorder.stops, 1, reason: 'the stale recording was stopped, not adopted');
+    final pending = await c.stop();
+    expect(pending.ticketId, 'T2');
+    expect(await store.list(userId: 'userA'), hasLength(1));
+  });
+
   test('Pending_recording_survives_a_store_reload', () async {
     final c = controller();
     await c.start(ticketId: 'T9');
