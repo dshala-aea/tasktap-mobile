@@ -886,14 +886,23 @@ void main() {
         'signed': const DraftReportsCompanion(customerSignatureAllegatoId: Value('sig-1')),
       };
       for (final entry in locks.entries) {
-        test('apply_refuses_and_unlinks_on_${entry.key}', () async {
+        test('apply_refuses_and_keeps_the_used_link_on_${entry.key}', () async {
           await (h.db.update(h.db.draftReports)..where((r) => r.id.equals(_report))).write(entry.value);
           await expectLater(
             h.feed.apply(_session, _draft(materials: [_material(_mat, 2)])),
             throwsA(isA<AiFeedReportLockedException>()),
           );
           expect(await h.materials(), isEmpty, reason: 'the signed/queued report is not rewritten');
-          expect(await h.store.sessionForReport(_report), isNull);
+          // A refusal must never erase the knowledge that this session was used for that report.
+          expect(await h.store.sessionForReport(_report), _session);
+          expect((await h.store.load(_session))?.reportId, _report);
+          // The sign-then-leave route: the next apply (the card's leave-sync) refuses again.
+          await expectLater(
+            h.feed.apply(_session, _draft(materials: [_material(_mat, 2)])),
+            throwsA(isA<AiFeedReportLockedException>()),
+          );
+          expect(await h.materials(), isEmpty);
+          expect(await h.store.sessionForReport(_report), _session);
         });
 
         test('applyConfirmResponse_refuses_on_${entry.key}', () async {

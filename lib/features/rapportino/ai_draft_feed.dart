@@ -483,15 +483,17 @@ class AiDraftFeed {
 
   /// The one guard every AI writer goes through: the linked report must still be the
   /// technician's editable draft. A signed, queued, failed-in-queue or sent report is never
-  /// touched (the queue reads its lines from Drift at send time): the session is unlinked and
-  /// [AiFeedReportLockedException] says why. The AI draft itself stays readable in the copilot.
+  /// touched (the queue reads its lines from Drift at send time): [AiFeedReportLockedException]
+  /// says why. The session stays LINKED to that report: the link is the only durable record that
+  /// this server session was already used, so every later entry (copilot resume, Compila,
+  /// Conferma, a leave-sync) re-detects it. It is dropped only by a confirmed release/abandon.
+  /// The AI draft itself stays readable in the copilot.
   Future<void> _guardWritable(AiDraftFeedState state, String reportId) async {
     final header = await (_db.select(
       _db.draftReports,
     )..where((t) => t.id.equals(reportId))).getSingleOrNull();
     final refusal = feedWriteRefusal(header);
     if (refusal == null) return;
-    await _store.unlink(state.sessionId);
     throw AiFeedReportLockedException(refusal);
   }
 
@@ -1107,7 +1109,7 @@ String? feedWriteRefusal(DraftReport? r) {
 }
 
 /// The linked report may no longer be written by the AI (see [feedWriteRefusal]); the session
-/// was unlinked from it.
+/// stays linked to it as the record that it was used.
 class AiFeedReportLockedException implements Exception {
   const AiFeedReportLockedException(this.message);
   final String message;

@@ -430,7 +430,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       }
       final refusal = feedWriteRefusal(existing);
       if (refusal != null) {
-        await ref.read(aiDraftFeedStoreProvider).unlink(sessionId);
+        // Stays linked: the link is the durable "this session was used" record.
         if (mounted) setState(() => _markDraftUsed(refusal));
         return;
       }
@@ -500,7 +500,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           reportId = null; // deleted from the phone: a fresh report is linked below
         } else if (feedWriteRefusal(existing) case final refusal?) {
           // Signed, queued or sent: this draft was used. Never re-seed it into a new report.
-          await store.unlink(sessionId);
           if (mounted) setState(() => _markDraftUsed(refusal));
           return;
         }

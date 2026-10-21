@@ -1817,6 +1817,46 @@ void main() {
       await _unmount(tester);
     });
 
+    testWidgets('re-entering after a refusal, without abandoning, still shows the used banner and '
+        'blocks Compila and Conferma', (tester) async {
+      final db = await dbWithLinkedReport(submission: 'submitted');
+      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('già stata usata per un rapportino inviato'), findsOneWidget);
+      await _unmount(tester); // back, WITHOUT 'Abbandona e ricomincia'
+
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('già stata usata per un rapportino inviato'), findsOneWidget);
+      expect(button(tester, 'Compila nel rapportino').onPressed, isNull);
+      expect(button(tester, 'Conferma e apri il rapportino').onPressed, isNull);
+      expect(await db.select(db.reportMateriali).get(), isEmpty);
+      expect(await db.select(db.reportStaffTable).get(), isEmpty);
+      expect(await db.select(db.draftReports).get(), hasLength(1), reason: 'no new report');
+      expect(await AiDraftFeedStore().sessionForReport(reportId), sess, reason: 'the used link stays');
+      await _unmount(tester);
+    });
+
+    testWidgets('Abbandona e ricomincia clears the used state: the fresh session is unlinked', (
+      tester,
+    ) async {
+      final db = await dbWithLinkedReport(submission: 'submitted');
+      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Abbandona e ricomincia'));
+      await tester.pumpAndSettle();
+
+      expect(await AiDraftFeedStore().sessionForReport(reportId), isNull);
+      expect(await AiDraftFeedStore().load(sess), isNull);
+      expect(await AiDraftFeedStore().load('sess-new'), isNull);
+      expect(find.textContaining('già stata usata'), findsNothing);
+      await _unmount(tester);
+    });
+
     testWidgets('Abbandona e ricomincia is disabled while recording', (tester) async {
       final db = await dbWithLinkedReport(submission: 'submitted');
       final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
