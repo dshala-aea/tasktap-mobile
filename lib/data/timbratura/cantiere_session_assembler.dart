@@ -67,7 +67,16 @@ class CantiereWorkInterval {
 /// - An open interval (no closing event yet) → endTime null (active).
 /// - A close event with no open interval, or an event missing its site context, is ignored
 ///   (defensive — shouldn't happen in normal flow).
-List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events) {
+///
+/// [businessDateOf] maps an instant to the business calendar date it belongs to (see
+/// timbra_session_assembler.dart's identical parameter). The upload queue is no longer day-scoped,
+/// so one call can carry several days: an 'ingresso' from a LATER day must not close a still-open
+/// interval it finds — that would invent up to a full day of worksite time — so it leaves it open
+/// instead. An 'uscita' from a later day still closes it: a genuine overnight visit.
+List<CantiereWorkInterval> assembleCantiereIntervals(
+  List<CantierePunche> events, {
+  DateTime Function(DateTime instant)? businessDateOf,
+}) {
   final intervals = <CantiereWorkInterval>[];
 
   String? openClientId;
@@ -79,7 +88,8 @@ List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events
   double? openLatitude;
   double? openLongitude;
 
-  void closeOpen(DateTime endTime) {
+  /// [endTime] is null when the interval must stay open (see [businessDateOf] above).
+  void closeOpen(DateTime? endTime) {
     // Captured-and-mutated variables are never promoted by flow analysis, even after a null
     // check — so the check has to run against local, single-assignment copies instead.
     final clientId = openClientId;
@@ -117,8 +127,14 @@ List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events
 
     switch (e.eventType) {
       case 'ingresso':
-        // Close any accidentally-open interval (defensive: shouldn't happen in normal flow).
-        closeOpen(t);
+        // Close any accidentally-open interval (defensive: shouldn't happen in normal flow) —
+        // unless it opened on an earlier business day, in which case it stays open (see above).
+        final openStartNow = openStart;
+        final crossesDay =
+            openStartNow != null &&
+            businessDateOf != null &&
+            businessDateOf(openStartNow) != businessDateOf(t);
+        closeOpen(crossesDay ? null : t);
         openClientId = e.id;
         openCantiereId = e.cantiereId;
         openCustomerId = e.customerId;

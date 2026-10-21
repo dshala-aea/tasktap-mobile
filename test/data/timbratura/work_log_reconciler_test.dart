@@ -66,6 +66,14 @@ class _FakeRepo implements IWorkSessionRepository {
   Future<List<WorkSession>> getTodaySessions() async => List.of(sessions);
 
   @override
+  Future<List<WorkSession>> getPendingSessions() async =>
+      sessions.where((s) => s.isPendingSync).toList();
+
+  @override
+  Future<int> getPendingCount() async =>
+      sessions.where((s) => s.isPendingSync && s.notes != reconciledOrphanMarker).length;
+
+  @override
   Future<void> markSynced(List<String> ids) async {}
 
   @override

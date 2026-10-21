@@ -53,6 +53,12 @@ class _Repo implements IWorkSessionRepository {
   @override
   Future<List<WorkSession>> getTodaySessions() async => List.of(sessions);
   @override
+  Future<List<WorkSession>> getPendingSessions() async =>
+      sessions.where((s) => s.isPendingSync).toList();
+  @override
+  Future<int> getPendingCount() async =>
+      sessions.where((s) => s.isPendingSync && s.notes != reconciledOrphanMarker).length;
+  @override
   Stream<List<WorkSession>> watchTodaySessions() => Stream.value(sessions);
   @override
   Future<void> markSynced(List<String> ids) async {

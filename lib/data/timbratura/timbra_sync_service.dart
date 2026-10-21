@@ -29,6 +29,8 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/timbra/timbra_providers.dart' show workSessionRepositoryProvider;
+import '../../core/time/business_time.dart';
+import '../../core/time/business_time_providers.dart';
 import '../api/dio_client.dart';
 import '../local/app_database.dart' show WorkSession;
 import '../worklogs/active_tracker_api_client.dart';
@@ -50,6 +52,7 @@ final Provider<TimbraSyncService> timbraSyncServiceProvider = Provider<TimbraSyn
     repo: repo,
     apiClient: apiClient,
     fetchActive: ActiveTrackerApiClient(dio).getActive,
+    businessTime: ref.watch(businessTimeProvider),
     // After a REST command lands, is retired or a batch is refused, re-read the server so
     // local == server. sync:false: we are the sync, do not loop back into it.
     onRemoteCommandsApplied: () =>
@@ -68,12 +71,14 @@ class TimbraSyncService {
     void Function()? onRemoteCommandsApplied,
     void Function(String message)? onNotice,
     DateTime Function()? clock,
+    BusinessTime? businessTime,
   }) : _repo = repo,
        _apiClient = apiClient,
        _fetchActive = fetchActive,
        _onRemoteCommandsApplied = onRemoteCommandsApplied,
        _onNotice = onNotice,
-       _clock = clock ?? DateTime.now;
+       _clock = clock ?? DateTime.now,
+       _businessTime = businessTime ?? BusinessTime.fallback(clock: clock);
 
   final IWorkSessionRepository _repo;
   final WorklogApiClient _apiClient;
@@ -81,6 +86,10 @@ class TimbraSyncService {
   final void Function()? _onRemoteCommandsApplied;
   final void Function(String message)? _onNotice;
   final DateTime Function() _clock;
+
+  /// The tenant's business calendar: decides which events belong to the same day when a batch
+  /// carries a backlog from more than one (see [_byBusinessDay]).
+  final BusinessTime _businessTime;
 
   bool _running = false;
   bool _rerun = false;
@@ -101,13 +110,18 @@ class TimbraSyncService {
   DateTime? _batchRetryAt;
   final Set<String> _noticeKinds = {};
 
-  /// Sync all of today's work intervals to the server.
+  /// Syncs every work interval this device still owes the server.
   ///
+  /// - The queue is NOT day-scoped: today's events plus EVERY pending event from any earlier day
+  ///   (see [_openUploadQueue]). A punch recorded offline before midnight is sent the next time
+  ///   the app has a connection — before this, it was never sent and never even counted as
+  ///   pending.
   /// - Taps on a shift that started on ANOTHER device are executed first, as REST commands (see
   ///   [_runRemoteCommands]).
   /// - The remaining, locally-originated events are assembled into intervals and POSTed
-  ///   (idempotent — safe to resend everything every time).
-  /// - On success marks every event that contributed as isPendingSync = false.
+  ///   (idempotent — safe to resend everything every time). One POST per business day, so a
+  ///   multi-day backlog arrives as the days it actually happened on.
+  /// - On success marks every event of that day as isPendingSync = false.
   /// - A transient failure is swallowed: offline use is unaffected and the events stay pending.
   ///   A PERMANENT batch refusal (4xx, e.g. 409 active_session_exists because another device
   ///   already has an open row) retires the dead events instead of retrying forever, because
@@ -137,9 +151,51 @@ class TimbraSyncService {
     }
   }
 
+  /// Everything this device has to show the server about, in chronological order: today's visible
+  /// events (the display day, which the interval state and the remote-shift analysis need in full)
+  /// plus every still-pending event from ANY day (the upload backlog). Deduplicated by id —
+  /// today's pending rows appear in both reads.
+  Future<List<WorkSession>> _openUploadQueue() async {
+    final byId = <String, WorkSession>{};
+    for (final s in await _repo.getTodaySessions()) {
+      byId[s.id] = s;
+    }
+    for (final s in await _repo.getPendingSessions()) {
+      byId[s.id] = s;
+    }
+    return byId.values.toList()..sort((a, b) => a.eventTime.compareTo(b.eventTime));
+  }
+
+  /// [sessions] (chronological) grouped by the business day the interval they belong to STARTED
+  /// on, days in ascending order. The events themselves keep their order inside each group.
+  ///
+  /// A closing event belongs to the day of the interval it closes, not to the day it happened on:
+  /// a night shift 22:00 → 06:00 is ONE interval, sent closed in the day it began. Grouping by each
+  /// event's own day would split it, leaving the 'fine' alone in the next day's group where the
+  /// assembler (correctly) ignores a close with no opener — pending forever, never sent, and
+  /// freezing the reconciler's unsynced guard.
+  List<List<WorkSession>> _byBusinessDay(List<WorkSession> sessions) {
+    final days = <DateTime, List<WorkSession>>{};
+    DateTime? openStart;
+    for (final s in sessions) {
+      final DateTime day;
+      if (s.eventType == 'ingresso' || s.eventType == 'ripresa') {
+        day = _businessTime.businessDateOf(s.eventTime);
+        openStart = s.eventTime;
+      } else if (s.eventType == 'fine' || s.eventType == 'pausa') {
+        day = _businessTime.businessDateOf(openStart ?? s.eventTime);
+        openStart = null;
+      } else {
+        day = _businessTime.businessDateOf(s.eventTime);
+      }
+      (days[day] ??= <WorkSession>[]).add(s);
+    }
+    return days.values.toList();
+  }
+
   Future<void> _syncOnce() async {
     try {
-      final allSessions = await _repo.getTodaySessions();
+      final allSessions = await _openUploadQueue();
       // Nothing of ours is waiting (our own marked corrections are pending by construction but are
       // never sent): every trigger — poll, resume, push — calls this, so do not re-POST a day of
       // already-synced events for nothing.
@@ -154,46 +210,59 @@ class TimbraSyncService {
           .where((s) => s.notes != reconciledOrphanMarker && !remote.ids.contains(s.id))
           .toList();
       if (sessions.isEmpty) return;
-      if (_batchHeld()) return;
 
-      final intervals = assembleIntervals(sessions);
-      if (intervals.isEmpty) return;
-
-      final dtos = intervals
-          .map(
-            (i) => MobileSessionDto(
-              clientId: i.clientId,
-              startTime: i.startTime,
-              endTime: i.endTime,
-              // Captured at punch time when available (PunchNotifier) — see WorkInterval's own
-              // doc comment for why only the opener's position is carried. Still null whenever no
-              // position was captured (GPS off, permission never granted, or a pre-existing
-              // event from before this capture existed); simple timbra keeps working either way.
-              latitude: i.latitude,
-              longitude: i.longitude,
-              gpsAccuracyMeters: i.gpsAccuracyMeters,
-            ),
-          )
-          .toList();
-
-      try {
-        await _apiClient.upsertSessions(dtos);
-        _batchFailures = 0;
-        _batchRetryAt = null;
-      } catch (e) {
-        if (!_isTransient(e) && e is DioException && e.response != null) {
-          await _handleRefusedBatch(sessions, e);
-        }
-        return; // transient: keeps isPendingSync = true for the next attempt.
+      for (final day in _byBusinessDay(sessions)) {
+        if (_batchHeld()) return;
+        if (!await _pushDay(day)) return;
       }
-
-      // Mark every local event as synced (by event id, which is the clientId
-      // of the interval it opened; non-opener events share the interval).
-      final syncedIds = sessions.map((s) => s.id).toList();
-      await _repo.markSynced(syncedIds);
     } catch (_) {
       // Swallow: keeps isPendingSync = true for the next attempt.
     }
+  }
+
+  /// Assembles and POSTs one business day's events. Returns false when the run must stop (a
+  /// failure of either kind): the refusal hold and the backoff are per-run, and a day that could
+  /// not be sent says nothing good about the next one, so later days wait for the next trigger.
+  Future<bool> _pushDay(List<WorkSession> day) async {
+    // Days already fully synced are common (today's events are always in the read) — do not
+    // re-POST them.
+    if (!day.any((s) => s.isPendingSync)) return true;
+
+    final intervals = assembleIntervals(day, businessDateOf: _businessTime.businessDateOf);
+    if (intervals.isEmpty) return true;
+
+    final dtos = intervals
+        .map(
+          (i) => MobileSessionDto(
+            clientId: i.clientId,
+            startTime: i.startTime,
+            endTime: i.endTime,
+            // Captured at punch time when available (PunchNotifier) — see WorkInterval's own
+            // doc comment for why only the opener's position is carried. Still null whenever no
+            // position was captured (GPS off, permission never granted, or a pre-existing
+            // event from before this capture existed); simple timbra keeps working either way.
+            latitude: i.latitude,
+            longitude: i.longitude,
+            gpsAccuracyMeters: i.gpsAccuracyMeters,
+          ),
+        )
+        .toList();
+
+    try {
+      await _apiClient.upsertSessions(dtos);
+      _batchFailures = 0;
+      _batchRetryAt = null;
+    } catch (e) {
+      if (!_isTransient(e) && e is DioException && e.response != null) {
+        await _handleRefusedBatch(day, e);
+      }
+      return false; // transient: keeps isPendingSync = true for the next attempt.
+    }
+
+    // Mark every local event of this day as synced (by event id, which is the clientId
+    // of the interval it opened; non-opener events share the interval).
+    await _repo.markSynced(day.map((s) => s.id).toList());
+    return true;
   }
 
   bool _batchHeld() {
