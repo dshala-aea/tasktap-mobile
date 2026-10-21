@@ -362,24 +362,26 @@ class CantiereActiveSession {
   final bool pendingSync;
 }
 
-/// The most recent local 'ingresso' with no closing 'uscita' after it, or null.
-CantiereActiveSession? deriveLocalActiveCantiereSession(List<CantierePunche> events) {
-  CantierePunche? opener;
-  for (final e in events) {
-    switch (e.eventType) {
-      case 'ingresso':
-        opener = e;
-      case 'uscita':
-        opener = null;
-    }
-  }
-  if (opener == null || opener.cantiereId == null) return null;
+/// The most recent local punch of the whole log, on any business day — the row that decides
+/// whether a site visit is still open.
+///
+/// Deliberately not `todayCantiereEventsProvider`: pairing is sequential, so the open interval is
+/// whatever follows the last 'ingresso', and a session started yesterday evening and not yet
+/// closed is still open this morning. A day window would answer "not on site" and offer "Ingresso"
+/// again, whose second opener orphans the first interval.
+final cantiereLatestPunchProvider = StreamProvider.autoDispose<CantierePunche?>((ref) {
+  return ref.watch(cantiereSessionRepositoryProvider).watchLatestPunch();
+});
+
+/// The open site visit implied by the latest punch, or null when it is not an 'ingresso'.
+CantiereActiveSession? activeCantiereSessionFromLatestPunch(CantierePunche? latest) {
+  if (latest == null || latest.eventType != 'ingresso' || latest.cantiereId == null) return null;
   return CantiereActiveSession(
-    cantiereId: opener.cantiereId!,
-    customerId: opener.customerId,
-    ticketId: opener.ticketId,
-    startTime: opener.eventTime,
-    pendingSync: opener.isPendingSync,
+    cantiereId: latest.cantiereId!,
+    customerId: latest.customerId,
+    ticketId: latest.ticketId,
+    startTime: latest.eventTime,
+    pendingSync: latest.isPendingSync,
   );
 }
 
@@ -390,8 +392,9 @@ CantiereActiveSession? deriveLocalActiveCantiereSession(List<CantierePunche> eve
 /// last-known server answer, which covers a session started from another device or surface (e.g.
 /// the office) with nothing queued locally.
 final cantiereActiveSessionProvider = Provider.autoDispose<CantiereActiveSession?>((ref) {
-  final localEvents = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
-  final local = deriveLocalActiveCantiereSession(localEvents);
+  final local = activeCantiereSessionFromLatestPunch(
+    ref.watch(cantiereLatestPunchProvider).valueOrNull,
+  );
   if (local != null) return local;
 
   final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;

@@ -160,10 +160,10 @@ final localTicketTimersProvider = StreamProvider.autoDispose<List<ActiveTracker>
 /// session that is still, factually, open. The whole local log is read instead; it is one
 /// person's punches on one device, so it stays small.
 ///
-/// Pairing is the rule `deriveLocalActiveCantiereSession` applies: in chronological order an
-/// 'ingresso' opens the interval and an 'uscita' closes it. Only a remaining open interval is
-/// drawn, and only one — site punches are sequential by construction (the Timbra screen refuses a
-/// second check-in while one is open).
+/// Pairing is the same sequential rule the Timbra screen applies
+/// (`activeCantiereSessionFromLatestPunch`): an 'ingresso' opens the interval and an 'uscita'
+/// closes it. Only a remaining open interval is drawn, and only one — site punches are sequential
+/// by construction (the Timbra screen refuses a second check-in while one is open).
 final localCantiereTimersProvider = StreamProvider.autoDispose<List<ActiveTracker>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final query = db.select(db.cantierePunches).join([

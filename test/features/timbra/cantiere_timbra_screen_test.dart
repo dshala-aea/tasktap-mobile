@@ -25,6 +25,7 @@ import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/timbratura/cantiere_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_providers.dart';
@@ -1992,6 +1993,40 @@ void main() {
         container.read(cantiereActiveSessionProvider)?.startTime,
         DateTime.utc(2026, 7, 10, 6),
       );
+    });
+
+    test('a check-in left open overnight is still the active session', () async {
+      // Recorded yesterday evening, never closed. The screen must not offer "Ingresso" again: a
+      // second opener would orphan this interval, and the technician could not close it at all.
+      final start = DateTime.now().toUtc().subtract(const Duration(hours: 14));
+      await CantiereSessionRepository(db).addEvent(
+        id: 'overnight-in',
+        eventTime: start,
+        eventType: 'ingresso',
+        cantiereId: 'cant-9',
+        customerId: 'cust-9',
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          activeCantiereLogProvider.overrideWith(() => _FakeActiveNotifier(null)),
+          // Nothing local is "today", which is exactly the case a day-scoped derivation got wrong.
+          todayCantiereEventsProvider.overrideWith(
+            (ref) => Stream.value(const <CantierePunche>[]),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(cantiereActiveSessionProvider, (_, _) {});
+      container.listen(activeCantiereLogProvider, (_, _) {});
+      await container.read(activeCantiereLogProvider.future);
+      await container.read(cantiereLatestPunchProvider.future);
+
+      final session = container.read(cantiereActiveSessionProvider);
+      expect(session?.cantiereId, 'cant-9');
+      expect(session?.pendingSync, isTrue);
+      expect(session?.startTime.toUtc(), start);
     });
   });
 }
