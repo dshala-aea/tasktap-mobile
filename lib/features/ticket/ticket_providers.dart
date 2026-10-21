@@ -245,8 +245,10 @@ final ticketControlsProvider = FutureProvider.autoDispose
       final repository = ref.watch(checklistReadRepositoryProvider);
 
       Future<List<TicketControlGroupDto>> fromMirror() async {
-        final controls = await repository.watchTicketControlRows(ticketId).first;
-        final groups = await repository.watchControlGroups().first;
+        // One-shot reads: this provider answers once per build, so there is nothing for a query
+        // stream subscription to deliver a second time. See the repository's own note.
+        final controls = await repository.getTicketControlRows(ticketId);
+        final groups = await repository.getControlGroups();
         return ticketControlGroupsFromMirror(controls: controls, groups: groups);
       }
 

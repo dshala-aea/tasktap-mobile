@@ -107,7 +107,11 @@ TicketControlDto _toDto(TicketControlRow row) => TicketControlDto(
   status: row.status,
   stringValue: row.stringValue,
   boolValue: row.boolValue,
-  dateValue: row.dateValue,
+  // UTC, like the wire: Drift hands a `dateTime()` column back as a local-kind DateTime with the
+  // same instant, and the wire's own value is UTC. Normalising here keeps the DTO identical to
+  // what `fetchControls` returns for the same row, so a value compared against the live answer
+  // (or submitted back) is the same object, not merely the same wall clock.
+  dateValue: row.dateValue?.toUtc(),
   numberValue: row.numberValue,
   controlLineageId: row.controlLineageId,
   note: row.note,

@@ -28,6 +28,17 @@ class ChecklistReadRepository {
   /// callers narrow it themselves (see `ticketControlGroupsFromMirror`).
   Stream<List<ControlGroupRow>> watchControlGroups() => _db.select(_db.controlGroups).watch();
 
+  /// One-shot reads of the same two tables, for a caller whose answer is a single [Future] rather
+  /// than a live view (`ticketControlsProvider`, which cannot re-emit once the tab is built).
+  ///
+  /// Deliberately not `watchTicketControlRows(...).first`: a query stream emits on its own
+  /// schedule, so a future that awaits only the first event inherits that schedule for no benefit,
+  /// and the subscription is cancelled the moment its first event lands — pure overhead.
+  Future<List<TicketControlRow>> getTicketControlRows(String ticketId) =>
+      (_db.select(_db.ticketControls)..where((c) => c.ticketId.equals(ticketId))).get();
+
+  Future<List<ControlGroupRow>> getControlGroups() => _db.select(_db.controlGroups).get();
+
   Stream<TicketChecklist> watchTicketChecklist(String ticketId) {
     // No prodottoAssistenzaId filter: ticket-level rows must reach [TicketChecklist.ticketLevel].
     // The asset tree below ignores them by construction (it only keys rows by a non-null asset id),
