@@ -133,17 +133,20 @@ void main() {
         customerId: 'cust-1',
       );
       await repo.addEvent(id: 'punch-a-out', eventTime: out10, eventType: 'uscita');
-      // cant-2: a different site, also closed — must not leak into cant-1's answer.
+      // cant-2: a different site, also closed — must not leak into cant-1's answer. Deliberately
+      // AFTER cant-1's uscita: the assembler pairs events sequentially (one worksite at a time), so
+      // an 'ingresso' while another interval is still open closes it — interleaving the two sites
+      // here would hand cant-1 a 30-minute interval and test nothing about filtering.
       await repo.addEvent(
         id: 'punch-b',
-        eventTime: in8.add(const Duration(minutes: 30)),
+        eventTime: out10.add(const Duration(minutes: 30)),
         eventType: 'ingresso',
         cantiereId: 'cant-2',
         customerId: 'cust-2',
       );
       await repo.addEvent(
         id: 'punch-b-out',
-        eventTime: out10.add(const Duration(minutes: 30)),
+        eventTime: out10.add(const Duration(minutes: 90)),
         eventType: 'uscita',
       );
 

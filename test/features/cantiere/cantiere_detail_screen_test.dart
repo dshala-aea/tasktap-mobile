@@ -393,50 +393,67 @@ void main() {
       await db.close();
     });
 
-    testWidgets('surfaces an error toast and creates no local draft when the backend call fails', (
-      tester,
-    ) async {
-      final db = AppDatabase(NativeDatabase.memory());
-      await db
-          .into(db.cantieri)
-          .insert(
-            CantieriCompanion.insert(
-              id: 'c1',
-              tenantId: 'tenant1',
-              createdAt: DateTime.utc(2026, 8, 31),
-              name: 'Cantiere Alpha',
-            ),
+    testWidgets(
+      'falls back to an offline draft and opens its editor when the backend call fails (P2-6)',
+      (tester) async {
+        final db = AppDatabase(NativeDatabase.memory());
+        await db
+            .into(db.cantieri)
+            .insert(
+              CantieriCompanion.insert(
+                id: 'c1',
+                tenantId: 'tenant1',
+                createdAt: DateTime.utc(2026, 8, 31),
+                name: 'Cantiere Alpha',
+              ),
+            );
+
+        final fakeApi = _FakeCantiereReportApiClient()
+          ..throwsOnCreate = DioException.connectionError(
+            requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+            reason: 'offline',
           );
+        final router = _makeCreaRapportinoRouter(cantiereId: 'c1');
 
-      final fakeApi = _FakeCantiereReportApiClient()
-        ..throwsOnCreate = DioException(
-          requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              appDatabaseProvider.overrideWithValue(db),
+              geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+              cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+              // Online path: see the note in the first test's overrides above.
+              isOnlineProvider.overrideWithValue(true),
+              currentUserProvider.overrideWithValue(_testUser),
+              internalUserIdProvider.overrideWith((ref) async => 'internal-user-1'),
+              cantiereReportApiClientProvider.overrideWithValue(fakeApi),
+            ],
+            child: MaterialApp.router(routerConfig: router),
+          ),
         );
+        await tester.pumpAndSettle();
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            appDatabaseProvider.overrideWithValue(db),
-            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
-            cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
-            // Online path: see the note in the first test's overrides above.
-            isOnlineProvider.overrideWithValue(true),
-            currentUserProvider.overrideWithValue(_testUser),
-            internalUserIdProvider.overrideWith((ref) async => 'internal-user-1'),
-            cantiereReportApiClientProvider.overrideWithValue(fakeApi),
-          ],
-          child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Crea rapportino'));
+        await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Crea rapportino'));
-      await tester.pumpAndSettle();
+        expect(fakeApi.calledWithCantiereId, 'c1');
+        // P2-6: a transport failure no longer dead-ends in a toast. `createCantiereReportDraft`
+        // owns the fallback (covered in depth by create_draft_test.dart); the screen's remaining
+        // job is to open the editor on the draft it hands back — a client GUID here, since the
+        // server never issued one.
+        final marker = tester.widget<Text>(find.textContaining('RAPPORTINI-EDITOR-MARKER:'));
+        final reportId = marker.data!.replaceFirst('RAPPORTINI-EDITOR-MARKER:', '');
+        final drafts = await db.select(db.draftReports).get();
+        expect(drafts.single.id, reportId);
+        expect(
+          drafts.single.cantiereId,
+          'c1',
+          reason: 'the cantiere link is what makes the later submit claim this site\'s punches',
+        );
+        expect(drafts.single.isLocalOnly, isTrue);
 
-      expect(await db.select(db.draftReports).get(), isEmpty);
-
-      await db.close();
-    });
+        await db.close();
+      },
+    );
   });
 
   group('Squadra assegnata offline', () {
