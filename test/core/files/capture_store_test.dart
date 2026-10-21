@@ -137,6 +137,40 @@ void main() {
     });
   });
 
+  group('CaptureStore.discard', () {
+    test('deletes a capture nothing references (a pick refused by the size cap)', () async {
+      final source = await writeSource('big.jpg');
+      final captured = await store.save(source.path, fileName: 'big.jpg');
+
+      await store.discard(captured);
+
+      expect(await File(captured.path).exists(), isFalse);
+    });
+
+    test('is a no-op for a path outside this store — it can never delete an arbitrary file', () async {
+      final outside = await writeSource('not_ours.jpg');
+
+      await store.discard(
+        CapturedFile(
+          path: outside.path,
+          fileName: 'not_ours.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 8,
+        ),
+      );
+
+      expect(await outside.exists(), isTrue);
+    });
+
+    test('tolerates a file that is already gone', () async {
+      final source = await writeSource('gone.jpg');
+      final captured = await store.save(source.path, fileName: 'gone.jpg');
+      await File(captured.path).delete();
+
+      await store.discard(captured); // must not throw
+    });
+  });
+
   group('contentTypeForFileName', () {
     test('maps every image/PDF extension the pickers can hand back', () {
       expect(contentTypeForFileName('a.jpg'), 'image/jpeg');

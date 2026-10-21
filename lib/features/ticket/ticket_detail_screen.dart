@@ -1270,7 +1270,8 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
       // in the offline outbox for days, and image_picker's path is in purgeable temp storage — a
       // purge in between turns the queued photo into a permanent "non trovato" (audit F6). A copy
       // failure throws into the catch below, so the queue never receives a temp path.
-      final captured = await (await ref.read(captureStoreProvider.future)).save(
+      final store = await ref.read(captureStoreProvider.future);
+      final captured = await store.save(
         xfile.path,
         fileName: xfile.name,
         // The plugin re-encodes to JPEG (imageQuality is set); an unknown extension is still jpeg.
@@ -1280,6 +1281,9 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
       // Rejected client-side, before it is ever queued or sent: a rejection after the file sat
       // in the offline outbox for a while would read as a delayed, unexplained failure.
       if (captured.sizeBytes > kMaxTicketAttachmentBytes) {
+        // The pick was refused, so nothing will ever reference this copy — don't leave a 10 MB
+        // orphan in the app's documents directory.
+        await store.discard(captured);
         if (!mounted) return;
         showAppToast(
           context,

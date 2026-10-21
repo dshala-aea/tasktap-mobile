@@ -94,6 +94,16 @@ class CaptureStore {
     // A short alphanumeric suffix only: ".pdf", ".jpg", or nothing.
     return RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(ext) ? ext : '';
   }
+
+  /// Deletes a capture that was refused before anything referenced it (today: the 10 MB ticket
+  /// attachment cap). Never call this for a file a draft or pending row points at — the read-only
+  /// view renders from this path (see the class comment). Refuses paths outside this store, so a
+  /// bad [CapturedFile] can never delete an arbitrary file.
+  Future<void> discard(CapturedFile file) async {
+    if (!p.isWithin(directory.path, file.path)) return;
+    final target = File(file.path);
+    if (await target.exists()) await target.delete();
+  }
 }
 
 /// The MIME type a picked file actually is, from its extension.
