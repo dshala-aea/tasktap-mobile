@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -55,28 +56,37 @@ AppNotifica _fakeNotifica({
 /// entirely: whichever write "wins", the loaded data matches.
 Future<Widget> _buildScreen({
   List<AppNotifica> notifiche = const [],
+  List<AppNotifica> altreNotifiche = const [],
   bool hasError = false,
 }) async {
   final db = AppDatabase(NativeDatabase.memory());
-  for (final n in notifiche) {
-    await db
-        .into(db.appNotifications)
-        .insertOnConflictUpdate(
-          AppNotificationsCompanion.insert(
-            id: n.id,
-            tenantId: 'test-tenant',
-            createdAt: n.timestamp,
-            userId: 'test-user',
-            title: n.titolo,
-            message: n.corpo,
-            type: n.tipo ?? 'TicketAssigned',
-            deliveryType: 'InApp',
-            isRead: Value(n.letta),
-            relatedEntityType: Value(n.relatedEntityType),
-            relatedEntityId: Value(n.relatedEntityId),
-          ),
-        );
+
+  Future<void> seed(Iterable<AppNotifica> items, String userId) async {
+    for (final n in items) {
+      await db
+          .into(db.appNotifications)
+          .insertOnConflictUpdate(
+            AppNotificationsCompanion.insert(
+              id: n.id,
+              tenantId: 'test-tenant',
+              createdAt: n.timestamp,
+              userId: userId,
+              title: n.titolo,
+              message: n.corpo,
+              type: n.tipo ?? 'TicketAssigned',
+              deliveryType: 'InApp',
+              isRead: Value(n.letta),
+              relatedEntityType: Value(n.relatedEntityType),
+              relatedEntityId: Value(n.relatedEntityId),
+            ),
+          );
+    }
   }
+
+  // Only the signed-in user's rows may appear (G2a). `altreNotifiche` stand in for the previous
+  // technician's retained cache on a shared device.
+  await seed(notifiche, 'test-user');
+  await seed(altreNotifiche, 'altra-persona');
 
   return ProviderScope(
     overrides: [
@@ -116,6 +126,13 @@ void main() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   });
 
+  setUp(() {
+    // The notifier scopes every cache read/write to the internal user id persisted by
+    // `EntitlementService.refresh` (`internalUserIdPrefsKey`). Without it, G2a shows an empty
+    // list by design — see notifiche_provider.dart.
+    SharedPreferences.setMockInitialValues({'internal_user_id': 'test-user'});
+  });
+
   Future<void> drain(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -149,6 +166,21 @@ void main() {
 
     // Both notifications have the same title in our fake data.
     expect(find.text('Nuovo intervento'), findsNWidgets(2));
+    await drain(tester);
+  });
+
+  // G2a: `SessionEnder.endForced` keeps the local cache, so a shared van tablet can hold the
+  // previous technician's rows. Only the signed-in user's may reach the screen.
+  testWidgets('never shows another user\'s cached notifications', (tester) async {
+    await tester.pumpWidget(
+      await _buildScreen(
+        notifiche: [_fakeNotifica(id: 'mine')],
+        altreNotifiche: [_fakeNotifica(id: 'theirs')],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nuovo intervento'), findsOneWidget);
     await drain(tester);
   });
 

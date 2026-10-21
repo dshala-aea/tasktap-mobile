@@ -1797,6 +1797,9 @@ void main() {
       await tapWideTab(tester, 'Storico');
 
       expect(find.text('Storico non disponibile offline'), findsOneWidget);
+      // G3: the state says explicitly that history needs a connection — an empty history must
+      // never be mistaken for a ticket with no activity.
+      expect(find.text('Storico disponibile solo con connessione.'), findsOneWidget);
       await resetAndDispose(tester);
     });
   });
