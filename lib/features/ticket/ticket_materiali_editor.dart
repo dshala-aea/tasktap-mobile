@@ -4,14 +4,9 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 // `&`, `|` and `like` are extension members (BooleanExpressionOperators /
 // StringExpressionOperators), not methods on the generated columns, so a `show` list that omits
-// them compiles to "undefined_operator"/"undefined_method". `Expression` is named for the same
-// reason: it is the receiver type the extensions attach to.
+// them compiles to "undefined_operator"/"undefined_method".
 import 'package:drift/drift.dart'
-    show
-        BooleanExpressionOperators,
-        Expression,
-        OrderingTerm,
-        StringExpressionOperators;
+    show BooleanExpressionOperators, OrderingTerm, StringExpressionOperators;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
