@@ -10,6 +10,7 @@ import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/cantiere_report_api_client.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
@@ -36,13 +37,22 @@ class _NullGeocodingService extends GeocodingService {
 class _FakeCantiereWorklogApiClient extends CantiereWorklogApiClient {
   _FakeCantiereWorklogApiClient() : super(Dio());
 
-  /// Overridable per test — empty by default (every existing test in this file relies on the
-  /// "Squadra assegnata" section collapsing to nothing), set to a non-empty list only by the
-  /// section-order test below, which needs the section actually rendered to check its position.
+  /// Overridable per test — empty by default (the "Squadra assegnata" section then renders its
+  /// "nessuna squadra" copy), set to a non-empty list by the section-order test below, which needs
+  /// the section actually rendered to check its position.
   List<CantiereCrewAssignmentDto> assignments = const [];
 
+  /// When true every call throws. The offline tests set this to prove the mirror path never
+  /// reaches the network — a real call would surface as an error, not as the mirrored crew.
+  bool throwsIfCalled = false;
+  int calls = 0;
+
   @override
-  Future<List<CantiereCrewAssignmentDto>> getAssegnazioni(String cantiereId) async => assignments;
+  Future<List<CantiereCrewAssignmentDto>> getAssegnazioni(String cantiereId) async {
+    calls++;
+    if (throwsIfCalled) throw StateError('network call attempted while offline');
+    return assignments;
+  }
 }
 
 /// Records the cantiereId it was called with, and returns a fixed report id with no staff rows
@@ -149,6 +159,9 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
           cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+          // `cantiereCrewAssignmentsProvider` reads the Drift crew mirror when offline instead of
+          // calling the client; these tests exercise the online path.
+          isOnlineProvider.overrideWithValue(true),
         ],
         child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
       ),
@@ -201,6 +214,9 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
           cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+          // `cantiereCrewAssignmentsProvider` reads the Drift crew mirror when offline instead of
+          // calling the client; these tests exercise the online path.
+          isOnlineProvider.overrideWithValue(true),
         ],
         child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
       ),
@@ -234,6 +250,8 @@ void main() {
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
             cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+            // Online path: see the note in the first test's overrides above.
+            isOnlineProvider.overrideWithValue(true),
           ],
           child: MaterialApp.router(routerConfig: router),
         ),
@@ -269,6 +287,8 @@ void main() {
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
             cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+            // Online path: see the note in the first test's overrides above.
+            isOnlineProvider.overrideWithValue(true),
             currentUserProvider.overrideWithValue(null),
             internalUserIdProvider.overrideWith((ref) async => null),
           ],
@@ -308,6 +328,8 @@ void main() {
               appDatabaseProvider.overrideWithValue(db),
               geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
               cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+              // Online path: see the note in the first test's overrides above.
+              isOnlineProvider.overrideWithValue(true),
               currentUserProvider.overrideWithValue(_testUser),
               internalUserIdProvider.overrideWith((ref) async => 'internal-user-1'),
               cantiereReportApiClientProvider.overrideWithValue(fakeApi),
@@ -350,6 +372,8 @@ void main() {
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
             cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+            // Online path: see the note in the first test's overrides above.
+            isOnlineProvider.overrideWithValue(true),
             currentUserProvider.overrideWithValue(null),
             internalUserIdProvider.overrideWith((ref) async => null),
             cantiereReportApiClientProvider.overrideWithValue(fakeApi),
@@ -395,6 +419,8 @@ void main() {
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
             cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+            // Online path: see the note in the first test's overrides above.
+            isOnlineProvider.overrideWithValue(true),
             currentUserProvider.overrideWithValue(_testUser),
             internalUserIdProvider.overrideWith((ref) async => 'internal-user-1'),
             cantiereReportApiClientProvider.overrideWithValue(fakeApi),
@@ -409,6 +435,83 @@ void main() {
 
       expect(await db.select(db.draftReports).get(), isEmpty);
 
+      await db.close();
+    });
+  });
+
+  group('Squadra assegnata offline', () {
+    /// A cantiere in the local mirror plus a client that would fail loudly if the offline path
+    /// ever called it.
+    Future<_FakeCantiereWorklogApiClient> buildOffline(
+      WidgetTester tester,
+      AppDatabase db, {
+      bool seedMirroredCrew = true,
+    }) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'c1',
+              tenantId: 'tenant1',
+              createdAt: DateTime.utc(2026, 8, 31),
+              name: 'Cantiere Alpha',
+            ),
+          );
+      if (seedMirroredCrew) {
+        await db
+            .into(db.colleagues)
+            .insert(ColleaguesCompanion.insert(id: 'u1', displayName: 'Mario Rossi'));
+        await db
+            .into(db.cantiereCrewAssignments)
+            .insert(
+              CantiereCrewAssignmentsCompanion.insert(
+                id: 'a1',
+                cantiereId: 'c1',
+                userId: 'u1',
+                isLead: const Value(true),
+              ),
+            );
+      }
+
+      final client = _FakeCantiereWorklogApiClient()..throwsIfCalled = true;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+            cantiereWorklogApiClientProvider.overrideWithValue(client),
+            isOnlineProvider.overrideWithValue(false),
+          ],
+          child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return client;
+    }
+
+    testWidgets('renders the mirrored crew without a network call', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final client = await buildOffline(tester, db);
+
+      expect(find.text('Squadra assegnata'), findsOneWidget);
+      expect(find.text('Mario Rossi'), findsOneWidget);
+      expect(find.text('LEAD'), findsOneWidget);
+      expect(client.calls, 0, reason: 'offline is answered from the Drift mirror');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await db.close();
+    });
+
+    testWidgets('an empty mirror reads as "nessuna squadra", not as a failure', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await buildOffline(tester, db, seedMirroredCrew: false);
+
+      expect(find.text('Squadra assegnata'), findsOneWidget);
+      expect(find.text('Nessuna squadra assegnata'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
       await db.close();
     });
   });
@@ -445,6 +548,8 @@ void main() {
               appDatabaseProvider.overrideWithValue(db),
               geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
               cantiereWorklogApiClientProvider.overrideWithValue(crewClient),
+              // Online path: see the note in the first test's overrides above.
+              isOnlineProvider.overrideWithValue(true),
             ],
             child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
           ),

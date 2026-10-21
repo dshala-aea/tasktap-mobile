@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -9,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/files/capture_store.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/time/business_time.dart' show BusinessTime, formatWorkDate;
@@ -992,9 +992,12 @@ class _ControlloTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controlsAsync = ref.watch(ticketControlsProvider(ticketId));
-    // Asset checklists come from the local mirror (offline); the ticket-level list below is still
-    // the online-only REST read. A ticket without assets renders exactly as before.
-    final showAssets = ref.watch(ticketChecklistProvider(ticketId)).valueOrNull?.hasAnything ?? false;
+    // Asset checklists come from the local mirror; the ticket-level list below is answered by
+    // [ticketControlsProvider] from the REST read online and from that same mirror offline. A
+    // ticket without assets renders exactly as before — [TicketChecklist.hasAssetChecklists], not
+    // `hasAnything`, so ticket-level rows alone never put the asset card on this tab.
+    final showAssets =
+        ref.watch(ticketChecklistProvider(ticketId)).valueOrNull?.hasAssetChecklists ?? false;
     final assetCard = TicketAssetChecklistsCard(ticketId: ticketId);
     Widget wrap(Widget ticketLevel) => showAssets
         ? Column(
@@ -1283,12 +1286,24 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
       final xfile = await picker.pickImage(source: source, imageQuality: 80);
       if (xfile == null) return;
 
-      final file = File(xfile.path);
-      final bytes = await file.readAsBytes();
+      // Copy into the app's own `captures/` BEFORE anything queues it: a ticket attachment can sit
+      // in the offline outbox for days, and image_picker's path is in purgeable temp storage — a
+      // purge in between turns the queued photo into a permanent "non trovato" (audit F6). A copy
+      // failure throws into the catch below, so the queue never receives a temp path.
+      final store = await ref.read(captureStoreProvider.future);
+      final captured = await store.save(
+        xfile.path,
+        fileName: xfile.name,
+        // The plugin re-encodes to JPEG (imageQuality is set); an unknown extension is still jpeg.
+        contentType: contentTypeForFileName(xfile.name, fallback: 'image/jpeg'),
+      );
 
       // Rejected client-side, before it is ever queued or sent: a rejection after the file sat
       // in the offline outbox for a while would read as a delayed, unexplained failure.
-      if (bytes.length > kMaxTicketAttachmentBytes) {
+      if (captured.sizeBytes > kMaxTicketAttachmentBytes) {
+        // The pick was refused, so nothing will ever reference this copy — don't leave a 10 MB
+        // orphan in the app's documents directory.
+        await store.discard(captured);
         if (!mounted) return;
         showAppToast(
           context,
@@ -1304,10 +1319,10 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
           .read(ticketAttachmentUploadQueueProvider)
           .upload(
             ticketId: widget.ticketId,
-            localPath: xfile.path,
-            fileName: xfile.name,
-            contentType: 'image/jpeg',
-            sizeBytes: bytes.length,
+            localPath: captured.path,
+            fileName: captured.fileName,
+            contentType: captured.contentType,
+            sizeBytes: captured.sizeBytes,
             isOnline: isOnline,
           );
 
@@ -2417,9 +2432,10 @@ class _StoricoTab extends ConsumerWidget {
         icon: LucideIcons.history,
         offline: e is TicketDetailOfflineException,
         offlineTitle: 'Storico non disponibile offline',
-        offlineBody:
-            'La cronologia delle modifiche si legge solo online: '
-            'riprova quando torni in copertura.',
+        // G3: state it explicitly. An empty history is indistinguishable from a ticket that was
+        // never touched, and the audit trail is the one thing on this screen a technician might
+        // need to prove a change happened.
+        offlineBody: 'Storico disponibile solo con connessione.',
         errorTitle: 'Impossibile caricare lo storico',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),

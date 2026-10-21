@@ -1,7 +1,7 @@
 // dart format width=100
 // test/features/rapportino/create_draft_test.dart
 //
-// Tests for createReworkDraft — the "Rilavora" affordance a rejected (Respinto) rapportino
+// Tests for createReworkDraft — the "Rielabora" affordance a rejected (Respinto) rapportino
 // gets on RapportinoViewScreen (mobile audit item #1).
 //
 // The backend's ReportStateMachine only allows Bozza → Inviato (CanInvia requires

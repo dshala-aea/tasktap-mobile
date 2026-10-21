@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/files/capture_store.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
@@ -81,6 +82,10 @@ Widget _buildDetail({
   // fetch-on-demand tab endpoints) get the deterministic "offline" tab
   // content rather than depending on how an unstubbed MockDio call fails.
   bool isOnline = false,
+  // The app-wide store resolves `<documents>/captures` through path_provider, which has no
+  // platform implementation in a widget test. Only the three upload tests need it (they tap
+  // Galleria/Fotocamera); every other test leaves it unresolved and never reads it.
+  CaptureStore? captureStore,
 }) {
   return ProviderScope(
     overrides: [
@@ -89,6 +94,8 @@ Widget _buildDetail({
       dioProvider.overrideWithValue(dio ?? MockDio()),
       isOnlineProvider.overrideWithValue(isOnline),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+      if (captureStore != null)
+        captureStoreProvider.overrideWith((ref) async => captureStore),
     ],
     child: MaterialApp(home: TicketDetailScreen(ticketId: ticketId)),
   );
@@ -156,6 +163,7 @@ void main() {
   late StreamController<AuthUser?> authStream;
   final ImagePickerPlatform originalImagePickerPlatform = ImagePickerPlatform.instance;
   final List<File> tempFiles = [];
+  final List<Directory> captureRoots = [];
 
   final fakeUser = AuthUser(
     id: 'u1',
@@ -181,6 +189,10 @@ void main() {
       if (f.existsSync()) f.deleteSync();
     }
     tempFiles.clear();
+    for (final d in captureRoots) {
+      if (d.existsSync()) d.deleteSync(recursive: true);
+    }
+    captureRoots.clear();
   });
 
   /// A real file on disk — `_pickImage`'s size check reads it with `File.readAsBytes`, so the
@@ -198,11 +210,27 @@ void main() {
     return file;
   }
 
+  /// A real captures directory under the system temp dir — the same shape `CaptureStore.forApp()`
+  /// builds under Documents, minus path_provider's platform channel (which a widget test cannot
+  /// drive). The screen resolves it through `captureStoreProvider`, so production and this test
+  /// run the same code, just pointed somewhere the test can inspect.
+  CaptureStore makeCaptureStore() {
+    final root = Directory.systemTemp.createTempSync('tt_captures_');
+    captureRoots.add(root);
+    return CaptureStore(Directory('${root.path}/${CaptureStore.folderName}'));
+  }
+
+  /// Files in a test capture store (empty when the store was never written to).
+  List<File> capturedFiles(CaptureStore store) => store.directory.existsSync()
+      ? store.directory.listSync().whereType<File>().toList()
+      : const <File>[];
+
   Future<void> pump(
     WidgetTester tester, {
     String ticketId = 'ticket-1',
     Dio? dio,
     bool isOnline = false,
+    CaptureStore? captureStore,
     // False for a fixture with an open (still-running) worklog entry: that renders a LiveDot,
     // whose pulse repeats forever and never lets pumpAndSettle's frame-quiescence check succeed —
     // it would otherwise hang until the 10-minute timeout. A handful of bounded pumps gives every
@@ -211,7 +239,14 @@ void main() {
     bool settle = true,
   }) async {
     await tester.pumpWidget(
-      _buildDetail(db: db, repo: repo, ticketId: ticketId, dio: dio, isOnline: isOnline),
+      _buildDetail(
+        db: db,
+        repo: repo,
+        ticketId: ticketId,
+        dio: dio,
+        isOnline: isOnline,
+        captureStore: captureStore,
+      ),
     );
     await tester.pump();
     authStream.add(fakeUser);
@@ -1116,14 +1151,62 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+    testWidgets('offline, shows the ticket-level controls from the local mirror', (tester) async {
+      await seedBase(db);
+      // The checklist sync mirrors ticket-level rows (`prodottoAssistenzaId` null), so the
+      // Controllo tab answers with them instead of the "non disponibili offline" state.
+      await applyChecklistBatch(
+        db,
+        ChecklistBatch(
+          authoritativeTicketIds: {'ticket-1'},
+          controlGroups: const [
+            SyncControlGroupDto(
+              id: 'g1',
+              maintenanceTemplateVersionId: 'v1',
+              name: 'Sicurezza',
+              sortOrder: 0,
+            ),
+          ],
+          ticketControls: const [
+            SyncTicketControlDto(
+              id: 'tl-1',
+              ticketId: 'ticket-1',
+              templateControlId: 'tpl-1',
+              controlLineageId: 'lin-1',
+              groupId: 'g1',
+              label: 'Pressione OK',
+              type: ControlType.checkbox,
+              isRequired: true,
+              status: 'Completed',
+              boolValue: true,
+            ),
+          ],
+          ticketAssets: const [],
+          assets: const [],
+        ),
+      );
+
+      await pump(tester, isOnline: false);
+      await tapTab(tester, 'Controllo');
+
+      expect(find.text('Pressione OK'), findsOneWidget);
+      // Twice by design: the accordion's group header and the group path above the control row
+      // both read "Sicurezza" for a top-level group — the same string at two sizes.
+      expect(find.text('Sicurezza'), findsNWidgets(2));
+      expect(find.text('Controlli non disponibili offline'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('offline with an empty mirror says no controls are planned', (tester) async {
       await seedBase(db);
 
       await pump(tester, isOnline: false);
       await tapTab(tester, 'Controllo');
 
-      expect(find.text('Controlli non disponibili offline'), findsOneWidget);
-      expect(find.text('Nessun controllo previsto'), findsNothing);
+      // The mirror is the answer offline: an empty one is an honest "nothing planned", not an
+      // unreachable server.
+      expect(find.text('Nessun controllo previsto'), findsOneWidget);
+      expect(find.text('Controlli non disponibili offline'), findsNothing);
       await resetAndDispose(tester);
     });
 
@@ -1381,8 +1464,9 @@ void main() {
       ImagePickerPlatform.instance = _FakeImagePickerPlatform(
         makeTempFile('foto.jpg', 2048).path,
       );
+      final captureStore = makeCaptureStore();
 
-      await pump(tester, dio: dio, isOnline: true);
+      await pump(tester, dio: dio, isOnline: true, captureStore: captureStore);
       await tapTab(tester, 'Allegati');
 
       expect(find.text('Nessun allegato'), findsOneWidget);
@@ -1391,6 +1475,14 @@ void main() {
 
       expect(find.text('foto.jpg'), findsOneWidget);
       expect(find.text('Nessun allegato'), findsNothing);
+
+      // The pick was copied into the app's own store — the upload never saw the picker's
+      // purgeable temp path (audit F6).
+      final stored = capturedFiles(captureStore);
+      expect(stored, hasLength(1));
+      expect(stored.single.path.startsWith(captureStore.directory.path), isTrue);
+      expect(stored.single.lengthSync(), 2048);
+      expect(stored.single.path.endsWith('.jpg'), isTrue);
       await resetAndDisposeAfterUpload(tester);
     });
 
@@ -1403,12 +1495,12 @@ void main() {
         // assertion self-checking: any accidental network call throws instead of silently
         // succeeding.
         await seedBase(db);
-        ImagePickerPlatform.instance = _FakeImagePickerPlatform(
-          makeTempFile('offline.jpg', 4096).path,
-        );
+        final picked = makeTempFile('offline.jpg', 4096);
+        ImagePickerPlatform.instance = _FakeImagePickerPlatform(picked.path);
+        final captureStore = makeCaptureStore();
 
         final dio = MockDio();
-        await pump(tester, dio: dio, isOnline: false);
+        await pump(tester, dio: dio, isOnline: false, captureStore: captureStore);
         await tapTab(tester, 'Allegati');
 
         await tapAndSettle(tester, find.text('Galleria'));
@@ -1421,6 +1513,13 @@ void main() {
         expect(rows, hasLength(1));
         expect(rows!.single.fileName, 'offline.jpg');
         expect(rows.single.state, 'pendingSync');
+        // The queued row points at the durable copy, not the picker's purgeable temp path — a
+        // cache purge between now and the reconnect must not lose the photo.
+        expect(rows.single.localPath, isNot(picked.path));
+        expect(rows.single.localPath.startsWith(captureStore.directory.path), isTrue);
+        expect(rows.single.contentType, 'image/jpeg');
+        expect(rows.single.sizeBytes, 4096);
+        expect(File(rows.single.localPath).existsSync(), isTrue);
         verifyNever(
           () => dio.post<Map<String, dynamic>>(
             any(),
@@ -1492,13 +1591,14 @@ void main() {
       await seedBase(db);
       final bigFile = makeTempFile('big.jpg', 10 * 1024 * 1024 + 1);
       ImagePickerPlatform.instance = _FakeImagePickerPlatform(bigFile.path);
+      final captureStore = makeCaptureStore();
 
       final dio = MockDio();
       when(
         () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
       ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/Tickets/ticket-1/attachments'));
 
-      await pump(tester, dio: dio, isOnline: true);
+      await pump(tester, dio: dio, isOnline: true, captureStore: captureStore);
       await tapTab(tester, 'Allegati');
 
       await tapAndSettle(tester, find.text('Fotocamera'));
@@ -1511,6 +1611,8 @@ void main() {
         () => PendingTicketAttachmentRepository(db).watchForTicket('ticket-1').first,
       );
       expect(rows, isEmpty);
+      // The refused copy is discarded rather than left as a 10 MB orphan in app documents.
+      expect(capturedFiles(captureStore), isEmpty);
       await resetAndDisposeAfterUpload(tester);
     });
   });
@@ -1856,6 +1958,9 @@ void main() {
       await tapWideTab(tester, 'Storico');
 
       expect(find.text('Storico non disponibile offline'), findsOneWidget);
+      // G3: the state says explicitly that history needs a connection — an empty history must
+      // never be mistaken for a ticket with no activity.
+      expect(find.text('Storico disponibile solo con connessione.'), findsOneWidget);
       await resetAndDispose(tester);
     });
   });

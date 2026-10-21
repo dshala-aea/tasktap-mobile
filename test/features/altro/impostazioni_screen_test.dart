@@ -9,7 +9,8 @@
 //   4. App section toggle rows are present.
 //   5. Account section toggle row is present.
 //   6. Toggling a toggle flips its state.
-//   7. Logout row triggers confirm dialog.
+//   7. Last sync row renders "Mai" before the first sync and a relative label after one.
+//   8. Logout row triggers confirm dialog.
 
 import 'dart:async';
 
@@ -25,6 +26,7 @@ import 'package:tasktap_mobile/data/auth/session_recovery_providers.dart';
 import 'package:tasktap_mobile/data/auth/unsent_work_counter.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/altro/impostazioni_screen.dart';
@@ -54,6 +56,9 @@ Widget _buildScreen(MockAuthRepository repo, AppDatabase db) {
       ),
       // The "Preferenze notifiche" entry is behind a CapabilityGate; nothing cached = hidden.
       cachedEntitlementProvider.overrideWith((ref) async => null),
+      // The "Ultima sincronizzazione" row reads the sync cursor; without this it would build the
+      // real file-backed database and fail on a platform channel in the test host.
+      appDatabaseProvider.overrideWithValue(db),
     ],
     child: const MaterialApp(home: ImpostazioniScreen()),
   );
@@ -236,7 +241,44 @@ void main() {
     await drain(tester);
   });
 
-  // ── 7. Logout row triggers dialog ─────────────────────────────────────────
+  // ── 7. Last sync row ───────────────────────────────────────────────────────
+  testWidgets('last sync row says "Mai" before the first sync', (tester) async {
+    final user = _fakeUser(displayName: 'Mario');
+    await pump(tester, user: user);
+
+    final scroller = find.byType(CustomScrollView);
+    await tester.dragUntilVisible(
+      find.text('Ultima sincronizzazione'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
+
+    expect(find.text('Ultima sincronizzazione'), findsOneWidget);
+    expect(find.text('Mai'), findsOneWidget);
+    await drain(tester);
+  });
+
+  testWidgets('last sync row shows a relative label once a sync has happened', (tester) async {
+    await db.setLastSync(DateTime.now().toUtc());
+
+    final user = _fakeUser(displayName: 'Mario');
+    await pump(tester, user: user);
+
+    final scroller = find.byType(CustomScrollView);
+    await tester.dragUntilVisible(
+      find.text('Ultima sincronizzazione'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
+
+    // The hour itself is the machine clock's; "today" is the part the row is responsible for.
+    expect(find.textContaining('Oggi alle '), findsOneWidget);
+    await drain(tester);
+  });
+
+  // ── 8. Logout row triggers dialog ─────────────────────────────────────────
   testWidgets('logout row tap shows confirm dialog', (tester) async {
     when(() => repo.currentUser).thenReturn(null);
     when(() => repo.signOut()).thenAnswer((_) async {});
