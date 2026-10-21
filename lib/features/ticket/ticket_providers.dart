@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/attachments/attachment_content_cache.dart' show AllegatoEntityType;
@@ -8,6 +9,8 @@ import '../../data/sync/sync_service.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../admin/admin_api_client.dart';
+import '../checklist/checklist_providers.dart' show checklistReadRepositoryProvider;
+import 'ticket_controls_mirror.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_workflow_api_client.dart';
 
@@ -161,12 +164,13 @@ final schedulesForTicketProvider = StreamProvider.autoDispose
     });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Ticket-detail tabs — fetched on demand from the backend. Rapportini now also
-// has a Drift mirror (O-8a/O-8b, see [ticketReportsProvider]); Controllo /
-// Allegati / Fabbisogno are still online-only. "no data" and "couldn't fetch
-// it" must stay distinguishable: each provider checks connectivity itself and
-// throws [TicketDetailOfflineException] before attempting a request when
-// offline, rather than letting Dio's own network error stand in for it.
+// Ticket-detail tabs. Four of them now answer offline from a Drift mirror the
+// sync fills — Rapportini (O-8a/O-8b), Allegati (O-8b/O-8c), Controllo (its
+// checklist mirror) and Fabbisogno (the per-ticket materiali mirror, pruned to
+// the server's scope). What is still online-only — Prodotti and the history —
+// checks connectivity itself and throws [TicketDetailOfflineException] before
+// attempting a request, rather than letting Dio's own network error stand in for
+// it: "no data" and "couldn't fetch it" must stay distinguishable.
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Rapportini recorded against a ticket (Report tab).
@@ -277,19 +281,50 @@ final pendingTicketAttachmentsProvider = StreamProvider.autoDispose
 /// A ticket's checklist, resolved from the maintenance-template version it
 /// materialised at creation (ADR-0012). Shared by the Controllo tab
 /// (read-only) and the rapportino Controlli step (interactive).
+///
+/// Two explicit axes, never merged:
+/// * online, the live fetch is the answer, returned as-is — it is the fresh truth;
+/// * offline, the checklist is answered from the sync mirror with no network
+///   call at all ([ticketControlGroupsFromMirror] rebuilds the server's tree
+///   from `ticket_controls` + `control_groups`), so the tab is available with
+///   the radio off instead of throwing [TicketDetailOfflineException].
+///
+/// A live fetch that throws degrades to the mirror rather than to an error
+/// screen: a flaky connection should show the last known checklist. An empty
+/// mirror then yields an empty list, which the Controllo tab renders as
+/// "Nessun controllo previsto" — the debugPrint keeps that trace visible.
 final ticketControlsProvider = FutureProvider.autoDispose
     .family<List<TicketControlGroupDto>, String>((ref, ticketId) async {
+      final repository = ref.watch(checklistReadRepositoryProvider);
+
+      Future<List<TicketControlGroupDto>> fromMirror() async {
+        // One-shot reads: this provider answers once per build, so there is nothing for a query
+        // stream subscription to deliver a second time. See the repository's own note.
+        final controls = await repository.getTicketControlRows(ticketId);
+        final groups = await repository.getControlGroups();
+        return ticketControlGroupsFromMirror(controls: controls, groups: groups);
+      }
+
       if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+        return fromMirror();
       }
       final api = ref.watch(ticketDetailApiClientProvider);
-      return api.fetchControls(ticketId);
+      try {
+        return await api.fetchControls(ticketId);
+      } catch (e) {
+        debugPrint(
+          'ticketControlsProvider($ticketId): live fetch failed ($e) — '
+          'falling back to the local checklist mirror',
+        );
+        return fromMirror();
+      }
     });
 
 /// Materials planned for a ticket — fabbisogno (Fabbisogno tab).
 ///
-/// Local-Drift-backed, unlike the five sibling ticket-detail providers below (Rapportini,
-/// Controls, Attachments, Worklogs, History) — TicketMateriali syncs to the device
+/// Local-Drift-backed, unlike the sibling ticket-detail providers that still
+/// fetch on demand (Rapportini, Attachments, Worklogs, History, and the
+/// by-id lookups below) — TicketMateriali syncs to the device
 /// (MobileUserSyncResult.TicketMateriali, office-set/low-volatility like the materiali catalog
 /// itself), so this works offline. Returns the same [TicketMaterialeDto] shape the online
 /// fetch used to, so both existing consumers (ticket_detail_screen.dart,

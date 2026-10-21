@@ -174,21 +174,61 @@ void main() {
     });
   });
 
-  // Item 13 of the admin-form audit: mirrors the backend's own guard —
-  // ReportStateMachine.CanEditOrDelete (Bozza/Inviato/Respinto allowed, Controllato onward and
-  // Annullato/NonFatturabile blocked) — "before office review", not draft-only.
-  group('rapportinoCanEditOrDelete', () {
-    test('true for Bozza, Inviato and Respinto', () {
-      for (final stato in ['Bozza', 'Inviato', 'Respinto']) {
-        expect(rapportinoCanEditOrDelete(_draft(stato: stato)), isTrue, reason: stato);
+  // Owner decision D8 (offline slice O-3 / audit F15): mobile edits Bozza only. Every other
+  // state opens the read-only view. It is deliberately NOT the backend's own wider
+  // ReportStateMachine.CanEditOrDelete window (Bozza/Inviato/Respinto): the editor's first
+  // autosave rewrites `stato:'Bozza'` + `isLocalOnly:true`, which corrupts a synced report and
+  // blinds sync to it forever. Reworking a Respinto goes through createReworkDraft instead.
+  group('rapportinoOpensEditor', () {
+    test('true for a Bozza that has not been sent from this device', () {
+      for (final state in ['draft', 'readyToSubmit', 'failed']) {
+        expect(
+          rapportinoOpensEditor(_draft(submissionState: state)),
+          isTrue,
+          reason: 'a $state Bozza is still this device\'s working copy',
+        );
       }
     });
 
-    test('false for Controllato, Fatturato, Annullato and NonFatturabile', () {
-      for (final stato in ['Controllato', 'Fatturato', 'Annullato', 'NonFatturabile']) {
-        expect(rapportinoCanEditOrDelete(_draft(stato: stato)), isFalse, reason: stato);
+    test('false for Inviato, Respinto, Controllato and Fatturato', () {
+      for (final stato in ['Inviato', 'Respinto', 'Controllato', 'Fatturato']) {
+        expect(rapportinoOpensEditor(_draft(stato: stato)), isFalse, reason: stato);
       }
     });
+
+    test('false for a Bozza this device already submitted (stato lags the next sync)', () {
+      expect(
+        rapportinoOpensEditor(_draft(submissionState: 'submitted', stato: 'Bozza')),
+        isFalse,
+      );
+    });
+
+    test('false for Annullato and NonFatturabile', () {
+      for (final stato in ['Annullato', 'NonFatturabile']) {
+        expect(rapportinoOpensEditor(_draft(stato: stato)), isFalse, reason: stato);
+      }
+    });
+  });
+
+  group('rapportinoCanDelete', () {
+    test('true for a Bozza', () {
+      expect(rapportinoCanDelete(_draft()), isTrue);
+    });
+
+    test('false for every state past Bozza (the office Annulla workflow owns those)', () {
+      for (final stato in ['Inviato', 'Respinto', 'Controllato', 'Fatturato', 'Annullato']) {
+        expect(rapportinoCanDelete(_draft(stato: stato)), isFalse, reason: stato);
+      }
+    });
+
+    test(
+      'false mid-send — a delete there races markSubmitted and the row resurrects on the next sync',
+      () {
+        for (final state in ['uploadingMedia', 'submitting']) {
+          expect(rapportinoCanDelete(_draft(submissionState: state)), isFalse, reason: state);
+        }
+      },
+    );
   });
 
   group('totalOreMinutes', () {

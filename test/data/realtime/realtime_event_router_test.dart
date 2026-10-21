@@ -9,6 +9,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/realtime/realtime_connection.dart';
@@ -42,6 +43,12 @@ class _RefreshTrackingNotifier extends NotificheNotifier {
 }
 
 void main() {
+  setUp(() {
+    // NotificheNotifier reads its cache scoped to `internalUserIdPrefsKey` (G2a); with no mock
+    // store the plugin channel throws inside the constructor's async cache load.
+    SharedPreferences.setMockInitialValues({});
+  });
+
   test('a TicketWorkLogStarted event invalidates ticketWorklogsProvider for that ticket', () async {
     var invalidated = false;
     final container = ProviderContainer();

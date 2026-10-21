@@ -143,6 +143,14 @@ class LoginNotifier extends StateNotifier<LoginState> {
     // the same `SessionEnder` but `endForced()`, which keeps the local data — a dead session is
     // not consent to lose a day's work (audit F1).
     await _ref.read(sessionEnderProvider).end();
+    // `loginProvider` is autoDispose and nothing is listening to it on the sign-out path: the
+    // ending itself is what tears the authenticated tree down, so this notifier is usually already
+    // disposed by the time the await returns (the router has moved to the login screen, which
+    // builds a fresh one). Writing `state` then throws "Tried to use LoginNotifier after dispose
+    // was called" — and, in a test container, fails the sign-out itself for a state write nobody
+    // would ever read. Everything that matters (the repository sign-out, the wipe, the zone reset)
+    // already happened inside `end()`.
+    if (!mounted) return;
     state = const LoginState();
   }
 

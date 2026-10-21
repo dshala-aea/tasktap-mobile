@@ -634,7 +634,7 @@ void main() {
   });
 
   group('RapportinoViewScreen — rejection banner (mobile audit item #1)', () {
-    testWidgets('shows the rejection banner and Rilavora affordance for a Respinto report', (
+    testWidgets('shows the rejection banner and Rielabora affordance for a Respinto report', (
       tester,
     ) async {
       await _seedSubmittedDraft(db, stato: 'Respinto');
@@ -642,7 +642,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("L'ufficio ha respinto"), findsOneWidget);
-      expect(find.text('Rilavora'), findsOneWidget);
+      expect(find.text('Rielabora'), findsOneWidget);
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
       // status_pill_test.dart's own note on this rendering change.
       expect(find.text('RESPINTA'), findsWidgets);
@@ -659,7 +659,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("L'ufficio ha respinto"), findsNothing);
-      expect(find.text('Rilavora'), findsNothing);
+      expect(find.text('Rielabora'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -673,7 +673,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("L'ufficio ha respinto"), findsNothing);
-      expect(find.text('Rilavora'), findsNothing);
+      expect(find.text('Rielabora'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
