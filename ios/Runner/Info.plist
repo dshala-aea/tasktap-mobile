@@ -73,7 +73,7 @@
 		<key>NSFaceIDUsageDescription</key>
 		<string>TaskTap usa Face ID per proteggere l'accesso ai dati di clienti e interventi su questo dispositivo.</string>
 		<key>NSMicrophoneUsageDescription</key>
-		<string>TaskTap usa il microfono per permetterti di dettare la descrizione dell'intervento invece di scriverla. L'audio resta sul dispositivo e non viene inviato a nessun server.</string>
+		<string>TaskTap usa il microfono per permetterti di dettare la descrizione dell'intervento invece di scriverla. Se registri un aggiornamento vocale per il rapportino, l'audio viene inviato al server di TaskTap per essere trascritto; la dettatura diretta nei campi resta sul dispositivo.</string>
 		<key>NSSpeechRecognitionUsageDescription</key>
 		<string>TaskTap converte la tua voce in testo sul dispositivo per compilare i campi del rapportino. Il riconoscimento avviene in locale, senza inviare audio a server esterni.</string>
 		<key>NSCameraUsageDescription</key>

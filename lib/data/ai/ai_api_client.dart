@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,16 +16,12 @@ import '../api/json_parse.dart';
 /// then fails has still cost one. Both facts have to reach the screen, or a technician cannot make
 /// an informed decision about pressing the button.
 ///
-/// ## Server-upload transcription is deliberately absent — dictation is not
+/// ## Two voice paths
 ///
-/// `POST /api/ai/transcribe` exists and takes a multipart audio file, but this app never calls
-/// it: voice input goes through on-device dictation instead (`DictateButton`,
-/// `lib/core/dictation/`), straight into the text field, per ADR-0017. That path is real and
-/// wired — package, native channel, manifest/Info.plist permissions all present on both
-/// platforms — so a client method for the server-upload endpoint would have no caller. It is
-/// left out and recorded in `docs/redesign-handoff.md` instead, not because voice input is
-/// unimplemented, but because this specific (upload-and-transcribe-server-side) path is
-/// intentionally not the one this app uses.
+/// On-device dictation (`DictateButton`, `lib/core/dictation/`, ADR-0017) fills a text field and
+/// never leaves the phone. [AiApiClient.transcribe] is the ONLINE path: a recording from
+/// `lib/core/audio/` is uploaded to `POST /api/ai/transcribe` and the server returns the
+/// transcript plus an `audioRef`.
 
 /// What the company has left this month.
 class AiQuotaDto {
@@ -522,6 +520,52 @@ class AiConversationConfirmResponse {
       );
 }
 
+/// What `POST /api/ai/transcribe` returns: the transcript and the id of the retained audio.
+class AiTranscription {
+  const AiTranscription({required this.transcript, required this.audioRef});
+
+  final String transcript;
+  final String audioRef;
+
+  factory AiTranscription.fromJson(Map<String, dynamic> json) => AiTranscription(
+    transcript: json['transcript'] as String? ?? '',
+    audioRef: json['audioRef'] as String? ?? '',
+  );
+}
+
+/// Why an upload for transcription did not produce a transcript. Quota exhaustion (429) is
+/// [AiQuotaExhaustedException], not a value here.
+enum AiTranscribeError {
+  /// 404: `Ai:VoiceCapture:Enabled` is off on the server.
+  voiceDisabled,
+
+  /// 403: AI drafting is switched off for the company.
+  aiDisabled,
+  audioTypeMismatch,
+  audioUnrecognised,
+  audioTooLong,
+  audioTooShort,
+  audioTooLarge,
+  audioTypeNotAllowed,
+  offline,
+  unavailable,
+}
+
+class AiTranscribeException implements Exception {
+  const AiTranscribeException(this.error, this.message);
+
+  final AiTranscribeError error;
+  final String message;
+
+  /// True when the SAME file may succeed later (connection, server hiccup). False when the audio
+  /// itself or the feature switch is the problem: repeating the upload cannot help.
+  bool get retryable =>
+      error == AiTranscribeError.offline || error == AiTranscribeError.unavailable;
+
+  @override
+  String toString() => message;
+}
+
 class AiApiClient {
   AiApiClient(this._dio);
 
@@ -632,6 +676,104 @@ class AiApiClient {
     } on DioException catch (e) {
       throw _translateConversation(e);
     }
+  }
+
+  /// POST /api/ai/transcribe — multipart field `audio` (m4a, sent as audio/mp4). The server sniffs
+  /// the container from the bytes and rejects a declared type that does not match.
+  ///
+  /// [idempotencyKey] must be generated once per recording and reused on every retry: the server
+  /// then returns the same `audioRef` without transcribing or charging again.
+  Future<AiTranscription> transcribe(File audio, {required String idempotencyKey}) async {
+    try {
+      final form = FormData.fromMap({
+        'audio': await MultipartFile.fromFile(
+          audio.path,
+          filename: 'voice.m4a',
+          contentType: DioMediaType('audio', 'mp4'),
+        ),
+      });
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/ai/transcribe',
+        data: form,
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+      );
+      final data = response.data;
+      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      return AiTranscription.fromJson(data);
+    } on DioException catch (e) {
+      throw _translateTranscribe(e);
+    }
+  }
+
+  static Exception _translateTranscribe(DioException e) {
+    final status = e.response?.statusCode;
+    final body = e.response?.data;
+    final map = body is Map<String, dynamic> ? body : null;
+
+    if (status == 429) {
+      return AiQuotaExhaustedException(
+        monthlyLimit: asInt(map?['monthlyLimit']),
+        used: asInt(map?['used']),
+        resetsAt: DateTime.tryParse(map?['resetsAt'] as String? ?? '')?.toUtc(),
+      );
+    }
+    if (status == null &&
+        (e.type == DioExceptionType.connectionError ||
+            e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.sendTimeout ||
+            e.type == DioExceptionType.receiveTimeout)) {
+      return const AiTranscribeException(
+        AiTranscribeError.offline,
+        'Nessuna connessione. La registrazione è salvata: riprova quando torna la rete.',
+      );
+    }
+    if (status == 404) {
+      return const AiTranscribeException(
+        AiTranscribeError.voiceDisabled,
+        'La trascrizione vocale non è attiva per questa azienda.',
+      );
+    }
+    if (status == 403) {
+      return const AiTranscribeException(
+        AiTranscribeError.aiDisabled,
+        'La bozza con AI è disattivata per questa azienda.',
+      );
+    }
+    if (status == 400) {
+      final code = map?['error'] as String?;
+      final reason = switch (code) {
+        'audio_type_mismatch' => (
+          AiTranscribeError.audioTypeMismatch,
+          'Il formato dell\'audio non è riconosciuto dal server.',
+        ),
+        'audio_unrecognised' => (
+          AiTranscribeError.audioUnrecognised,
+          'Il file audio non è leggibile.',
+        ),
+        'audio_too_long' => (
+          AiTranscribeError.audioTooLong,
+          'La registrazione è troppo lunga.',
+        ),
+        'audio_too_short' => (
+          AiTranscribeError.audioTooShort,
+          'La registrazione è troppo breve.',
+        ),
+        'audio_too_large' => (
+          AiTranscribeError.audioTooLarge,
+          'Il file audio è troppo grande.',
+        ),
+        'audio_type_not_allowed' => (
+          AiTranscribeError.audioTypeNotAllowed,
+          'Il formato audio non è accettato.',
+        ),
+        _ => null,
+      };
+      if (reason != null) return AiTranscribeException(reason.$1, reason.$2);
+    }
+    return const AiTranscribeException(
+      AiTranscribeError.unavailable,
+      'Il servizio di trascrizione non ha risposto. Riprova più tardi.',
+    );
   }
 
   /// DELETE /api/ai/conversations/{id} — abandon. Best-effort: a session that's already gone
