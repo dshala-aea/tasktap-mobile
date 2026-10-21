@@ -79,6 +79,7 @@ class SyncService {
       await _upsertMateriali(payload.materiali);
       await _replaceTicketMateriali(payload);
       await _upsertMaterialeBarcodes(payload.materialiBarcodes);
+      if (payload.carriesMagazzini) await _replaceMagazzini(payload.magazzini);
       await _upsertCantieri(payload.cantieri);
       await _replaceCantiereCrewAssignments(payload);
       await _replaceColleagues(payload.colleagues);
@@ -610,6 +611,42 @@ class SyncService {
             (c) => ColleaguesCompanion.insert(
               id: c.id,
               displayName: c.displayName,
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  /// The warehouses a rapportino material line can be sourced from.
+  ///
+  /// Replaced wholesale, like [_replaceColleagues]: the server sends the full active list every
+  /// sync, so upserting would keep a deactivated warehouse in the picker forever — and a
+  /// technician would source a line from stock the office no longer counts.
+  ///
+  /// The empty-list guard matters for the same reason as colleagues': "the tenant has no
+  /// warehouses" is not something this member can ever assert (the payload is gated on
+  /// `carriesMagazzini`, and an all-deactivated tenant is a data state this screen cannot serve
+  /// anyway), while wiping the mirror would silently strip the source off every line added until
+  /// the next successful sync. Keeps the previous list, exactly like the colleagues mirror.
+  Future<void> _replaceMagazzini(List<SyncMagazzinoDto> list) async {
+    if (list.isEmpty) return;
+
+    await db.transaction(() async {
+      await db.delete(db.magazzini).go();
+      await db.batch(
+        (b) => b.insertAll(
+          db.magazzini,
+          list.map(
+            (w) => MagazziniCompanion.insert(
+              id: w.id,
+              tenantId: w.tenantId,
+              createdAt: w.createdAt,
+              updatedAt: Value(w.updatedAt),
+              nome: w.nome,
+              tipo: w.tipo,
+              assegnatoUserId: Value(w.assegnatoUserId),
+              isActive: Value(w.isActive),
             ),
           ),
         ),
