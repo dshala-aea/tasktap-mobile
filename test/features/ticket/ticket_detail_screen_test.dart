@@ -1344,12 +1344,19 @@ void main() {
 
       await pump(tester, dio: dio, isOnline: true, attachmentCache: cache);
       await tapTab(tester, 'Allegati');
-      await tester.tap(find.text('foto1.jpg'));
       // The cache's hit/miss path touches dart:io (`Directory.exists`, the write-then-rename),
-      // and real I/O cannot complete while `pumpAndSettle` holds the fake-async loop — the
-      // viewer's FutureBuilder would spin on `CircularProgressIndicator` until the settle timeout.
-      // Yield to the real event loop first (same reason as step_riepilogo_signature_test.dart).
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+      // and real I/O never resolves inside `testWidgets`' fake-async zone — the viewer's
+      // FutureBuilder would sit on `CircularProgressIndicator` until `pumpAndSettle` timed out.
+      // So the tap, the frame that BUILDS the pushed viewer (that frame is what starts the
+      // future), and the wait all happen inside `runAsync` — the shape already used in
+      // step_riepilogo_signature_test.dart. A bare `Future.delayed` outside runAsync cannot
+      // help: at that point the future does not exist yet.
+      await tester.runAsync(() async {
+        await tester.tap(find.text('foto1.jpg'));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+      });
       await tester.pumpAndSettle();
 
       // The pushed screen's AppBar repeats the filename as its title. Its own copy is the only
@@ -1398,11 +1405,16 @@ void main() {
 
       await pump(tester, dio: dio, isOnline: true, attachmentCache: cache);
       await tapTab(tester, 'Allegati');
-      await tester.tap(find.text('certificato.pdf'));
       // Same fake-async/real-I/O rule as the image test above: `cache.lookup` calls
-      // `Directory.exists` before the (stubbed) request, so the failure only surfaces once the
-      // real event loop runs. Without this yield the assertion fires before the toast exists.
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+      // `Directory.exists` before the (stubbed) request, so that await never resolves under the
+      // fake clock and the toast never appears. Tap, pump and wait inside `runAsync`, then let
+      // the frame that mounts the toast be pumped there as well.
+      await tester.runAsync(() async {
+        await tester.tap(find.text('certificato.pdf'));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+      });
       await tester.pumpAndSettle();
 
       expect(find.byType(InteractiveViewer), findsNothing);
