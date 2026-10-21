@@ -2,19 +2,26 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
+import '../local/app_database.dart';
 import '../sync/connectivity_provider.dart';
+import '../sync/sync_service.dart' show appDatabaseProvider;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ExtensionFieldsApiClient
 //
 // Thin Dio wrapper for `ExtensionFieldsController` (backend, TaskTapAPI.Api) — tenant-defined
-// custom fields on an entity. Two endpoints only, both live-fetched with no local Drift mirror
-// (same "fetch-on-demand" shape as TicketDetailApiClient's own tabs, see that file's header
-// comment): the field *definitions* an admin configured for an entity type, and the *values* one
-// specific entity currently holds for them.
+// custom fields on an entity. Two endpoints only: the field *definitions* an admin configured for
+// an entity type, and the *values* one specific entity currently holds for them.
+//
+// Online these are live reads. Offline they are answered from the local mirror the sync fills:
+// `extension_field_definitions` (schema 46, whole-set replace every sync) for the definitions, and
+// the `extension_values` column the sync has carried inside each ticket/cantiere/report entity for
+// the values. Before that mirror existed the whole section vanished with no signal on exactly the
+// screens a technician uses on site.
 //
 // `entityType` here is always the backend's own lowercase key ('ticket', 'cantiere', 'report',
 // 'cantiereworklog', …) — see ExtensionFieldsController.DispatchGetAsync/DispatchSetAsync for the
@@ -65,26 +72,19 @@ final extensionFieldsApiClientProvider = Provider<ExtensionFieldsApiClient>((ref
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Offline signal — same shape as TicketDetailOfflineException: thrown before a request is even
-// attempted, so the section can say "needs a connection" instead of a generic/ambiguous failure.
-// ══════════════════════════════════════════════════════════════════════════════
-
-class ExtensionFieldsOfflineException implements Exception {
-  const ExtensionFieldsOfflineException();
-
-  @override
-  String toString() => 'Offline: campi aggiuntivi non disponibili senza connessione.';
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
 // Providers
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Active field definitions for one backend entity-type key, e.g. `'ticket'`.
+///
+/// Offline, answered from the sync mirror — the section renders read-only from what the last sync
+/// delivered instead of disappearing. The mirror is written wholesale by every sync
+/// (`SyncService._replaceExtensionFieldDefinitions`), so it is the same active set the live
+/// endpoint would return for this caller's permissions.
 final extensionFieldDefinitionsProvider = FutureProvider.autoDispose
     .family<List<ExtensionFieldDefinitionDto>, String>((ref, entityType) async {
       if (!ref.watch(isOnlineProvider)) {
-        throw const ExtensionFieldsOfflineException();
+        return _mirroredDefinitions(ref.watch(appDatabaseProvider), entityType);
       }
       final api = ref.watch(extensionFieldsApiClientProvider);
       return api.fetchDefinitions(entityType);
@@ -93,14 +93,90 @@ final extensionFieldDefinitionsProvider = FutureProvider.autoDispose
 /// One entity's current extension-field values, keyed by `(entityType, entityId)` so a ticket and
 /// a cantiere sharing no relation never collide, and so switching which entity a screen is showing
 /// (e.g. picking a different cantiere) naturally invalidates to a fresh fetch.
+///
+/// Offline, answered from the entity's own `extensionValues` column — the values have always been
+/// on the wire inside the entity JSON; they just had nowhere to land before schema 46.
 final extensionFieldValuesProvider = FutureProvider.autoDispose
     .family<Map<String, String>, (String entityType, String entityId)>((ref, key) async {
       if (!ref.watch(isOnlineProvider)) {
-        throw const ExtensionFieldsOfflineException();
+        return _mirroredValues(ref.watch(appDatabaseProvider), key.$1, key.$2);
       }
       final api = ref.watch(extensionFieldsApiClientProvider);
       return api.fetchValues(key.$1, key.$2);
     });
+
+/// Definitions this device mirrored for [entityType], in the order the office arranged them.
+Future<List<ExtensionFieldDefinitionDto>> _mirroredDefinitions(
+  AppDatabase db,
+  String entityType,
+) async {
+  final rows =
+      await (db.select(db.extensionFieldDefinitions)
+            ..where((d) => d.entityType.equals(entityType))
+            ..orderBy([(d) => OrderingTerm.asc(d.sortOrder)]))
+          .get();
+
+  return rows
+      .map(
+        (d) => ExtensionFieldDefinitionDto(
+          id: d.id,
+          key: d.key,
+          label: d.label,
+          entityType: d.entityType,
+          fieldType: d.fieldType,
+          isRequired: d.isRequired,
+          showInCard: d.showInCard,
+          sortOrder: d.sortOrder,
+          options: d.options,
+          unit: d.unit,
+          defaultValue: d.defaultValue,
+          placeholder: d.placeholder,
+        ),
+      )
+      .toList();
+}
+
+/// Values this device mirrored for one entity, or an empty map when it holds none.
+Future<Map<String, String>> _mirroredValues(
+  AppDatabase db,
+  String entityType,
+  String entityId,
+) async {
+  final raw = switch (entityType) {
+    'ticket' => (await (db.select(
+      db.tickets,
+    )..where((t) => t.id.equals(entityId))).getSingleOrNull())?.extensionValues,
+    'cantiere' => (await (db.select(
+      db.cantieri,
+    )..where((c) => c.id.equals(entityId))).getSingleOrNull())?.extensionValues,
+    'report' => (await (db.select(
+      db.draftReports,
+    )..where((r) => r.id.equals(entityId))).getSingleOrNull())?.extensionValues,
+    // Every other extensible type is not mirrored by the mobile sync (customers, contracts, …).
+    _ => null,
+  };
+  return decodeExtensionValues(raw);
+}
+
+/// Parses the server's raw `extensionValues` JSON-object text into the flat map the section
+/// renders. Accepts the double-encoded shape the API produces (`"{\"zona\":\"Nord\"}"` → a string
+/// holding JSON) and a plain object, and tolerates a non-string JSON value by stringifying it —
+/// the same leniency `ExtensionValueService.Parse` applies server-side. Malformed text yields an
+/// empty map rather than throwing: a corrupt mirror must not break the whole form.
+Map<String, String> decodeExtensionValues(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return const {};
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is Map<String, dynamic>) {
+      return decoded.map(
+        (key, value) => MapEntry(key, value?.toString() ?? ''),
+      );
+    }
+  } catch (_) {
+    // Not JSON (or not an object) — treat as "no values recorded".
+  }
+  return const {};
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // DTOs

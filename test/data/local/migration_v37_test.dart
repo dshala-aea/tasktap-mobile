@@ -117,9 +117,11 @@ void main() {
   /// queries carry no delta, so there was nothing a reset would fetch. Schema 42 (customers.agentId,
   /// already on the wire for unedited customers) was the first reason to move it since: v10. The
   /// sync-v2 authoritative scope is the second: its cursor overlap and its prune both require a
-  /// complete payload, not a stale delta. This test is the record that no release moved the
-  /// generation silently.
+  /// complete payload, not a stale delta. Schema 46 is the third: `extensionValues` travels inside
+  /// each entity, and a delta never re-sends an unedited ticket, so without a full sync every
+  /// device would keep a null custom-field set on every ticket nobody happened to touch. This test
+  /// is the record that no release moved the generation silently.
   test('the sync cursor generation is the one the current release set', () {
-    expect(AppDatabase.syncCursorGeneration, 'v11');
+    expect(AppDatabase.syncCursorGeneration, 'v12');
   });
 }

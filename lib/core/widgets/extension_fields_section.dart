@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../data/extension_fields/extension_fields_api_client.dart';
+import '../../data/sync/connectivity_provider.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_spacing.dart';
 import '../utils/error_message.dart';
@@ -212,6 +213,14 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
   }
 
   Widget _buildSection(BuildContext context, List<ExtensionFieldDefinitionDto> defs) {
+    // Offline the section is READ-ONLY: the values render from the sync mirror (so a technician
+    // can still see what the office recorded), but saving them needs a connection, and there is no
+    // queued-write path for this endpoint. Hiding the button is the honest affordance — the
+    // alternative is letting a technician type into fields whose save will fail and take the text
+    // with it. This is exactly the case that used to be invisible: the whole section simply did not
+    // appear offline.
+    final online = ref.watch(isOnlineProvider);
+
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.lg),
       child: Column(
@@ -224,16 +233,22 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (final d in defs) ...[_buildField(context, d), const SizedBox(height: 16)],
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: AppButton(
-                    label: _isSaving ? 'Salvataggio…' : 'Salva',
-                    onPressed: (!_dirty || _isSaving) ? null : _save,
-                    isLoading: _isSaving,
-                    size: AppButtonSize.sm,
-                    fullWidth: false,
+                if (!online)
+                  Text(
+                    'Sola lettura finché non torna la connessione.',
+                    style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+                  )
+                else
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: AppButton(
+                      label: _isSaving ? 'Salvataggio…' : 'Salva',
+                      onPressed: (!_dirty || _isSaving) ? null : _save,
+                      isLoading: _isSaving,
+                      size: AppButtonSize.sm,
+                      fullWidth: false,
+                    ),
                   ),
-                ),
               ],
             ),
           ),

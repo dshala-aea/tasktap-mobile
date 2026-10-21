@@ -28839,6 +28839,13 @@
             },
             "description": "The maintenance templates this tenant may reference — the curated (shared) ones plus its\nown — so a technician can attach a checklist to a ticket offline (\"Modello checklist\").\nReturned in full on every sync, inactive templates included: see\nSyncMaintenanceTemplateDto for both decisions, and for why this is not\n`IReadOnlyList&lt;MaintenanceTemplate&gt;`."
           },
+          "extensionFieldDefinitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncExtensionFieldDefinitionDto"
+            },
+            "description": "The tenant's active custom-field definitions (\"campi aggiuntivi\") for every extensible entity\ntype the caller may read, so the section renders with no network and a rapportino written on\nsite can still be completed field by field."
+          },
           "controlGroups": {
             "type": "array",
             "items": {
@@ -28936,7 +28943,7 @@
             "description": "Tickets whose checklist, assets and groups were NOT sent this time (whole tickets only). The phone keeps whatever it\nalready holds for them; nothing here implies a deletion."
           }
         },
-        "description": "Shape returned by Task&lt;MobileUserSyncResult&gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false, bool includeStrumenti = true, bool includeMaintenanceTemplates = true).\nContains the technician's own schedules (today..today+7d) and the linked\nreference entities they need for offline work, plus their draft reports."
+        "description": "Shape returned by Task&lt;MobileUserSyncResult&gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false, bool includeStrumenti = true, bool includeMaintenanceTemplates = true, Func&lt;string, Task&lt;bool&gt;&gt;? canReadExtensionEntityType = null).\nContains the technician's own schedules (today..today+7d) and the linked\nreference entities they need for offline work, plus their draft reports."
       },
       "ModelRole": {
         "type": "integer",
@@ -34749,6 +34756,97 @@
           }
         },
         "description": "One person\u0027s place on a cantiere\u0027s crew, mirrored so the phone can answer \u0022who is with me on\nthis site\u0022 offline \u2014 the lead\u0027s batch clock-in picker and the teammate list both come from here."
+      },
+      "SyncExtensionFieldDefinitionDto": {
+        "required": [
+          "id",
+          "key",
+          "label",
+          "entityType",
+          "fieldType",
+          "isRequired",
+          "showInList",
+          "showInCard",
+          "sortOrder",
+          "options",
+          "unit",
+          "defaultValue",
+          "placeholder"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identity of the definition row, so the device can upsert rather than duplicate.",
+            "format": "uuid"
+          },
+          "key": {
+            "type": "string",
+            "description": "The value key: what the entity's `ExtensionValues` JSON object is keyed by."
+          },
+          "label": {
+            "type": "string",
+            "description": "The field's caption."
+          },
+          "entityType": {
+            "type": "string",
+            "description": "Lowercase canonical type (`ticket`, `cantiere`, `report`, …) — the mirror groups by it."
+          },
+          "fieldType": {
+            "type": "string",
+            "description": "Free-string type the client maps to a renderer (text, number, date, boolean, select)."
+          },
+          "isRequired": {
+            "type": "boolean",
+            "description": "Whether the field must have a value before the entity is saved."
+          },
+          "showInList": {
+            "type": "boolean",
+            "description": "Whether a list column shows it (office grid; carried for shape parity with the summary DTO)."
+          },
+          "showInCard": {
+            "type": "boolean",
+            "description": "Whether the card/detail summary shows it."
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Display order within the entity type.",
+            "format": "int32"
+          },
+          "options": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Raw options string for a select-type field; the client parses it."
+          },
+          "unit": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional unit suffix (kg, mm, °C) shown next to the value."
+          },
+          "defaultValue": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Value pre-filled into a new entity, when the tenant set one."
+          },
+          "placeholder": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Input placeholder."
+          }
+        },
+        "description": "One tenant-defined custom field (\"campi aggiuntivi\") of an extensible entity, mirrored so the\nphone can render the section with no network — and so a value the office set is still readable\non a building site with no signal."
       },
       "SyncControlGroupDto": {
         "required": [

@@ -43,9 +43,13 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 /// did not have as the column's own name, unless that step names it in `newColumns`. So the shape
 /// below pins the value too (see the `maintenance_template_id` assertion), not just the presence.
 const _columnsAddedAfter37 = <String, List<String>>{
-  'draft_reports': ['expected_version'],
+  'draft_reports': ['expected_version', 'extension_values'],
   'pending_tickets': ['maintenance_template_id'],
   'report_strumenti': ['usage_description', 'outcome'],
+  // Schema 46. `tickets` matters beyond shape: step 38 re-creates that table from the CURRENT
+  // definition, so an absent `extension_values` is exactly the case its `newColumns` exists for.
+  'tickets': ['extension_values'],
+  'cantieri': ['extension_values'],
 };
 
 void main() {
@@ -218,6 +222,20 @@ void main() {
       isNull,
       reason: 'a v37 device has no template picker, so the rebuilt column must be NULL',
     );
+
+    // The same re-creation also rebuilds `tickets.extension_values` (schema 46), which the fixture
+    // dropped to make the reopen a real v37 — it is the first `tickets` column to need step 38's
+    // `newColumns`. Same trap, same only-sees-it check: the rebuilt column would otherwise hold the
+    // literal string "extension_values", which `decodeExtensionValues` reads as "no values recorded"
+    // and would therefore never surface on the "Altri campi" section.
+    expect(
+      server.extensionValues,
+      isNull,
+      reason: 'a v37 device has no custom-field values, so the rebuilt column must be NULL',
+    );
+    // Step 46 puts back the columns a real v37 device lacks on the tables step 38 does not rebuild.
+    expect(await columnsOf(db, 'cantieri'), contains('extension_values'));
+    expect(await columnsOf(db, 'draft_reports'), contains('extension_values'));
 
     // The rebuild is a real table re-creation, so everything else has to survive it.
     expect(await columnType(db, 'tickets', 'due_date'), 'TEXT');

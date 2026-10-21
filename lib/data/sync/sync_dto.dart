@@ -49,6 +49,11 @@ class SyncResultDto {
   /// replaced wholesale rather than merged (see SyncService).
   final List<SyncMaintenanceTemplateDto> maintenanceTemplates;
 
+  /// The tenant's active custom-field definitions, mirrored into `extension_field_definitions` so
+  /// the "campi aggiuntivi" section renders with no network. The whole visible set travels every
+  /// sync, so it is replaced wholesale (see `SyncService._replaceExtensionFieldDefinitions`).
+  final List<SyncExtensionFieldDefinitionDto> extensionFieldDefinitions;
+
   final List<SyncControlGroupDto> controlGroups;
   final List<SyncTicketControlDto> ticketControls;
   final List<SyncTicketAssetDto> ticketAssets;
@@ -129,6 +134,12 @@ class SyncResultDto {
   /// the mirror — the same trap [carriesMaintenanceTemplates] closes for the template catalogue.
   final bool carriesCantiereCrewAssignments;
 
+  /// False when the payload came from a backend that predates the extension-field definitions.
+  /// Without it an older backend would look like "every custom field was deleted" and the
+  /// wholesale replace would empty the section — the same trap
+  /// [carriesMaintenanceTemplates] closes for the template catalogue.
+  final bool carriesExtensionFieldDefinitions;
+
   /// The server's authoritative in-scope id sets, one nullable list per collection (sync v2).
   /// Null when the backend predates it — and null means NO PRUNE, never "everything left scope".
   /// See [SyncScopeDto] and [SyncService]'s prune.
@@ -165,6 +176,7 @@ class SyncResultDto {
     'maintenanceTemplates',
     'ticketMateriali',
     'cantiereCrewAssignments',
+    'extensionFieldDefinitions',
   };
 
   /// The sync-v2 additions that travel beside the row lists: the authoritative scope and the
@@ -210,6 +222,7 @@ class SyncResultDto {
     this.prodottiAssistenza = const [],
     this.agents = const [],
     this.maintenanceTemplates = const [],
+    this.extensionFieldDefinitions = const [],
     this.controlGroups = const [],
     this.ticketControls = const [],
     this.ticketAssets = const [],
@@ -235,6 +248,7 @@ class SyncResultDto {
     this.carriesMaintenanceTemplates = false,
     this.carriesTicketMateriali = false,
     this.carriesCantiereCrewAssignments = false,
+    this.carriesExtensionFieldDefinitions = false,
     this.scope,
   });
 
@@ -275,6 +289,10 @@ class SyncResultDto {
       maintenanceTemplates: _list(
         j['maintenanceTemplates'],
         SyncMaintenanceTemplateDto.fromJson,
+      ),
+      extensionFieldDefinitions: _list(
+        j['extensionFieldDefinitions'],
+        SyncExtensionFieldDefinitionDto.fromJson,
       ),
       controlGroups: _list(j['controlGroups'], SyncControlGroupDto.fromJson),
       ticketControls: _list(j['ticketControls'], SyncTicketControlDto.fromJson),
@@ -318,6 +336,7 @@ class SyncResultDto {
       carriesAllegati: j.containsKey('allegati'),
       carriesTicketMateriali: j.containsKey('ticketMateriali'),
       carriesCantiereCrewAssignments: j.containsKey('cantiereCrewAssignments'),
+      carriesExtensionFieldDefinitions: j.containsKey('extensionFieldDefinitions'),
       scope: j['scope'] == null
           ? null
           : SyncScopeDto.fromJson(j['scope'] as Map<String, dynamic>),
@@ -592,6 +611,13 @@ class TicketDto {
   /// Free-form labels — see `Tickets.tagsJson`'s own doc comment in `app_database.dart`.
   final List<String> tags;
 
+  /// The tenant's custom-field values for this ticket, as the server's raw JSON-object text.
+  ///
+  /// On the wire this is a JSON *string* holding JSON — `Ticket.ExtensionValues` is a `string?` over
+  /// a Postgres `jsonb` column, so System.Text.Json writes it quoted — hence `String?` here and a
+  /// double decode at the point of use. Null means the ticket has no custom-field values.
+  final String? extensionValues;
+
   const TicketDto({
     required this.id,
     required this.tenantId,
@@ -616,6 +642,7 @@ class TicketDto {
     this.priority,
     this.dueDate,
     this.tags = const [],
+    this.extensionValues,
   });
 
   factory TicketDto.fromJson(Map<String, dynamic> j) => TicketDto(
@@ -642,6 +669,7 @@ class TicketDto {
     priority: j['priority'] as String?,
     dueDate: parseDateOnly(j['dueDate']),
     tags: (j['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
+    extensionValues: j['extensionValues'] as String?,
   );
 }
 
@@ -832,6 +860,10 @@ class CantiereDto {
   final String? customerId;
   final String? commessaId;
 
+  /// The tenant's custom-field values for this cantiere, raw JSON-object text — see
+  /// `TicketDto.extensionValues` for the double-encoded wire shape.
+  final String? extensionValues;
+
   const CantiereDto({
     required this.id,
     required this.tenantId,
@@ -847,6 +879,7 @@ class CantiereDto {
     this.status = 0,
     this.customerId,
     this.commessaId,
+    this.extensionValues,
   });
 
   factory CantiereDto.fromJson(Map<String, dynamic> j) => CantiereDto(
@@ -864,7 +897,81 @@ class CantiereDto {
     status: parseCantiereStatus(j['status']),
     customerId: j['customerId'] as String?,
     commessaId: j['commessaId'] as String?,
+    extensionValues: j['extensionValues'] as String?,
   );
+}
+
+// ── Tenant extension-field definitions ─────────────────────────────────────────
+
+/// One `extensionFieldDefinitions[]` row — a tenant-configured custom field ("campo aggiuntivo")
+/// for an extensible entity type.
+///
+/// Mirrors the server's `SyncExtensionFieldDefinitionDto`, which itself carries exactly the members
+/// `ExtensionFieldDefinitionSummaryDto` hands the office forms — so the mirrored section renders
+/// the same online and offline. `showInList` travels on the wire (it is an office-grid concern) and
+/// is deliberately not read here: nothing on the phone renders a list column from it.
+class SyncExtensionFieldDefinitionDto {
+  final String id;
+  final String key;
+  final String label;
+  final String entityType;
+  final String fieldType;
+  final bool isRequired;
+  final bool showInCard;
+  final int sortOrder;
+  final String? options;
+  final String? unit;
+  final String? defaultValue;
+  final String? placeholder;
+
+  const SyncExtensionFieldDefinitionDto({
+    required this.id,
+    required this.key,
+    required this.label,
+    required this.entityType,
+    required this.fieldType,
+    this.isRequired = false,
+    this.showInCard = false,
+    this.sortOrder = 0,
+    this.options,
+    this.unit,
+    this.defaultValue,
+    this.placeholder,
+  });
+
+  /// Exactly the keys [fromJson] reads — the inbound contract test compares this with the
+  /// server's declared schema in both directions, so a member added on one side alone fails.
+  static const Set<String> wireKeys = {
+    'id',
+    'key',
+    'label',
+    'entityType',
+    'fieldType',
+    'isRequired',
+    'showInList',
+    'showInCard',
+    'sortOrder',
+    'options',
+    'unit',
+    'defaultValue',
+    'placeholder',
+  };
+
+  factory SyncExtensionFieldDefinitionDto.fromJson(Map<String, dynamic> j) =>
+      SyncExtensionFieldDefinitionDto(
+        id: j['id'] as String,
+        key: j['key'] as String,
+        label: j['label'] as String,
+        entityType: j['entityType'] as String,
+        fieldType: j['fieldType'] as String? ?? 'text',
+        isRequired: j['isRequired'] as bool? ?? false,
+        showInCard: j['showInCard'] as bool? ?? false,
+        sortOrder: (j['sortOrder'] as num?)?.toInt() ?? 0,
+        options: j['options'] as String?,
+        unit: j['unit'] as String?,
+        defaultValue: j['defaultValue'] as String?,
+        placeholder: j['placeholder'] as String?,
+      );
 }
 
 // ── Cantiere crew assignment ────────────────────────────────────────────────────
@@ -1115,6 +1222,10 @@ class ReportDto {
   final String? customerSignoffText;
   final DateTime? customerSignoffAt;
 
+  /// The tenant's custom-field values for this rapportino, raw JSON-object text — see
+  /// `TicketDto.extensionValues` for the double-encoded wire shape.
+  final String? extensionValues;
+
   const ReportDto({
     required this.id,
     required this.tenantId,
@@ -1145,6 +1256,7 @@ class ReportDto {
     this.materialiNotRequired = false,
     this.customerSignoffText,
     this.customerSignoffAt,
+    this.extensionValues,
   });
 
   factory ReportDto.fromJson(Map<String, dynamic> j) => ReportDto(
@@ -1178,6 +1290,7 @@ class ReportDto {
     materialiNotRequired: j['materialiNotRequired'] as bool? ?? false,
     customerSignoffText: j['customerSignoffText'] as String?,
     customerSignoffAt: _dt(j['customerSignoffAt']),
+    extensionValues: j['extensionValues'] as String?,
   );
 }
 
