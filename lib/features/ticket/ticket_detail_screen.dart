@@ -2344,9 +2344,10 @@ class _StoricoTab extends ConsumerWidget {
         icon: LucideIcons.history,
         offline: e is TicketDetailOfflineException,
         offlineTitle: 'Storico non disponibile offline',
-        offlineBody:
-            'La cronologia delle modifiche si legge solo online: '
-            'riprova quando torni in copertura.',
+        // G3: state it explicitly. An empty history is indistinguishable from a ticket that was
+        // never touched, and the audit trail is the one thing on this screen a technician might
+        // need to prove a change happened.
+        offlineBody: 'Storico disponibile solo con connessione.',
         errorTitle: 'Impossibile caricare lo storico',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),
