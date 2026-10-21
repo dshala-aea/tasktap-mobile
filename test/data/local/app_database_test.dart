@@ -166,7 +166,16 @@ void main() {
     late Map<String, String> realTableDdl;
 
     setUpAll(() async {
-      realTableDdl = await _currentTableDdl(['tickets', 'pending_tickets', 'customers']);
+      realTableDdl = await _currentTableDdl([
+        'tickets',
+        'pending_tickets',
+        'customers',
+        // `report_allegati` too: schema 44 adds `kind`/`content_hash` to it, and a real device has
+        // carried that table since its first release. Same fixture gap as `customers` above — the
+        // current DDL already declares both columns, so the step's `PRAGMA table_info` guard skips
+        // the add here, and migration_v44_test.dart covers the add path itself.
+        'report_allegati',
+      ]);
     });
 
     test('upgrading from 33 adds both columns with defaults and keeps existing rows', () async {

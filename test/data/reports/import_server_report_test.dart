@@ -343,8 +343,16 @@ void main() {
       await expectLater(run(), throwsA(isA<ServerReportNotMirroredException>()));
 
       final d = (await repo.getDraft(_rid))!;
-      expect(d.isLocalOnly, isFalse);
-      expect(d.submissionState, isNot('draft'));
+      expect(d.isLocalOnly, isFalse, reason: 'the editor gates on this flag');
+      // `submissionState` defaults to 'draft' on a freshly mirrored row, so it cannot tell a
+      // refused import from a completed one. The success path's own distinguishing write is
+      // `updatedAt`: the seed leaves it null and the import stamps it.
+      expect(d.updatedAt, isNull, reason: 'a refused import writes nothing at all');
+      expect(
+        (await repo.getControlli(_rid)).map((c) => c.id),
+        ['server-ctrl-1'],
+        reason: 'a refused import must not re-key children it never adopted',
+      );
     });
 
     test('refuses a report that is no longer a Bozza', () async {

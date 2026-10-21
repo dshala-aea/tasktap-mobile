@@ -49,10 +49,27 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  /// A container backed by an in-memory Drift database.
+  ///
+  /// `ticketWorklogsProvider` reads the ticket-timer mirror first (O-9), so a bare
+  /// `ProviderContainer()` opens the real on-device database through `path_provider` — a channel
+  /// with no implementation under `flutter test`. The read then dies before the provider has a
+  /// state to invalidate, and the listener below never fires.
+  ProviderContainer memoryContainer() {
+    final db = AppDatabase(NativeDatabase.memory());
+    final container = ProviderContainer(
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+    return container;
+  }
+
   test('a TicketWorkLogStarted event invalidates ticketWorklogsProvider for that ticket', () async {
     var invalidated = false;
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+    final container = memoryContainer();
     container.listen(
       ticketWorklogsProvider('t1'),
       (prev, next) => invalidated = true,
@@ -78,8 +95,7 @@ void main() {
 
   test('a TicketWorkLogStopped event invalidates ticketWorklogsProvider for that ticket', () async {
     var invalidated = false;
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+    final container = memoryContainer();
     container.listen(
       ticketWorklogsProvider('t2'),
       (prev, next) => invalidated = true,

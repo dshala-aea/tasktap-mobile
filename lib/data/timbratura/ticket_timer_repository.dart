@@ -62,9 +62,11 @@ class TicketTimerRepository {
             isPendingSync: const Value(true),
           ),
         );
-    return (await (_db.select(
-      _db.ticketTimers,
-    )..where((t) => t.id.equals(id))).getSingle());
+    return _asUtc(
+      await (_db.select(
+        _db.ticketTimers,
+      )..where((t) => t.id.equals(id))).getSingle(),
+    );
   }
 
   /// Closes the timer this device is running for [ticketId], if any.
@@ -95,21 +97,25 @@ class TicketTimerRepository {
         isPendingSync: const Value(true),
       ),
     );
-    return (await (_db.select(
-      _db.ticketTimers,
-    )..where((t) => t.id.equals(row.id))).getSingle());
+    return _asUtc(
+      await (_db.select(
+        _db.ticketTimers,
+      )..where((t) => t.id.equals(row.id))).getSingle(),
+    );
   }
 
   /// Every timer on one ticket, newest first, open row first among equals — the same ordering the
   /// online list arrives in.
-  Future<List<TicketTimer>> forTicket(String ticketId) =>
-      (_db.select(_db.ticketTimers)
-            ..where((t) => t.ticketId.equals(ticketId))
-            ..orderBy([
-              (t) => OrderingTerm.desc(t.workDate),
-              (t) => OrderingTerm.desc(t.startSeconds),
-            ]))
-          .get();
+  Future<List<TicketTimer>> forTicket(String ticketId) async =>
+      (await (_db.select(_db.ticketTimers)
+                ..where((t) => t.ticketId.equals(ticketId))
+                ..orderBy([
+                  (t) => OrderingTerm.desc(t.workDate),
+                  (t) => OrderingTerm.desc(t.startSeconds),
+                ]))
+              .get())
+          .map(_asUtc)
+          .toList();
 
   /// The session this device currently has running, on any ticket.
   ///
@@ -122,15 +128,17 @@ class TicketTimerRepository {
               ..orderBy([(t) => OrderingTerm.desc(t.startSeconds)])
               ..limit(1))
             .get();
-    return rows.isEmpty ? null : rows.first;
+    return rows.isEmpty ? null : _asUtc(rows.first);
   }
 
   /// Rows the server has not confirmed, oldest first.
-  Future<List<TicketTimer>> pending() =>
-      (_db.select(_db.ticketTimers)
-            ..where((t) => t.isPendingSync.equals(true))
-            ..orderBy([(t) => OrderingTerm.asc(t.startUtc)]))
-          .get();
+  Future<List<TicketTimer>> pending() async =>
+      (await (_db.select(_db.ticketTimers)
+                ..where((t) => t.isPendingSync.equals(true))
+                ..orderBy([(t) => OrderingTerm.asc(t.startUtc)]))
+              .get())
+          .map(_asUtc)
+          .toList();
 
   /// The server accepted [clientId]'s session: adopt its id and stop counting the row as unsent.
   Future<void> markSynced(String clientId, String serverId) async {
@@ -188,6 +196,21 @@ class TicketTimerRepository {
       (_db.update(_db.ticketTimers)..where((t) => t.id.equals(id))).write(
         TicketTimersCompanion(syncError: Value(message)),
       );
+
+  /// Re-stamps a row's instants on the way out.
+  ///
+  /// Drift hands a `DateTimeColumn` back as a LOCAL-kind `DateTime` for the same instant. Both
+  /// `startUtc`/`endUtc` and the `workDate` civil day pinned at UTC midnight are documented as
+  /// UTC, and `DateTime.==` includes `isUtc` — so without this a caller comparing a row against
+  /// the value it wrote sees "different" for the same moment, and a caller that serialises
+  /// `startUtc` without remembering a `toUtc()` emits a local wall-clock time the server reads in
+  /// its own zone. Same moment either way; this just makes the field names true.
+  static TicketTimer _asUtc(TicketTimer row) => row.copyWith(
+    workDate: Value(row.workDate?.toUtc()),
+    startUtc: Value(row.startUtc?.toUtc()),
+    endUtc: Value(row.endUtc?.toUtc()),
+    updatedAt: Value(row.updatedAt?.toUtc()),
+  );
 
   /// The office's zone, taken from [BusinessTime] rather than re-derived here: the workDate and the
   /// time of day this table stores are the legacy label frame every worklog reader displays, and a
