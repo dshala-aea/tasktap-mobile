@@ -939,12 +939,34 @@ void main() {
       });
     });
 
-    test('a_throwing_apply_never_leaves_the_crash_marker_set', () async {
-      await (h.db.update(h.db.draftReports)..where((r) => r.id.equals(_report))).write(
-        const DraftReportsCompanion(submissionState: Value('readyToSubmit')),
+    test('a_statement_throwing_inside_the_transaction_leaves_the_baseline_untouched', () async {
+      // Seed a baseline so "exactly as it was" is not just empty.
+      await h.feed.apply(_session, _draft(workers: [_worker(_me, hours: 2)]));
+      final before = (await h.store.load(_session))!.toJson();
+      expect(before['applied'], isNotEmpty);
+
+      // The worker row is written first and the material insert then fails: Drift rolls back.
+      await h.db.customStatement(
+        "CREATE TRIGGER boom BEFORE INSERT ON report_materiali WHEN NEW.materiale_id = '$_mat' "
+        "BEGIN SELECT RAISE(ABORT, 'boom'); END",
       );
-      await expectLater(h.feed.apply(_session, _draft()), throwsA(isA<AiFeedReportLockedException>()));
-      expect((await h.store.load(_session))?.applying ?? false, isFalse);
+      final planned = _draft(
+        workers: [_worker(_me, hours: 2), _worker(_planned, hours: 5)],
+        materials: [_material(_mat, 2)],
+      );
+      await expectLater(h.feed.apply(_session, planned), throwsA(anything));
+
+      expect(await h.materials(), isEmpty, reason: 'rolled back');
+      expect((await h.staff()).map((s) => s.userId), [_me], reason: 'the second worker rolled back');
+      final after = (await h.store.load(_session))!;
+      expect(after.applying, isFalse, reason: 'the crash marker is cleared');
+      expect(after.toJson()['applied'], before['applied'], reason: 'baseline as before the apply');
+
+      await h.db.customStatement('DROP TRIGGER boom');
+      await h.feed.apply(_session, planned);
+      expect(await h.materials(), hasLength(1));
+      expect((await h.staff()).map((s) => s.userId).toSet(), {_me, _planned});
+      expect(await h.feed.pendingEdits(_session), isEmpty, reason: 'no removal edit is derived');
     });
 
     test('recovery_adopts_a_local_value_only_where_it_equals_the_server_value', () async {

@@ -459,18 +459,26 @@ class AiDraftFeed {
   /// Runs [write] between the persisted "apply in progress" marker and the baseline save.
   /// [write] receives whether an earlier apply was interrupted (see [AiDraftFeedState.applying]).
   ///
-  /// A write that THROWS rolled its Drift transaction back, so nothing is half-written: the marker
-  /// is cleared then too. Only a killed process leaves it set.
+  /// A write that THROWS rolled its Drift transaction back, so nothing is half-written, and the
+  /// in-memory baseline [write] mutated inside that transaction describes rows that never landed:
+  /// the STORED baseline is restored from a snapshot taken before the write, so the next derive
+  /// never reads those keys as removed by hand. The crash marker is cleared only after that
+  /// restore (and only if it was not already set by an earlier, killed apply). Only a killed
+  /// process leaves it set.
   Future<void> _marked(AiDraftFeedState state, Future<void> Function(bool recovering) write) async {
     final recovering = state.applying;
+    final snapshot = jsonDecode(jsonEncode(state.toJson())) as Map<String, dynamic>;
     state.applying = true;
     await _store.save(state);
     try {
       await write(recovering);
-    } finally {
-      state.applying = false;
-      await _store.save(state);
+    } catch (_) {
+      final restored = AiDraftFeedState.fromJson(snapshot)..applying = recovering;
+      await _store.save(restored);
+      rethrow;
     }
+    state.applying = false;
+    await _store.save(state);
   }
 
   /// The one guard every AI writer goes through: the linked report must still be the
