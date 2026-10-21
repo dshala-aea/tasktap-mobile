@@ -412,4 +412,247 @@ void main() {
       await expectLater(client.abandonConversation('sess-1'), completes);
     });
   });
+
+  group('live draft wire contract (Task 11)', () {
+    Dio dioWith(Future<ResponseBody> Function(RequestOptions) f) {
+      final dio = Dio();
+      dio.httpClientAdapter = _Adapter(f);
+      return dio;
+    }
+
+    ResponseBody json(Object body, [int status = 200]) => ResponseBody.fromString(
+      jsonEncode(body),
+      status,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+
+    test('resumeConversation returns the session id, or null on a 404', () async {
+      RequestOptions? seen;
+      final ok = AiApiClient(
+        dioWith((o) async {
+          seen = o;
+          return json({'sessionId': 'sess-9'});
+        }),
+      );
+      expect(await ok.resumeConversation('tkt-1'), 'sess-9');
+      expect(seen!.method, 'GET');
+      expect(seen!.queryParameters, {'ticketId': 'tkt-1'});
+
+      final none = AiApiClient(dioWith((o) async => json({'title': 'Not Found'}, 404)));
+      expect(await none.resumeConversation('tkt-1'), isNull);
+    });
+
+    test('postTurn sends the new fields and the Idempotency-Key header', () async {
+      RequestOptions? seen;
+      final client = AiApiClient(
+        dioWith((o) async {
+          seen = o;
+          return json({'assistantReplyText': 'Ok', 'draft': <String, dynamic>{}});
+        }),
+      );
+      await client.postTurn(
+        'sess-1',
+        text: 'Filtro olio',
+        source: AiTurnSource.voice,
+        audioRef: 'a-1',
+        rawTranscript: 'filtro orio',
+        replacesTurnId: 't-3',
+        idempotencyKey: 'key-9',
+      );
+      expect(seen!.headers['Idempotency-Key'], 'key-9');
+      expect(seen!.data, {
+        'text': 'Filtro olio',
+        'source': 'Voice',
+        'audioRef': 'a-1',
+        'rawTranscript': 'filtro orio',
+        'replacesTurnId': 't-3',
+      });
+
+      await client.postTurn('sess-1', text: 'x', idempotencyKey: 'key-10');
+      expect(seen!.data, {'text': 'x', 'source': 'Typed'});
+    });
+
+    test('syncEdits is an edits-only turn with the exact ConfirmedEditDto wire keys', () async {
+      RequestOptions? seen;
+      final client = AiApiClient(
+        dioWith((o) async {
+          seen = o;
+          return json({'assistantReplyText': '', 'draft': <String, dynamic>{}});
+        }),
+      );
+      await client.syncEdits(
+        'sess-1',
+        const [
+          AiConfirmedEdit(kind: 'worker', id: 'u-1', property: 'hours', value: 5.5),
+          AiConfirmedEdit(kind: 'material', name: 'Nastro teflon'),
+          AiConfirmedEdit(kind: 'material', id: 'm-1', remove: true),
+        ],
+        idempotencyKey: 'batch-1',
+      );
+      expect(seen!.path, '/api/ai/conversations/sess-1/turns');
+      expect(seen!.headers['Idempotency-Key'], 'batch-1');
+      expect(seen!.data, {
+        'text': '',
+        'source': 'Typed',
+        'confirmedEdits': [
+          {'kind': 'worker', 'id': 'u-1', 'property': 'hours', 'value': 5.5, 'remove': false},
+          {'kind': 'material', 'name': 'Nastro teflon', 'remove': false},
+          {'kind': 'material', 'id': 'm-1', 'remove': true},
+        ],
+      });
+      for (final e in (seen!.data as Map)['confirmedEdits'] as List) {
+        expect(AiConfirmedEdit.wireKeys, containsAll((e as Map).keys));
+      }
+    });
+
+    test('draft entries carry km, vehicle, unit, isFreeText and a control date; unknown '
+        'strings never throw', () {
+      final d = AiCopilotDraftDto.fromJson({
+        'workers': [
+          {'userId': 'u', 'fullName': 'A', 'km': 12, 'vehicle': 'Doblò', 'state': 'Nuovo'},
+        ],
+        'materials': [
+          {'materialId': 'm', 'name': 'n', 'quantity': 1, 'unit': 'pz', 'isFreeText': true},
+        ],
+        'controlli': [
+          {'ticketControlId': 'c', 'dateValue': '2026-10-20T00:00:00Z', 'state': 'X'},
+        ],
+      });
+      expect(d.workers.single.km, 12);
+      expect(d.workers.single.vehicle, 'Doblò');
+      expect(d.workers.single.state, AiResolutionState.unresolved);
+      expect(d.materials.single.unit, 'pz');
+      expect(d.materials.single.isFreeText, isTrue);
+      expect(d.controlli.single.dateValue, DateTime.utc(2026, 10, 20));
+    });
+
+    test('a 400 keeps the server\'s stable code (which edit refusal it was)', () async {
+      final client = AiApiClient(
+        dioWith((o) async => json({'error': 'edit_reference_not_found', 'message': 'x'}, 400)),
+      );
+      await expectLater(
+        () => client.syncEdits(
+          's',
+          const [AiConfirmedEdit(kind: 'worker', id: 'u')],
+          idempotencyKey: 'k',
+        ),
+        throwsA(
+          isA<AiConversationException>()
+              .having((e) => e.statusCode, 'status', 400)
+              .having((e) => e.code, 'code', 'edit_reference_not_found'),
+        ),
+      );
+    });
+
+    test('409 codes are surfaced, not collapsed', () async {
+      for (final code in [
+        'turn_in_progress',
+        'concurrent_update',
+        'draft_too_large',
+        'turn_limit_exceeded',
+      ]) {
+        final client = AiApiClient(dioWith((o) async => json({'code': code, 'title': 'x'}, 409)));
+        await expectLater(
+          () => client.postTurn('s', text: 't', idempotencyKey: 'k'),
+          throwsA(isA<AiConversationException>().having((e) => e.code, 'code', code)),
+        );
+      }
+    });
+
+    test('a 429 on a turn is a quota exception and a lost connection is flagged offline', () async {
+      final quota = AiApiClient(dioWith((o) async => json({'error': 'QuotaExceeded'}, 429)));
+      await expectLater(
+        () => quota.postTurn('s', text: 't', idempotencyKey: 'k'),
+        throwsA(isA<AiQuotaExhaustedException>()),
+      );
+      final offline = _clientThrowing(_err(type: DioExceptionType.connectionError));
+      await expectLater(
+        () => offline.postTurn('s', text: 't', idempotencyKey: 'k'),
+        throwsA(isA<AiConversationException>().having((e) => e.offline, 'offline', isTrue)),
+      );
+    });
+
+    test('postTurn gives the server its full 45 s turn budget (per-request timeouts)', () async {
+      RequestOptions? seen;
+      final client = AiApiClient(
+        dioWith((o) async {
+          seen = o;
+          return json({'assistantReplyText': 'Ok', 'draft': <String, dynamic>{}});
+        }),
+      );
+      await client.postTurn('s', text: 'x', idempotencyKey: 'k');
+      expect(seen!.receiveTimeout, const Duration(seconds: 60));
+      expect(seen!.sendTimeout, const Duration(seconds: 60));
+    });
+
+    test('a 422 for an over-long text is a typed, Italian, shortenable refusal', () async {
+      final client = AiApiClient(
+        dioWith(
+          (o) async => json({
+            'code': 'validation_failed',
+            'errors': {
+              'Text': ['Text must not exceed 8000 characters.'],
+            },
+          }, 422),
+        ),
+      );
+      await expectLater(
+        () => client.postTurn('s', text: 't', idempotencyKey: 'k'),
+        throwsA(
+          isA<AiConversationException>()
+              .having((e) => e.statusCode, 'status', 422)
+              .having((e) => e.isTextTooLong, 'tooLong', isTrue)
+              .having((e) => e.message, 'message', contains('troppo lungo')),
+        ),
+      );
+    });
+
+    test('any other 422 gets an honest Italian sentence, never the service-silent copy', () async {
+      final client = AiApiClient(
+        dioWith(
+          (o) async => json({
+            'code': 'validation_failed',
+            'errors': {
+              'Text': ['Text must not be empty.'],
+            },
+          }, 422),
+        ),
+      );
+      await expectLater(
+        () => client.postTurn('s', text: 't', idempotencyKey: 'k'),
+        throwsA(
+          isA<AiConversationException>()
+              .having((e) => e.statusCode, 'status', 422)
+              .having((e) => e.isTextTooLong, 'tooLong', isFalse)
+              .having((e) => e.message, 'message', contains('rifiutato'))
+              .having((e) => e.message, 'message', isNot(contains('validation_failed'))),
+        ),
+      );
+    });
+
+    test('a 400 with a code the app does not know never shows the raw code', () async {
+      for (final code in ['audio_ref_invalid', 'something_new']) {
+        final client = AiApiClient(dioWith((o) async => json({'error': code, 'message': 'x'}, 400)));
+        await expectLater(
+          () => client.postTurn('s', text: 't', idempotencyKey: 'k'),
+          throwsA(
+            isA<AiConversationException>()
+                .having((e) => e.code, 'code', code)
+                .having((e) => e.message, 'message', isNot(contains('_'))),
+          ),
+        );
+      }
+    });
+
+    test('tryAbandonConversation reports whether the session is gone and never throws', () async {
+      final ok = AiApiClient(dioWith((o) async => json({}, 204)));
+      expect(await ok.tryAbandonConversation('s'), isTrue);
+      final gone = AiApiClient(dioWith((o) async => json({'title': 'nf'}, 404)));
+      expect(await gone.tryAbandonConversation('s'), isTrue);
+      final down = _clientThrowing(_err(type: DioExceptionType.connectionError));
+      expect(await down.tryAbandonConversation('s'), isFalse);
+    });
+  });
 }

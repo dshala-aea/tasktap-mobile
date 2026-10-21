@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/audio/pending_recording_store.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../domain/auth/i_auth_repository.dart';
 import '../local/app_database.dart';
@@ -30,9 +31,18 @@ class SessionEnder {
     required IAuthRepository repo,
     required AppDatabase db,
     required Future<void> Function() resetBusinessZone,
-  }) : _repo = repo,
+    Future<void> Function()? wipePendingVoice,
+  }) : _wipePendingVoice = wipePendingVoice ?? _wipeAppPendingVoice,
+       _repo = repo,
        _db = db,
        _resetBusinessZone = resetBusinessZone;
+
+  /// Unsent voice recordings are raw audio of the previous user: removed on logout. Best-effort,
+  /// like the rest of the wipe (a failure here must not skip the Drift/prefs wipe).
+  final Future<void> Function() _wipePendingVoice;
+
+  static Future<void> _wipeAppPendingVoice() async =>
+      (await PendingRecordingStore.forApp()).wipe();
 
   final IAuthRepository _repo;
   final AppDatabase _db;
@@ -63,6 +73,11 @@ class SessionEnder {
     // leaving the local Drift DB and SharedPreferences populated after sign-out would let the next
     // person to sign in on this device (possibly a different tenant entirely) see the previous
     // account's full cached tickets/customers/cantieri/notifications and settings.
+    try {
+      await _wipePendingVoice();
+    } on Object {
+      // best-effort: never block the rest of the teardown
+    }
     try {
       await _db.wipeAllData();
       await (await SharedPreferences.getInstance()).clear();

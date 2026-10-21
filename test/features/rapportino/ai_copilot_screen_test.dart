@@ -87,7 +87,29 @@ class _FakeAiApiClient extends AiApiClient {
   );
 
   @override
-  Future<AiConversationTurnResult> sendTurn(String sessionId, String text) async {
+  Future<AiConversationDetailDto> getConversation(String sessionId) async => AiConversationDetailDto(
+    sessionId: sessionId,
+    draft: AiCopilotDraftDto.empty,
+    turns: const [],
+    version: 1,
+    expiresAtUtc: DateTime.utc(9999),
+  );
+
+  /// Task 11: entering from a ticket first asks for a live session; none exists here.
+  @override
+  Future<String?> resumeConversation(String ticketId) async => null;
+
+  @override
+  Future<AiConversationTurnResult> postTurn(
+    String sessionId, {
+    required String text,
+    AiTurnSource source = AiTurnSource.typed,
+    String? audioRef,
+    String? rawTranscript,
+    String? replacesTurnId,
+    List<Map<String, dynamic>>? confirmedEdits,
+    required String idempotencyKey,
+  }) async {
     sentTurns.add(text);
     return turnResult ??
         const AiConversationTurnResult(assistantReplyText: 'Ok.', draft: AiCopilotDraftDto.empty);
