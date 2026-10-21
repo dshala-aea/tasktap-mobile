@@ -22,7 +22,7 @@ import '../../data/ai/ai_api_client.dart';
 import '../../data/local/app_database.dart' show Ticket;
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../presentation/providers/report_editor_providers.dart'
-    show draftReportRepositoryProvider;
+    show draftReportRepositoryProvider, reportEditorProvider;
 import 'ai_draft_feed.dart';
 import 'apply_confirmed_draft.dart';
 import 'create_draft.dart';
@@ -200,6 +200,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   bool _editing = false;
   bool _opening = false;
 
+  /// A feed apply is writing the linked report.
+  bool _applying = false;
+
   @override
   void initState() {
     super.initState();
@@ -337,12 +340,22 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   /// Writes the confirmed subset of the current draft into the linked report. A no-op when the
   /// draft was never opened in the editor. Never throws: the feed is a convenience over the
   /// server draft, which stays the source of truth.
+  ///
+  /// Afterwards the editor's provider is invalidated: an editor hydrated before this write would
+  /// otherwise hold the old row, and its next whole-row save would turn the stale values into
+  /// "hand edits" sent to the server as confirmed.
   Future<void> _feedApply() async {
     final id = _sessionId;
-    if (id == null || _linkedReportId == null) return;
+    final reportId = _linkedReportId;
+    if (id == null || reportId == null) return;
+    if (mounted) setState(() => _applying = true);
     try {
       await ref.read(aiDraftFeedProvider).apply(id, _draft);
-    } catch (_) {}
+      if (mounted) ref.invalidate(reportEditorProvider(reportId));
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _applying = false);
+    }
   }
 
   Future<List<AiConfirmedEdit>> _editsForTurn(String sessionId) async {
@@ -666,6 +679,18 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           inProgress++;
           await Future<void>.delayed(widget.turnRetryDelay);
           if (!mounted) rethrow;
+          continue;
+        }
+        if (e.statusCode == 400 && (o.edits?.isNotEmpty ?? false)) {
+          // The server refused the turn: one of the hand edits riding in it, most likely. The
+          // spoken/typed update must still go through: the edits are sent edits-only, where a
+          // refused one is isolated and recorded as unsendable (shown on the editor card), and the
+          // turn is re-sent WITHOUT them under the same key (a 400 claims nothing server-side).
+          try {
+            await ref.read(aiEditSyncerProvider).sync(sessionId);
+          } catch (_) {}
+          if (!mounted) rethrow;
+          o.edits = const [];
           continue;
         }
         if (e.isConcurrentUpdate && !refetched) {
@@ -1175,7 +1200,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                       ? 'Apri il rapportino collegato'
                       : 'Compila nel rapportino',
                   isLoading: _opening,
-                  onPressed: !sessionReady || _opening || _confirming ? null : _openInEditor,
+                  // Never while a turn, an edit or an apply is in flight: the editor would hydrate
+                  // rows that are about to change underneath it.
+                  onPressed:
+                      !sessionReady || _opening || _confirming || _sending || _editing || _applying
+                      ? null
+                      : _openInEditor,
                 ),
               ),
               Padding(

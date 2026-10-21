@@ -32,6 +32,10 @@ class AiDraftFeedCard extends ConsumerStatefulWidget {
 class _AiDraftFeedCardState extends ConsumerState<AiDraftFeedCard> {
   String? _sessionId;
   bool _busy = false;
+
+  /// Shown persistently, not only as a toast: a blocked sync and the edits that cannot reach the
+  /// server stay on the card until they are resolved.
+  AiFeedStatus _status = const AiFeedStatus();
   late final AiEditSyncer _syncer;
   late final AiDraftFeed _feed;
 
@@ -52,6 +56,18 @@ class _AiDraftFeedCardState extends ConsumerState<AiDraftFeedCard> {
       id = null; // no readable feed state: not an AI-fed rapportino
     }
     if (mounted && id != null) setState(() => _sessionId = id);
+    await _loadStatus();
+  }
+
+  Future<void> _loadStatus() async {
+    final id = _sessionId;
+    if (id == null) return;
+    try {
+      final status = await _feed.status(id);
+      if (mounted) setState(() => _status = status);
+    } catch (_) {
+      // Unreadable state: nothing to show.
+    }
   }
 
   @override
@@ -84,6 +100,7 @@ class _AiDraftFeedCardState extends ConsumerState<AiDraftFeedCard> {
       if (mounted) showAppToast(context, message: e.toString(), tone: ToastTone.error);
     } finally {
       if (mounted) setState(() => _busy = false);
+      await _loadStatus();
     }
   }
 
@@ -134,6 +151,22 @@ class _AiDraftFeedCardState extends ConsumerState<AiDraftFeedCard> {
                 ),
               ],
             ),
+            if (_status.blocked) ...[
+              const SizedBox(height: 8),
+              Text(
+                _status.blockedMessage,
+                key: const ValueKey('ai-feed-blocked'),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.red),
+              ),
+            ],
+            if (_status.unsendable.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                _status.notice,
+                key: const ValueKey('ai-feed-unsendable'),
+                style: TextStyle(fontSize: 12, color: c.red),
+              ),
+            ],
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -144,7 +177,7 @@ class _AiDraftFeedCardState extends ConsumerState<AiDraftFeedCard> {
                   size: AppButtonSize.sm,
                   fullWidth: false,
                   isLoading: _busy,
-                  onPressed: _busy ? null : () => _run(_sync),
+                  onPressed: _busy || _status.blocked ? null : () => _run(_sync),
                 ),
                 AppButton.secondary(
                   label: 'Aggiorna dalla bozza',

@@ -41,6 +41,9 @@ class _FakeAi extends AiApiClient {
   final List<Object> replies = [];
   AiCopilotDraftDto draft = AiCopilotDraftDto.empty;
 
+  /// A request whose edits match is refused with a 400, as the server refuses an unknown id.
+  bool Function(List<Map<String, dynamic>> edits)? rejectIf;
+
   @override
   Future<AiConversationTurnResult> postTurn(
     String sessionId, {
@@ -53,6 +56,13 @@ class _FakeAi extends AiApiClient {
     required String idempotencyKey,
   }) async {
     calls.add(_Sync(confirmedEdits, idempotencyKey, text));
+    if (rejectIf != null && confirmedEdits != null && rejectIf!(confirmedEdits)) {
+      throw const AiConversationException(
+        400,
+        'edit_reference_not_found',
+        code: 'edit_reference_not_found',
+      );
+    }
     if (replies.isNotEmpty) {
       final r = replies.removeAt(0);
       if (r is AiConversationTurnResult) return r;
@@ -81,12 +91,14 @@ AiDraftMaterialUsage _material(
   String id,
   double qty, {
   String name = 'Valvola',
+  String? unit,
   AiResolutionState state = AiResolutionState.operatorConfirmed,
   AiFactSource source = AiFactSource.operatorInput,
 }) => AiDraftMaterialUsage(
   materialId: id,
   name: name,
   quantity: qty,
+  unit: unit,
   state: state,
   source: source,
 );
@@ -486,10 +498,12 @@ void main() {
         isA<AiEditSyncBlockedException>().having((e) => e.message, 'message', contains('limite')),
       ),
     );
-    // Retrying cannot help: later syncs and turns send nothing.
-    expect(await h.syncer.sync(_session), isNull);
+    // Retrying cannot help: later syncs say so again (never "nothing to sync" while edits are
+    // stuck), turns carry nothing, and the blocked state is there for the card to show.
+    await expectLater(h.syncer.sync(_session), throwsA(isA<AiEditSyncBlockedException>()));
     expect(await h.syncer.editsForTurn(_session), isEmpty);
     expect(h.ai.calls, hasLength(1));
+    expect((await h.feed.status(_session)).blocked, isTrue);
   });
 
   test('Edits_ride_in_the_next_turn_and_are_acknowledged_with_it', () async {
@@ -585,5 +599,211 @@ void main() {
     expect(await h.feed.apply('other', _draft(workers: [_worker(_me, hours: 3)])), isFalse);
     expect(await h.staff(), isEmpty);
     expect(await h.syncer.editsForTurn('other'), isEmpty);
+  });
+
+  group('fix round 1', () {
+    Future<void> insertStaff(String userId, {double? hours}) => h.db
+        .into(h.db.reportStaffTable)
+        .insert(
+          ReportStaffTableCompanion.insert(
+            id: 'hand-$userId',
+            tenantId: 'ten-1',
+            createdAt: DateTime.utc(2026, 10, 20),
+            reportId: _report,
+            userId: userId,
+            hoursWorked: Value(hours),
+          ),
+        );
+
+    test('Hand_added_line_later_valued_by_the_server_takes_the_server_value', () async {
+      // The Ore tile auto-seeds the technician with no hours before the draft holds them.
+      await h.feed.apply(_session, _draft());
+      await insertStaff(_me);
+
+      // "Ho lavorato 4 ore": the server now holds the technician with 4 h.
+      await h.feed.apply(_session, _draft(workers: [_worker(_me, hours: 4)]));
+
+      expect((await h.staff()).single.hoursWorked, 4, reason: 'an empty value takes the server value');
+      expect(await h.feed.pendingEdits(_session), isEmpty, reason: 'nothing typed by hand');
+
+      await h.feed.applyConfirmResponse(
+        _session,
+        const AiConversationConfirmResponse(
+          title: 'X',
+          staff: [AiResolvedStaff(userId: _me, hoursWorked: 4)],
+        ),
+      );
+      expect((await h.staff()).single.hoursWorked, 4);
+      expect(await h.staff(), hasLength(1));
+    });
+
+    test('A_technician_typed_value_on_a_hand_line_is_kept_and_sent_as_a_confirmed_edit', () async {
+      await h.feed.apply(_session, _draft());
+      await insertStaff(_planned, hours: 2);
+
+      await h.feed.apply(_session, _draft(workers: [_worker(_planned, hours: 4, km: 15)]));
+
+      final row = (await h.staff()).single;
+      expect(row.hoursWorked, 2, reason: 'typed by the technician');
+      expect(row.kmTraveled, 15, reason: 'km 0 is the editor default, not a statement');
+      expect(await h.feed.pendingEdits(_session), [
+        const AiConfirmedEdit(kind: 'worker', id: _planned, property: 'hours', value: 2.0),
+      ]);
+    });
+
+    test('Hand_added_material_gets_its_server_unit_when_local_unit_is_empty', () async {
+      await h.feed.apply(_session, _draft());
+      await h.db
+          .into(h.db.reportMateriali)
+          .insert(
+            ReportMaterialiCompanion.insert(
+              id: 'hand-m',
+              tenantId: 'ten-1',
+              createdAt: DateTime.utc(2026, 10, 20),
+              reportId: _report,
+              materialeId: const Value(_mat),
+              quantity: 3,
+            ),
+          );
+
+      await h.feed.apply(_session, _draft(materials: [_material(_mat, 2, unit: 'pz')]));
+
+      final m = (await h.materials()).single;
+      expect(m.unitOfMeasure, 'pz');
+      expect(m.quantity, 3, reason: 'typed by the technician');
+      expect(await h.feed.pendingEdits(_session), [
+        const AiConfirmedEdit(kind: 'material', id: _mat, property: 'quantity', value: 3.0),
+      ]);
+    });
+
+    test('A_line_the_server_no_longer_holds_leaves_the_report_unless_edited_by_hand', () async {
+      await h.feed.apply(_session, _draft(materials: [_material(_mat, 2)]));
+      await h.feed.apply(_session, _draft());
+      expect(await h.materials(), isEmpty, reason: 'removed by voice, untouched by hand');
+      expect(await h.feed.pendingEdits(_session), isEmpty);
+
+      await h.feed.apply(_session, _draft(materials: [_material(_mat, 2)]));
+      await h.db.update(h.db.reportMateriali).write(const ReportMaterialiCompanion(quantity: Value(5)));
+      await h.feed.apply(_session, _draft());
+      expect((await h.materials()).single.quantity, 5, reason: 'a hand-edited line is the technician\'s');
+      // Still a conflict, not gone: an entry in ANY state keeps its line.
+      await h.feed.apply(
+        _session,
+        _draft(materials: [_material(_mat, 2, state: AiResolutionState.conflict)]),
+      );
+      expect(await h.materials(), hasLength(1));
+    });
+
+    test('An_invalid_edit_is_never_sent_and_is_reported_unsendable', () async {
+      await h.feed.apply(
+        _session,
+        _draft(
+          controlli: const [
+            AiDraftControlAnswer(ticketControlId: _ctrl, state: AiResolutionState.needsConfirmation),
+          ],
+        ),
+      );
+      await h.db
+          .into(h.db.reportMateriali)
+          .insert(
+            ReportMaterialiCompanion.insert(
+              id: 'hand-m',
+              tenantId: 'ten-1',
+              createdAt: DateTime.utc(2026, 10, 20),
+              reportId: _report,
+              freeTextName: const Value('--'),
+              quantity: 1,
+            ),
+          );
+      await h.db
+          .into(h.db.reportControlli)
+          .insert(
+            ReportControlliCompanion.insert(
+              id: controlRowId(_report, _ctrl),
+              tenantId: 'ten-1',
+              createdAt: DateTime.utc(2026, 10, 20),
+              reportId: _report,
+              controlId: _ctrl,
+              stringValue: Value('x' * 501),
+            ),
+          );
+
+      expect(await h.feed.pendingEdits(_session), isEmpty);
+      expect(await h.syncer.sync(_session), isNull);
+      expect(h.ai.calls, isEmpty, reason: 'an edit the server would refuse is never sent');
+
+      final status = await h.feed.status(_session);
+      expect(status.unsendable, hasLength(3), reason: 'the name edit, its quantity, the long text');
+      expect(status.unsendable.join(' '), contains('--'));
+      expect(status.notice, contains('non sincronizzabil'));
+    });
+
+    test('A_400_on_an_edits_only_batch_drops_only_the_offending_edit', () async {
+      await h.feed.apply(_session, _draft(workers: [_worker(_me, hours: 3)]));
+      final row = (await h.staff()).single;
+      await (h.db.update(h.db.reportStaffTable)..where((r) => r.id.equals(row.id))).write(
+        const ReportStaffTableCompanion(hoursWorked: Value(5)),
+      );
+      // A catalogue material since deactivated: the server refuses its id.
+      await h.db
+          .into(h.db.reportMateriali)
+          .insert(
+            ReportMaterialiCompanion.insert(
+              id: 'hand-m',
+              tenantId: 'ten-1',
+              createdAt: DateTime.utc(2026, 10, 20),
+              reportId: _report,
+              materialeId: const Value(_mat),
+              quantity: 1,
+            ),
+          );
+      h.ai.rejectIf = (edits) => edits.any((e) => e['id'] == _mat);
+
+      await h.syncer.sync(_session);
+
+      final accepted = h.ai.calls.where((c) => !c.edits!.any((e) => e['id'] == _mat));
+      expect(accepted.expand((c) => c.edits!), [
+        {'kind': 'worker', 'id': _me, 'property': 'hours', 'value': 5.0, 'remove': false},
+      ], reason: 'the valid edit still reaches the server');
+      expect(await h.feed.pendingEdits(_session), isEmpty);
+      final status = await h.feed.status(_session);
+      expect(status.unsendable, hasLength(2), reason: 'only the material edits are dropped');
+
+      // Never retried: the next sync sends nothing.
+      final before = h.ai.calls.length;
+      await h.syncer.sync(_session);
+      expect(h.ai.calls, hasLength(before));
+    });
+
+    test('a later batch with an explicit action is persisted before an earlier one is sent', () async {
+      await h.feed.apply(_session, _draft(workers: [_worker(_me, hours: 3)]));
+      await h.db.delete(h.db.reportStaffTable).go();
+      h.ai.replies.add(const AiConversationException(null, 'offline', offline: true));
+      await expectLater(
+        h.syncer.sync(_session, extra: [const AiConfirmedEdit(kind: 'material', id: _mat)]),
+        throwsA(isA<AiConversationException>()),
+      );
+      // Both the derived removal and the accept survive for the next attempt.
+      await h.syncer.sync(_session);
+      final sent = h.ai.calls.skip(1).expand((c) => c.edits!).toList();
+      expect(sent, containsAll([
+        {'kind': 'worker', 'id': _me, 'remove': true},
+        {'kind': 'material', 'id': _mat, 'remove': false},
+      ]));
+    });
+
+    test('an apply interrupted mid-way is recovered without inventing hand edits', () async {
+      // Simulate a crash after the Drift write but before the baseline was saved.
+      await insertStaff(_me, hours: 3);
+      final state = (await h.store.load(_session))!..applying = true;
+      await h.store.save(state);
+
+      expect(await h.feed.pendingEdits(_session), isEmpty, reason: 'nothing is derived meanwhile');
+
+      await h.feed.apply(_session, _draft(workers: [_worker(_me, hours: 3)]));
+      expect(await h.staff(), hasLength(1));
+      expect(await h.feed.pendingEdits(_session), isEmpty);
+      expect((await h.store.load(_session))!.applying, isFalse);
+    });
   });
 }

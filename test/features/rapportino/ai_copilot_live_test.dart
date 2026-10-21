@@ -1438,6 +1438,67 @@ void main() {
       await _unmount(tester);
     });
 
+    testWidgets('a 400 on a turn carrying hand edits resends the turn without them; the bad edit '
+        'is isolated and never sent again', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Compila nel rapportino'));
+      await tester.pumpAndSettle();
+      final staff = await db.select(db.reportStaffTable).get();
+      await (db.update(db.reportStaffTable)..where((r) => r.id.equals(staff.single.id))).write(
+        const ReportStaffTableCompanion(hoursWorked: Value(5)),
+      );
+      tester.state<NavigatorState>(find.byType(Navigator).last).pop();
+      await tester.pumpAndSettle();
+
+      const refused = AiConversationException(400, 'edit_value_invalid', code: 'edit_value_invalid');
+      ai.turnScript
+        ..add(refused) // the turn with the edit
+        ..add(refused) // the edit alone, edits-only: isolated and dropped
+        ..add(AiConversationTurnResult(assistantReplyText: 'Annotato.', draft: liveDraft()));
+      await _typeAndSend(tester, 'Ho finito');
+
+      const edit = {'kind': 'worker', 'id': 'me-1', 'property': 'hours', 'value': 5.0, 'remove': false};
+      expect(ai.posted.map((p) => p.text).toList(), ['Ho finito', '', 'Ho finito']);
+      expect(ai.postedEdits, [
+        [edit],
+        [edit],
+        null,
+      ], reason: 'the spoken update goes through without the refused edit');
+      expect(find.text('Annotato.'), findsOneWidget);
+
+      await _typeAndSend(tester, 'Altro');
+      expect(ai.postedEdits.last, isNull, reason: 'a refused edit never wedges later turns');
+      await _unmount(tester);
+    });
+
+    testWidgets('Compila is disabled while a turn is in flight (no editor hydrated under a pending '
+        'apply)', (tester) async {
+      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
+      ai.turnGate = Completer<void>();
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+
+      AppButton compila() => tester.widget<AppButton>(
+        find.ancestor(of: find.text('Compila nel rapportino'), matching: find.byType(AppButton)),
+      );
+      expect(compila().onPressed, isNotNull);
+
+      await tester.enterText(find.byType(TextFormField), 'Sto lavorando');
+      await tester.tap(find.byTooltip('Invia'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(compila().onPressed, isNull, reason: 'a turn is in flight');
+
+      ai.turnGate!.complete();
+      await tester.pumpAndSettle();
+      expect(compila().onPressed, isNotNull);
+      await _unmount(tester);
+    });
+
     testWidgets('Held_removal_can_be_re_added_or_kept_removed (copilot actions)', (tester) async {
       const held = AiCandidateFact(
         field: 'removed.materials.id:m-1',

@@ -528,6 +528,24 @@ void main() {
       expect(d.controlli.single.dateValue, DateTime.utc(2026, 10, 20));
     });
 
+    test('a 400 keeps the server\'s stable code (which edit refusal it was)', () async {
+      final client = AiApiClient(
+        dioWith((o) async => json({'error': 'edit_reference_not_found', 'message': 'x'}, 400)),
+      );
+      await expectLater(
+        () => client.syncEdits(
+          's',
+          const [AiConfirmedEdit(kind: 'worker', id: 'u')],
+          idempotencyKey: 'k',
+        ),
+        throwsA(
+          isA<AiConversationException>()
+              .having((e) => e.statusCode, 'status', 400)
+              .having((e) => e.code, 'code', 'edit_reference_not_found'),
+        ),
+      );
+    });
+
     test('409 codes are surfaced, not collapsed', () async {
       for (final code in [
         'turn_in_progress',

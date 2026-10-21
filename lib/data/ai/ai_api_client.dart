@@ -1259,9 +1259,13 @@ class AiApiClient {
     if (status == 400) {
       final rawReason = map?['error'] ?? map?['message'];
       final reason = body is String ? body : (rawReason is String ? rawReason : null);
+      // The AI endpoints answer 400 with `{error: <stable code>, message}`: keep the code so a
+      // caller can tell WHICH refusal it was (an edit the server will never accept, say).
+      final rawCode = map?['error'];
       return AiConversationException(
         status,
         reason ?? 'Richiesta non valida.',
+        code: rawCode is String ? rawCode : null,
       );
     }
 

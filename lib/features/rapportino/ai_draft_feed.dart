@@ -73,12 +73,16 @@ class AiDraftFeedState {
     this.reportId,
     Map<String, Map<String, Object?>>? applied,
     Map<String, Map<String, Object?>>? synced,
-    this.batch,
+    List<AiEditBatch>? batches,
     this.blocked = false,
     Set<String>? knownControls,
+    Map<String, String>? rejected,
+    this.applying = false,
   }) : applied = applied ?? {},
        synced = synced ?? {},
-       knownControls = knownControls ?? {};
+       batches = batches ?? [],
+       knownControls = knownControls ?? {},
+       rejected = rejected ?? {};
 
   final String sessionId;
 
@@ -93,8 +97,19 @@ class AiDraftFeedState {
   /// non-removal edit was acknowledged, `__removed` once a removal was.
   final Map<String, Map<String, Object?>> synced;
 
-  /// The edits-only batch sent and not yet acknowledged.
-  AiEditBatch? batch;
+  /// The edits-only batches not yet acknowledged, in order. ALL of a sync's batches (explicit
+  /// actions included) are persisted before the first is sent, so a failure of one never loses a
+  /// later one.
+  final List<AiEditBatch> batches;
+
+  /// Edits the server refused (400): edit signature -> the server's code. Never sent again; shown
+  /// on the editor card. A different value is a different edit and is tried again.
+  final Map<String, String> rejected;
+
+  /// Set before an apply writes Drift and cleared after its baseline is saved. Found set on load,
+  /// the last apply was interrupted in between: its rows have no baseline and must not be mistaken
+  /// for hand-added lines.
+  bool applying;
 
   /// The server refused further edit syncs for this session (409 `draft_too_large`).
   bool blocked;
@@ -109,9 +124,11 @@ class AiDraftFeedState {
     'reportId': reportId,
     'applied': applied,
     'synced': synced,
-    'batch': batch?.toJson(),
+    'batches': [for (final b in batches) b.toJson()],
     'blocked': blocked,
     'knownControls': knownControls.toList(),
+    'rejected': rejected,
+    'applying': applying,
   };
 
   static Map<String, Map<String, Object?>> _lines(Object? raw) => {
@@ -125,10 +142,18 @@ class AiDraftFeedState {
     reportId: json['reportId'] as String?,
     applied: _lines(json['applied']),
     synced: _lines(json['synced']),
-    batch: json['batch'] is Map<String, dynamic>
-        ? AiEditBatch.fromJson(json['batch'] as Map<String, dynamic>)
-        : null,
+    batches: [
+      for (final b in (json['batches'] as List<dynamic>? ?? const []))
+        if (b is Map<String, dynamic>) AiEditBatch.fromJson(b),
+      if (json['batch'] is Map<String, dynamic>)
+        AiEditBatch.fromJson(json['batch'] as Map<String, dynamic>),
+    ],
     blocked: json['blocked'] == true,
+    applying: json['applying'] == true,
+    rejected: {
+      if (json['rejected'] is Map)
+        for (final e in (json['rejected'] as Map).entries) e.key.toString(): e.value.toString(),
+    },
     knownControls: {
       for (final k in (json['knownControls'] as List<dynamic>? ?? const [])) k.toString(),
     },
@@ -410,10 +435,24 @@ class AiDraftFeed {
     state.knownControls
       ..clear()
       ..addAll(lines.present.where((k) => k.startsWith('control:')));
-    await _applyLines(state, reportId, lines.lines, present: lines.present);
-    await _store.save(state);
+    await _marked(
+      state,
+      (recovering) =>
+          _applyLines(state, reportId, lines.lines, present: lines.present, recovering: recovering),
+    );
     return true;
   });
+
+  /// Runs [write] between the persisted "apply in progress" marker and the baseline save.
+  /// [write] receives whether an earlier apply was interrupted (see [AiDraftFeedState.applying]).
+  Future<void> _marked(AiDraftFeedState state, Future<void> Function(bool recovering) write) async {
+    final recovering = state.applying;
+    state.applying = true;
+    await _store.save(state);
+    await write(recovering);
+    state.applying = false;
+    await _store.save(state);
+  }
 
   /// The end-of-flow Confirm response, applied into the SAME report the incremental path fed:
   /// matched by identity, so nothing is duplicated, and hand edits still win. Header text is only
@@ -424,7 +463,16 @@ class AiDraftFeed {
         final reportId = state?.reportId;
         if (state == null || reportId == null) return false;
         // No `present` set: Confirm leaves out conflicts and plans, so absence proves nothing here.
-        await _applyLines(state, reportId, _linesOfConfirm(r), present: null);
+        await _marked(
+          state,
+          (recovering) => _applyLines(
+            state,
+            reportId,
+            _linesOfConfirm(r),
+            present: null,
+            recovering: recovering,
+          ),
+        );
         final header = await (_db.select(
           _db.draftReports,
         )..where((t) => t.id.equals(reportId))).getSingleOrNull();
@@ -455,6 +503,17 @@ class AiDraftFeed {
     final state = await _store.load(sessionId);
     if (state == null || state.reportId == null) return const <AiConfirmedEdit>[];
     return _pending(state);
+  });
+
+  /// What the editor card shows persistently: whether syncing is blocked, and the hand edits that
+  /// cannot reach the server (with why).
+  Future<AiFeedStatus> status(String sessionId) => _locked(sessionId, () async {
+    final state = await _store.load(sessionId);
+    if (state == null) return const AiFeedStatus();
+    final unsendable = state.reportId == null || state.applying
+        ? const <String>[]
+        : [for (final u in (await _derive(state)).unsendable) describeUnsendable(u.$1, u.$2)];
+    return AiFeedStatus(blocked: state.blocked, unsendable: unsendable);
   });
 
   /// Records [edits] as acknowledged by the server (derived edits only).
@@ -565,6 +624,7 @@ class AiDraftFeed {
     String reportId,
     List<_Line> incoming, {
     required Set<String>? present,
+    bool recovering = false,
   }) async {
     final header = await (_db.select(
       _db.draftReports,
@@ -599,8 +659,34 @@ class AiDraftFeed {
           }
           continue;
         }
-        // Not ours: a line the technician added (or touched) by hand is theirs.
-        if (row != null || state.synced.containsKey(line.key)) continue;
+        if (row != null) {
+          // A line added by hand (the Ore tile's own row for the technician, say) that the server
+          // now holds too. It gets a baseline here: what the technician left empty (or at the
+          // editor's default) takes the server value; what they typed stays, and differs from the
+          // baseline, so it is a hand edit and goes to the server as confirmed.
+          final adopted = <String, Object?>{'_id': ?line.id, '_name': ?line.name};
+          final updates = <String, Object?>{};
+          for (final p in line.values.keys) {
+            final local = row.values[p];
+            final server = line.values[p];
+            if (recovering) {
+              adopted[p] = local; // written by the interrupted apply itself
+            } else if (_isEditorDefault(p, local)) {
+              if (!_isEditorDefault(p, server) && !_same(server, local)) updates[p] = server;
+              adopted[p] = _isEditorDefault(p, server) ? local : server;
+            } else {
+              adopted[p] = server;
+            }
+          }
+          if (updates.isNotEmpty) {
+            await _update(row, updates, now);
+            changed = true;
+          }
+          state.applied[line.key] = adopted;
+          continue;
+        }
+        // Removed by hand after the technician added it: theirs, not re-added.
+        if (state.synced.containsKey(line.key)) continue;
         await _insert(line, reportId, header.tenantId, now);
         state.applied[line.key] = {
           ...line.values,
@@ -764,7 +850,40 @@ class AiDraftFeed {
     return true;
   }
 
-  Future<List<AiConfirmedEdit>> _pending(AiDraftFeedState state) async {
+  /// Value empty, or the editor's own default for it (km 0): nothing the technician stated.
+  static bool _isEditorDefault(String property, Object? v) {
+    if (v == null) return true;
+    if (property == 'km' && v is num && v == 0) return true;
+    return v is String && v.trim().isEmpty;
+  }
+
+  Future<List<AiConfirmedEdit>> _pending(AiDraftFeedState state) async =>
+      (await _derive(state)).sendable;
+
+  /// The hand edits split into those that can be sent and those that cannot (refused by the
+  /// client-side mirror of `ConfirmedEditValidator`, or refused earlier by the server).
+  Future<({List<AiConfirmedEdit> sendable, List<(AiConfirmedEdit, String)> unsendable})> _derive(
+    AiDraftFeedState state,
+  ) async {
+    final sendable = <AiConfirmedEdit>[];
+    final unsendable = <(AiConfirmedEdit, String)>[];
+    // An interrupted apply leaves rows with no baseline: derive nothing until it is recovered.
+    if (state.applying) return (sendable: sendable, unsendable: unsendable);
+    for (final e in await _allEdits(state)) {
+      final local = invalidEditReason(e);
+      final server = state.rejected[editSignature(e)];
+      if (local != null) {
+        unsendable.add((e, local));
+      } else if (server != null) {
+        unsendable.add((e, serverRejectionReason(server)));
+      } else {
+        sendable.add(e);
+      }
+    }
+    return (sendable: sendable, unsendable: unsendable);
+  }
+
+  Future<List<AiConfirmedEdit>> _allEdits(AiDraftFeedState state) async {
     final rows = _byKey(await _rows(state.reportId!));
     final edits = <AiConfirmedEdit>[];
 
@@ -836,6 +955,81 @@ class AiDraftFeed {
     }
     return null;
   }
+}
+
+/// What the editor card shows about the feed, persistently.
+class AiFeedStatus {
+  const AiFeedStatus({this.blocked = false, this.unsendable = const []});
+
+  /// The server refuses further edit syncs for this draft.
+  final bool blocked;
+
+  /// One Italian line per hand edit that cannot reach the server, naming it and why.
+  final List<String> unsendable;
+
+  String get blockedMessage => _blockedMessage;
+
+  String get notice => unsendable.isEmpty
+      ? ''
+      : '${unsendable.length} ${unsendable.length == 1 ? 'modifica non sincronizzabile' : 'modifiche non sincronizzabili'}: '
+            '${unsendable.join('; ')}. Correggile nel rapportino.';
+}
+
+/// A stable identity for an edit (what the server refused is never sent again).
+String editSignature(AiConfirmedEdit e) => jsonEncode(e.toJson());
+
+final _letterOrDigit = RegExp(r'[\p{L}\p{N}]', unicode: true);
+
+/// The client-side mirror of the server's `ConfirmedEditValidator` (strings at most 500
+/// characters, an identifying name with a letter or digit, numbers finite and not negative, a
+/// parsable date): an edit it refuses would make the server refuse the whole request, so it is
+/// never sent. Returns the Italian reason, or null when the edit is fine.
+String? invalidEditReason(AiConfirmedEdit e) {
+  const max = 500;
+  if (e.id == _emptyGuid) return 'identificativo mancante';
+  final name = e.name;
+  if (name != null && name.length > max) return 'nome oltre $max caratteri';
+  final nameIdentifies =
+      e.kind == AiConfirmedEdit.kindActivity || (e.kind == AiConfirmedEdit.kindMaterial && e.id == null);
+  if (nameIdentifies && !_letterOrDigit.hasMatch(name ?? '')) return 'nome senza lettere o cifre';
+  final v = e.value;
+  if (v is num && (v.isNaN || v.isInfinite)) return 'numero non valido';
+  if (v is num && v < 0) return 'valore negativo';
+  if (v is String && v.length > max) return 'testo oltre $max caratteri';
+  if (e.property == 'dateValue' && (v is! String || DateTime.tryParse(v) == null)) {
+    return 'data non valida';
+  }
+  return null;
+}
+
+/// The server's 400 code, in words.
+String serverRejectionReason(String code) => switch (code) {
+  'edit_reference_not_found' => 'non esiste più o non appartiene al ticket',
+  'edit_value_invalid' => 'valore non accettato dal server',
+  'edit_property_unknown' => 'campo non accettato dal server',
+  _ => 'rifiutata dal server',
+};
+
+/// "materiale «--» (quantità): nome senza lettere o cifre".
+String describeUnsendable(AiConfirmedEdit e, String reason) {
+  final what = switch (e.kind) {
+    AiConfirmedEdit.kindWorker => 'tecnico',
+    AiConfirmedEdit.kindMaterial => 'materiale',
+    AiConfirmedEdit.kindControl => 'risposta della checklist',
+    AiConfirmedEdit.kindActivity => 'attività',
+    _ => 'voce',
+  };
+  final label = e.name != null && e.name!.isNotEmpty ? ' «${e.name}»' : '';
+  final field = switch (e.property) {
+    'hours' => ' (ore)',
+    'km' => ' (km)',
+    'vehicle' => ' (veicolo)',
+    'quantity' => ' (quantità)',
+    'unit' => ' (unità)',
+    null => e.remove ? ' (rimozione)' : '',
+    _ => ' (risposta)',
+  };
+  return '$what$label$field: $reason';
 }
 
 /// The server refuses further edit syncs for this draft; retrying cannot help.
@@ -914,23 +1108,25 @@ class AiEditSyncer {
 
   /// Sends every pending hand edit, plus [extra] explicit actions, as edits-only batches. Returns
   /// the draft of the last acknowledged batch, or null when nothing was sent. Throws
-  /// [AiEditSyncBlockedException] once the server refuses more syncs; any other failure leaves the
-  /// unacknowledged batch persisted for the next attempt.
+  /// [AiEditSyncBlockedException] whenever the server refuses more syncs for this draft (every
+  /// call, so the technician is told each time, never "nothing to sync"). A 400 isolates the
+  /// refused edit by halving the batch: only that edit is dropped, recorded as unsendable and
+  /// shown on the card; the rest still go. Any other failure leaves the queue persisted.
   Future<AiCopilotDraftDto?> sync(
     String sessionId, {
     List<AiConfirmedEdit> extra = const [],
   }) => _locked(sessionId, () => _sync(sessionId, extra));
 
-  /// The edits to ride in the next turn of [sessionId] (at most one request's worth). An
-  /// unacknowledged batch, or more pending edits than one request holds, is flushed edits-only
-  /// first. Never throws: if the flush fails the turn still goes, without edits.
+  /// The edits to ride in the next turn of [sessionId] (at most one request's worth). A queued
+  /// batch, or more pending edits than one request holds, is flushed edits-only first. Never
+  /// throws: if the flush fails the turn still goes, without edits.
   Future<List<AiConfirmedEdit>> editsForTurn(String sessionId) => _locked(sessionId, () async {
     final state = await _store.load(sessionId);
     if (state == null || state.blocked || state.reportId == null) {
       return const <AiConfirmedEdit>[];
     }
     try {
-      if (state.batch != null) await _sync(sessionId, const []);
+      if (state.batches.isNotEmpty) await _sync(sessionId, const []);
       final fresh = await _store.load(sessionId);
       if (fresh == null || fresh.blocked) return const <AiConfirmedEdit>[];
       final pending = await _feed._pending(fresh);
@@ -962,29 +1158,86 @@ class AiEditSyncer {
     return draft;
   }
 
+  List<AiEditBatch> _chunk(List<AiConfirmedEdit> edits, {required bool derived}) => [
+    for (var i = 0; i < edits.length; i += AiConfirmedEdit.maxPerRequest)
+      AiEditBatch(
+        key: _newKey(),
+        edits: edits.sublist(i, (i + AiConfirmedEdit.maxPerRequest).clamp(0, edits.length)),
+        derived: List.filled(
+          (i + AiConfirmedEdit.maxPerRequest).clamp(0, edits.length) - i,
+          derived,
+        ),
+      ),
+  ];
+
   Future<AiCopilotDraftDto?> _sync(String sessionId, List<AiConfirmedEdit> extra) async {
     final state = await _store.load(sessionId) ?? AiDraftFeedState(sessionId: sessionId);
     if (state.blocked) {
-      if (extra.isNotEmpty) throw const AiEditSyncBlockedException(_blockedMessage);
-      return null;
-    }
-    AiCopilotDraftDto? last;
-    if (state.batch != null) last = await _send(state, state.batch!);
-
-    final derived = state.reportId == null ? const <AiConfirmedEdit>[] : await _feed._pending(state);
-    final all = [...derived, ...extra];
-    final flags = [for (var i = 0; i < all.length; i++) i < derived.length];
-    for (var i = 0; i < all.length; i += AiConfirmedEdit.maxPerRequest) {
-      final end = (i + AiConfirmedEdit.maxPerRequest).clamp(0, all.length);
-      final batch = AiEditBatch(
-        key: _newKey(),
-        edits: all.sublist(i, end),
-        derived: flags.sublist(i, end),
-      );
-      state.batch = batch;
+      state.batches.clear();
       await _store.save(state);
-      last = await _send(state, batch);
+      throw const AiEditSyncBlockedException(_blockedMessage);
     }
+    // Explicit actions are queued (and persisted) before anything already queued is sent.
+    final invalidExtra = [for (final e in extra) if (invalidEditReason(e) != null) e];
+    if (invalidExtra.isNotEmpty) {
+      throw AiConversationException(400, invalidEditReason(invalidExtra.first)!);
+    }
+    if (extra.isNotEmpty) {
+      state.batches.addAll(_chunk(extra, derived: false));
+      await _store.save(state);
+    }
+    var last = await _drain(state);
+
+    if (state.reportId != null) {
+      final derived = await _feed._pending(state);
+      if (derived.isNotEmpty) {
+        state.batches.addAll(_chunk(derived, derived: true));
+        await _store.save(state);
+        last = await _drain(state) ?? last;
+      }
+    }
+    return last;
+  }
+
+  /// Sends the queue front to back; each batch leaves it only once acknowledged (or, refused, once
+  /// isolated down to the single refused edit).
+  Future<AiCopilotDraftDto?> _drain(AiDraftFeedState state) async {
+    AiCopilotDraftDto? last;
+    AiConversationException? refusedAction;
+    while (state.batches.isNotEmpty) {
+      final batch = state.batches.first;
+      try {
+        last = await _send(state, batch);
+        _settle(state, batch);
+        state.batches.removeAt(0);
+        await _store.save(state);
+      } on AiConversationException catch (e) {
+        if (e.statusCode != 400) rethrow;
+        state.batches.removeAt(0);
+        if (batch.edits.length > 1) {
+          // Halve it: new keys (a 400 claims nothing on the server), same order, persisted.
+          final mid = batch.edits.length ~/ 2;
+          state.batches.insertAll(0, [
+            AiEditBatch(
+              key: _newKey(),
+              edits: batch.edits.sublist(0, mid),
+              derived: batch.derived.sublist(0, mid),
+            ),
+            AiEditBatch(
+              key: _newKey(),
+              edits: batch.edits.sublist(mid),
+              derived: batch.derived.sublist(mid),
+            ),
+          ]);
+        } else if (batch.derived.single) {
+          state.rejected[editSignature(batch.edits.single)] = e.code ?? e.message;
+        } else {
+          refusedAction = e; // an explicit action: the technician is told
+        }
+        await _store.save(state);
+      }
+    }
+    if (refusedAction != null) throw refusedAction;
     return last;
   }
 
@@ -998,8 +1251,6 @@ class AiEditSyncer {
           batch.edits,
           idempotencyKey: batch.key,
         );
-        _settle(state, batch);
-        await _store.save(state);
         return result.draft;
       } on AiConversationException catch (e) {
         if (e.isTurnInProgress && inProgress < _maxInProgressRetries) {
@@ -1014,15 +1265,9 @@ class AiEditSyncer {
         if (e.isDraftTooLarge || e.isTurnLimitExceeded) {
           state
             ..blocked = true
-            ..batch = null;
+            ..batches.clear();
           await _store.save(state);
           throw const AiEditSyncBlockedException(_blockedMessage);
-        }
-        if (e.statusCode == 400) {
-          // The body itself is refused: resending it can never succeed. It is dropped (and its
-          // edits counted as delivered) so one bad value cannot wedge every later sync.
-          _settle(state, batch);
-          await _store.save(state);
         }
         rethrow;
       }
@@ -1034,7 +1279,6 @@ class AiEditSyncer {
       for (var i = 0; i < batch.edits.length; i++)
         if (batch.derived[i]) batch.edits[i],
     ]);
-    state.batch = null;
   }
 }
 
