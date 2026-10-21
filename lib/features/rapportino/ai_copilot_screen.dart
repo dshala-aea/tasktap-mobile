@@ -175,6 +175,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   /// The server said voice capture is off for this company (404 on transcribe): no mic.
   bool _voiceDisabled = false;
   bool _recording = false;
+
+  /// "Abbandona e ricomincia" is running: a second tap would start a second session.
+  bool _abandoning = false;
   StreamSubscription<PendingRecording>? _interruptSub;
   bool _stopping = false;
   VoiceCaptureController? _voiceCtl;
@@ -440,10 +443,18 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   /// "Abbandona e ricomincia": deletes the used session on the server, then starts a fresh one.
   Future<void> _abandonAndRestart() async {
     final sessionId = _sessionId;
-    if (sessionId == null) return;
-    final ok = await ref.read(aiApiClientProvider).tryAbandonConversation(sessionId);
+    if (sessionId == null || _abandoning || _recording) return;
+    setState(() => _abandoning = true);
+    final bool ok;
+    try {
+      ok = await ref.read(aiApiClientProvider).tryAbandonConversation(sessionId);
+    } catch (_) {
+      if (mounted) setState(() => _abandoning = false);
+      rethrow;
+    }
     if (!mounted) return;
     if (!ok) {
+      setState(() => _abandoning = false);
       showAppToast(
         context,
         message: 'Non sono riuscito ad abbandonare la bozza. Controlla la connessione e riprova.',
@@ -451,8 +462,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       );
       return;
     }
-    unawaited(_quiet(ref.read(aiDraftFeedStoreProvider).unlink(sessionId)));
+    await _quiet(ref.read(aiDraftFeedStoreProvider).unlink(sessionId));
+    if (!mounted) return;
     setState(() {
+      _abandoning = false;
       _sessionId = null;
       _usedDraftMessage = null;
       _linkedReportId = null;
@@ -1475,7 +1488,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         banner(context.colors.amber, _usedDraftMessage!, [
           TextButton(
             key: const ValueKey('abandon-and-restart'),
-            onPressed: _sending ? null : _abandonAndRestart,
+            onPressed: _sending || _recording || _abandoning ? null : _abandonAndRestart,
             child: const Text('Abbandona e ricomincia'),
           ),
         ]),

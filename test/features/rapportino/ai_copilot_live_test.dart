@@ -1817,6 +1817,35 @@ void main() {
       await _unmount(tester);
     });
 
+    testWidgets('Abbandona e ricomincia is disabled while recording', (tester) async {
+      final db = await dbWithLinkedReport(submission: 'submitted');
+      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+
+      final restart = tester.widget<TextButton>(find.byKey(const ValueKey('abandon-and-restart')));
+      expect(restart.onPressed, isNull);
+      await _unmount(tester);
+    });
+
+    testWidgets('a double tap on Abbandona e ricomincia starts exactly one session', (tester) async {
+      final db = await dbWithLinkedReport(submission: 'submitted');
+      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+
+      final finder = find.byKey(const ValueKey('abandon-and-restart'));
+      await tester.tap(finder);
+      await tester.tap(finder, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(ai.abandoned, [sess]);
+      expect(ai.startCalls, hasLength(1));
+      await _unmount(tester);
+    });
+
     testWidgets('a report submitted while the copilot is open refuses the next turn apply and '
         'the open-in-editor path creates no new report', (tester) async {
       final db = await dbWithLinkedReport();
