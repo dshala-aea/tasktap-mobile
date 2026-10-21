@@ -994,7 +994,7 @@ class StepControlli extends ConsumerWidget {
     final hasAssets =
         ticket != null &&
         ticket.isNotEmpty &&
-        (ref.watch(ticketChecklistProvider(ticket)).valueOrNull?.hasAnything ?? false);
+        (ref.watch(ticketChecklistProvider(ticket)).valueOrNull?.hasAssetChecklists ?? false);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
