@@ -72,7 +72,7 @@ void main() {
     ).thenAnswer((_) async => ok(body));
   }
 
-  Future<List<MagazzinoData>> mirrors() =>
+  Future<List<MagazziniData>> mirrors() =>
       (db.select(db.magazzini)..orderBy([(w) => OrderingTerm.asc(w.id)])).get();
 
   test('a payload carrying the warehouses fills the local mirror', () async {
