@@ -118,7 +118,10 @@ void main() {
     expect(row.tipo, 'Furgone');
     expect(row.assegnatoUserId, 'u1');
     expect(row.tenantId, 'ten1');
-    expect(row.createdAt, DateTime.utc(2026, 10, 1, 8));
+    // Drift keeps `dateTime()` as an epoch value and hands it back local-kinded, while `==` on
+    // DateTime also compares isUtc — so compare the instant, not the kind. The mirror's contract
+    // is "same moment the server sent", which is what this asserts.
+    expect(row.createdAt.toUtc(), DateTime.utc(2026, 10, 1, 8));
     expect(row.updatedAt, isNull);
     expect(row.isActive, isTrue);
   });
