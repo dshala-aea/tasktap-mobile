@@ -24,6 +24,10 @@ Future<List<ActiveTracker>> _visible({
     overrides: [
       activeTrackersProvider.overrideWith((ref) => Stream.value(server)),
       todaySessionsProvider.overrideWith((ref) => Stream.value(local)),
+      // These cases are about attendance; a ticket clock is covered by
+      // visible_trackers_local_ticket_test.dart. Overriding also keeps this container off the
+      // real Drift database.
+      localTicketTimersProvider.overrideWith((ref) => Stream.value(const <ActiveTracker>[])),
     ],
   );
   addTearDown(c.dispose);
