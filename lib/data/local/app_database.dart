@@ -878,6 +878,19 @@ class ReportAllegati extends Table {
   /// True when this file has not yet been uploaded to the server.
   BoolColumn get isPendingUpload => boolean().withDefault(const Constant(false))();
 
+  /// AllegatoKindEnum: UserUpload=0, SystemArtifact=1 (captured signatures). Only the server sends
+  /// this today; a row this device wrote before schema 43 keeps the default, which is what every
+  /// locally-captured file is.
+  IntColumn get kind => integer().withDefault(const Constant(0))();
+
+  /// SHA-256 of the file's bytes, lowercase hex — the value the sync delivers for a server row and
+  /// the value `AttachmentService` computes for one uploaded from here. Null on rows written
+  /// before the column existed, and on a local capture that has never reached the server.
+  ///
+  /// Its reason for existing is the attachment cache (O-8c): a file identifies itself by content,
+  /// so a re-uploaded or re-sent attachment is the same cache entry, and a changed one is not.
+  TextColumn get contentHash => text().nullable()();
+
   /// GPS position captured at the moment this allegato was recorded (signatures only — see
   /// `ReportEditorNotifier.saveCustomerSignature`/`saveTechnicianSignature`). Null when the
   /// device denied/lacked location, or for allegati that never carry a position (photos):
@@ -1211,7 +1224,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 42;
+  int get schemaVersion => 43;
 
   @override
   MigrationStrategy get migration {
@@ -1608,6 +1621,23 @@ class AppDatabase extends _$AppDatabase {
           // `duplicate column name` before the app opens.
           if (!await _columnExists(m.database, 'customers', 'agent_id')) {
             await m.addColumn(customers, customers.agentId);
+          }
+        }
+        if (from < 43) {
+          // The two attachment columns the sync now delivers: what kind of file it is, and the
+          // SHA-256 of its bytes. Both nullable/defaulted, so no backfill here — every device
+          // fills them by downloading the attachment list once, which it does on the next sync
+          // whatever its cursor (the list travels whole, like the maintenance catalogue).
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `report_allegati` from the current definition today, but the guard is
+          // what keeps an `alterTable` added later from turning this into a crash on `duplicate
+          // column name` before the app opens.
+          if (!await _columnExists(m.database, 'report_allegati', 'kind')) {
+            await m.addColumn(reportAllegati, reportAllegati.kind);
+          }
+          if (!await _columnExists(m.database, 'report_allegati', 'content_hash')) {
+            await m.addColumn(reportAllegati, reportAllegati.contentHash);
           }
         }
       },

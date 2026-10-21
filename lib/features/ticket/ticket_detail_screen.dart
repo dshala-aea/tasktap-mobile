@@ -844,10 +844,12 @@ class _ReportTab extends ConsumerWidget {
       error: (e, _) => UnavailableState.forFetchError(
         icon: LucideIcons.fileText,
         offline: e is TicketDetailOfflineException,
-        offlineTitle: 'Rapportini non disponibili offline',
+        // Offline the tab reads the local mirror (O-8a/O-8b): it only lands here when none of the
+        // ticket's reports has reached this phone yet — a download awaited, not a missing report.
+        offlineTitle: 'Rapportini non ancora sul telefono',
         offlineBody:
-            'La lista dei rapportini di questo ticket richiede una '
-            'connessione: riprova quando torni online.',
+            'I rapportini di questo ticket si sincronizzano quando '
+            'torni online. Riprova più tardi.',
         errorTitle: 'Impossibile caricare i rapportini',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),

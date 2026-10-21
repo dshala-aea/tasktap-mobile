@@ -48,6 +48,37 @@ class SyncResultDto {
   final List<SyncStrumentoDto> strumenti;
   final List<SyncReportStrumentoDto> reportStrumenti;
 
+  /// The full aggregate of every report the payload covers: who worked on it, what was used,
+  /// which checklist items were answered, which files it carries, and the row version of each.
+  ///
+  /// Headers alone left a report opened from sync a blank shell — the Rapportini list could show
+  /// its state and dates, but its Squadra/Materiali/Controlli/Foto sections had nothing to render
+  /// unless this device had authored or explicitly imported it. See
+  /// `SyncService._applyReportAggregate` for the scope rules, which are the backend's: children
+  /// travel in full for every report in scope on every sync, because a child deleted in the
+  /// office has no change marker of its own.
+  final List<SyncReportStaffDto> reportStaff;
+  final List<SyncReportMaterialeDto> reportMateriali;
+  final List<SyncReportControlloDto> reportControlli;
+
+  /// Attachments for BOTH report and ticket entities, discriminated by `entityType`/`entityId`,
+  /// active rows only. One list rather than two because that is what the payload sends and what
+  /// `report_allegati` holds: that table has always carried ticket attachments too.
+  final List<SyncReportAllegatoDto> allegati;
+
+  /// `{reportId, version}` — the version `GET /api/reports/{id}` reports for that row, which is
+  /// what the submit's stale-copy guard compares against (`DraftReports.expectedVersion`).
+  final List<SyncReportVersionDto> reportVersions;
+
+  /// False when the payload came from a backend that predates the report aggregate. Without it an
+  /// older backend would look like "every report lost its staff, materials and answers", and the
+  /// per-report replace would delete children the device already holds.
+  final bool carriesReportAggregate;
+
+  /// Same, for the attachment list — kept apart because it is pruned over a different entity set
+  /// (reports AND tickets) and travels under its own member.
+  final bool carriesAllegati;
+
   /// True when the server stopped at its 5000-row cap. Informational: the authoritative list of
   /// what was left out is [checklistOmittedTicketIds].
   final bool checklistTruncated;
@@ -106,6 +137,17 @@ class SyncResultDto {
   /// barcode collection the offline scan resolves through.
   static const Set<String> scopeWireKeys = {'scope', 'materialiBarcodes'};
 
+  /// The report aggregate (O-8a). Its own set rather than a member of [checklistWireKeys]: these
+  /// rows describe reports, not a ticket's checklist, and the contract gate checks this group
+  /// still names members `MobileUserSyncResult` declares.
+  static const Set<String> reportAggregateWireKeys = {
+    'reportStaff',
+    'reportMateriali',
+    'reportControlli',
+    'allegati',
+    'reportVersions',
+  };
+
   const SyncResultDto({
     required this.syncedAt,
     required this.since,
@@ -133,6 +175,13 @@ class SyncResultDto {
     this.assets = const [],
     this.strumenti = const [],
     this.reportStrumenti = const [],
+    this.reportStaff = const [],
+    this.reportMateriali = const [],
+    this.reportControlli = const [],
+    this.allegati = const [],
+    this.reportVersions = const [],
+    this.carriesReportAggregate = false,
+    this.carriesAllegati = false,
     this.checklistTruncated = false,
     this.checklistOmittedTicketIds = const [],
     this.carriesChecklist = false,
@@ -188,6 +237,20 @@ class SyncResultDto {
         j['reportStrumenti'],
         SyncReportStrumentoDto.fromJson,
       ),
+      reportStaff: _list(j['reportStaff'], SyncReportStaffDto.fromJson),
+      reportMateriali: _list(
+        j['reportMateriali'],
+        SyncReportMaterialeDto.fromJson,
+      ),
+      reportControlli: _list(
+        j['reportControlli'],
+        SyncReportControlloDto.fromJson,
+      ),
+      allegati: _list(j['allegati'], SyncReportAllegatoDto.fromJson),
+      reportVersions: _list(
+        j['reportVersions'],
+        SyncReportVersionDto.fromJson,
+      ),
       checklistTruncated: j['checklistTruncated'] as bool? ?? false,
       checklistOmittedTicketIds:
           ((j['checklistOmittedTicketIds'] as List<dynamic>?) ?? const [])
@@ -199,6 +262,8 @@ class SyncResultDto {
       carriesProdottiAssistenza: j.containsKey('prodottiAssistenza'),
       carriesAgents: j.containsKey('agents'),
       carriesMaintenanceTemplates: j.containsKey('maintenanceTemplates'),
+      carriesReportAggregate: j.containsKey('reportStaff'),
+      carriesAllegati: j.containsKey('allegati'),
       scope: j['scope'] == null
           ? null
           : SyncScopeDto.fromJson(j['scope'] as Map<String, dynamic>),
@@ -1320,6 +1385,294 @@ class SyncMaintenanceTemplateDto {
     'isActive': isActive,
     'latestPublishedVersion': latestPublishedVersion,
   };
+}
+
+// ── Report aggregate (O-8a) ───────────────────────────────────────────────────
+//
+// The child rows of a report, plus its version and its files. Five classes, one per backend
+// `SyncReport*Dto`; every one of them is a straight wire mirror — no device-side interpretation,
+// because the same values already exist in these tables for reports authored here
+// (`ReportStaffTable`, `ReportMateriali`, `ReportControlli`, `ReportAllegati`), and the point of
+// the mirror is that the two origins become indistinguishable to every reader.
+
+/// One technician's line on a report: hours, kilometres, vehicle and pause.
+class SyncReportStaffDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String reportId;
+  final String userId;
+  final double? hoursWorked;
+  final double kmTraveled;
+  final String? vehicle;
+  final double? costPerKm;
+  final String? notes;
+  final DateTime? startTime;
+  final DateTime? endTime;
+  final int pauseMinutes;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'reportId',
+    'userId',
+    'hoursWorked',
+    'kmTraveled',
+    'vehicle',
+    'costPerKm',
+    'notes',
+    'startTime',
+    'endTime',
+    'pauseMinutes',
+  };
+
+  const SyncReportStaffDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.reportId,
+    required this.userId,
+    this.hoursWorked,
+    this.kmTraveled = 0,
+    this.vehicle,
+    this.costPerKm,
+    this.notes,
+    this.startTime,
+    this.endTime,
+    this.pauseMinutes = 0,
+  });
+
+  factory SyncReportStaffDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportStaffDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        reportId: j['reportId'] as String,
+        userId: j['userId'] as String,
+        hoursWorked: _dbl(j['hoursWorked']),
+        kmTraveled: _dbl(j['kmTraveled']) ?? 0,
+        vehicle: j['vehicle'] as String?,
+        costPerKm: _dbl(j['costPerKm']),
+        notes: j['notes'] as String?,
+        startTime: _dt(j['startTime']),
+        endTime: _dt(j['endTime']),
+        pauseMinutes: _intOrNull(j['pauseMinutes']) ?? 0,
+      );
+}
+
+/// One material used on a report — either a catalogue reference or free text.
+class SyncReportMaterialeDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String reportId;
+  final String? materialeId;
+  final String? freeTextName;
+  final double quantity;
+  final String? unitOfMeasure;
+  final double? unitPrice;
+  final String? notes;
+  final String? magazzinoId;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'reportId',
+    'materialeId',
+    'freeTextName',
+    'quantity',
+    'unitOfMeasure',
+    'unitPrice',
+    'notes',
+    'magazzinoId',
+  };
+
+  const SyncReportMaterialeDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.reportId,
+    this.materialeId,
+    this.freeTextName,
+    required this.quantity,
+    this.unitOfMeasure,
+    this.unitPrice,
+    this.notes,
+    this.magazzinoId,
+  });
+
+  factory SyncReportMaterialeDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportMaterialeDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        reportId: j['reportId'] as String,
+        materialeId: j['materialeId'] as String?,
+        freeTextName: j['freeTextName'] as String?,
+        quantity: _dbl(j['quantity']) ?? 0,
+        unitOfMeasure: j['unitOfMeasure'] as String?,
+        unitPrice: _dbl(j['unitPrice']),
+        notes: j['notes'] as String?,
+        magazzinoId: j['magazzinoId'] as String?,
+      );
+}
+
+/// One answered checklist item on a report. `ticketControlId` is the wire's name for what
+/// `ReportControlli` stores as `controlId` — the Drift column keeps its own name.
+class SyncReportControlloDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String reportId;
+  final String ticketControlId;
+  final String? stringValue;
+  final bool? boolValue;
+  final DateTime? dateValue;
+  final double? numberValue;
+  final String? note;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'reportId',
+    'ticketControlId',
+    'stringValue',
+    'boolValue',
+    'dateValue',
+    'numberValue',
+    'note',
+  };
+
+  const SyncReportControlloDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.reportId,
+    required this.ticketControlId,
+    this.stringValue,
+    this.boolValue,
+    this.dateValue,
+    this.numberValue,
+    this.note,
+  });
+
+  factory SyncReportControlloDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportControlloDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        reportId: j['reportId'] as String,
+        ticketControlId: j['ticketControlId'] as String,
+        stringValue: j['stringValue'] as String?,
+        boolValue: j['boolValue'] as bool?,
+        dateValue: _dt(j['dateValue']),
+        numberValue: _dbl(j['numberValue']),
+        note: j['note'] as String?,
+      );
+}
+
+/// One attachment, for a report OR a ticket. `entityType`/`entityId` say which, and they are the
+/// only keys that matter: `report_allegati` has never had a report column.
+class SyncReportAllegatoDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+
+  /// AllegatoEntityTypeEnum: 0 = Ticket, 1 = Report, 2 = Materiale. Sent as the enum's ordinal.
+  final int entityType;
+  final String entityId;
+  final String fileName;
+  final String contentType;
+  final int sizeBytes;
+
+  /// AllegatoKindEnum: 0 = UserUpload, 1 = SystemArtifact (captured signatures).
+  final int kind;
+  final String uploadedByUserId;
+  final bool isActive;
+
+  /// SHA-256 of the bytes, lowercase hex. Null on rows written before the column existed.
+  final String? contentHash;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'entityType',
+    'entityId',
+    'fileName',
+    'contentType',
+    'sizeBytes',
+    'kind',
+    'uploadedByUserId',
+    'isActive',
+    'contentHash',
+  };
+
+  const SyncReportAllegatoDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.entityType,
+    required this.entityId,
+    required this.fileName,
+    required this.contentType,
+    required this.sizeBytes,
+    required this.kind,
+    required this.uploadedByUserId,
+    this.isActive = true,
+    this.contentHash,
+  });
+
+  factory SyncReportAllegatoDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportAllegatoDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        entityType: _intOrNull(j['entityType']) ?? 0,
+        entityId: j['entityId'] as String,
+        fileName: j['fileName'] as String,
+        contentType: j['contentType'] as String,
+        sizeBytes: _intOrNull(j['sizeBytes']) ?? 0,
+        kind: _intOrNull(j['kind']) ?? 0,
+        uploadedByUserId: j['uploadedByUserId'] as String,
+        isActive: j['isActive'] as bool? ?? true,
+        contentHash: j['contentHash'] as String?,
+      );
+}
+
+/// The version of one report's server row (`xmin`), as `GET /api/reports/{id}` reports it.
+class SyncReportVersionDto {
+  final String reportId;
+  final String version;
+
+  static const Set<String> wireKeys = {'reportId', 'version'};
+
+  const SyncReportVersionDto({required this.reportId, required this.version});
+
+  factory SyncReportVersionDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportVersionDto(
+        reportId: j['reportId'] as String,
+        version: j['version'] as String,
+      );
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

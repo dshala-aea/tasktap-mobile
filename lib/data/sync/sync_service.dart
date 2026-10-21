@@ -66,6 +66,9 @@ class SyncService {
       // office rejection (POST /api/reports/{id}/respingi) actually show up on the device instead
       // of the phone never learning about it. See sync_dto.dart's `submittedReports` doc comment.
       await _upsertDraftReports(payload.submittedReports);
+      // The full aggregate of those reports (children, files, versions) — after both header
+      // upserts, because a child is only written for a report row this device already holds.
+      await _applyReportAggregate(payload);
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
@@ -849,6 +852,223 @@ class SyncService {
           );
     }
   }
+
+  /// The full aggregate of every report in scope: staff lines, materials, answered checklist
+  /// items, attachment metadata and row versions (O-8a).
+  ///
+  /// Two independent guards, both deliberate:
+  ///
+  /// * **Ownership.** Children are written only for a report row that exists locally and is NOT
+  ///   this device's unsent working copy (`isLocalOnly`). Such a copy may hold staff, materials and
+  ///   answers the server has never seen; replacing them with the server's would delete that work —
+  ///   the same rule [_upsertDraftReports] already applies to the header.
+  /// * **Authority.** `reportVersions` is the payload's cutoff-free in-scope report set. The
+  ///   backend re-sends children in full for every report in it, because a child deleted in the
+  ///   office stamps nothing the device can observe — a delta filter would leave the stale child
+  ///   here for ever. So a report in that set with no child rows in the payload has none, and its
+  ///   children are deleted here. A report absent from the set is no evidence of anything, and is
+  ///   left alone.
+  ///
+  /// Deliberately silent when the payload carries neither member: an older backend must never look
+  /// like "every report lost its children" (see [SyncResultDto.carriesReportAggregate]).
+  Future<void> _applyReportAggregate(SyncResultDto payload) async {
+    if (!payload.carriesReportAggregate && !payload.carriesAllegati) return;
+
+    final owned = <String>{
+      for (final r in await db.select(db.draftReports).get())
+        if (!r.isLocalOnly) r.id,
+    };
+    final versions = <String, String>{
+      for (final v in payload.reportVersions) v.reportId: v.version,
+    };
+    final inScope = versions.keys.toSet();
+
+    if (payload.carriesReportAggregate && inScope.isNotEmpty) {
+      final staff = <String, List<SyncReportStaffDto>>{};
+      for (final s in payload.reportStaff) {
+        (staff[s.reportId] ??= []).add(s);
+      }
+      final materiali = <String, List<SyncReportMaterialeDto>>{};
+      for (final m in payload.reportMateriali) {
+        (materiali[m.reportId] ??= []).add(m);
+      }
+      final controlli = <String, List<SyncReportControlloDto>>{};
+      for (final c in payload.reportControlli) {
+        (controlli[c.reportId] ??= []).add(c);
+      }
+
+      final replace = inScope.intersection(owned);
+      if (replace.isNotEmpty) {
+        // Delete first and insert after, per table: the payload is the complete set for these
+        // report ids, so a merge would keep a child the office has already removed.
+        await (db.delete(
+          db.reportStaffTable,
+        )..where((r) => r.reportId.isIn(replace))).go();
+        await (db.delete(
+          db.reportMateriali,
+        )..where((r) => r.reportId.isIn(replace))).go();
+        await (db.delete(
+          db.reportControlli,
+        )..where((r) => r.reportId.isIn(replace))).go();
+
+        for (final reportId in replace) {
+          for (final s in staff[reportId] ?? const <SyncReportStaffDto>[]) {
+            await db
+                .into(db.reportStaffTable)
+                .insert(
+                  ReportStaffTableCompanion.insert(
+                    id: s.id,
+                    tenantId: s.tenantId,
+                    createdAt: s.createdAt,
+                    updatedAt: Value(s.updatedAt),
+                    reportId: reportId,
+                    userId: s.userId,
+                    hoursWorked: Value(s.hoursWorked),
+                    kmTraveled: Value(s.kmTraveled),
+                    vehicle: Value(s.vehicle),
+                    costPerKm: Value(s.costPerKm),
+                    notes: Value(s.notes),
+                    startTime: Value(s.startTime),
+                    endTime: Value(s.endTime),
+                    pauseMinutes: Value(s.pauseMinutes),
+                  ),
+                );
+          }
+          for (final m in materiali[reportId] ?? const <SyncReportMaterialeDto>[]) {
+            await db
+                .into(db.reportMateriali)
+                .insert(
+                  ReportMaterialiCompanion.insert(
+                    id: m.id,
+                    tenantId: m.tenantId,
+                    createdAt: m.createdAt,
+                    updatedAt: Value(m.updatedAt),
+                    reportId: reportId,
+                    materialeId: Value(m.materialeId),
+                    freeTextName: Value(m.freeTextName),
+                    quantity: m.quantity,
+                    unitOfMeasure: Value(m.unitOfMeasure),
+                    unitPrice: Value(m.unitPrice),
+                    notes: Value(m.notes),
+                    magazzinoId: Value(m.magazzinoId),
+                  ),
+                );
+          }
+          for (final c
+              in controlli[reportId] ?? const <SyncReportControlloDto>[]) {
+            await db
+                .into(db.reportControlli)
+                .insert(
+                  ReportControlliCompanion.insert(
+                    id: c.id,
+                    tenantId: c.tenantId,
+                    createdAt: c.createdAt,
+                    updatedAt: Value(c.updatedAt),
+                    reportId: reportId,
+                    controlId: c.ticketControlId,
+                    stringValue: Value(c.stringValue),
+                    boolValue: Value(c.boolValue),
+                    dateValue: Value(c.dateValue?.toUtc()),
+                    numberValue: Value(c.numberValue),
+                    note: Value(c.note),
+                  ),
+                );
+          }
+        }
+
+        // The version of the server copy, for exactly the rows this sync owns. The submit's
+        // stale-copy guard compares against it; a local working copy keeps its own, captured when
+        // it was imported (import_server_report.dart's own comment explains why that moment is the
+        // only one that may set it).
+        for (final reportId in replace) {
+          await (db.update(
+            db.draftReports,
+          )..where((r) => r.id.equals(reportId))).write(
+            DraftReportsCompanion(expectedVersion: Value(versions[reportId])),
+          );
+        }
+      }
+    }
+
+    if (payload.carriesAllegati) {
+      // Report entities: the report scope above is the authority. Ticket entities: only the ticket
+      // manifest is — a delta ticket list says nothing about a ticket's files, so with no manifest
+      // (an older backend) ticket attachments are never pruned.
+      final reportEntities = inScope.intersection(owned);
+      final ticketScope = payload.scope?.tickets?.toSet();
+
+      final byEntity = <String, List<SyncReportAllegatoDto>>{};
+      for (final a in payload.allegati) {
+        final writable = a.entityType == _entityTypeReport
+            ? reportEntities.contains(a.entityId)
+            : a.entityType == _entityTypeTicket &&
+                  (ticketScope?.contains(a.entityId) ?? false);
+        if (!writable) continue;
+        (byEntity['${a.entityType}:${a.entityId}'] ??= []).add(a);
+      }
+
+      Future<void> replaceEntity(int entityType, Set<String> entities) async {
+        if (entities.isEmpty) return;
+        // A file captured here and not yet uploaded is this device's own work: the server does not
+        // know about it, so its absence from the payload says nothing. `isPendingUpload` is the
+        // existing marker for that state (see the table's own doc comment).
+        await (db.delete(db.reportAllegati)..where(
+              (a) => a.entityType.equals(entityType) & a.entityId.isIn(entities) &
+                  a.isPendingUpload.equals(false),
+            ))
+            .go();
+        for (final entityId in entities) {
+          for (final a in byEntity['$entityType:$entityId'] ??
+              const <SyncReportAllegatoDto>[]) {
+            await db
+                .into(db.reportAllegati)
+                .insertOnConflictUpdate(
+                  ReportAllegatiCompanion.insert(
+                    id: a.id,
+                    tenantId: a.tenantId,
+                    createdAt: a.createdAt,
+                    updatedAt: Value(a.updatedAt),
+                    fileName: a.fileName,
+                    contentType: a.contentType,
+                    sizeBytes: a.sizeBytes,
+                    // The bytes live on the server, so there is no local file to point at. Empty
+                    // rather than a fake path: every reader tests `storagePath.isNotEmpty &&
+                    // File(...).existsSync()` before drawing from it.
+                    storagePath: '',
+                    url: _attachmentContentPath(a.entityType, a.entityId, a.id),
+                    entityType: a.entityType,
+                    entityId: a.entityId,
+                    uploadedByUserId: a.uploadedByUserId,
+                    isActive: Value(a.isActive),
+                    isPendingUpload: const Value(false),
+                    kind: Value(a.kind),
+                    contentHash: Value(a.contentHash),
+                  ),
+                );
+          }
+        }
+      }
+
+      await replaceEntity(_entityTypeReport, reportEntities);
+      if (ticketScope != null) await replaceEntity(_entityTypeTicket, ticketScope);
+    }
+  }
+
+  /// AllegatoEntityTypeEnum, as the wire sends it (ordinals): Ticket=0, Report=1, Materiale=2. Kept
+  /// as ints because the table stores ordinals — there is no Dart enum for this type in the client.
+  static const int _entityTypeTicket = 0;
+  static const int _entityTypeReport = 1;
+
+  /// The route a synced file's bytes are fetched from — the same strings the backend builds
+  /// (`AttachmentService.ContentPath`), derived here rather than sent, because the payload carries
+  /// metadata only.
+  static String _attachmentContentPath(
+    int entityType,
+    String entityId,
+    String allegatoId,
+  ) => entityType == _entityTypeTicket
+      ? '/api/tickets/$entityId/attachments/$allegatoId/content'
+      : '/api/reports/$entityId/attachments/$allegatoId/content';
 
   Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {
     for (final s in list) {

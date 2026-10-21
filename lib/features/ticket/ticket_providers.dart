@@ -160,22 +160,46 @@ final schedulesForTicketProvider = StreamProvider.autoDispose
     });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Ticket-detail tabs with no local mirror (Report / Controllo / Allegati /
-// Fabbisogno) — fetched on demand from the backend. None of these are ever
-// written by SyncService, so "no data" and "couldn't fetch it" must stay
-// distinguishable: each provider checks connectivity itself and throws
-// [TicketDetailOfflineException] before attempting a request when offline,
-// rather than letting Dio's own network error stand in for it.
+// Ticket-detail tabs — fetched on demand from the backend. Rapportini now also
+// has a Drift mirror (O-8a/O-8b, see [ticketReportsProvider]); Controllo /
+// Allegati / Fabbisogno are still online-only. "no data" and "couldn't fetch
+// it" must stay distinguishable: each provider checks connectivity itself and
+// throws [TicketDetailOfflineException] before attempting a request when
+// offline, rather than letting Dio's own network error stand in for it.
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Rapportini recorded against a ticket (Report tab).
+///
+/// Online it asks the server, which is the only place that knows about reports this phone has
+/// never seen. Offline it reads the Drift mirror, which O-8a now fills with every in-scope report's
+/// header and children — so the tab keeps working, and tapping a row opens the read-only view (that
+/// one already reads the mirror by id).
+///
+/// An empty mirror throws [TicketDetailOfflineException] rather than returning `[]`: the device
+/// cannot tell "this ticket has no reports" from "none have reached this phone yet", and an empty
+/// list would state the first as fact.
 final ticketReportsProvider = FutureProvider.autoDispose
     .family<List<TicketReportSummary>, String>((ref, ticketId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      if (ref.watch(isOnlineProvider)) {
+        final api = ref.watch(ticketDetailApiClientProvider);
+        return api.fetchReportsForTicket(ticketId);
       }
-      final api = ref.watch(ticketDetailApiClientProvider);
-      return api.fetchReportsForTicket(ticketId);
+      final db = ref.watch(appDatabaseProvider);
+      final rows = await (db.select(db.draftReports)
+            ..where((r) => r.ticketId.equals(ticketId))
+            ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
+          .get();
+      if (rows.isEmpty) throw const TicketDetailOfflineException();
+      return rows
+          .map(
+            (r) => TicketReportSummary.fromMirror(
+              id: r.id,
+              title: r.title,
+              stato: r.stato,
+              createdAt: r.createdAt,
+            ),
+          )
+          .toList();
     });
 
 /// Prodotti in assistenza the ticket covers (Prodotti compartment): the ticket's coverage ids from
