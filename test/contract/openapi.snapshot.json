@@ -28230,6 +28230,17 @@
             "description": "The `since` cutoff that was applied (null = full sync).",
             "format": "date-time"
           },
+          "scope": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "The server's authoritative in-scope id set per collection, so the device can prune what\nleft scope \u2014 this endpoint is otherwise upsert-only and never deletes. Additive: an older\nclient ignores it, and null (absent from an older server) differs from an empty list.\nSee SyncScopeDto.",
+                "$ref": "#/components/schemas/SyncScopeDto"
+              }
+            ]
+          },
           "schedules": {
             "type": "array",
             "items": {
@@ -28292,6 +28303,13 @@
               "$ref": "#/components/schemas/Materiale"
             },
             "description": "The tenant's active materials catalog, scoped to the authenticated technician's tenant.\nUsed by the mobile rapportino material picker for offline-first operation.\nDelta filter (`UpdatedAt &gt; since`) is applied when DateTime? MobileUserSyncResult.Since is set."
+          },
+          "materialiBarcodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncMaterialeBarcodeDto"
+            },
+            "description": "Barcodes of the materials in scope, so an offline barcode scan resolves to a material.\nThey follow the material catalogue, so a deactivated material's barcodes leave scope with\nit. Not delta-filtered: the set is small, and a scan must resolve for a material the\ndevice already holds whether or not its barcode row changed since the last sync."
           },
           "cantieri": {
             "type": "array",
@@ -34312,6 +34330,57 @@
         },
         "description": "One maintenance template the technician can attach to a ticket as its checklist \u2014 the \"Modello\nchecklist\" the web app's ticket form offers."
       },
+      "SyncMaterialeBarcodeDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "materialeId",
+          "barcode",
+          "barcodeType",
+          "isPrimary"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "materialeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "barcode": {
+            "type": "string"
+          },
+          "barcodeType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isPrimary": {
+            "type": "boolean"
+          }
+        },
+        "description": "One barcode of a material in scope, so an offline scan resolves to a material.\n\nA DTO rather than MaterialeBarcode for the same reason\nSyncScheduleDto is one, plus a concrete failure this payload would hit today: the\nentity carries the `Materiale` navigation, and EF relationship fixup fills it \u2014 and the\nmaterial's own `Barcodes` collection \u2014 because both rows are tracked in this request. The\npayload also serialises the materials as entities, so the cycle would either throw during\nserialisation or nest the whole catalogue inside it. Projecting in SQL never tracks either side.\n\nGuid SyncMaterialeBarcodeDto.TenantId, DateTime SyncMaterialeBarcodeDto.CreatedAt and DateTime? SyncMaterialeBarcodeDto.UpdatedAt are carried because\nthe device's barcode row mirrors them and its parser reads them unconditionally: omitting them\nwould not degrade that row, it would throw on the missing member and fail the whole sync. The\nclient has been parsing this shape since before the server sent it, so a member the two sides\ndisagree on is invisible to both compilers and only shows up as a dead sync on a real device."
+      },
       "SyncReportStrumentoDto": {
         "required": [
           "id",
@@ -34530,6 +34599,133 @@
           }
         },
         "description": "A schedule as the device sees it.\n\nThe sync payload used to serialise Schedule entities directly, which is how an\ninternal schema change was able to break a client: dropping the assignment columns (ADR-0009)\nremoved `userId` from the wire, and the Flutter client casts it non-nullably. An entity is\na storage shape and will keep changing; this DTO is the contract, and it changes only when the\ncontract is meant to.\n\nGuid SyncScheduleDto.UserId is preserved as the directly assigned technician \u2014 the same value the\ndropped column held \u2014 so the existing client keeps working unchanged.\nIReadOnlyList&lt;SyncScheduleAssigneeDto&gt; SyncScheduleDto.Assignees is what it should move to: it carries everyone on the schedule,\nincluding squadra-mediated members the old column could never express."
+      },
+      "SyncScopeDto": {
+        "type": "object",
+        "properties": {
+          "schedules": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every schedule in the caller's scope: assignment plus the `ActivityDate` window, never the cutoff."
+          },
+          "tickets": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every ticket in scope \u2014 the tenant book for fullScope callers, the assigned/referenced set for a technician."
+          },
+          "locations": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every location in scope (whole tenant book for fullScope, the referenced/derived set for a technician)."
+          },
+          "customers": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every customer in scope (whole tenant book for fullScope, the derived set for a technician)."
+          },
+          "cantieri": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every cantiere in scope: the caller's roster/crew, or the tenant's active sites for fullScope."
+          },
+          "agents": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The agents referenced by the in-scope customers and tickets."
+          },
+          "draftReports": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every draft report of the caller \u2014 drafts are unbounded, so the cutoff never narrows this set."
+          },
+          "submittedReports": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every submitted report inside the 90-day window a full sync applies (see MobileUserSyncService)."
+          },
+          "materiali": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every active material of the tenant."
+          },
+          "materialiBarcodes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every barcode of an active material \u2014 the lookup an offline scan resolves through."
+          },
+          "strumenti": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Every active instrument of the tenant. Null \u2014 never empty \u2014 when the caller may not read instruments."
+          }
+        },
+        "description": "The server's complete in-scope id set for each collection this payload delivers \u2014 the\nauthoritative scope, not the delta. The device keeps what is listed and prunes what is absent,\nso a row that left scope (a schedule rolled out of the \u00b17-day window, a ticket reassigned to a\ncolleague, a report aged past the 90-day window, a material deactivated, a customer deleted)\nfinally leaves the phone too.\n\nThis is deliberately distinct from the row lists it travels with: on a delta those carry only\nthe rows changed after the cursor, while this carries everything still in scope. Sending the\ndelta set here would tell the device to delete every unchanged row it holds.\n\nA null member means \"no authoritative set \u2014 do not prune\". That is only ever the case for a\ncollection this caller is not delivered at all (today: `strumenti` without\n`team.strumento.read`), and it is also what an older server produces by omitting\n`scope` entirely. An empty list is different and meaningful: `[]` says nothing is in\nscope, so the device may prune everything it holds for that collection.\n\nThere is deliberately no manifest for the checklist collections (IReadOnlyList&lt;SyncControlGroupDto&gt; MobileUserSyncResult.ControlGroups,\nIReadOnlyList&lt;SyncTicketControlDto&gt; MobileUserSyncResult.TicketControls, IReadOnlyList&lt;SyncTicketAssetDto&gt; MobileUserSyncResult.TicketAssets,\nIReadOnlyList&lt;SyncAssetDto&gt; MobileUserSyncResult.Assets) nor for IReadOnlyList&lt;TicketMateriale&gt; MobileUserSyncResult.TicketMateriali.\nThe checklist set is truncated per sync (int MobileUserSyncService.MaxAssetControlRowsPerSync /\nIReadOnlyList&lt;Guid&gt; MobileUserSyncResult.ChecklistOmittedTicketIds), so a manifest there would prune rows the\nserver deliberately withheld; the device prunes checklist rows by the ticket manifest instead.\nTicketMateriali rows are keyed by ticket, so they follow the ticket manifest."
       },
       "SyncStrumentoDto": {
         "required": [

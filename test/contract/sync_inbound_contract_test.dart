@@ -103,6 +103,10 @@ void main() {
     'SyncProdottoAssistenzaDto': ProdottoAssistenzaSyncDto.wireKeys,
     'SyncAgentDto': AgentSyncDto.wireKeys,
     'SyncMaintenanceTemplateDto': SyncMaintenanceTemplateDto.wireKeys,
+    // The sync-v2 additions: the authoritative scope object and the barcode collection the
+    // offline scan resolves through.
+    'SyncScopeDto': SyncScopeDto.wireKeys,
+    'SyncMaterialeBarcodeDto': MaterialeBarcodeDto.wireKeys,
     'SyncCantiereCrewAssignmentDto': SyncCantiereCrewAssignmentDto.wireKeys,
     // The I2 confirm response. The draft and resolved shapes are different DTOs, so these are
     // pinned here rather than inferred from the draft summary's classes.
@@ -138,6 +142,7 @@ void main() {
       final declared = props('MobileUserSyncResult');
       expect(SyncResultDto.checklistWireKeys.difference(declared), isEmpty);
       expect(SyncResultDto.referenceWireKeys.difference(declared), isEmpty);
+      expect(SyncResultDto.scopeWireKeys.difference(declared), isEmpty);
     },
   );
 
@@ -219,6 +224,19 @@ void main() {
     expect(mt.id, isNotEmpty);
     expect(mt.origin, 'System', reason: 'first enum value of MaintenanceTemplateOrigin');
     expect(mt.latestPublishedVersion, 1);
+
+    final mb = MaterialeBarcodeDto.fromJson(
+      instance('SyncMaterialeBarcodeDto'),
+    );
+    expect(mb.barcode, isNotEmpty);
+    expect(mb.materialeId, isNotEmpty);
+    expect(mb.isPrimary, isTrue);
+
+    // Every member of the scope is generated as a one-element array: this is what proves the
+    // parser keeps null and empty distinguishable rather than collapsing them.
+    final sx = SyncScopeDto.fromJson(instance('SyncScopeDto'));
+    expect(sx.tickets, hasLength(1));
+    expect(sx.strumenti, hasLength(1));
   });
 
   test(
@@ -242,6 +260,8 @@ void main() {
         'prodottiAssistenza': [instance('SyncProdottoAssistenzaDto')],
         'agents': [instance('SyncAgentDto')],
         'maintenanceTemplates': [instance('SyncMaintenanceTemplateDto')],
+        'scope': instance('SyncScopeDto'),
+        'materialiBarcodes': [instance('SyncMaterialeBarcodeDto')],
         // Present-but-empty is enough for the flag: what the applier does with the rows is
         // covered in test/data/sync/sync_ticket_materiali_test.dart.
         'ticketMateriali': <Object>[],
@@ -259,11 +279,25 @@ void main() {
       expect(full.checklistOmittedTicketIds, [
         '00000000-0000-0000-0000-000000000001',
       ]);
+      expect(
+        full.scope,
+        isNotNull,
+        reason: 'a payload that carries the authoritative scope can prune',
+      );
+      expect(full.scope!.tickets, hasLength(1));
+      expect(full.scope!.strumenti, hasLength(1));
+      expect(full.materialiBarcodes, hasLength(1));
+      expect(full.materialiBarcodes.single.materialeId, isNotEmpty);
 
       final older = SyncResultDto.fromJson({
         'syncedAt': '2026-10-07T08:00:00Z',
         'since': null,
       });
+      expect(
+        older.scope,
+        isNull,
+        reason: 'an older backend must NOT look like "everything left scope"',
+      );
       expect(
         older.carriesChecklist,
         isFalse,
