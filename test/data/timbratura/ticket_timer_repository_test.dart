@@ -24,6 +24,12 @@ void main() {
   /// catches a fixed-offset implementation.
   final summerStart = DateTime.utc(2026, 8, 16, 8, 30);
 
+  // Every instant and business date this repository writes is UTC, but Drift keeps `dateTime()`
+  // as an epoch value and decodes it back **local-kinded** — and DateTime's `==` compares `isUtc`
+  // as well as the moment. Comparing the raw read-back therefore only holds on a runner whose TZ
+  // is UTC; the device-zone jobs run under Europe/Rome, America/Los_Angeles and Pacific/Auckland,
+  // where it fails. Normalise through `toUtc()` so the assertion is about the instant stored.
+
   setUp(() {
     db = _makeDb();
     repo = TicketTimerRepository(
@@ -41,8 +47,8 @@ void main() {
     expect(row.ticketId, 't1');
     expect(row.isPendingSync, isTrue);
     expect(row.clientId, row.id, reason: 'a device-born row is its own idempotency key');
-    expect(row.startUtc, summerStart);
-    expect(row.workDate, DateTime.utc(2026, 8, 16));
+    expect(row.startUtc!.toUtc(), summerStart);
+    expect(row.workDate!.toUtc(), DateTime.utc(2026, 8, 16));
     expect(row.startSeconds, 10 * 3600 + 30 * 60, reason: '10:30 Rome, not 08:30 UTC');
     expect(row.endSeconds, isNull);
     expect(row.endUtc, isNull);
@@ -58,7 +64,7 @@ void main() {
 
     expect(closed, isNotNull);
     expect(closed!.id, started.id);
-    expect(closed.endUtc, summerStart.add(const Duration(hours: 2)));
+    expect(closed.endUtc!.toUtc(), summerStart.add(const Duration(hours: 2)));
     expect(closed.endSeconds, 12 * 3600 + 30 * 60, reason: '12:30 Rome');
     expect(
       closed.isPendingSync,
@@ -106,8 +112,8 @@ void main() {
     final rows = await repo.forTicket('t1');
 
     expect(rows, hasLength(2));
-    expect(rows.first.workDate, DateTime.utc(2026, 8, 17));
-    expect(rows[1].workDate, DateTime.utc(2026, 8, 16));
+    expect(rows.first.workDate!.toUtc(), DateTime.utc(2026, 8, 17));
+    expect(rows[1].workDate!.toUtc(), DateTime.utc(2026, 8, 16));
   });
 
   test('pending is the unsynced backlog, day-agnostic', () async {
@@ -122,7 +128,11 @@ void main() {
     final pending = await repo.pending();
 
     expect(pending, hasLength(2), reason: 'a backlog is not scoped to today');
-    expect(pending.first.workDate, DateTime.utc(2026, 8, 15), reason: 'oldest first');
+    expect(
+      pending.first.workDate!.toUtc(),
+      DateTime.utc(2026, 8, 15),
+      reason: 'oldest first',
+    );
   });
 
   test('markSynced adopts the server id and drops the placeholder row', () async {
@@ -136,8 +146,11 @@ void main() {
     expect(rows.single.id, 'server-1');
     expect(rows.single.clientId, started.clientId);
     expect(rows.single.isPendingSync, isFalse);
-    expect(rows.single.startUtc, summerStart);
-    expect(rows.single.endUtc, summerStart.add(const Duration(hours: 2)));
+    expect(rows.single.startUtc!.toUtc(), summerStart);
+    expect(
+      rows.single.endUtc!.toUtc(),
+      summerStart.add(const Duration(hours: 2)),
+    );
     expect(await repo.pending(), isEmpty);
   });
 
