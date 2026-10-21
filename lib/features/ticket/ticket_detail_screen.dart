@@ -211,9 +211,9 @@ class _TicketDetailBody extends ConsumerWidget {
     // the sheet it opens) — not a route to a full contract editor.
     final contractId = ticket.contractId;
     final contractAsync = contractId == null ? null : ref.watch(contractByIdProvider(contractId));
-    // Same offline-vs-error distinction the timer bar below already draws (see its own
-    // "Timer non disponibile offline" branch) — this used to collapse any error, including
-    // offline, to a bare "—".
+    // Same offline-vs-error distinction the timer bar below draws: offline with nothing in the
+    // mirror is its own state ("Non disponibile offline"), not the same as the server saying the
+    // contract does not exist.
     final contractLabel = contractAsync?.when(
       data: (c) => c?['name'] as String? ?? '—',
       loading: () => 'Caricamento…',

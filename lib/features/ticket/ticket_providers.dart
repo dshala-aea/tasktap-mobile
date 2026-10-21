@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart' show DioException;
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/attachments/attachment_content_cache.dart' show AllegatoEntityType;
 import '../../data/local/app_database.dart';
+import '../../data/reference/reference_cache_repository.dart' show referenceCacheProvider;
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
@@ -487,43 +489,98 @@ final ticketHistoryProvider = FutureProvider.autoDispose
 /// not `ticketId`, so a cantiere or another ticket pointing at the same contract shares this
 /// provider's cache rather than each issuing its own fetch.
 ///
-/// Live-fetched, same as [AdminApiClient.fetchContractById]'s own doc comment explains: contracts
-/// have no local Drift mirror, only `Tickets.contractId` (a bare id column, synced) does. Online-
-/// only for the same reason every other tab on this screen without a mirror is.
+/// Online the server answers, because it is the only place that knows about an edit made in the
+/// office a minute ago. When the request never arrived — the radio says online but there is no
+/// response — the synced mirror answers instead, and offline it is the mirror from the start. A
+/// *response* is never second-guessed: a 404 from the server means the contract is gone, and
+/// showing a stale mirrored row would state otherwise.
+///
+/// The mirror has no `condizioni` (it is not part of the sync contract), so that field reads as
+/// absent offline. It is shown as '—', not invented.
 final contractByIdProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, contractId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref.watch(adminApiClientProvider).fetchContractById(contractId);
+        } catch (e) {
+          if (e is DioException && e.response != null) rethrow;
+        }
       }
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchContractById(contractId);
+      final row = await ref.watch(referenceCacheProvider).contractById(contractId);
+      if (row == null) throw const TicketDetailOfflineException();
+      return {
+        'id': row.id,
+        'name': row.name,
+        'customerId': row.customerId,
+        'locationId': row.locationId,
+        'startDate': row.startDate.toIso8601String(),
+        'endDate': row.endDate?.toIso8601String(),
+        'isActive': row.isActive,
+        'numero': row.numero,
+        'codice': row.codice,
+        'externalId': row.externalId,
+      };
     });
 
 /// The commessa a ticket or cantiere is tagged with (feature audit module #13, Gap 6) — keyed by
 /// `commessaId`, not by the ticket/cantiere it belongs to, so a ticket and its cantiere pointing
 /// at the same commessa share this provider's cache rather than each issuing its own fetch.
 ///
-/// Live-fetched, same reasoning as [contractByIdProvider]: commesse have no local Drift mirror,
-/// only `Tickets.commessaId`/`Cantieri.commessaId` (bare id columns, synced) do.
+/// Same online-then-mirror shape as [contractByIdProvider]. The mirror carries the fields a
+/// technician reads on site (`codice`, `descrizione`, `stato`); the office-only detail screen
+/// shows the rest as absent rather than as zero.
 final commessaByIdProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, commessaId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref.watch(adminApiClientProvider).fetchCommessaById(commessaId);
+        } catch (e) {
+          if (e is DioException && e.response != null) rethrow;
+        }
       }
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchCommessaById(commessaId);
+      final row = await ref.watch(referenceCacheProvider).commessaById(commessaId);
+      if (row == null) throw const TicketDetailOfflineException();
+      return {
+        'id': row.id,
+        'codice': row.codice,
+        'descrizione': row.descrizione,
+        'customerId': row.customerId,
+        'stato': row.stato,
+        'isActive': row.isActive,
+        'externalId': row.externalId,
+      };
     });
 
 /// The prodotto assistenza a contract is tied to — keyed by `prodottoAssistenzaId`, same
-/// by-id/no-local-mirror reasoning as [commessaByIdProvider]/[contractByIdProvider]. The contract
-/// detail screen only has the id (not the customer it belongs to), so this uses
+/// online-then-mirror shape as [commessaByIdProvider]. The contract detail screen only has the id
+/// (not the customer it belongs to), so the server path uses
 /// [AdminApiClient.fetchProdottoAssistenzaById] rather than the customer-scoped
 /// `fetchProdottiAssistenza` the contract/prodotto FORM screens use.
 final prodottoAssistenzaByIdProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, prodottoId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref
+              .watch(adminApiClientProvider)
+              .fetchProdottoAssistenzaById(prodottoId);
+        } catch (e) {
+          if (e is DioException && e.response != null) rethrow;
+        }
       }
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchProdottoAssistenzaById(prodottoId);
+      final row = await ref
+          .watch(referenceCacheProvider)
+          .prodottoAssistenzaById(prodottoId);
+      if (row == null) throw const TicketDetailOfflineException();
+      return {
+        'id': row.id,
+        'name': row.name,
+        'customerId': row.customerId,
+        'locationId': row.locationId,
+        'codice': row.codice,
+        'serialNumber': row.serialNumber,
+        'categoria': row.categoria,
+        'marchio': row.marchio,
+        'isActive': row.isActive,
+        'externalId': row.externalId,
+      };
     });

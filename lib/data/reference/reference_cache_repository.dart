@@ -177,6 +177,24 @@ class ReferenceCacheRepository {
             ..where((a) => a.isActive.equals(true))
             ..orderBy([(a) => OrderingTerm.asc(a.nome)]))
           .get();
+
+  // ── By id ────────────────────────────────────────────────────────────────────
+  //
+  // The screens that show "which contract is this ticket tied to" only ever had an id: a ticket
+  // carries `contractId`/`commessaId` as bare synced columns, and the row behind them was fetched
+  // live. These three readers are what makes that row answerable offline.
+
+  Future<Contract?> contractById(String id) => (_db.select(
+    _db.contracts,
+  )..where((c) => c.id.equals(id))).getSingleOrNull();
+
+  Future<CommesseData?> commessaById(String id) => (_db.select(
+    _db.commesse,
+  )..where((c) => c.id.equals(id))).getSingleOrNull();
+
+  Future<ProdottiAssistenzaData?> prodottoAssistenzaById(String id) =>
+      (_db.select(_db.prodottiAssistenza)..where((p) => p.id.equals(id)))
+          .getSingleOrNull();
 }
 
 final referenceCacheProvider = Provider<ReferenceCacheRepository>(
