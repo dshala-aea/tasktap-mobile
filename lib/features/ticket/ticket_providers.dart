@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/attachments/attachment_content_cache.dart' show AllegatoEntityType;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
@@ -163,25 +164,47 @@ final schedulesForTicketProvider = StreamProvider.autoDispose
     });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Ticket-detail tabs with no local mirror (Report / Allegati / Fabbisogno) —
-// fetched on demand from the backend. None of these are ever written by
-// SyncService, so "no data" and "couldn't fetch it" must stay distinguishable:
-// each provider checks connectivity itself and throws
-// [TicketDetailOfflineException] before attempting a request when offline,
-// rather than letting Dio's own network error stand in for it.
-//
-// The Controllo tab is the exception: its checklist IS mirrored by the sync, so
-// [ticketControlsProvider] answers offline from that mirror (see its own comment).
+// Ticket-detail tabs. Four of them now answer offline from a Drift mirror the
+// sync fills — Rapportini (O-8a/O-8b), Allegati (O-8b/O-8c), Controllo (its
+// checklist mirror) and Fabbisogno (the per-ticket materiali mirror, pruned to
+// the server's scope). What is still online-only — Prodotti and the history —
+// checks connectivity itself and throws [TicketDetailOfflineException] before
+// attempting a request, rather than letting Dio's own network error stand in for
+// it: "no data" and "couldn't fetch it" must stay distinguishable.
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Rapportini recorded against a ticket (Report tab).
+///
+/// Online it asks the server, which is the only place that knows about reports this phone has
+/// never seen. Offline it reads the Drift mirror, which O-8a now fills with every in-scope report's
+/// header and children — so the tab keeps working, and tapping a row opens the read-only view (that
+/// one already reads the mirror by id).
+///
+/// An empty mirror throws [TicketDetailOfflineException] rather than returning `[]`: the device
+/// cannot tell "this ticket has no reports" from "none have reached this phone yet", and an empty
+/// list would state the first as fact.
 final ticketReportsProvider = FutureProvider.autoDispose
     .family<List<TicketReportSummary>, String>((ref, ticketId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      if (ref.watch(isOnlineProvider)) {
+        final api = ref.watch(ticketDetailApiClientProvider);
+        return api.fetchReportsForTicket(ticketId);
       }
-      final api = ref.watch(ticketDetailApiClientProvider);
-      return api.fetchReportsForTicket(ticketId);
+      final db = ref.watch(appDatabaseProvider);
+      final rows = await (db.select(db.draftReports)
+            ..where((r) => r.ticketId.equals(ticketId))
+            ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
+          .get();
+      if (rows.isEmpty) throw const TicketDetailOfflineException();
+      return rows
+          .map(
+            (r) => TicketReportSummary.fromMirror(
+              id: r.id,
+              title: r.title,
+              stato: r.stato,
+              createdAt: r.createdAt,
+            ),
+          )
+          .toList();
     });
 
 /// Prodotti in assistenza the ticket covers (Prodotti compartment): the ticket's coverage ids from
@@ -205,13 +228,43 @@ final ticketProdottiProvider = FutureProvider.autoDispose
     });
 
 /// Files uploaded directly to a ticket (Allegati tab).
+///
+/// Server-authoritative online; offline it reads the mirror sync fills (`report_allegati`, with
+/// [AllegatoEntityType.ticket]), so the files a technician already knows about stay listed on site.
+/// An empty mirror throws rather than answering with nothing: the table is pruned to the ticket
+/// scope on every sync, but it is also empty on a device that has not run one yet, and the tab
+/// must not state "nessun allegato" when it simply does not know.
 final ticketAttachmentsProvider = FutureProvider.autoDispose
     .family<List<TicketAttachmentDto>, String>((ref, ticketId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      if (ref.watch(isOnlineProvider)) {
+        final api = ref.watch(ticketDetailApiClientProvider);
+        return api.fetchAttachments(ticketId);
       }
-      final api = ref.watch(ticketDetailApiClientProvider);
-      return api.fetchAttachments(ticketId);
+      final db = ref.watch(appDatabaseProvider);
+      final rows =
+          await (db.select(db.reportAllegati)
+                ..where(
+                  (a) =>
+                      a.entityType.equals(AllegatoEntityType.ticket) &
+                      a.entityId.equals(ticketId) &
+                      a.isActive.equals(true) &
+                      a.isPendingUpload.equals(false),
+                )
+                ..orderBy([(a) => OrderingTerm.desc(a.createdAt)]))
+              .get();
+      if (rows.isEmpty) throw const TicketDetailOfflineException();
+      return rows
+          .map(
+            (a) => TicketAttachmentDto(
+              id: a.id,
+              fileName: a.fileName,
+              contentType: a.contentType,
+              sizeBytes: a.sizeBytes,
+              contentUrl: a.url,
+              createdAt: a.createdAt,
+            ),
+          )
+          .toList();
     });
 
 /// Attachments picked from this ticket's Allegati tab that have not yet reached the server —

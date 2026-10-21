@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/reports/import_server_report.dart';
 import '../../data/reports/server_report_api_client.dart';
 import '../../data/reports/ticket_controls_cache_repository.dart';
+import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../data/sync/sync_service.dart' show appDatabaseProvider, syncProvider;
 import '../ticket/ticket_detail_api_client.dart';
 
@@ -23,14 +24,26 @@ import '../ticket/ticket_detail_api_client.dart';
 /// confirm response to a local Drift draft instead, because Confirm no longer creates a server
 /// object to fetch. Do not delete this function on the copilot's account: the list's call is a
 /// different requirement with a different failure mode.
+///
+/// Offline (O-8a/O-8b) the report's whole aggregate is already mirrored in Drift, so the same
+/// requirement is met without a request: [importServerReportFromMirror] promotes that row to a
+/// working copy. It refuses when sync never delivered the children
+/// ([ServerReportNotMirroredException]) — the one case where the editor must stay shut.
+/// [overwriteLocal] has no offline meaning: there is no server copy to overwrite from, and the
+/// local row is already the freshest thing the phone has.
 Future<void> importServerReportForEditing(
   WidgetRef ref, {
   required String reportId,
   String? cantiereId,
   bool overwriteLocal = false,
-}) {
-  return importServerReport(
-    db: ref.read(appDatabaseProvider),
+}) async {
+  final db = ref.read(appDatabaseProvider);
+  if (!ref.read(isOnlineProvider)) {
+    await importServerReportFromMirror(db: db, reportId: reportId);
+    return;
+  }
+  await importServerReport(
+    db: db,
     api: ref.read(serverReportApiClientProvider),
     reportId: reportId,
     cantiereId: cantiereId,

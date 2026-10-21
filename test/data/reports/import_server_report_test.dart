@@ -249,4 +249,126 @@ void main() {
     expect(d.tenantId, '22222222-2222-2222-2222-222222222222');
     notifier.dispose();
   });
+
+  group('importServerReportFromMirror (offline, O-8b)', () {
+    /// What `SyncService._applyReportAggregate` leaves behind: the server's header, children with
+    /// the SERVER's row ids, and `expectedVersion` stamped exactly for reports whose complete child
+    /// set the payload carried.
+    Future<void> seedMirrored({
+      String stato = 'Bozza',
+      bool isLocalOnly = false,
+      String? expectedVersion = '4321',
+    }) async {
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: _rid,
+              tenantId: 't',
+              createdAt: DateTime.utc(2026, 10, 1),
+              title: 'Rapportino server',
+              insertedUserId: 'u',
+              locationId: 'l',
+              ticketId: const Value('33333333-3333-3333-3333-333333333333'),
+              stato: Value(stato),
+              isLocalOnly: Value(isLocalOnly),
+              expectedVersion: Value(expectedVersion),
+            ),
+          );
+      await repo.upsertStaff(
+        ReportStaffTableCompanion.insert(
+          id: 'server-staff-1',
+          tenantId: 't',
+          createdAt: DateTime.utc(2026, 10, 1),
+          reportId: _rid,
+          userId: 'tech-1',
+        ),
+      );
+      await repo.upsertControllo(
+        ReportControlliCompanion.insert(
+          id: 'server-ctrl-1',
+          tenantId: 't',
+          createdAt: DateTime.utc(2026, 10, 1),
+          reportId: _rid,
+          controlId: _tc1,
+          boolValue: const Value(true),
+        ),
+      );
+    }
+
+    Future<void> run() => importServerReportFromMirror(db: db, reportId: _rid);
+
+    test('promotes the mirrored Bozza without fetching or touching its children', () async {
+      await seedMirrored();
+
+      await run();
+
+      final d = (await repo.getDraft(_rid))!;
+      expect(d.isLocalOnly, isTrue, reason: 'it is now this device\'s working copy');
+      expect(d.submissionState, 'draft');
+      expect(d.expectedVersion, '4321', reason: 'the version the phone actually saw survives');
+      expect(api.calls, 0, reason: 'offline: nothing to fetch');
+      final staff = await repo.getStaff(_rid);
+      expect(staff.map((s) => s.id), ['server-staff-1']);
+    });
+
+    test('re-keys controlli to the editor convention, so an edit does not duplicate the answer',
+        () async {
+      await seedMirrored();
+
+      await run();
+
+      final ctrls = await repo.getControlli(_rid);
+      expect(ctrls.map((c) => c.id), ['ctrl-$_rid-$_tc1']);
+      expect(ctrls.single.controlId, _tc1);
+      expect(ctrls.single.boolValue, isTrue);
+
+      // What the Controlli step writes when the technician answers the same item.
+      await repo.upsertControllo(
+        ReportControlliCompanion.insert(
+          id: controlRowId(_rid, _tc1),
+          tenantId: 't',
+          createdAt: DateTime.utc(2026, 10, 2),
+          reportId: _rid,
+          controlId: _tc1,
+          boolValue: const Value(false),
+        ),
+      );
+      expect(await repo.getControlli(_rid), hasLength(1));
+    });
+
+    test('refuses a row sync never completed: header-only must not become editable', () async {
+      await seedMirrored(expectedVersion: null);
+
+      await expectLater(run(), throwsA(isA<ServerReportNotMirroredException>()));
+
+      final d = (await repo.getDraft(_rid))!;
+      expect(d.isLocalOnly, isFalse);
+      expect(d.submissionState, isNot('draft'));
+    });
+
+    test('refuses a report that is no longer a Bozza', () async {
+      await seedMirrored(stato: 'Inviato');
+
+      await expectLater(run(), throwsA(isA<ServerReportNotEditableException>()));
+
+      expect((await repo.getDraft(_rid))!.isLocalOnly, isFalse);
+    });
+
+    test('an already-imported working copy is left alone', () async {
+      await seedMirrored(isLocalOnly: true);
+      await (db.update(db.draftReports)..where((r) => r.id.equals(_rid))).write(
+        const DraftReportsCompanion(diagnosi: Value('Modificato in locale')),
+      );
+
+      await run();
+
+      expect((await repo.getDraft(_rid))!.diagnosi, 'Modificato in locale');
+      expect((await repo.getControlli(_rid)).map((c) => c.id), ['server-ctrl-1']);
+    });
+
+    test('a report this phone does not hold is refused', () async {
+      await expectLater(run(), throwsA(isA<ServerReportNotMirroredException>()));
+    });
+  });
 }

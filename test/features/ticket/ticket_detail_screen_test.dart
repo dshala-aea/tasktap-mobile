@@ -1043,9 +1043,39 @@ void main() {
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rapportini non disponibili offline'), findsOneWidget);
+      expect(find.text('Rapportini non ancora sul telefono'), findsOneWidget);
       // Never claims "nessun rapportino" — that would say "there is
       // nothing" when the truth is "we could not check".
+      expect(find.text('Nessun rapportino'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('offline it lists the rapportini already mirrored on the phone', (tester) async {
+      await seedBase(db);
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'rep-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 2, 10),
+              title: 'Sostituzione valvola',
+              insertedUserId: 'user-1',
+              locationId: 'loc-1',
+              ticketId: const Value('ticket-1'),
+              stato: const Value('Inviato'),
+            ),
+          );
+
+      await pump(tester, isOnline: false);
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Report'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sostituzione valvola'), findsOneWidget);
+      expect(find.text('Inviato'), findsOneWidget, reason: 'the mirror stato, by name');
+      expect(find.text('Rapportini non ancora sul telefono'), findsNothing);
       expect(find.text('Nessun rapportino'), findsNothing);
       await resetAndDispose(tester);
     });
@@ -1361,7 +1391,36 @@ void main() {
       await pump(tester, isOnline: false);
       await tapTab(tester, 'Allegati');
 
-      expect(find.text('Allegati non disponibili offline'), findsOneWidget);
+      expect(find.text('Allegati non ancora sul telefono'), findsOneWidget);
+      expect(find.text('Nessun allegato'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('offline it lists the attachments already mirrored on the phone', (tester) async {
+      await seedBase(db);
+      await db
+          .into(db.reportAllegati)
+          .insert(
+            ReportAllegatiCompanion.insert(
+              id: 'att-9',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1, 9),
+              fileName: 'preventivo.pdf',
+              contentType: 'application/pdf',
+              sizeBytes: 4096,
+              storagePath: '',
+              url: '/api/tickets/ticket-1/attachments/att-9/content',
+              entityType: 0,
+              entityId: 'ticket-1',
+              uploadedByUserId: 'user-1',
+            ),
+          );
+
+      await pump(tester, isOnline: false);
+      await tapTab(tester, 'Allegati');
+
+      expect(find.text('preventivo.pdf'), findsOneWidget);
+      expect(find.text('Allegati non ancora sul telefono'), findsNothing);
       expect(find.text('Nessun allegato'), findsNothing);
       await resetAndDispose(tester);
     });

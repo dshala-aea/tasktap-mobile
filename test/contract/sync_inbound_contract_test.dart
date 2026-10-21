@@ -107,6 +107,12 @@ void main() {
     // offline scan resolves through.
     'SyncScopeDto': SyncScopeDto.wireKeys,
     'SyncMaterialeBarcodeDto': MaterialeBarcodeDto.wireKeys,
+    // The report aggregate (O-8a): the children, files and versions of every report in scope.
+    'SyncReportStaffDto': SyncReportStaffDto.wireKeys,
+    'SyncReportMaterialeDto': SyncReportMaterialeDto.wireKeys,
+    'SyncReportControlloDto': SyncReportControlloDto.wireKeys,
+    'SyncReportAllegatoDto': SyncReportAllegatoDto.wireKeys,
+    'SyncReportVersionDto': SyncReportVersionDto.wireKeys,
     'SyncCantiereCrewAssignmentDto': SyncCantiereCrewAssignmentDto.wireKeys,
     // The I2 confirm response. The draft and resolved shapes are different DTOs, so these are
     // pinned here rather than inferred from the draft summary's classes.
@@ -143,6 +149,7 @@ void main() {
       expect(SyncResultDto.checklistWireKeys.difference(declared), isEmpty);
       expect(SyncResultDto.referenceWireKeys.difference(declared), isEmpty);
       expect(SyncResultDto.scopeWireKeys.difference(declared), isEmpty);
+      expect(SyncResultDto.reportAggregateWireKeys.difference(declared), isEmpty);
     },
   );
 

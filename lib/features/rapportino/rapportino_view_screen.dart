@@ -18,6 +18,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
+import '../../data/attachments/attachment_content_cache.dart';
 import '../../data/local/app_database.dart';
 import '../../data/reports/ticket_controls_cache_repository.dart' show cachedTicketControlsProvider;
 import '../ticket/ticket_detail_api_client.dart'
@@ -598,8 +599,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                           children: [
                             SectionTitle(title: 'Foto (${photoAllegati.length})'),
                             const SizedBox(height: 8),
-                            _AllegatiPhotoGrid(dio: dio, allegati: photoAllegati),
-                          ],
+                            _AllegatiPhotoGrid(dio: dio, allegati: photoAllegati),                          ],
                         ),
                       ),
                     ),
@@ -983,7 +983,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
 // Signature block
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _SignatureBlock extends StatelessWidget {
+class _SignatureBlock extends ConsumerWidget {
   const _SignatureBlock({required this.dio, required this.allegato, required this.signedAt});
 
   final Dio dio;
@@ -994,7 +994,7 @@ class _SignatureBlock extends StatelessWidget {
   final DateTime signedAt;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final signedLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(signedAt.toLocal());
 
     // The placeholder this used to always show, still shown when the allegato hasn't resolved —
@@ -1031,6 +1031,12 @@ class _SignatureBlock extends StatelessWidget {
 
     final a = allegato!;
     final hasLocal = a.storagePath.isNotEmpty && File(a.storagePath).existsSync();
+    final contentRef = (
+      allegatoId: a.id,
+      contentHash: a.contentHash,
+      sizeBytes: a.sizeBytes,
+      url: a.url,
+    );
 
     return AppTappable(
       onTap: () => openAttachment(
@@ -1040,6 +1046,8 @@ class _SignatureBlock extends StatelessWidget {
         contentType: a.contentType,
         url: a.url,
         localPath: hasLocal ? a.storagePath : null,
+        cache: ref.read(attachmentContentCacheProvider),
+        contentRef: a.url.isEmpty ? null : contentRef,
       ),
       borderRadius: BorderRadius.circular(10),
       child: ClipRRect(
@@ -1061,7 +1069,11 @@ class _SignatureBlock extends StatelessWidget {
                       errorBuilder: (_, _, _) => const _SignatureFallbackIcon(),
                     )
                   : a.url.isNotEmpty
-                  ? Image.network(a.url, errorBuilder: (_, _, _) => const _SignatureFallbackIcon())
+                  ? AttachmentThumbnail(
+                      attachment: contentRef,
+                      fit: BoxFit.contain,
+                      placeholder: const _SignatureFallbackIcon(),
+                    )
                   : const _SignatureFallbackIcon(),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1102,14 +1114,14 @@ class _SignatureFallbackIcon extends StatelessWidget {
 /// StepMaterialiFold grid) so an offline-captured, not-yet-uploaded photo still shows.
 /// cacheWidth/cacheHeight for the same reason StepMaterialiFold's own tile has them: a camera
 /// photo decodes at full sensor resolution, and this is a small square tile.
-class _AllegatiPhotoGrid extends StatelessWidget {
+class _AllegatiPhotoGrid extends ConsumerWidget {
   const _AllegatiPhotoGrid({required this.dio, required this.allegati});
 
   final Dio dio;
   final List<ReportAllegatiData> allegati;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tileSize =
         (MediaQuery.sizeOf(context).width -
             AppSpacing.pagePadding * 2 -
@@ -1123,6 +1135,12 @@ class _AllegatiPhotoGrid extends StatelessWidget {
       runSpacing: 8,
       children: allegati.map((a) {
         final hasLocal = a.storagePath.isNotEmpty && File(a.storagePath).existsSync();
+        final contentRef = (
+          allegatoId: a.id,
+          contentHash: a.contentHash,
+          sizeBytes: a.sizeBytes,
+          url: a.url,
+        );
         return AppTappable(
           onTap: () => openAttachment(
             context,
@@ -1131,6 +1149,8 @@ class _AllegatiPhotoGrid extends StatelessWidget {
             contentType: a.contentType,
             url: a.url,
             localPath: hasLocal ? a.storagePath : null,
+            cache: ref.read(attachmentContentCacheProvider),
+            contentRef: a.url.isEmpty ? null : contentRef,
           ),
           borderRadius: BorderRadius.circular(8),
           child: ClipRRect(
@@ -1147,12 +1167,11 @@ class _AllegatiPhotoGrid extends StatelessWidget {
                       errorBuilder: (ctx, e, _) => _photoErrorTile(context),
                     )
                   : a.url.isNotEmpty
-                  ? Image.network(
-                      a.url,
-                      fit: BoxFit.cover,
+                  ? AttachmentThumbnail(
+                      attachment: contentRef,
                       cacheWidth: cachePx,
                       cacheHeight: cachePx,
-                      errorBuilder: (ctx, e, _) => _photoErrorTile(context),
+                      placeholder: _photoErrorTile(context),
                     )
                   : _photoErrorTile(context),
             ),

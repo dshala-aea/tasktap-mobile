@@ -240,6 +240,23 @@ class TicketReportSummary {
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
+
+  /// The same summary from the device's own Drift row, for the offline Report tab (O-8b). The
+  /// mirror stores `stato` as the enum NAME — the shape the sync payload carries — and this reuses
+  /// the wire parser so both paths agree on the label.
+  factory TicketReportSummary.fromMirror({
+    required String id,
+    required String title,
+    required String stato,
+    required DateTime createdAt,
+  }) {
+    return TicketReportSummary(
+      id: id,
+      title: title,
+      stato: _parseStato(stato),
+      createdAt: createdAt,
+    );
+  }
 }
 
 /// One file attached directly to the ticket (Allegati tab).

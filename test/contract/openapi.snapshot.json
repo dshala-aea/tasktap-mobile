@@ -28427,6 +28427,41 @@
               "$ref": "#/components/schemas/SyncProdottoAssistenzaDto"
             },
             "description": "Products of the customers this payload carries."
+          },
+          "reportStaff": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncReportStaffDto"
+            },
+            "description": "Staff rows (technician, hours, km, times) of the reports in scope, in full every sync."
+          },
+          "reportMateriali": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncReportMaterialeDto"
+            },
+            "description": "Materials actually consumed on the reports in scope, in full every sync."
+          },
+          "reportControlli": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncReportControlloDto"
+            },
+            "description": "Checklist observations recorded on the reports in scope, in full every sync."
+          },
+          "allegati": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncReportAllegatoDto"
+            },
+            "description": "Metadata of the active attachments on the reports AND tickets in scope \u2014 one list,\ndiscriminated by AllegatoEntityTypeEnum SyncReportAllegatoDto.EntityType/Guid SyncReportAllegatoDto.EntityId,\nbecause the device's table is keyed that way and P2-4's prefetch needs both. Metadata only: the bytes are\nreached through the owning aggregate's content route. string? SyncReportAllegatoDto.ContentHash lets the\ndevice cache by content rather than by id + size."
+          },
+          "reportVersions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncReportVersionDto"
+            },
+            "description": "The opaque `xmin` version of each report row travelling in this payload, so the phone can send it back\nas `expectedVersion` and a stale submit is refused instead of overwriting an office edit. A separate\nlist because the reports themselves travel as entities and `xmin` has no CLR property \u2014 see\nSyncReportVersionDto."
           }
         },
         "description": "Shape returned by Task&lt;MobileUserSyncResult&gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false, bool includeStrumenti = true, bool includeMaintenanceTemplates = true).\nContains the technician's own schedules (today..today+7d) and the linked\nreference entities they need for offline work, plus their draft reports."
@@ -39594,6 +39629,381 @@
             ]
           }
         }
+      },
+      "SyncReportStaffDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "reportId",
+          "userId",
+          "hoursWorked",
+          "kmTraveled",
+          "vehicle",
+          "costPerKm",
+          "notes",
+          "startTime",
+          "endTime",
+          "pauseMinutes"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "reportId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "hoursWorked": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "kmTraveled": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "vehicle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "costPerKm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "pauseMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "One staff row (time and distance contributed by one technician) of a report in scope, so the\nphone can render a submitted rapportino's staff section offline.\n\nA DTO rather than ReportStaff for the same reason\nSyncMaterialeBarcodeDto is one: this payload already serialises `Report` as\nan entity, and EF relationship fixup fills any navigation that exists between the two once both\nare tracked in the same request \u2014 today `ReportStaff` carries no navigation, so the cycle is\nlatent rather than live, which is exactly the kind of \"it works until someone adds a property\"\nshape a wire contract must not depend on. Projecting in SQL never tracks either side, and it\npins the member set the device parses instead of letting an entity change reshape the payload.\n\nGuid SyncReportStaffDto.TenantId, DateTime SyncReportStaffDto.CreatedAt and DateTime? SyncReportStaffDto.UpdatedAt are carried because\nthe device's mirror row parses them unconditionally: omitting one would not blank a field, it\nwould throw on the device and fail the whole sync. The two sides have no shared compiler."
+      },
+      "SyncReportMaterialeDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "reportId",
+          "materialeId",
+          "freeTextName",
+          "quantity",
+          "unitOfMeasure",
+          "unitPrice",
+          "notes",
+          "magazzinoId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "reportId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "materialeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "freeTextName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "unitOfMeasure": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unitPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "magazzinoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "One material actually consumed / installed on a report in scope (not the ticket's fabbisogno,\nwhich travels as TicketMateriale), so a submitted rapportino's\nmaterials section is readable offline.\n\nA DTO rather than ReportMateriale for the same reason\nSyncMaterialeBarcodeDto is one: this payload serialises `Report` and\n`Materiale` as entities, and a navigation added between either and this row would be filled\nby EF fixup because all of them are tracked in this request \u2014 a serialisation cycle. A SQL\nprojection tracks nothing and pins the wire shape the phone already parses.\n\nGuid SyncReportMaterialeDto.TenantId, DateTime SyncReportMaterialeDto.CreatedAt and DateTime? SyncReportMaterialeDto.UpdatedAt are carried because\nthe device's mirror row parses them unconditionally; a missing member throws on the device and\nkills the whole sync, it does not merely blank a column."
+      },
+      "SyncReportControlloDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "reportId",
+          "ticketControlId",
+          "stringValue",
+          "boolValue",
+          "dateValue",
+          "numberValue",
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "reportId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ticketControlId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stringValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "boolValue": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "dateValue": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "numberValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "What one technician recorded, on one visit, against one item of the ticket's checklist \u2014 a\nReportControlObservation row of a report in scope. Named \"controllo\"\nafter the report section the phone renders it in, not after the entity.\n\nA DTO rather than the entity for the same reason SyncMaterialeBarcodeDto is one:\nthis payload serialises `Report`, `TicketControl` and the template definitions as\ntracked rows, so any navigation between them and this observation would be filled by EF fixup\ninto a cycle at serialisation time. A projection tracks nothing and keeps the member set the\ndevice parses fixed.\n\nGuid SyncReportControlloDto.TenantId, DateTime SyncReportControlloDto.CreatedAt and DateTime? SyncReportControlloDto.UpdatedAt are carried because\nthe device's mirror row parses them unconditionally; a missing member throws on the device and\nfails the whole sync."
+      },
+      "SyncReportAllegatoDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "entityType",
+          "entityId",
+          "fileName",
+          "contentType",
+          "sizeBytes",
+          "kind",
+          "uploadedByUserId",
+          "isActive",
+          "contentHash"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "entityType": {
+            "$ref": "#/components/schemas/AllegatoEntityTypeEnum"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AllegatoKindEnum"
+          },
+          "uploadedByUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "contentHash": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The metadata of one stored attachment (allegato), for the device-side attachment/PDF cache\n(P2-4). Deliberately metadata only: the bytes are fetched through the owning aggregate's\ncontent route, never embedded in this payload.\n\nOne list covers report <em>and</em> ticket attachments, discriminated by\nAllegatoEntityTypeEnum SyncReportAllegatoDto.EntityType/Guid SyncReportAllegatoDto.EntityId, because the device's table is already keyed\nthat way \u2014 a second list would be the same rows under another name. Report attachments are\nscoped to the reports in scope (drafts and the 90-day submitted window), ticket attachments to\nthe tickets in scope, so the phone can prefetch what it may actually open.\n\nA DTO rather than Allegato for the same reason\nSyncMaterialeBarcodeDto is one: the entity is tracked next to the reports and\ntickets it belongs to, so any navigation added later is filled by EF fixup into a cycle, and\nevery entity column would become part of the phone's contract by accident. This projection\ndeliberately omits `StoragePath` (a storage key must never reach a client \u2014 the same leak\nthe `Url` column was removed for) and the capture metadata the cache does not need.\n\nstring? SyncReportAllegatoDto.ContentHash is the hex SHA-256 of the stored bytes, or null for rows written\nbefore P2-4 added the column. The device must fall back to id + size for those: the hash is a\ncache validator, never the attachment's identity.\n\nGuid SyncReportAllegatoDto.TenantId, DateTime SyncReportAllegatoDto.CreatedAt and DateTime? SyncReportAllegatoDto.UpdatedAt are carried because\nthe device's mirror row parses them unconditionally; a missing member throws on the device and\nfails the whole sync."
+      },
+      "SyncReportVersionDto": {
+        "required": [
+          "reportId",
+          "version"
+        ],
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "description": "The opaque version of one report row in this payload \u2014 its PostgreSQL `xmin`, formatted by\nstring ReportVersion.Format(uint xmin) \u2014 so the phone can send it back as\n`expectedVersion` on `POST /api/reports/submit`.\n\nA separate list rather than a member bolted onto the `Report` entity rows in\nIReadOnlyList&lt;Report&gt; MobileUserSyncResult.DraftReports / IReadOnlyList&lt;Report&gt; MobileUserSyncResult.SubmittedReports:\nthose rows are shipped as entities (not DTOs), and `xmin` is a shadow, database-generated\nsystem column with no CLR property to hang a value on \u2014 adding one would mean either reshaping\nthe entity every client already parses or inventing a wrapper type for a value that is not part\nof the report at all. A parallel `(reportId, version)` list keeps the entity passthrough\nuntouched, which is the same reason the checklist collection travels separately.\n\nThe version is read in the same query that materialises the report rows, never afterwards: a\nversion newer than the data the phone receives would let its next submit silently overwrite an\noffice edit \u2014 see the ordering note in `ReportsController.GetById`."
       }
     }
   },
