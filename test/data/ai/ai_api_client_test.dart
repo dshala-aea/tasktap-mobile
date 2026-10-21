@@ -412,4 +412,94 @@ void main() {
       await expectLater(client.abandonConversation('sess-1'), completes);
     });
   });
+
+  group('live draft wire contract (Task 11)', () {
+    Dio dioWith(Future<ResponseBody> Function(RequestOptions) f) {
+      final dio = Dio();
+      dio.httpClientAdapter = _Adapter(f);
+      return dio;
+    }
+
+    ResponseBody json(Object body, [int status = 200]) => ResponseBody.fromString(
+      jsonEncode(body),
+      status,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+
+    test('resumeConversation returns the session id, or null on a 404', () async {
+      RequestOptions? seen;
+      final ok = AiApiClient(
+        dioWith((o) async {
+          seen = o;
+          return json({'sessionId': 'sess-9'});
+        }),
+      );
+      expect(await ok.resumeConversation('tkt-1'), 'sess-9');
+      expect(seen!.method, 'GET');
+      expect(seen!.queryParameters, {'ticketId': 'tkt-1'});
+
+      final none = AiApiClient(dioWith((o) async => json({'title': 'Not Found'}, 404)));
+      expect(await none.resumeConversation('tkt-1'), isNull);
+    });
+
+    test('postTurn sends the new fields and the Idempotency-Key header', () async {
+      RequestOptions? seen;
+      final client = AiApiClient(
+        dioWith((o) async {
+          seen = o;
+          return json({'assistantReplyText': 'Ok', 'draft': <String, dynamic>{}});
+        }),
+      );
+      await client.postTurn(
+        'sess-1',
+        text: 'Filtro olio',
+        source: AiTurnSource.voice,
+        audioRef: 'a-1',
+        rawTranscript: 'filtro orio',
+        replacesTurnId: 't-3',
+        idempotencyKey: 'key-9',
+      );
+      expect(seen!.headers['Idempotency-Key'], 'key-9');
+      expect(seen!.data, {
+        'text': 'Filtro olio',
+        'source': 'Voice',
+        'audioRef': 'a-1',
+        'rawTranscript': 'filtro orio',
+        'replacesTurnId': 't-3',
+      });
+
+      await client.postTurn('sess-1', text: 'x', idempotencyKey: 'key-10');
+      expect(seen!.data, {'text': 'x', 'source': 'Typed'});
+    });
+
+    test('409 codes are surfaced, not collapsed', () async {
+      for (final code in [
+        'turn_in_progress',
+        'concurrent_update',
+        'draft_too_large',
+        'turn_limit_exceeded',
+      ]) {
+        final client = AiApiClient(dioWith((o) async => json({'code': code, 'title': 'x'}, 409)));
+        await expectLater(
+          () => client.postTurn('s', text: 't', idempotencyKey: 'k'),
+          throwsA(isA<AiConversationException>().having((e) => e.code, 'code', code)),
+        );
+      }
+    });
+
+    test('a 429 on a turn is a quota exception and a lost connection is flagged offline', () async {
+      final quota = AiApiClient(dioWith((o) async => json({'error': 'QuotaExceeded'}, 429)));
+      await expectLater(
+        () => quota.postTurn('s', text: 't', idempotencyKey: 'k'),
+        throwsA(isA<AiQuotaExhaustedException>()),
+      );
+      final offline = _clientThrowing(_err(type: DioExceptionType.connectionError));
+      await expectLater(
+        () => offline.postTurn('s', text: 't', idempotencyKey: 'k'),
+        throwsA(isA<AiConversationException>().having((e) => e.offline, 'offline', isTrue)),
+      );
+    });
+  });
 }

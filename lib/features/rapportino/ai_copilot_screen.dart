@@ -6,6 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/audio/pending_recording_store.dart';
+import '../../core/audio/voice_capture_controller.dart';
+import '../../core/audio/voice_capture_provider.dart';
+import '../../core/audio/voice_consent.dart';
+
 import '../../core/icons/app_lucide_icons.dart';
 import '../../core/dictation/dictate_button.dart';
 import '../../core/router/app_router.dart';
@@ -14,7 +19,11 @@ import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ai/ai_api_client.dart';
+import '../../data/local/app_database.dart' show Ticket;
+import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import 'apply_confirmed_draft.dart';
+import 'create_draft.dart';
+import 'draft_provenance_badge.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AiCopilotScreen — the multi-turn AI copilot (distinct from step_dettagli.dart's
@@ -29,17 +38,73 @@ import 'apply_confirmed_draft.dart';
 // and opens the ordinary editor on it. Nothing is created server-side, so there is no server object
 // to download and no import to retry.
 //
-// No voice-recording-and-upload flow here (unlike the web copilot's record/transcribe control):
-// this app never calls server-side transcription, by design (see AiApiClient's own "Server-upload
-// transcription is deliberately absent — dictation is not" note) — dictation goes through
-// DictateButton, on-device, straight into the text field, same as every other dictated field in
-// this app.
+// LIVE DRAFT (AI report builder MVP). Entered from a ticket, the screen RESUMES the technician's
+// durable server-side draft for that ticket (GET ?ticketId=) or starts one (POST), then shows the
+// seeded draft at once with a provenance badge per value. Voice: the mic records, the server
+// transcribes (`VoiceCaptureController` + `AiApiClient.transcribe`), the transcript appears next to
+// the draft and is posted as a `Voice` turn with a per-recording Idempotency-Key that is reused on
+// every retry. On-device dictation (DictateButton, ADR-0017) stays as before and is the no-signal
+// fallback. Leaving the screen never deletes the draft: it is durable and is resumed; only
+// "Abbandona bozza" deletes it.
 // ══════════════════════════════════════════════════════════════════════════════
 
+
 class _ChatMessage {
-  const _ChatMessage({required this.isOperator, required this.text});
+  _ChatMessage({
+    required this.isOperator,
+    required this.text,
+    this.source = AiTurnSource.typed,
+    this.turnId,
+    this.audioRef,
+    this.rawTranscript,
+  });
   final bool isOperator;
   final String text;
+  final AiTurnSource source;
+
+  /// The server's id of this operator turn, once known (the POST response carries none, so it is
+  /// read back from the conversation). A correction replaces this turn.
+  String? turnId;
+  final String? audioRef;
+  final String? rawTranscript;
+
+  /// Replaced by a later correction: shown struck through.
+  bool superseded = false;
+}
+
+/// One turn on its way to the server, kept whole until it succeeds so a retry re-sends exactly the
+/// same thing under exactly the same Idempotency-Key.
+class _Outgoing {
+  _Outgoing({
+    required this.key,
+    this.recording,
+    this.voice,
+    this.text,
+    this.source = AiTurnSource.typed,
+    this.audioRef,
+    this.rawTranscript,
+    this.replacesTurnId,
+    this.supersedes,
+  });
+
+  /// Generated once. For a recording it derives from the recording's own persisted key, so it is
+  /// stable across restarts of the upload.
+  final String key;
+
+  /// Set while the audio still has to be transcribed; [text] is null until then.
+  final PendingRecording? recording;
+
+  /// The recorder that produced [recording]; used for its (retried) upload.
+  final VoiceCaptureController? voice;
+  String? text;
+  AiTurnSource source;
+  String? audioRef;
+  String? rawTranscript;
+  final String? replacesTurnId;
+
+  /// The message a correction replaces (to strike it through once the correction lands).
+  final _ChatMessage? supersedes;
+  _ChatMessage? message;
 }
 
 // A turn can legitimately take up to the server's ~45s wall-clock ceiling — a single static
@@ -52,11 +117,25 @@ const _thinkingStageMessages = [
 ];
 const _thinkingStageDelays = [Duration.zero, Duration(seconds: 4), Duration(seconds: 12)];
 
+/// How many times a 409 `turn_in_progress` is retried (same key) before the technician is asked.
+const _maxTurnInProgressRetries = 5;
+
+/// A draft with less than this left before deletion shows the expiry warning.
+const _expiryWarningWindow = Duration(days: 3);
+
 class AiCopilotScreen extends ConsumerStatefulWidget {
-  const AiCopilotScreen({super.key, this.ticketId, this.cantiereId});
+  const AiCopilotScreen({
+    super.key,
+    this.ticketId,
+    this.cantiereId,
+    @visibleForTesting this.turnRetryDelay = const Duration(seconds: 2),
+  });
 
   final String? ticketId;
   final String? cantiereId;
+
+  /// Pause before re-sending a turn the server reports as still in progress.
+  final Duration turnRetryDelay;
 
   @override
   ConsumerState<AiCopilotScreen> createState() => _AiCopilotScreenState();
@@ -78,6 +157,22 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   int _thinkingStage = 0;
   final _thinkingTimers = <Timer>[];
 
+  DateTime? _expiresAt;
+  bool _expiryDismissed = false;
+
+  /// The server said voice capture is off for this company (404 on transcribe): no mic.
+  bool _voiceDisabled = false;
+  bool _recording = false;
+  StreamSubscription<PendingRecording>? _interruptSub;
+
+  /// The turn that has not gone through yet (offered as "Riprova invio"), and why.
+  _Outgoing? _failed;
+  String? _failureMessage;
+
+  /// AI is unusable for this draft (no credits, caps reached): the draft stays readable and the
+  /// technician is offered the manual path.
+  String? _aiBlockedMessage;
+
   @override
   void initState() {
     super.initState();
@@ -87,6 +182,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   @override
   void dispose() {
     _cancelThinkingTimers();
+    _interruptSub?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -112,61 +208,423 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     }
   }
 
+  // ── entry: resume or start ────────────────────────────────────────────────────
+
+  /// From a ticket: the live session for (user, ticket) if the server has one, else a new one.
+  /// Either way the draft (seeded from the ticket on a new session) and the earlier turns are read
+  /// back with GET so the technician sees them immediately.
   Future<void> _start() async {
     setState(() {
       _starting = true;
       _startError = null;
     });
+    final client = ref.read(aiApiClientProvider);
     try {
-      final session = await ref
-          .read(aiApiClientProvider)
-          .startConversation(ticketId: widget.ticketId, cantiereId: widget.cantiereId);
+      String? id;
+      if (widget.ticketId != null) id = await client.resumeConversation(widget.ticketId!);
+      final resumed = id != null;
+      id ??= (await client.startConversation(
+        ticketId: widget.ticketId,
+        cantiereId: widget.cantiereId,
+      )).sessionId;
+
+      AiConversationDetailDto? detail;
+      try {
+        detail = await client.getConversation(id);
+      } catch (_) {
+        // A resumed draft that cannot be read is an error (an empty screen would look like data
+        // loss); a freshly started one just has nothing worth showing yet.
+        if (resumed) rethrow;
+      }
       if (!mounted) return;
       setState(() {
-        _sessionId = session.sessionId;
+        _sessionId = id;
         _starting = false;
+        if (detail != null) _adopt(detail, withTurns: true);
       });
+      _scrollToEnd();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _starting = false;
-        _startError = e.toString();
+        _startError = _startFailureText(e);
+        if (e is AiQuotaExhaustedException) {
+          _aiBlockedMessage = _startError;
+        }
       });
     }
   }
 
+  String _startFailureText(Object e) {
+    if (e is AiQuotaExhaustedException) {
+      return 'I crediti AI dell\'azienda sono esauriti: non posso avviare una nuova bozza AI.';
+    }
+    if (e is AiConversationException && e.offline) {
+      return 'La bozza AI richiede la connessione e ora non c\'è segnale. '
+          'La dettatura sul telefono funziona anche offline: puoi compilare il rapportino '
+          'a mano e dettare nei campi.';
+    }
+    return e.toString();
+  }
+
+  /// Takes what the server holds as the truth for the draft, the expiry and (on entry) the
+  /// conversation so far.
+  void _adopt(AiConversationDetailDto d, {required bool withTurns}) {
+    _draft = d.draft;
+    _expiresAt = d.expiresAtUtc;
+    if (withTurns) {
+      _messages
+        ..clear()
+        ..addAll(
+          d.turns.map(
+            (t) => _ChatMessage(
+              isOperator: t.isOperator,
+              text: t.text,
+              source: t.source,
+              turnId: t.isOperator ? t.turnId : null,
+            ),
+          ),
+        );
+    }
+  }
+
+  // ── sending ──────────────────────────────────────────────────────────────────
+
+  bool get _aiBlocked => _aiBlockedMessage != null;
+
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
-    final sessionId = _sessionId;
-    if (text.isEmpty || sessionId == null || _sending) return;
+    if (text.isEmpty || _sessionId == null || _sending || _aiBlocked) return;
+    _inputCtrl.clear();
+    await _run(_Outgoing(key: const Uuid().v4(), text: text));
+  }
 
+  Future<void> _retryFailed() async {
+    final o = _failed;
+    if (o == null || _sending) return;
+    await _run(o);
+  }
+
+  /// Runs one outgoing turn to the end: transcribe if it is audio, show it, post it (with the
+  /// bounded 409 handling), apply the draft. Every failure leaves [o] intact for "Riprova invio".
+  Future<void> _run(_Outgoing o) async {
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
     setState(() {
-      _messages.add(_ChatMessage(isOperator: true, text: text));
       _sending = true;
+      _failed = null;
+      _failureMessage = null;
       // A new turn moves the draft's Version on — any pending confirm key is now stale.
       _confirmKey = null;
     });
     _startThinkingTimers();
-    _inputCtrl.clear();
-    _scrollToEnd();
 
     try {
-      final result = await ref.read(aiApiClientProvider).sendTurn(sessionId, text);
+      if (o.text == null) {
+        final voice = o.voice!;
+        // `upload` reuses the recording's OWN key and deletes the local files only on success.
+        final t = await voice.upload(o.recording!);
+        o.text = t.transcript;
+        o.audioRef = t.audioRef;
+        o.rawTranscript = t.transcript;
+        o.source = AiTurnSource.voice;
+      }
+      if (o.text!.trim().isEmpty) {
+        _finishRun();
+        if (mounted) {
+          showAppToast(
+            context,
+            message: 'Non ho sentito nulla nella registrazione. Riprova.',
+            tone: ToastTone.warning,
+          );
+        }
+        return;
+      }
+      if (o.message == null) {
+        final m = _ChatMessage(
+          isOperator: true,
+          text: o.text!,
+          source: o.source,
+          audioRef: o.audioRef,
+          rawTranscript: o.rawTranscript,
+        );
+        o.message = m;
+        if (mounted) setState(() => _messages.add(m));
+        _scrollToEnd();
+      }
+
+      final result = await _postWithRetry(sessionId, o);
       if (!mounted) return;
       _cancelThinkingTimers();
       setState(() {
+        o.supersedes?.superseded = true;
         _messages.add(_ChatMessage(isOperator: false, text: result.assistantReplyText));
         _draft = result.draft;
         _sending = false;
       });
       _scrollToEnd();
+      unawaited(_learnTurnIds());
+    } on AiTranscribeException catch (e) {
+      if (!mounted) return;
+      _cancelThinkingTimers();
+      if (e.error == AiTranscribeError.voiceDisabled) {
+        // Retrying cannot help and the mic must not keep offering what the server refuses.
+        setState(() {
+          _voiceDisabled = true;
+          _sending = false;
+        });
+        return;
+      }
+      setState(() => _sending = false);
+      if (e.retryable) {
+        _fail(o, e.message);
+      } else {
+        // The audio itself is unusable: drop it rather than offer a retry that cannot work.
+        unawaited(_discardRecording(o));
+        showAppToast(context, message: e.message, tone: ToastTone.error);
+      }
+    } on AiQuotaExhaustedException {
+      if (!mounted) return;
+      _cancelThinkingTimers();
+      setState(() {
+        _sending = false;
+        _aiBlockedMessage =
+            'I crediti AI dell\'azienda sono esauriti. La bozza resta qui, leggibile: '
+            'puoi continuare senza AI.';
+      });
+    } on AiConversationException catch (e) {
+      if (!mounted) return;
+      _cancelThinkingTimers();
+      setState(() => _sending = false);
+      if (e.isDraftTooLarge || e.isTurnLimitExceeded) {
+        setState(() => _aiBlockedMessage = e.message);
+      } else {
+        _fail(o, e.message);
+      }
     } catch (e) {
       if (!mounted) return;
       _cancelThinkingTimers();
       setState(() => _sending = false);
-      showAppToast(context, message: e.toString(), tone: ToastTone.error);
+      _fail(o, e.toString());
     }
   }
+
+  void _finishRun() {
+    _cancelThinkingTimers();
+    if (mounted) setState(() => _sending = false);
+  }
+
+  void _fail(_Outgoing o, String message) {
+    setState(() {
+      _failed = o;
+      _failureMessage = message;
+    });
+  }
+
+  Future<void> _discardRecording(_Outgoing o) async {
+    final r = o.recording;
+    if (r == null) return;
+    try {
+      await o.voice?.store.delete(r);
+    } catch (_) {
+      // The 7-day sweep of the pending store collects it anyway.
+    }
+  }
+
+  /// Posts [o] with the SAME key every time. 409 `turn_in_progress`: the server is still on it,
+  /// wait and re-send (bounded). 409 `concurrent_update`: refetch the draft, then re-send ONCE.
+  Future<AiConversationTurnResult> _postWithRetry(String sessionId, _Outgoing o) async {
+    final client = ref.read(aiApiClientProvider);
+    var inProgress = 0;
+    var refetched = false;
+    while (true) {
+      try {
+        return await client.postTurn(
+          sessionId,
+          text: o.text!,
+          source: o.source,
+          audioRef: o.audioRef,
+          rawTranscript: o.rawTranscript,
+          replacesTurnId: o.replacesTurnId,
+          idempotencyKey: o.key,
+        );
+      } on AiConversationException catch (e) {
+        if (e.isTurnInProgress && inProgress < _maxTurnInProgressRetries) {
+          inProgress++;
+          await Future<void>.delayed(widget.turnRetryDelay);
+          if (!mounted) rethrow;
+          continue;
+        }
+        if (e.isConcurrentUpdate && !refetched) {
+          refetched = true;
+          final d = await client.getConversation(sessionId);
+          if (!mounted) rethrow;
+          setState(() => _adopt(d, withTurns: false));
+          continue;
+        }
+        rethrow;
+      }
+    }
+  }
+
+  /// The turn response names no turn id, so the id a correction must replace is read back from the
+  /// conversation: the latest operator turn, if it is the text we just sent.
+  Future<void> _learnTurnIds() async {
+    final id = _sessionId;
+    if (id == null) return;
+    try {
+      final d = await ref.read(aiApiClientProvider).getConversation(id);
+      if (!mounted) return;
+      final lastServer = d.turns.lastWhere(
+        (t) => t.isOperator,
+        orElse: () => const AiConversationTurn(
+          turnId: '',
+          role: '',
+          text: '',
+          source: AiTurnSource.typed,
+        ),
+      );
+      if (lastServer.turnId.isEmpty) return;
+      final localLast = _messages.lastWhere(
+        (m) => m.isOperator && !m.superseded,
+        orElse: () => _ChatMessage(isOperator: false, text: ''),
+      );
+      if (localLast.isOperator && localLast.turnId == null && localLast.text == lastServer.text) {
+        setState(() {
+          localLast.turnId = lastServer.turnId;
+          _expiresAt = d.expiresAtUtc;
+        });
+      }
+    } catch (_) {
+      // Best effort: "Correggi" looks the id up again when it is tapped.
+    }
+  }
+
+  // ── correction ───────────────────────────────────────────────────────────────
+
+  Future<void> _correct(_ChatMessage m) async {
+    if (_sending || _sessionId == null) return;
+    if (m.turnId == null) await _learnTurnIds();
+    if (!mounted) return;
+    final replaces = m.turnId;
+    if (replaces == null) {
+      showAppToast(
+        context,
+        message: 'Non riesco a correggere questo messaggio adesso. Riprova tra poco.',
+        tone: ToastTone.warning,
+      );
+      return;
+    }
+    final corrected = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _CorrectionDialog(initial: m.text),
+    );
+    if (corrected == null || corrected.trim().isEmpty || corrected.trim() == m.text.trim()) return;
+    await _run(
+      _Outgoing(
+        key: const Uuid().v4(),
+        text: corrected.trim(),
+        // Keeps the audio and the unedited transcript beside the corrected text.
+        source: m.audioRef != null ? AiTurnSource.voice : AiTurnSource.typed,
+        audioRef: m.audioRef,
+        rawTranscript: m.rawTranscript ?? (m.audioRef != null ? m.text : null),
+        replacesTurnId: replaces,
+        supersedes: m,
+      ),
+    );
+  }
+
+  // ── voice ────────────────────────────────────────────────────────────────────
+
+  Future<void> _toggleMic() async {
+    if (_sending) return;
+    VoiceCaptureController voice;
+    try {
+      voice = await ref.read(voiceCaptureControllerProvider.future);
+    } catch (_) {
+      if (mounted) {
+        showAppToast(
+          context,
+          message: 'La registrazione non è disponibile su questo telefono.',
+          tone: ToastTone.error,
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    if (_recording) {
+      await _stopRecording(voice);
+      return;
+    }
+
+    var result = await voice.start(ticketId: widget.ticketId);
+    if (!mounted) return;
+    if (result == RecordingStartResult.consentRequired) {
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Registrazione vocale'),
+          content: const Text(voiceConsentText),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Accetto')),
+          ],
+        ),
+      );
+      if (accepted != true || !mounted) return;
+      await acceptVoiceConsent();
+      result = await voice.start(ticketId: widget.ticketId);
+      if (!mounted) return;
+    }
+    switch (result) {
+      case RecordingStartResult.started:
+        setState(() => _recording = true);
+        // The 9:30 hard stop or another app taking the microphone ends the recording without a tap.
+        _interruptSub?.cancel();
+        _interruptSub = voice.completed.listen((rec) => _onRecordingEnded(voice, rec));
+      case RecordingStartResult.consentRequired:
+        break;
+      case RecordingStartResult.notSignedIn:
+        showAppToast(context, message: 'Accedi per registrare un aggiornamento.', tone: ToastTone.warning);
+      case RecordingStartResult.permissionDenied:
+        showAppToast(
+          context,
+          message: 'Serve il permesso del microfono per registrare.',
+          tone: ToastTone.warning,
+        );
+      case RecordingStartResult.permissionPermanentlyDenied:
+        showAppToast(
+          context,
+          message: 'Il microfono è bloccato: abilitalo dalle impostazioni del telefono.',
+          tone: ToastTone.warning,
+        );
+    }
+  }
+
+  Future<void> _stopRecording(VoiceCaptureController voice) async {
+    try {
+      final rec = await voice.stop();
+      // Not awaited: nothing depends on the cancel completing.
+      unawaited(_interruptSub?.cancel());
+      _interruptSub = null;
+      if (!mounted) return;
+      setState(() => _recording = false);
+      await _run(_Outgoing(key: '${rec.idempotencyKey}:turn', recording: rec, voice: voice));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _recording = false);
+      showAppToast(context, message: 'Registrazione non riuscita: $e', tone: ToastTone.error);
+    }
+  }
+
+  void _onRecordingEnded(VoiceCaptureController voice, PendingRecording rec) {
+    if (!mounted || !_recording) return;
+    setState(() => _recording = false);
+    unawaited(_run(_Outgoing(key: '${rec.idempotencyKey}:turn', recording: rec, voice: voice)));
+  }
+
+  // ── lifecycle: confirm, leave, abandon, manual path ──────────────────────────
 
   Future<void> _confirm() async {
     final sessionId = _sessionId;
@@ -237,12 +695,49 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     }
   }
 
-  Future<void> _abandon() async {
+  /// Leaves the screen. The live draft is durable: it is resumed next time, never deleted here.
+  void _leave() {
+    if (mounted) Navigator.of(context).maybePop();
+  }
+
+  /// The explicit, destructive act: delete the server-side draft, then leave.
+  Future<void> _abandonDraft() async {
     final sessionId = _sessionId;
     if (sessionId != null) {
-      unawaited(ref.read(aiApiClientProvider).abandonConversation(sessionId));
+      _sessionId = null;
+      await ref.read(aiApiClientProvider).abandonConversation(sessionId);
     }
     if (mounted) Navigator.of(context).maybePop();
+  }
+
+  /// "Continua senza AI": the ordinary manual editor, prefilled from the ticket exactly like the
+  /// ticket screen's own "Crea rapportino". The AI draft (if any) stays on the server untouched.
+  Future<void> _continueWithoutAi() async {
+    Ticket? ticket;
+    final ticketId = widget.ticketId;
+    if (ticketId != null) {
+      try {
+        final db = ref.read(appDatabaseProvider);
+        ticket = await (db.select(db.tickets)..where((t) => t.id.equals(ticketId))).getSingleOrNull();
+      } catch (_) {
+        ticket = null; // an unreadable mirror just means no prefill
+      }
+    }
+    final id = await createLocalDraft(
+      ref,
+      title: ticket != null ? 'Rapportino — ${ticket.title}' : 'Nuovo rapportino',
+      locationId: ticket?.locationId ?? '',
+      ticketId: ticketId,
+      cantiereId: widget.cantiereId,
+      customerId: ticket?.customerId,
+      tenantId: ticket?.tenantId,
+    );
+    if (!mounted) return;
+    if (id == null) {
+      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+      return;
+    }
+    context.go(AppRoutes.rapportiniEditor(id));
   }
 
   void _scrollToEnd() {
@@ -256,6 +751,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     });
   }
 
+  // ── build ────────────────────────────────────────────────────────────────────
+
+  bool get _expiringSoon {
+    final e = _expiresAt;
+    if (e == null || _expiryDismissed) return false;
+    return e.difference(DateTime.now().toUtc()) <= _expiryWarningWindow;
+  }
+
   @override
   Widget build(BuildContext context) {
     final quota = ref.watch(aiQuotaProvider);
@@ -263,83 +766,132 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     final blocked = _draft.hasBlockingOpenItems;
     final sessionReady = _sessionId != null;
 
-    return PopScope(
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) unawaited(_abandon());
-      },
-      child: Scaffold(
-        backgroundColor: context.colors.bg2,
-        body: SafeArea(
-          child: Column(
-            children: [
-              ScreenHeader(
-                title: 'Rapportino con AI Copilot',
-                showBack: true,
-                onBack: _abandon,
-              ),
-              if (_starting) const Expanded(child: Center(child: CircularProgressIndicator())),
-              if (_startError != null)
-                Expanded(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(_startError!, textAlign: TextAlign.center),
-                          const SizedBox(height: 12),
-                          AppButton.secondary(label: 'Riprova', onPressed: _start),
-                        ],
-                      ),
+    return Scaffold(
+      backgroundColor: context.colors.bg2,
+      body: SafeArea(
+        child: Column(
+          children: [
+            ScreenHeader(title: 'Rapportino con AI Copilot', showBack: true, onBack: _leave),
+            if (_starting) const Expanded(child: Center(child: CircularProgressIndicator())),
+            if (_startError != null)
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_startError!, textAlign: TextAlign.center),
+                        const SizedBox(height: 12),
+                        if (!_aiBlocked) AppButton.secondary(label: 'Riprova', onPressed: _start),
+                        if (!_aiBlocked) const SizedBox(height: 8),
+                        AppButton(label: 'Continua senza AI', onPressed: _continueWithoutAi),
+                      ],
                     ),
                   ),
                 ),
-              if (!_starting && _startError == null) ...[
-                Expanded(child: _buildChat(context)),
-                if (_draft.activities.isNotEmpty ||
-                    _draft.workers.isNotEmpty ||
-                    _draft.materials.isNotEmpty ||
-                    _draft.controlli.isNotEmpty ||
-                    _draft.diagnosi != null ||
-                    _draft.soluzione != null ||
-                    _draft.customerSignoffText != null ||
-                    _draft.openItems.isNotEmpty)
-                  _buildDraftSummary(context),
-                _buildInputRow(context, sessionReady, quotaExhausted),
+              ),
+            if (!_starting && _startError == null) ...[
+              ..._buildBanners(context),
+              Expanded(child: _buildChat(context)),
+              if (_draft.activities.isNotEmpty ||
+                  _draft.workers.isNotEmpty ||
+                  _draft.materials.isNotEmpty ||
+                  _draft.controlli.isNotEmpty ||
+                  _draft.diagnosi != null ||
+                  _draft.soluzione != null ||
+                  _draft.customerSignoffText != null ||
+                  _draft.openItems.isNotEmpty)
+                _buildDraftSummary(context),
+              if (_voiceDisabled)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.pagePadding,
-                    AppSpacing.sm,
-                    AppSpacing.pagePadding,
-                    AppSpacing.base,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                    vertical: 4,
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: AppButton.secondary(label: 'Annulla', onPressed: _abandon),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        // The label says "apri", not "crea": Confirm no longer creates anything
-                        // server-side, and the technician lands on a local Bozza that is not yet
-                        // sent. Copy that said "crea" would be the one place in the app where a
-                        // rapportino looks filed and is not.
-                        child: AppButton(
-                          label: _confirming ? 'Preparo il rapportino…' : 'Conferma e apri il rapportino',
-                          onPressed: !sessionReady || _messages.isEmpty || blocked || _confirming
-                              ? null
-                              : _confirm,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    'La registrazione vocale non è attiva per questa azienda: scrivi o detta '
+                    'con la tastiera.',
+                    style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
                   ),
                 ),
-              ],
+              _buildInputRow(context, sessionReady, quotaExhausted),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.sm,
+                  AppSpacing.pagePadding,
+                  AppSpacing.base,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(child: AppButton.secondary(label: 'Esci', onPressed: _leave)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      // The label says "apri", not "crea": Confirm no longer creates anything
+                      // server-side, and the technician lands on a local Bozza that is not yet
+                      // sent. Copy that said "crea" would be the one place in the app where a
+                      // rapportino looks filed and is not.
+                      child: AppButton(
+                        label: _confirming ? 'Preparo il rapportino…' : 'Conferma e apri il rapportino',
+                        onPressed: !sessionReady || _messages.isEmpty || blocked || _confirming
+                            ? null
+                            : _confirm,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );
+  }
+
+  List<Widget> _buildBanners(BuildContext context) {
+    Widget banner(Color color, String text, List<Widget> actions) => Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 4, AppSpacing.pagePadding, 0),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withAlpha(24),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withAlpha(90)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(text, style: TextStyle(color: context.colors.ink, fontSize: 13)),
+          if (actions.isNotEmpty) Wrap(spacing: 8, children: actions),
+        ],
+      ),
+    );
+
+    return [
+      if (_expiringSoon)
+        banner(context.colors.amber, _expiryText(), [
+          TextButton(
+            onPressed: () => setState(() => _expiryDismissed = true),
+            child: const Text('Riprendi'),
+          ),
+          TextButton(onPressed: _abandonDraft, child: const Text('Abbandona bozza')),
+        ]),
+      if (_aiBlockedMessage != null)
+        banner(context.colors.red, _aiBlockedMessage!, [
+          TextButton(onPressed: _continueWithoutAi, child: const Text('Continua senza AI')),
+        ]),
+      if (_failed != null && _failureMessage != null)
+        banner(context.colors.red, '$_failureMessage\nL\'aggiornamento non è stato inviato.', [
+          TextButton(onPressed: _sending ? null : _retryFailed, child: const Text('Riprova invio')),
+        ]),
+    ];
+  }
+
+  String _expiryText() {
+    final e = _expiresAt!.toLocal();
+    final d = '${e.day.toString().padLeft(2, '0')}/${e.month.toString().padLeft(2, '0')}';
+    return 'Questa bozza scade il $d se non la riprendi. Puoi continuarla o abbandonarla.';
   }
 
   Widget _buildChat(BuildContext context) {
@@ -356,6 +908,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         ),
       );
     }
+
+    // Only the latest, still-valid voice message of the operator can be corrected.
+    final lastCorrectable = _messages.lastIndexWhere((m) => m.isOperator && !m.superseded);
 
     return ListView.builder(
       controller: _scrollCtrl,
@@ -392,20 +947,50 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           );
         }
         final m = _messages[i];
+        final canCorrect =
+            i == lastCorrectable && m.source == AiTurnSource.voice && !_sending && !_aiBlocked;
         return Align(
           alignment: m.isOperator ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: m.isOperator ? AppColors.Y : context.colors.surface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              m.text,
-              style: TextStyle(color: m.isOperator ? Colors.white : context.colors.ink),
-            ),
+          child: Column(
+            crossAxisAlignment: m.isOperator ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              Container(
+                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: m.isOperator ? AppColors.Y : context.colors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (m.isOperator && m.source == AiTurnSource.voice) ...[
+                      const Icon(LucideIcons.mic, size: 14, color: Colors.white),
+                      const SizedBox(width: 6),
+                    ],
+                    Flexible(
+                      child: Text(
+                        m.text,
+                        style: TextStyle(
+                          color: m.isOperator ? Colors.white : context.colors.ink,
+                          decoration: m.superseded ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (canCorrect)
+                TextButton(
+                  onPressed: () => _correct(m),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(44, 44),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: const Text('Correggi'),
+                ),
+            ],
           ),
         );
       },
@@ -414,7 +999,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
   Widget _buildDraftSummary(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 180),
+      constraints: const BoxConstraints(maxHeight: 260),
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 4),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -437,16 +1022,19 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
               _draftRow(
                 '${a.description.isEmpty ? '—' : a.description}${a.hours != null ? ' · ${a.hours}h' : ''}',
                 a.state,
+                a.source,
               ),
             for (final w in _draft.workers)
               _draftRow(
                 '${w.fullName.isEmpty ? '—' : w.fullName}${w.hours != null ? ' · ${w.hours}h' : ''}',
                 w.state,
+                w.source,
               ),
             for (final m in _draft.materials)
-              _draftRow('${m.name.isEmpty ? '—' : m.name} × ${m.quantity}', m.state),
-            for (final c in _draft.controlli) _draftRow(c.describe(), c.state),
-            if (_draft.openItems.isNotEmpty)
+              _draftRow('${m.name.isEmpty ? '—' : m.name} × ${m.quantity}', m.state, m.source),
+            for (final c in _draft.controlli)
+              _draftRow(c.describe(), c.state, AiFactSource.operatorInput),
+            if (_draft.openItems.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
@@ -459,6 +1047,20 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                   ),
                 ),
               ),
+              for (final item in _draft.openItems)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(
+                    describeOpenItem(item),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: item.state == AiResolutionState.conflict
+                          ? context.colors.red
+                          : context.colors.ink,
+                    ),
+                  ),
+                ),
+            ],
           ],
         ),
       ),
@@ -480,36 +1082,33 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     ),
   );
 
-  Widget _draftRow(String label, AiResolutionState state) {
-    final Color bg;
-    final Color fg;
-    switch (state) {
-      case AiResolutionState.resolvedBySystem:
-      case AiResolutionState.operatorConfirmed:
-        bg = context.colors.green.withAlpha(31);
-        fg = context.colors.green;
-      case AiResolutionState.ambiguous:
-        bg = context.colors.amber.withAlpha(31);
-        fg = context.colors.amber;
-      case AiResolutionState.conflict:
-        bg = context.colors.red.withAlpha(31);
-        fg = context.colors.red;
-      case AiResolutionState.unresolved:
-        bg = context.colors.bg3;
-        fg = context.colors.inkMuted;
-    }
+  /// One value of the draft with its provenance badge. A planned / ticket-recorded value the
+  /// technician has not confirmed is muted and italic: it must never read as work that was done.
+  Widget _draftRow(String label, AiResolutionState state, AiFactSource source) {
+    final unconfirmed = isUnconfirmedProposal(state);
     return Padding(
+      key: unconfirmed ? ValueKey('planned-unconfirmed-row:$label') : null,
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 12))),
-          AppBadge(label: state.name, small: true, bgColor: bg, fgColor: fg),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: unconfirmed ? FontStyle.italic : FontStyle.normal,
+                color: unconfirmed ? context.colors.inkMuted : context.colors.ink,
+              ),
+            ),
+          ),
+          DraftProvenanceBadge(source: source, state: state),
         ],
       ),
     );
   }
 
   Widget _buildInputRow(BuildContext context, bool sessionReady, bool quotaExhausted) {
+    final enabled = sessionReady && !quotaExhausted && !_aiBlocked;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
@@ -521,21 +1120,71 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         label: 'Scrivi cosa hai fatto…',
         controller: _inputCtrl,
         maxLines: 3,
-        enabled: sessionReady && !quotaExhausted,
+        enabled: enabled,
         onChanged: (_) {},
         suffixIcon: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (!_voiceDisabled)
+              IconButton(
+                icon: Icon(
+                  _recording ? LucideIcons.square : LucideIcons.mic,
+                  size: 18,
+                  color: _recording ? context.colors.red : context.colors.ink,
+                ),
+                tooltip: _recording ? 'Ferma la registrazione' : 'Registra un aggiornamento vocale',
+                onPressed: enabled && (!_sending || _recording) ? _toggleMic : null,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              ),
             DictateButton(controller: _inputCtrl, onChanged: (_) {}, explainWhenUnavailable: false),
             IconButton(
               icon: Icon(LucideIcons.send, size: 18, color: context.colors.ink),
               tooltip: 'Invia',
-              onPressed: sessionReady && !quotaExhausted && !_sending ? _send : null,
+              onPressed: enabled && !_sending ? _send : null,
               constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CorrectionDialog extends StatefulWidget {
+  const _CorrectionDialog({required this.initial});
+  final String initial;
+
+  @override
+  State<_CorrectionDialog> createState() => _CorrectionDialogState();
+}
+
+class _CorrectionDialogState extends State<_CorrectionDialog> {
+  late final _ctrl = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Correggi la trascrizione'),
+      content: TextField(
+        key: const ValueKey('correction-field'),
+        controller: _ctrl,
+        maxLines: 5,
+        minLines: 2,
+        autofocus: true,
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annulla')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _ctrl.text),
+          child: const Text('Invia correzione'),
+        ),
+      ],
     );
   }
 }

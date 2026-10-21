@@ -115,12 +115,30 @@ class AiFailure implements Exception {
 /// differently to a 409 (stale idempotency-key version: mint a fresh key and let the technician
 /// retry) than to any other failure, which a plain [AiFailure] can't express.
 class AiConversationException implements Exception {
-  const AiConversationException(this.statusCode, this.message);
+  const AiConversationException(this.statusCode, this.message, {this.code, this.offline = false});
 
   final int? statusCode;
   final String message;
 
+  /// The server's stable machine-readable code (`turn_in_progress`, `concurrent_update`,
+  /// `draft_too_large`, `turn_limit_exceeded`, ...), when the error body carried one.
+  final String? code;
+
+  /// The request never reached the server (no signal, DNS, timeout): the same call may succeed
+  /// later, and the AI draft needs a connection.
+  final bool offline;
+
   bool get isStaleVersionConflict => statusCode == 409;
+
+  /// 409: the same Idempotency-Key is still being processed. Retry with the SAME key after a pause.
+  bool get isTurnInProgress => statusCode == 409 && code == 'turn_in_progress';
+
+  /// 409: the draft moved on under this request. Refetch it (GET), then retry with the same key.
+  bool get isConcurrentUpdate => statusCode == 409 && code == 'concurrent_update';
+
+  /// 409: the draft or the conversation hit a hard cap; retrying cannot help.
+  bool get isDraftTooLarge => statusCode == 409 && code == 'draft_too_large';
+  bool get isTurnLimitExceeded => statusCode == 409 && code == 'turn_limit_exceeded';
 
   @override
   String toString() => message;
@@ -128,15 +146,44 @@ class AiConversationException implements Exception {
 
 /// A resolved field's confidence — mirrors backend `ResolutionState` (CandidateFact.cs),
 /// on the wire as a string (`[JsonConverter(typeof(JsonStringEnumConverter))]`).
-enum AiResolutionState { unresolved, resolvedBySystem, operatorConfirmed, ambiguous, conflict }
+///
+/// [needsConfirmation] is a value that came from the ticket record or a plan, never from the
+/// operator: it proves nothing until the technician confirms it. Members are only ever APPENDED on
+/// the server, so an unknown string (a newer server) parses to [unresolved], never throws.
+enum AiResolutionState {
+  unresolved,
+  resolvedBySystem,
+  operatorConfirmed,
+  ambiguous,
+  conflict,
+  needsConfirmation,
+}
 
-AiResolutionState _parseResolutionState(String? s) => switch (s) {
+AiResolutionState _parseResolutionState(Object? s) => switch (s) {
   'ResolvedBySystem' => AiResolutionState.resolvedBySystem,
   'OperatorConfirmed' => AiResolutionState.operatorConfirmed,
   'Ambiguous' => AiResolutionState.ambiguous,
   'Conflict' => AiResolutionState.conflict,
+  'NeedsConfirmation' => AiResolutionState.needsConfirmation,
   _ => AiResolutionState.unresolved,
 };
+
+/// Where a draft value came from — mirrors backend `FactSource`. [ticketRecord] and [planned] are
+/// never evidence that work happened. An unknown string parses to [operatorInput].
+enum AiFactSource { operatorInput, taskTapTool, derived, ticketRecord, planned }
+
+AiFactSource _parseFactSource(Object? s) => switch (s) {
+  'TaskTapTool' => AiFactSource.taskTapTool,
+  'Derived' => AiFactSource.derived,
+  'TicketRecord' => AiFactSource.ticketRecord,
+  'Planned' => AiFactSource.planned,
+  _ => AiFactSource.operatorInput,
+};
+
+/// How a turn's text reached the client (request `source`, and each turn of a resumed session).
+enum AiTurnSource { typed, voice }
+
+AiTurnSource _parseTurnSource(Object? s) => s == 'Voice' ? AiTurnSource.voice : AiTurnSource.typed;
 
 class AiConversationSessionDto {
   const AiConversationSessionDto({required this.sessionId, this.ticketId, this.cantiereId});
@@ -158,15 +205,42 @@ class AiConversationSessionDto {
 /// shown on mobile — the web copilot's own doc comment covers why the shape carries more than
 /// this; this app only needs the count and the blocking states.
 class AiCandidateFact {
-  const AiCandidateFact({required this.field, required this.state});
+  const AiCandidateFact({
+    required this.field,
+    required this.state,
+    this.source = AiFactSource.operatorInput,
+    this.conflictOperatorValue,
+  });
 
   final String field;
   final AiResolutionState state;
+  final AiFactSource source;
 
-  factory AiCandidateFact.fromJson(Map<String, dynamic> json) => AiCandidateFact(
-    field: json['field'] as String? ?? '',
-    state: _parseResolutionState(json['state'] as String?),
-  );
+  /// For a held removal (`removed.<collection>.<key>`): the name of the entry the technician
+  /// removed and the AI proposed again (the server's `conflict.operatorValue`).
+  final String? conflictOperatorValue;
+
+  /// A removal the technician made that a later proposal tried to bring back.
+  bool get isHeldRemoval => field.startsWith('removed.');
+
+  /// `workers` | `materials` | `activities` | `controlli` for a held removal, else null.
+  String? get removedCollection {
+    if (!isHeldRemoval) return null;
+    final parts = field.split('.');
+    return parts.length >= 3 ? parts[1] : null;
+  }
+
+  factory AiCandidateFact.fromJson(Map<String, dynamic> json) {
+    final provenance = json['provenance'];
+    final conflict = json['conflict'];
+    final shown = conflict is Map ? conflict['operatorValue'] : null;
+    return AiCandidateFact(
+      field: json['field'] as String? ?? '',
+      state: _parseResolutionState(json['state']),
+      source: _parseFactSource(provenance is Map ? provenance['sourceType'] : null),
+      conflictOperatorValue: shown is String ? shown : null,
+    );
+  }
 }
 
 class AiDraftWorkerRef {
@@ -175,18 +249,21 @@ class AiDraftWorkerRef {
     required this.fullName,
     this.hours,
     required this.state,
+    this.source = AiFactSource.operatorInput,
   });
 
   final String userId;
   final String fullName;
   final double? hours;
   final AiResolutionState state;
+  final AiFactSource source;
 
   factory AiDraftWorkerRef.fromJson(Map<String, dynamic> json) => AiDraftWorkerRef(
     userId: json['userId'] as String? ?? '',
     fullName: json['fullName'] as String? ?? '',
     hours: asDouble(json['hours']),
-    state: _parseResolutionState(json['state'] as String?),
+    state: _parseResolutionState(json['state']),
+    source: _parseFactSource(json['source']),
   );
 }
 
@@ -196,18 +273,21 @@ class AiDraftMaterialUsage {
     required this.name,
     required this.quantity,
     required this.state,
+    this.source = AiFactSource.operatorInput,
   });
 
   final String materialId;
   final String name;
   final double quantity;
   final AiResolutionState state;
+  final AiFactSource source;
 
   factory AiDraftMaterialUsage.fromJson(Map<String, dynamic> json) => AiDraftMaterialUsage(
     materialId: json['materialId'] as String? ?? '',
     name: json['name'] as String? ?? '',
     quantity: asDoubleOr0(json['quantity']),
-    state: _parseResolutionState(json['state'] as String?),
+    state: _parseResolutionState(json['state']),
+    source: _parseFactSource(json['source']),
   );
 }
 
@@ -231,7 +311,7 @@ class AiDraftControlAnswer {
     stringValue: json['stringValue'] as String?,
     boolValue: json['boolValue'] as bool?,
     numberValue: asDouble(json['numberValue']),
-    state: _parseResolutionState(json['state'] as String?),
+    state: _parseResolutionState(json['state']),
   );
 
   /// A short human-readable answer, for a one-line list row.
@@ -248,16 +328,23 @@ class AiDraftControlAnswer {
 /// Report's Title/Details directly from these, so this is the exact text that becomes the
 /// rapportino's title/description; the technician needs to see it before confirming.
 class AiDraftActivity {
-  const AiDraftActivity({required this.description, this.hours, required this.state});
+  const AiDraftActivity({
+    required this.description,
+    this.hours,
+    required this.state,
+    this.source = AiFactSource.operatorInput,
+  });
 
   final String description;
   final double? hours;
   final AiResolutionState state;
+  final AiFactSource source;
 
   factory AiDraftActivity.fromJson(Map<String, dynamic> json) => AiDraftActivity(
     description: json['description'] as String? ?? '',
     hours: asDouble(json['hours']),
-    state: _parseResolutionState(json['state'] as String?),
+    state: _parseResolutionState(json['state']),
+    source: _parseFactSource(json['source']),
   );
 }
 
@@ -330,6 +417,76 @@ class AiConversationTurnResult {
           (json['draft'] as Map<String, dynamic>?) ?? const {},
         ),
       );
+}
+
+/// One visible turn of a resumed session: text and how it arrived, never tool calls.
+class AiConversationTurn {
+  const AiConversationTurn({
+    required this.turnId,
+    required this.role,
+    required this.text,
+    required this.source,
+    this.at,
+  });
+
+  final String turnId;
+
+  /// `Operator` or `Assistant` (any other string is kept as is and rendered as the assistant).
+  final String role;
+  final String text;
+  final AiTurnSource source;
+  final DateTime? at;
+
+  bool get isOperator => role == 'Operator';
+
+  factory AiConversationTurn.fromJson(Map<String, dynamic> json) => AiConversationTurn(
+    turnId: json['turnId'] as String? ?? '',
+    role: json['role'] as String? ?? '',
+    text: json['text'] as String? ?? '',
+    source: _parseTurnSource(json['source']),
+    at: DateTime.tryParse(json['at'] as String? ?? '')?.toUtc(),
+  );
+}
+
+/// `GET /api/ai/conversations/{id}`: the durable draft plus what was said, enough to resume on
+/// any device. [expiresAtUtc] is the date the inactive draft is deleted.
+class AiConversationDetailDto {
+  const AiConversationDetailDto({
+    required this.sessionId,
+    this.ticketId,
+    required this.draft,
+    required this.turns,
+    required this.version,
+    required this.expiresAtUtc,
+    this.authorName,
+  });
+
+  final String sessionId;
+  final String? ticketId;
+  final AiCopilotDraftDto draft;
+  final List<AiConversationTurn> turns;
+  final int version;
+  final DateTime expiresAtUtc;
+  final String? authorName;
+
+  factory AiConversationDetailDto.fromJson(Map<String, dynamic> json) {
+    final author = json['author'];
+    return AiConversationDetailDto(
+      sessionId: json['sessionId'] as String? ?? '',
+      ticketId: json['ticketId'] as String?,
+      draft: AiCopilotDraftDto.fromJson((json['draft'] as Map<String, dynamic>?) ?? const {}),
+      turns: ((json['turns'] as List<dynamic>?) ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(AiConversationTurn.fromJson)
+          .toList(),
+      version: asIntOr0(json['version']),
+      // Far in the future when absent or unreadable: an unknown expiry must never raise a warning.
+      expiresAtUtc:
+          DateTime.tryParse(json['expiresAtUtc'] as String? ?? '')?.toUtc() ??
+          DateTime.utc(9999),
+      authorName: author is Map ? author['fullName'] as String? : null,
+    );
+  }
 }
 
 /// One resolved technician line. Mirror of backend `AiResolvedStaff`.
@@ -656,6 +813,70 @@ class AiApiClient {
     }
   }
 
+  /// GET /api/ai/conversations?ticketId= — the caller's live session for that ticket, or null (404).
+  Future<String?> resumeConversation(String ticketId) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/ai/conversations',
+        queryParameters: {'ticketId': ticketId},
+      );
+      final id = response.data?['sessionId'] as String?;
+      return (id == null || id.isEmpty) ? null : id;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw _translateConversation(e);
+    }
+  }
+
+  /// GET /api/ai/conversations/{id} — the draft, the turns and the expiry.
+  Future<AiConversationDetailDto> getConversation(String sessionId) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>('/api/ai/conversations/$sessionId');
+      final data = response.data;
+      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      return AiConversationDetailDto.fromJson(data);
+    } on DioException catch (e) {
+      throw _translateConversation(e);
+    }
+  }
+
+  /// POST /api/ai/conversations/{id}/turns — one utterance, typed or transcribed.
+  ///
+  /// [idempotencyKey] (sent as the `Idempotency-Key` header) must be generated ONCE per logical
+  /// turn and reused unchanged on every retry: the server then replays the original response
+  /// instead of applying (and charging) the turn twice. [replacesTurnId] marks a correction of an
+  /// earlier operator turn. [confirmedEdits] is for the editor sync (Task 12).
+  Future<AiConversationTurnResult> postTurn(
+    String sessionId, {
+    required String text,
+    AiTurnSource source = AiTurnSource.typed,
+    String? audioRef,
+    String? rawTranscript,
+    String? replacesTurnId,
+    List<Map<String, dynamic>>? confirmedEdits,
+    required String idempotencyKey,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/ai/conversations/$sessionId/turns',
+        data: {
+          'text': text,
+          'source': source == AiTurnSource.voice ? 'Voice' : 'Typed',
+          'audioRef': ?audioRef,
+          'rawTranscript': ?rawTranscript,
+          'replacesTurnId': ?replacesTurnId,
+          'confirmedEdits': ?confirmedEdits,
+        },
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+      );
+      final data = response.data;
+      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      return AiConversationTurnResult.fromJson(data);
+    } on DioException catch (e) {
+      throw _translateConversation(e);
+    }
+  }
+
   /// POST /api/ai/conversations/{id}/turns — one operator utterance.
   Future<AiConversationTurnResult> sendTurn(String sessionId, String text) async {
     try {
@@ -891,6 +1112,7 @@ class AiApiClient {
       return AiConversationException(
         status,
         'Nessuna connessione. Il copilot AI richiede la rete.',
+        offline: true,
       );
     }
 
@@ -906,14 +1128,25 @@ class AiApiClient {
     }
 
     if (status == 409) {
+      // ProblemDetails carries the stable code under `code`; older shapes used `error`.
+      final code = (map?['code'] ?? map?['error']) as String?;
       return AiConversationException(
         status,
-        'La bozza è cambiata da quando hai provato a confermare — riprova.',
+        switch (code) {
+          'turn_in_progress' => 'L\'aggiornamento precedente è ancora in elaborazione.',
+          'concurrent_update' => 'La bozza è stata modificata da un altro dispositivo.',
+          'draft_too_large' =>
+            'La bozza è diventata troppo grande: apri il rapportino e completalo a mano.',
+          'turn_limit_exceeded' =>
+            'Questa conversazione ha raggiunto il limite di aggiornamenti.',
+          _ => 'La bozza è cambiata da quando hai provato a confermare — riprova.',
+        },
+        code: code,
       );
     }
 
     if (status == 400) {
-      final reason = body is String ? body : (map?['error'] as String?);
+      final reason = body is String ? body : ((map?['error'] ?? map?['message']) as String?);
       return AiConversationException(
         status,
         reason ?? 'Richiesta non valida.',
