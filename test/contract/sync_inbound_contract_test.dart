@@ -103,6 +103,7 @@ void main() {
     'SyncProdottoAssistenzaDto': ProdottoAssistenzaSyncDto.wireKeys,
     'SyncAgentDto': AgentSyncDto.wireKeys,
     'SyncMaintenanceTemplateDto': SyncMaintenanceTemplateDto.wireKeys,
+    'SyncCantiereCrewAssignmentDto': SyncCantiereCrewAssignmentDto.wireKeys,
     // The I2 confirm response. The draft and resolved shapes are different DTOs, so these are
     // pinned here rather than inferred from the draft summary's classes.
     'AiConversationConfirmResponse': AiConversationConfirmResponse.wireKeys,

@@ -22,6 +22,13 @@ class SyncResultDto {
   final List<MaterialeDto> materiali;
   final List<MaterialeBarcodeDto> materialiBarcodes;
   final List<CantiereDto> cantieri;
+
+  /// The crew of every cantiere [cantieri] carries this time — the complete set per cantiere, with
+  /// no delta filter on these rows, so that a lead change reaches a device whose cantiere row
+  /// itself did not change. Mirrored into `cantiere_crew_assignments` so the lead-only clock-in
+  /// affordances and the teammate picker work offline (see SyncService).
+  final List<SyncCantiereCrewAssignmentDto> cantiereCrewAssignments;
+
   final List<TicketStatusDto> ticketStatuses;
   final List<TicketTypeDto> ticketTypes;
   final List<ColleagueDto> colleagues;
@@ -76,6 +83,11 @@ class SyncResultDto {
   /// replace would wipe the picker.
   final bool carriesMaintenanceTemplates;
 
+  /// False when the payload came from a backend that predates the cantiere-crew member. Without it
+  /// an older backend would look like "every crew is empty" and the per-cantiere replace would wipe
+  /// the mirror — the same trap [carriesMaintenanceTemplates] closes for the template catalogue.
+  final bool carriesCantiereCrewAssignments;
+
   static const Set<String> checklistWireKeys = {
     'controlGroups',
     'ticketControls',
@@ -87,14 +99,22 @@ class SyncResultDto {
     'checklistOmittedTicketIds',
   };
 
-  /// The reference members, kept apart from [checklistWireKeys]: they carry the mirror the create
-  /// wizard reads, not a ticket's checklist state.
+  /// The reference members, kept apart from [checklistWireKeys]: they carry local mirrors, not a
+  /// ticket's checklist state.
+  ///
+  /// `cantiereCrewAssignments` mirrors the crew of the payload's cantieri (who is assigned to each
+  /// worksite and which of them is lead) into `cantiere_crew_assignments`, so the lead-only
+  /// clock-in affordances and the teammate picker work offline. It is additive and old-backend
+  /// tolerant: a server that predates the member omits the key, and
+  /// [carriesCantiereCrewAssignments] then reads false so the mirror keeps whatever it holds
+  /// instead of being wiped as "every crew is empty".
   static const Set<String> referenceWireKeys = {
     'contracts',
     'commesse',
     'prodottiAssistenza',
     'agents',
     'maintenanceTemplates',
+    'cantiereCrewAssignments',
   };
 
   const SyncResultDto({
@@ -110,6 +130,7 @@ class SyncResultDto {
     required this.materiali,
     this.materialiBarcodes = const [],
     required this.cantieri,
+    this.cantiereCrewAssignments = const [],
     required this.ticketStatuses,
     required this.ticketTypes,
     required this.colleagues,
@@ -133,6 +154,7 @@ class SyncResultDto {
     this.carriesProdottiAssistenza = false,
     this.carriesAgents = false,
     this.carriesMaintenanceTemplates = false,
+    this.carriesCantiereCrewAssignments = false,
   });
 
   factory SyncResultDto.fromJson(Map<String, dynamic> j) {
@@ -155,6 +177,10 @@ class SyncResultDto {
         MaterialeBarcodeDto.fromJson,
       ),
       cantieri: _list(j['cantieri'], CantiereDto.fromJson),
+      cantiereCrewAssignments: _list(
+        j['cantiereCrewAssignments'],
+        SyncCantiereCrewAssignmentDto.fromJson,
+      ),
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
       colleagues: _list(j['colleagues'], ColleagueDto.fromJson),
@@ -189,6 +215,7 @@ class SyncResultDto {
       carriesProdottiAssistenza: j.containsKey('prodottiAssistenza'),
       carriesAgents: j.containsKey('agents'),
       carriesMaintenanceTemplates: j.containsKey('maintenanceTemplates'),
+      carriesCantiereCrewAssignments: j.containsKey('cantiereCrewAssignments'),
     );
   }
 }
@@ -635,6 +662,41 @@ class CantiereDto {
     customerId: j['customerId'] as String?,
     commessaId: j['commessaId'] as String?,
   );
+}
+
+// ── Cantiere crew assignment ────────────────────────────────────────────────────
+
+/// One `cantiereCrewAssignments[]` row — a person assigned to a cantiere, and whether they are its
+/// lead.
+///
+/// Mirrors the server's `CantiereCrewAssignment` through the sync payload rather than the
+/// paginated `GET /api/cantieri/{id}/assegnazioni` shape the live client parses: the same facts,
+/// plus the `cantiereId` the live endpoint already has in its path. Ids are Guids on the wire and
+/// stay strings here, exactly like every other sync DTO.
+class SyncCantiereCrewAssignmentDto {
+  final String id;
+  final String cantiereId;
+  final String userId;
+  final bool isLead;
+
+  const SyncCantiereCrewAssignmentDto({
+    required this.id,
+    required this.cantiereId,
+    required this.userId,
+    this.isLead = false,
+  });
+
+  /// Exactly the keys [fromJson] reads — the inbound contract test compares this with the
+  /// server's declared schema in both directions, so a member added on one side alone fails.
+  static const Set<String> wireKeys = {'id', 'cantiereId', 'userId', 'isLead'};
+
+  factory SyncCantiereCrewAssignmentDto.fromJson(Map<String, dynamic> j) =>
+      SyncCantiereCrewAssignmentDto(
+        id: j['id'] as String,
+        cantiereId: j['cantiereId'] as String,
+        userId: j['userId'] as String,
+        isLead: j['isLead'] as bool? ?? false,
+      );
 }
 
 // ── TicketStatus ───────────────────────────────────────────────────────────────
