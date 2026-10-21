@@ -1335,7 +1335,11 @@ void main() {
       expect((await repo.getDraft('report-1'))!.submissionState, 'submitted');
     });
 
-    test('a forced send that really has no network becomes a transient failed row', () async {
+    // Reversed deliberately by the offline-submit slice: a forced attempt the network never
+    // carried is not a failed send, so the row goes back to the queue with its whole retry budget
+    // and the calm "In attesa di connessione" state. The full matrix (captive portal, six manual
+    // taps, the attachment-upload path) lives in `submission_queue_offline_test.dart`.
+    test('a forced send that really has no network leaves the row waiting, not failed', () async {
       online = false;
       await _insertDraft(db);
       stubSubmitThrows(
@@ -1344,9 +1348,10 @@ void main() {
       await gated.enqueue('report-1');
       await gated.processAll(force: true);
       final d = (await repo.getDraft('report-1'))!;
-      expect(d.submissionState, 'failed');
-      expect(d.submissionErrorTransient, isTrue);
-      expect(d.submissionError, contains('Nessuna connessione'));
+      expect(d.submissionState, 'readyToSubmit');
+      expect(d.submissionError, isNull);
+      expect(d.submissionAttempts, 0);
+      expect(submitCalls(), 1, reason: 'force means it really tried the network');
     });
 
     test('manual retry() is forced too', () async {
@@ -1548,14 +1553,25 @@ void main() {
       });
     }
 
-    test('a connection error is transient', () async {
+    // A connection error is only "transient" when the device could reach the network and the
+    // server still did not answer — otherwise it is the technician being offline, which the queue
+    // must not charge against the retry budget. `recheck` is the probe's answer; the default in
+    // this group is `false` (nothing reachable), so pin the reachable side explicitly here.
+    test('a connection error with a reachable network is transient', () async {
+      recheck = true;
       await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'k');
       stubSubmitThrows(
         DioException(requestOptions: reqOpts, type: DioExceptionType.connectionTimeout),
       );
       await gated.processAll();
       final draft = (await repo.getDraft('report-1'))!;
+      expect(draft.submissionState, 'failed');
       expect(draft.submissionErrorTransient, isTrue);
+      expect(
+        draft.submissionAttempts,
+        0,
+        reason: 'the server never answered, so this must not spend a retry',
+      );
     });
 
     test('transient retries stop at the cap and the row stays failed', () async {

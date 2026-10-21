@@ -911,7 +911,7 @@ class _RejectionBanner extends ConsumerStatefulWidget {
 class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
   bool _busy = false;
 
-  Future<void> _rilavora() async {
+  Future<void> _rielabora() async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -920,7 +920,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
       if (newId == null) {
         showAppToast(
           context,
-          message: 'Accedi per rilavorare il rapportino.',
+          message: 'Accedi per rielaborare il rapportino.',
           tone: ToastTone.warning,
         );
         return;
@@ -961,15 +961,16 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
             // The backend has no motivo/reason field to show here — POST
             // /api/reports/{id}/respingi takes no body and Report carries none — so this says
             // what is true instead of a reason that does not exist yet.
-            "Rilavoralo per correggerlo e inviarlo di nuovo. L'ufficio non ha registrato "
-            'un motivo per questo rifiuto.',
+            "Rielaboralo per correggerlo e inviarlo di nuovo: si crea un nuovo rapportino con gli "
+            "stessi dati, quello respinto resta com'è. L'ufficio non ha registrato un motivo per "
+            'questo rifiuto.',
             style: TextStyle(color: context.colors.ink, fontSize: 13),
           ),
           const SizedBox(height: 12),
           AppButton(
-            label: 'Rilavora',
+            label: 'Rielabora',
             icon: const Icon(LucideIcons.penTool),
-            onPressed: _busy ? null : _rilavora,
+            onPressed: _busy ? null : _rielabora,
             isLoading: _busy,
           ),
         ],

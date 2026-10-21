@@ -413,12 +413,20 @@ class _DettagliSection extends ConsumerWidget {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Squadra assegnata — read-only crew list from the same `cantiereCrewAssignmentsProvider`
-// (GET /api/cantieri/{id}/assegnazioni) the batch-timbra "Seleziona squadra" picker already uses
-// (cantiere_timbra_screen.dart / teammate_picker_sheet.dart) — same data, no new fetch. Collapses
-// to nothing while loading, on error (including offline — see that provider's own doc comment on
-// why AsyncError there is an expected, not exceptional, state), or when nobody is assigned: this
-// is a convenience read, not something this screen's primary Timbra/Crea-rapportino flows depend
-// on, so it must never block or clutter the rest of the page while it resolves.
+// (GET /api/cantieri/{id}/assegnazioni online, the Drift crew mirror offline) the batch-timbra
+// "Seleziona squadra" picker already uses (cantiere_timbra_screen.dart /
+// teammate_picker_sheet.dart) — same data, no new fetch.
+//
+// Three states, deliberately distinct:
+//   - loading / error: collapse to nothing. An error no longer means "offline" (the provider
+//     answers from the mirror without signal), so it is the genuinely unavailable case — the local
+//     read itself failed — and saying "no crew" then would be a claim the app cannot make.
+//   - data, empty: render "Nessuna squadra assegnata". This is an authoritative answer (the live
+//     server's or the mirrored crew's), so it must read differently from "couldn't ask".
+//   - data, non-empty: the crew list.
+// Never an empty card or an empty list: the section is a convenience read, not something this
+// screen's primary Timbra/Crea-rapportino flows depend on, so it must not clutter the page while
+// it resolves.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _SquadraSection extends ConsumerWidget {
@@ -432,37 +440,49 @@ class _SquadraSection extends ConsumerWidget {
 
     return assignmentsAsync.when(
       loading: () => const SizedBox.shrink(),
+      // Unavailable, not empty: see this section's header comment.
       error: (e, _) => const SizedBox.shrink(),
       data: (assignments) {
-        if (assignments.isEmpty) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SectionTitle(title: 'Squadra assegnata'),
             AppCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: assignments.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final a = entry.value;
-                  // Same fallback contract as everywhere else colleagueNameProvider is read: the
-                  // raw id rather than nothing, when the local mirror doesn't (yet) know them.
-                  final name = ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId;
-                  return ListRow(
-                    leading: AppAvatar(name: name, size: 36),
-                    title: name,
-                    meta: a.isLead
-                        ? AppBadge(
-                            label: 'LEAD',
-                            small: true,
-                            bgColor: context.colors.inkMuted.withAlpha(31),
-                            fgColor: context.colors.inkMuted,
-                          )
-                        : null,
-                    showDivider: i != assignments.length - 1,
-                  );
-                }).toList(),
-              ),
+              padding: assignments.isEmpty
+                  ? const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.base,
+                      vertical: AppSpacing.md,
+                    )
+                  : EdgeInsets.zero,
+              child: assignments.isEmpty
+                  ? Text(
+                      'Nessuna squadra assegnata',
+                      style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+                    )
+                  : Column(
+                      children: assignments.asMap().entries.map((entry) {
+                        final i = entry.key;
+                        final a = entry.value;
+                        // Same fallback contract as everywhere else colleagueNameProvider is read:
+                        // the raw id rather than nothing, when the local mirror doesn't (yet) know
+                        // them.
+                        final name =
+                            ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId;
+                        return ListRow(
+                          leading: AppAvatar(name: name, size: 36),
+                          title: name,
+                          meta: a.isLead
+                              ? AppBadge(
+                                  label: 'LEAD',
+                                  small: true,
+                                  bgColor: context.colors.inkMuted.withAlpha(31),
+                                  fgColor: context.colors.inkMuted,
+                                )
+                              : null,
+                          showDivider: i != assignments.length - 1,
+                        );
+                      }).toList(),
+                    ),
             ),
           ],
         );

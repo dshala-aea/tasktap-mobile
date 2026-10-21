@@ -107,6 +107,7 @@ void main() {
     // offline scan resolves through.
     'SyncScopeDto': SyncScopeDto.wireKeys,
     'SyncMaterialeBarcodeDto': MaterialeBarcodeDto.wireKeys,
+    'SyncCantiereCrewAssignmentDto': SyncCantiereCrewAssignmentDto.wireKeys,
     // The I2 confirm response. The draft and resolved shapes are different DTOs, so these are
     // pinned here rather than inferred from the draft summary's classes.
     'AiConversationConfirmResponse': AiConversationConfirmResponse.wireKeys,
@@ -261,6 +262,9 @@ void main() {
         'maintenanceTemplates': [instance('SyncMaintenanceTemplateDto')],
         'scope': instance('SyncScopeDto'),
         'materialiBarcodes': [instance('SyncMaterialeBarcodeDto')],
+        // Present-but-empty is enough for the flag: what the applier does with the rows is
+        // covered in test/data/sync/sync_ticket_materiali_test.dart.
+        'ticketMateriali': <Object>[],
       });
       expect(full.carriesChecklist, isTrue);
       expect(full.carriesStrumenti, isTrue);
@@ -269,6 +273,7 @@ void main() {
       expect(full.carriesProdottiAssistenza, isTrue);
       expect(full.carriesAgents, isTrue);
       expect(full.carriesMaintenanceTemplates, isTrue);
+      expect(full.carriesTicketMateriali, isTrue);
       expect(full.ticketControls, hasLength(1));
       expect(full.checklistTruncated, isTrue);
       expect(full.checklistOmittedTicketIds, [
@@ -315,6 +320,12 @@ void main() {
         isFalse,
         reason:
             'an older backend must NOT look like "every maintenance template was deleted"',
+      );
+      expect(
+        older.carriesTicketMateriali,
+        isFalse,
+        reason:
+            'an older backend must NOT look like "every fabbisogno was cleared"',
       );
     },
   );

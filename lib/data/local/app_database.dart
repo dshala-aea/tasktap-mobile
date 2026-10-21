@@ -350,6 +350,37 @@ class Cantieri extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── cantiere crew assignments (schema 43) ────────────────────────────────────
+/// The crew of each cantiere this device has synced — one row per assignment, the lead flag
+/// included.
+///
+/// Client-only mirror of `GET /api/cantieri/{id}/assegnazioni`. Before it existed that endpoint was
+/// the cantiere flow's last live-only read: offline, the lead-only clock-in affordances silently
+/// disappeared (`isLeadForCantiereProvider` read "not lead") and the teammate picker opened empty,
+/// even though the cantiere punches themselves already queue offline. The row carries exactly what
+/// its two readers need — who is on the crew and which of them is lead — and is replaced per
+/// cantiere on every sync (see `SyncService._replaceCantiereCrewAssignments`), never merged field
+/// by field.
+///
+/// No tenant/created/updated bookkeeping: nothing reads them, and the whole set for a cantiere is
+/// rewritten each time the payload carries it.
+class CantiereCrewAssignments extends Table {
+  TextColumn get id => text()();
+  TextColumn get cantiereId => text()();
+
+  /// The internal database Guid of the assigned technician — the same id
+  /// `internalUserIdProvider` holds, not the Zitadel OIDC sub.
+  TextColumn get userId => text()();
+
+  /// Whether this person is the lead for the cantiere. A lead change must reach the device even
+  /// when the cantiere row itself did not change, which is why the sync sends the crew in full
+  /// rather than delta-filtered.
+  BoolColumn get isLead => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── ticket_statuses ───────────────────────────────────────────────────────────
 class TicketStatuses extends Table {
   IntColumn get id => integer()();
@@ -1205,13 +1236,14 @@ class ChecklistOmittedTickets extends Table {
     ProdottiAssistenza,
     Agents,
     MaintenanceTemplates,
+    CantiereCrewAssignments,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 42;
+  int get schemaVersion => 43;
 
   @override
   MigrationStrategy get migration {
@@ -1220,6 +1252,7 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
         await _createChecklistIndexes();
         await _createReferenceIndexes();
+        await _createCantiereCrewIndexes();
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -1610,6 +1643,22 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(customers, customers.agentId);
           }
         }
+        if (from < 43) {
+          // The cantiere crew mirror — who is assigned to a cantiere and which of them is lead — so
+          // the lead-only clock-in affordances and the teammate picker survive offline (the
+          // cantiere punches themselves already queue offline; the crew was the last live-only read
+          // in that flow).
+          //
+          // A new client-only table, and NO `syncCursorGeneration` bump, for the same reason schema
+          // 40 needed none: the sync member carries the *complete* crew of every cantiere the
+          // payload already carries, with no delta filter on the crew rows (a lead change must reach
+          // the device even when the cantiere row itself is unchanged). So there is no row a delta
+          // cursor could leave unbackfilled — the next ordinary sync fills this table. Nothing is
+          // backfilled here: the device genuinely holds no crew until that sync, and inventing one
+          // would make `isLeadForCantiereProvider` lie.
+          await m.createTable(cantiereCrewAssignments);
+          await _createCantiereCrewIndexes();
+        }
       },
     );
   }
@@ -1750,9 +1799,32 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// The crew mirror is only ever read as "the rows for this cantiere", by the teammate picker and
+  /// by the lead derivation in cantiere_timbra_screen.dart.
+  ///
+  /// Kept separate from the other index helpers for the same reason [_createReferenceIndexes] is
+  /// kept from [_createChecklistIndexes]: the table it indexes does not exist on devices older than
+  /// schema 43, and a `CREATE INDEX ... ON cantiere_crew_assignments` emitted from an earlier
+  /// branch would fail their upgrade. `IF NOT EXISTS` keeps this idempotent (a fresh install runs
+  /// it from `onCreate`, an upgrade from the `from < 43` branch).
+  Future<void> _createCantiereCrewIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS cantiere_crew_assignments_cantiere '
+      'ON cantiere_crew_assignments (cantiere_id)',
+    );
+  }
+
   Future<DateTime?> getLastSync() async {
     final row = await (select(syncMeta)..where((t) => t.id.equals(_cursorId))).getSingleOrNull();
     return row?.lastSync;
+  }
+
+  /// [getLastSync], but live: emits again whenever [setLastSync] writes a new cursor, so a screen
+  /// can show "ultima sincronizzazione" without polling. Emits null until the first successful sync
+  /// (there is then no `sync_meta` row at all — the same "never synced" the getter reports).
+  Stream<DateTime?> watchLastSync() {
+    final query = select(syncMeta)..where((t) => t.id.equals(_cursorId));
+    return query.watchSingleOrNull().map((row) => row?.lastSync);
   }
 
   Future<void> setLastSync(DateTime dt) async {

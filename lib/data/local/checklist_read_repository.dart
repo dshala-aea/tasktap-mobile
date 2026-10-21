@@ -1,26 +1,51 @@
 // dart format width=100
 import 'dart:convert';
 
-import 'package:drift/drift.dart';
 import 'package:rxdart/rxdart.dart';
 
 import '../../domain/checklist/checklist_models.dart';
 import '../../domain/checklist/control_type.dart';
 import 'app_database.dart';
 
-/// Reads the per-asset checklist mirror as a [TicketChecklist]. Everything here is local: it works
-/// with zero network.
+/// Reads the checklist mirror. Everything here is local: it works with zero network.
+///
+/// [watchTicketChecklist] builds the per-asset tree; the ticket-level rows (`prodottoAssistenzaId`
+/// null) are not assets, so they ride along on [TicketChecklist.ticketLevel] instead of being
+/// dropped, and [watchTicketControlRows]/[watchControlGroups] expose the raw rows a feature-layer
+/// mapper can turn into the server's checklist tree without any network call.
 class ChecklistReadRepository {
   ChecklistReadRepository(this._db);
 
   final AppDatabase _db;
 
+  /// Every mirrored control row of one ticket — ticket-level and per-asset alike. Raw rows, no
+  /// feature DTOs: the shape `GET /api/tickets/{id}/controls` returns is built in the feature
+  /// layer (`ticket_controls_mirror.dart`).
+  Stream<List<TicketControlRow>> watchTicketControlRows(String ticketId) =>
+      (_db.select(_db.ticketControls)..where((c) => c.ticketId.equals(ticketId))).watch();
+
+  /// The synced `control_groups` table. Shared by every ticket on the same template version, so
+  /// callers narrow it themselves (see `ticketControlGroupsFromMirror`).
+  Stream<List<ControlGroupRow>> watchControlGroups() => _db.select(_db.controlGroups).watch();
+
+  /// One-shot reads of the same two tables, for a caller whose answer is a single [Future] rather
+  /// than a live view (`ticketControlsProvider`, which cannot re-emit once the tab is built).
+  ///
+  /// Deliberately not `watchTicketControlRows(...).first`: a query stream emits on its own
+  /// schedule, so a future that awaits only the first event inherits that schedule for no benefit,
+  /// and the subscription is cancelled the moment its first event lands — pure overhead.
+  Future<List<TicketControlRow>> getTicketControlRows(String ticketId) =>
+      (_db.select(_db.ticketControls)..where((c) => c.ticketId.equals(ticketId))).get();
+
+  Future<List<ControlGroupRow>> getControlGroups() => _db.select(_db.controlGroups).get();
+
   Stream<TicketChecklist> watchTicketChecklist(String ticketId) {
-    final controls =
-        (_db.select(_db.ticketControls)..where(
-              (c) => c.ticketId.equals(ticketId) & c.prodottoAssistenzaId.isNotNull(),
-            ))
-            .watch();
+    // No prodottoAssistenzaId filter: ticket-level rows must reach [TicketChecklist.ticketLevel].
+    // The asset tree below ignores them by construction (it only keys rows by a non-null asset id),
+    // so tickets with no ticket-level rows build exactly the tree they always did.
+    final controls = (_db.select(
+      _db.ticketControls,
+    )..where((c) => c.ticketId.equals(ticketId))).watch();
     final coverage = (_db.select(_db.ticketAssets)..where((a) => a.ticketId.equals(ticketId))).watch();
     final assets = _db.select(_db.assets).watch();
     final groups = _db.select(_db.controlGroups).watch();
@@ -61,6 +86,12 @@ class ChecklistReadRepository {
       if (id != null) (rowsByAsset[id] ??= []).add(c);
     }
     final ids = {...coverageById.keys, ...rowsByAsset.keys};
+    // Rows with no asset belong to the ticket itself. They take no part in the asset tree below,
+    // but [TicketChecklist.hasAnything] must not claim the ticket has nothing.
+    final ticketLevel = _sortedControls([
+      for (final c in controls)
+        if (c.prodottoAssistenzaId == null) _toControl(c),
+    ]);
 
     AssetChecklist make(String id) {
       final cov = coverageById[id];
@@ -110,6 +141,7 @@ class ChecklistReadRepository {
       librettos: librettos,
       standalone: standalone,
       omitted: omitted,
+      ticketLevel: ticketLevel,
     );
   }
 

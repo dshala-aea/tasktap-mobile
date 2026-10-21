@@ -59,6 +59,10 @@ Widget _buildRouted({required AppDatabase db, required ServerReportApiClient api
         path: '/altro/rapportini/editor/:reportId',
         builder: (_, s) => Scaffold(body: Text('editor:${s.pathParameters['reportId']}')),
       ),
+      GoRoute(
+        path: '/altro/rapportini/view/:reportId',
+        builder: (_, s) => Scaffold(body: Text('view:${s.pathParameters['reportId']}')),
+      ),
     ],
   );
   return ProviderScope(
@@ -446,26 +450,30 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('a report sent but not yet reviewed by the office (Inviato) can still be swiped', (
+    testWidgets(
+      'a report sent to the office (Inviato) has no swipe-to-delete affordance — it leaves '
+      'through the office Annulla workflow',
+      (tester) async {
+        await _seedDraft(
+          db,
+          id: 'draft-1',
+          title: 'In attesa di revisione',
+          stato: 'Inviato',
+          submissionState: 'submitted',
+        );
+        await tester.pumpWidget(buildWithDio(db: db));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Dismissible), findsNothing);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('a rejected report (Respinto) has no swipe-to-delete affordance either', (
       tester,
     ) async {
-      await _seedDraft(
-        db,
-        id: 'draft-1',
-        title: 'In attesa di revisione',
-        stato: 'Inviato',
-        submissionState: 'submitted',
-      );
-      await tester.pumpWidget(buildWithDio(db: db));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(Dismissible), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('a rejected report (Respinto) can still be swiped', (tester) async {
       await _seedDraft(
         db,
         id: 'draft-1',
@@ -476,7 +484,7 @@ void main() {
       await tester.pumpWidget(buildWithDio(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.byType(Dismissible), findsOneWidget);
+      expect(find.byType(Dismissible), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -495,6 +503,116 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(Dismissible), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  // ── O-3 / P0-8 (owner decision D8 + audit F15) ──────────────────────────────
+  //
+  // Non-Bozza reports are read-only on mobile: the list must never route them into the editor,
+  // whose first autosave rewrites `stato:'Bozza'` + `isLocalOnly:true` over the server's copy.
+  group('RapportiniListScreen — only a Bozza opens the editor', () {
+    for (final caso in const [
+      // (stato, submissionState) — every shape a synced non-Bozza report arrives in.
+      ('Inviato', 'submitted'),
+      ('Respinto', 'submitted'),
+      ('Controllato', 'submitted'),
+      ('Fatturato', 'submitted'),
+    ]) {
+      testWidgets('${caso.$1} opens the read-only view, never the editor', (tester) async {
+        await _seedDraft(
+          db,
+          id: 'srv-1',
+          title: 'Rapportino ${caso.$1.toLowerCase()}',
+          stato: caso.$1,
+          submissionState: caso.$2,
+          isLocalOnly: false,
+        );
+
+        await tester.pumpWidget(_buildRouted(db: db, api: _FakeServerApi()));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Rapportino ${caso.$1.toLowerCase()}'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('view:srv-1'), findsOneWidget);
+        expect(find.text('editor:srv-1'), findsNothing);
+        // Nothing was imported (or rewritten) either.
+        expect((await (db.select(db.draftReports)
+                  ..where((r) => r.id.equals('srv-1')))
+              .getSingle())
+            .stato, caso.$1);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      });
+    }
+  });
+
+  group('RapportiniListScreen — delete of a server-known report is online-only', () {
+    testWidgets('offline, the row is kept and the technician is told why', (tester) async {
+      final mockDio = MockDio();
+      when(() => mockDio.delete<void>(any())).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/reports/srv-1'),
+          type: DioExceptionType.connectionError,
+        ),
+      );
+      await _seedDraft(db, id: 'srv-1', title: 'Da eliminare', isLocalOnly: false);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            dioProvider.overrideWithValue(mockDio),
+          ],
+          child: const MaterialApp(home: RapportiniListScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Elimina'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Elimina'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('serve la connessione'), findsOneWidget);
+      // Not deleted: the server copy still exists, so a local delete would have resurrected it
+      // on the next sync.
+      expect(find.text('Da eliminare'), findsOneWidget);
+      expect(await db.select(db.draftReports).get(), hasLength(1));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('online, the server delete succeeds and then the local row goes', (tester) async {
+      final mockDio = MockDio();
+      when(() => mockDio.delete<void>(any())).thenAnswer(
+        (_) async => Response<void>(requestOptions: RequestOptions(path: ''), statusCode: 204),
+      );
+      await _seedDraft(db, id: 'srv-1', title: 'Da eliminare', isLocalOnly: false);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            dioProvider.overrideWithValue(mockDio),
+          ],
+          child: const MaterialApp(home: RapportiniListScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Elimina'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Elimina'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Da eliminare'), findsNothing);
+      expect(await db.select(db.draftReports).get(), isEmpty);
+      verify(() => mockDio.delete<void>('/api/reports/srv-1')).called(1);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
