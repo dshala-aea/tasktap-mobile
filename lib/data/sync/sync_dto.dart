@@ -76,6 +76,11 @@ class SyncResultDto {
   /// replace would wipe the picker.
   final bool carriesMaintenanceTemplates;
 
+  /// The server's authoritative in-scope id sets, one nullable list per collection (sync v2).
+  /// Null when the backend predates it — and null means NO PRUNE, never "everything left scope".
+  /// See [SyncScopeDto] and [SyncService]'s prune.
+  final SyncScopeDto? scope;
+
   static const Set<String> checklistWireKeys = {
     'controlGroups',
     'ticketControls',
@@ -96,6 +101,10 @@ class SyncResultDto {
     'agents',
     'maintenanceTemplates',
   };
+
+  /// The sync-v2 additions that travel beside the row lists: the authoritative scope and the
+  /// barcode collection the offline scan resolves through.
+  static const Set<String> scopeWireKeys = {'scope', 'materialiBarcodes'};
 
   const SyncResultDto({
     required this.syncedAt,
@@ -133,6 +142,7 @@ class SyncResultDto {
     this.carriesProdottiAssistenza = false,
     this.carriesAgents = false,
     this.carriesMaintenanceTemplates = false,
+    this.scope,
   });
 
   factory SyncResultDto.fromJson(Map<String, dynamic> j) {
@@ -189,8 +199,87 @@ class SyncResultDto {
       carriesProdottiAssistenza: j.containsKey('prodottiAssistenza'),
       carriesAgents: j.containsKey('agents'),
       carriesMaintenanceTemplates: j.containsKey('maintenanceTemplates'),
+      scope: j['scope'] == null
+          ? null
+          : SyncScopeDto.fromJson(j['scope'] as Map<String, dynamic>),
     );
   }
+}
+
+// ── Scope ─────────────────────────────────────────────────────────────────────
+//
+// The authoritative in-scope id set per collection (sync v2). Distinct from the row lists it
+// travels with: on a delta those carry only what changed after the cursor, while this carries
+// everything still in scope. The phone prunes what is absent — see `SyncService`'s prune.
+//
+// Nullability is load-bearing in BOTH directions:
+//   * the whole object null   → an older backend, or a server that could not compute scope:
+//                                no authoritative set at all, so no prune;
+//   * a member null           → this caller is not delivered that collection at all (today:
+//                                `strumenti` without `team.strumento.read`): no prune for it;
+//   * a member `[]`           → genuinely nothing is in scope: everything local goes.
+// That is why every member is `List<String>?` and not a non-null list with an `isEmpty` flag.
+class SyncScopeDto {
+  const SyncScopeDto({
+    this.schedules,
+    this.tickets,
+    this.locations,
+    this.customers,
+    this.cantieri,
+    this.agents,
+    this.draftReports,
+    this.submittedReports,
+    this.materiali,
+    this.materialiBarcodes,
+    this.strumenti,
+  });
+
+  final List<String>? schedules;
+  final List<String>? tickets;
+  final List<String>? locations;
+  final List<String>? customers;
+  final List<String>? cantieri;
+  final List<String>? agents;
+  final List<String>? draftReports;
+  final List<String>? submittedReports;
+  final List<String>? materiali;
+  final List<String>? materialiBarcodes;
+  final List<String>? strumenti;
+
+  /// The exact keys `fromJson` reads — compared with the OpenAPI snapshot by the inbound
+  /// contract gate.
+  static const Set<String> wireKeys = {
+    'schedules',
+    'tickets',
+    'locations',
+    'customers',
+    'cantieri',
+    'agents',
+    'draftReports',
+    'submittedReports',
+    'materiali',
+    'materialiBarcodes',
+    'strumenti',
+  };
+
+  factory SyncScopeDto.fromJson(Map<String, dynamic> j) => SyncScopeDto(
+    schedules: _idList(j['schedules']),
+    tickets: _idList(j['tickets']),
+    locations: _idList(j['locations']),
+    customers: _idList(j['customers']),
+    cantieri: _idList(j['cantieri']),
+    agents: _idList(j['agents']),
+    draftReports: _idList(j['draftReports']),
+    submittedReports: _idList(j['submittedReports']),
+    materiali: _idList(j['materiali']),
+    materialiBarcodes: _idList(j['materialiBarcodes']),
+    strumenti: _idList(j['strumenti']),
+  );
+
+  /// Null stays null ("no authoritative set"); an empty array stays an empty list ("nothing in
+  /// scope"). Never collapse the two.
+  static List<String>? _idList(dynamic v) =>
+      v == null ? null : (v as List<dynamic>).cast<String>();
 }
 
 // ── Colleague ──────────────────────────────────────────────────────────────────
@@ -556,6 +645,20 @@ class MaterialeBarcodeDto {
     this.barcodeType,
     this.isPrimary = false,
   });
+
+  /// The exact keys `fromJson` reads — compared with the OpenAPI snapshot by the inbound
+  /// contract gate. The server carries all eight on the wire (including the nullable ones, which
+  /// it must send rather than omit: this parser reads them unconditionally).
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'materialeId',
+    'barcode',
+    'barcodeType',
+    'isPrimary',
+  };
 
   factory MaterialeBarcodeDto.fromJson(Map<String, dynamic> j) =>
       MaterialeBarcodeDto(

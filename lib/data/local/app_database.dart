@@ -1701,7 +1701,16 @@ class AppDatabase extends _$AppDatabase {
   /// v10 — 2026-10-16, schema 42 added `customers.agentId`. Already on the wire, and a delta sync only
   ///      re-sends customers that changed, so an unedited customer would keep a null agent — and the
   ///      new-ticket pre-fill silently never fire for it — until somebody happened to edit it.
-  static const String syncCursorGeneration = 'v10';
+  /// v11 — 2026-10-21, the sync-v2 authoritative scope. Two independent reasons, both about a
+  ///      cursor this device already holds:
+  ///      * the server now hands back a cursor with a short overlap, so a row written while the
+  ///        request was running is re-read next time instead of falling behind the cursor
+  ///        forever. A cursor written by v10 or earlier predates that overlap and would never
+  ///        re-request those rows.
+  ///      * the mirror now PRUNES to the payload's authoritative `scope`, and a prune is only
+  ///        safe against a complete payload. Resuming from a stale delta cursor would treat rows
+  ///        a delta merely did not mention as out of scope and delete them.
+  static const String syncCursorGeneration = 'v11';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

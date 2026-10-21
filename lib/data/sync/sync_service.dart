@@ -9,8 +9,10 @@ import '../../core/time/business_time.dart' show formatDateOnly;
 import '../api/dio_client.dart';
 import '../local/app_database.dart';
 import '../reference/reference_cache_repository.dart';
+import '../timbratura/cantiere_session_repository.dart' show cantiereReconciledOrphanMarker;
 import 'checklist_reconciler.dart';
 import 'checklist_refetch_service.dart';
+import 'draft_submission_state.dart';
 import 'sync_dto.dart';
 
 /// Calls GET /api/sync/mobile?since=[lastSync], upserts every entity into
@@ -73,7 +75,14 @@ class SyncService {
       await _replaceColleagues(payload.colleagues);
       await _applyReferenceCache(payload);
       await _replaceMaintenanceTemplates(payload);
-      await _applyChecklist(payload);
+      // What unsent local work still points at, computed once and used twice: the instrument
+      // catalogue's wholesale replace must keep a pinned instrument, and the prune below must
+      // keep every pinned row. Both happen after every upsert, inside this transaction.
+      final pins = await _collectUnsentPins();
+      await _applyChecklist(payload, pins);
+      // The authoritative-scope prune runs after every upsert in the SAME transaction, so no
+      // reader ever observes a half-pruned mirror.
+      await _pruneToScope(payload, pins);
     });
 
     await db.setLastSync(payload.syncedAt);
@@ -91,7 +100,7 @@ class SyncService {
 
   /// The per-asset checklist mirror and the instrument catalogue. Skipped member by member when the
   /// payload does not carry it: an older backend must never look like "everything is empty".
-  Future<void> _applyChecklist(SyncResultDto payload) async {
+  Future<void> _applyChecklist(SyncResultDto payload, _UnsentPins pins) async {
     if (payload.carriesChecklist) {
       final withLocal = await ticketIdsWithLocalChecklist(db);
       await applyChecklistBatch(
@@ -105,7 +114,15 @@ class SyncService {
       await pruneOmittedWithoutTicket(db);
     }
     if (payload.carriesStrumenti) {
-      await replaceStrumenti(db, payload.strumenti);
+      // `scope.strumenti == null` (with `scope` present) is the server saying it has no
+      // authoritative instrument set for this caller — and the `strumenti: []` that travels with
+      // it is the absence of a set, not an authoritative empty one. Replacing the catalogue on it
+      // would delete a cached instrument (including one an unsent draft still references) over a
+      // permission change, which is exactly what the scope prune is forbidden to do.
+      final scope = payload.scope;
+      if (scope == null || scope.strumenti != null) {
+        await replaceStrumenti(db, payload.strumenti, keepIds: pins.strumenti);
+      }
       await replaceServerReportStrumenti(
         db,
         reportIdsInPayload: [...payload.draftReports, ...payload.submittedReports].map((r) => r.id),
@@ -219,6 +236,287 @@ class SyncService {
               t.maintenanceTemplateId.isNotIn(keepIds),
         ))
         .write(const PendingTicketsCompanion(maintenanceTemplateId: Value(null)));
+  }
+
+  // ── Authoritative scope (sync v2) ──────────────────────────────────────────
+  //
+  // The payload has always been upsert-only, so the mirror kept every row that ever left scope:
+  // a schedule past the ±7-day window, a ticket reassigned to a colleague, a report older than
+  // the 90-day window, a deactivated material, a deleted customer, a removed instrument. `scope`
+  // is the server's complete in-scope id set per collection, and this is what finally deletes
+  // what is absent from it.
+  //
+  // Three rules keep the prune from becoming a data-loss path:
+  //  * no `scope` → no prune. An older backend omits it, and the wire spells that as null.
+  //  * a null MEMBER → no prune for that collection (`strumenti` for a caller without
+  //    `team.strumento.read`). `[]` is different and authoritative: nothing is in scope.
+  //  * an unsent local piece of work pins every row it references. Pinned rows are kept as
+  //    ordinary, visible rows — no hidden flag — because a technician must still be able to open
+  //    the ticket a draft is being written against, and the queue must still be able to send it.
+
+  /// Ids that unsent local work still references. Deriving them from the same queues
+  /// `UnsentWorkCounter` counts is deliberate: "unsent" must mean one thing on this device.
+  Future<_UnsentPins> _collectUnsentPins() async {
+    final pins = _UnsentPins();
+    final submitted = DraftSubmissionState.submitted.toPersistedString();
+
+    // Local rapportini not yet submitted — the counter's own predicate (`isLocalOnly` and not
+    // `submitted`). A local-only row is never a prune candidate itself (rule: no manifest
+    // describes it), and every row it points at has to survive with it.
+    final drafts = await (db.select(db.draftReports)..where(
+          (r) =>
+              r.isLocalOnly.equals(true) &
+              r.submissionState.equals(submitted).not(),
+        ))
+        .get();
+    for (final d in drafts) {
+      _addIfNotNull(pins.tickets, d.ticketId);
+      _addIfNotNull(pins.customers, d.customerId);
+      _addIfNotNull(pins.locations, d.locationId);
+      _addIfNotNull(pins.cantieri, d.cantiereId);
+      // A draft's schedule is a reference from unsent work too. Not on the minimum list, but
+      // letting it leave would leave the editor pointing at a row the mirror no longer has.
+      _addIfNotNull(pins.schedules, d.scheduleId);
+    }
+    if (drafts.isNotEmpty) {
+      final ids = drafts.map((d) => d.id).toList();
+      final materialRows =
+          await (db.select(db.reportMateriali)..where((m) => m.reportId.isIn(ids))).get();
+      for (final m in materialRows) {
+        _addIfNotNull(pins.materiali, m.materialeId);
+      }
+      final strumentoRows =
+          await (db.select(db.reportStrumenti)..where((s) => s.reportId.isIn(ids))).get();
+      for (final s in strumentoRows) {
+        _addIfNotNull(pins.strumenti, s.strumentoId);
+      }
+    }
+
+    // Ticket-create outbox rows in any state but submitted: their customer/location/cantiere
+    // must still be there when the queue retries, and for the repair affordance to name them.
+    final pendingTickets = await (db.select(db.pendingTickets)..where(
+          (t) => t.state.equals(submitted).not(),
+        ))
+        .get();
+    for (final t in pendingTickets) {
+      pins.customers.add(t.customerId);
+      pins.locations.add(t.locationId);
+      _addIfNotNull(pins.cantieri, t.cantiereId);
+      _addIfNotNull(pins.agents, t.agentId);
+    }
+
+    // Ticket-attachment outbox rows: they point at a ticket.
+    final pendingAttachments = await (db.select(db.pendingTicketAttachments)..where(
+          (a) => a.state.equals(submitted).not(),
+        ))
+        .get();
+    for (final a in pendingAttachments) {
+      pins.tickets.add(a.ticketId);
+    }
+
+    // Cantiere punches on ANY day, excluding the ones the reconciler has already established the
+    // server holds (`reconciled_orphan` — the same rule the counter applies).
+    final pendingPunches = await (db.select(db.cantierePunches)..where(
+          (p) =>
+              p.isPendingSync.equals(true) &
+              (p.notes.isNull() |
+                  p.notes.equals(cantiereReconciledOrphanMarker).not()),
+        ))
+        .get();
+    for (final p in pendingPunches) {
+      _addIfNotNull(pins.cantieri, p.cantiereId);
+      _addIfNotNull(pins.customers, p.customerId);
+      _addIfNotNull(pins.tickets, p.ticketId);
+    }
+
+    // Pending simple timbra sessions are unsent work too, but `WorkSessions` carries no
+    // customer/location/ticket reference on this device (see the table's columns), so there is
+    // nothing for them to pin. If that ever changes, this is where the pin belongs.
+
+    // A pinned ticket pins what its own row points at — the case that matters is a ticket
+    // reassigned to a colleague but still needed by a local draft or a queued attachment.
+    if (pins.tickets.isNotEmpty) {
+      final ticketRows = await (db.select(db.tickets)..where(
+            (t) => t.id.isIn(pins.tickets.toList()),
+          ))
+          .get();
+      for (final t in ticketRows) {
+        pins.customers.add(t.customerId);
+        pins.locations.add(t.locationId);
+        _addIfNotNull(pins.agents, t.agentId);
+        _addIfNotNull(pins.cantieri, t.cantiereId);
+      }
+    }
+
+    // A pinned customer's Riferimento: the create wizard pre-fills a new ticket's agent from it,
+    // so the agent row must remain readable.
+    if (pins.customers.isNotEmpty) {
+      final customerRows = await (db.select(db.customers)..where(
+            (c) => c.id.isIn(pins.customers.toList()),
+          ))
+          .get();
+      for (final c in customerRows) {
+        _addIfNotNull(pins.agents, c.agentId);
+      }
+    }
+
+    return pins;
+  }
+
+  static void _addIfNotNull(Set<String> target, String? id) {
+    if (id != null) target.add(id);
+  }
+
+  /// Prunes the mirror to the payload's authoritative scope. Runs inside `sync()`'s single
+  /// transaction, after every upsert.
+  Future<void> _pruneToScope(SyncResultDto payload, _UnsentPins pins) async {
+    final scope = payload.scope;
+    // Rule 1: an older backend omits `scope` (null on the wire). Absence is never evidence that
+    // everything left scope.
+    if (scope == null) return;
+
+    // Children before parents throughout: a child left behind either violates the schema's one
+    // foreign key (schedule_assignees.schedule_id) or leaves a read path looking up a parent that
+    // is gone.
+
+    if (scope.schedules != null) {
+      await _pruneSchedules(scope.schedules!, pins.schedules);
+    }
+    if (scope.tickets != null) {
+      await _pruneTickets(scope.tickets!, pins.tickets);
+    }
+    await _pruneReports(scope);
+    if (scope.locations != null) {
+      await _pruneIds(db.locations, db.locations.id, scope.locations!, pins.locations);
+    }
+    if (scope.customers != null) {
+      await _pruneIds(db.customers, db.customers.id, scope.customers!, pins.customers);
+    }
+    if (scope.cantieri != null) {
+      await _pruneIds(db.cantieri, db.cantieri.id, scope.cantieri!, pins.cantieri);
+    }
+    if (scope.agents != null) {
+      await _pruneIds(db.agents, db.agents.id, scope.agents!, pins.agents);
+    }
+    if (scope.materiali != null) {
+      await _pruneIds(db.materiali, db.materiali.id, scope.materiali!, pins.materiali);
+    }
+    if (scope.materialiBarcodes != null) {
+      // No pin: nothing unsent references a barcode.
+      await _pruneIds(
+        db.materialeBarcodes,
+        db.materialeBarcodes.id,
+        scope.materialiBarcodes!,
+        const <String>{},
+      );
+    }
+    if (scope.strumenti != null) {
+      // Rule 2: null means this caller has no authoritative instrument set — skip. `[]` means
+      // nothing is in scope and does prune (the wholesale replace above already ran with the pins).
+      await _pruneIds(db.strumenti, db.strumenti.id, scope.strumenti!, pins.strumenti);
+    }
+  }
+
+  /// Schedules and their assignments. `schedule_assignees` is the only real foreign key in the
+  /// schema, so its rows go first.
+  Future<void> _pruneSchedules(List<String> inScope, Set<String> pinned) async {
+    final keep = {...inScope, ...pinned};
+    final local = await _localIds(db.schedules, db.schedules.id);
+    final drop = local.difference(keep);
+    if (drop.isEmpty) return;
+    await (db.delete(db.scheduleAssignees)..where((a) => a.scheduleId.isIn(drop))).go();
+    await (db.delete(db.schedules)..where((s) => s.id.isIn(drop))).go();
+  }
+
+  /// Tickets and everything keyed by them.
+  Future<void> _pruneTickets(List<String> inScope, Set<String> pinned) async {
+    final keep = {...inScope, ...pinned};
+    final local = await _localIds(db.tickets, db.tickets.id);
+    final drop = local.difference(keep);
+    if (drop.isNotEmpty) {
+      // The checklist tables (`ticket_controls`, `ticket_assets`, `control_groups`, `assets`) are
+      // deliberately NOT pruned by a manifest: the server truncates that collection per sync
+      // (see `checklistOmittedTicketIds`), so a manifest would delete rows the server withheld on
+      // purpose. Their ticket-scoped rows follow the ticket prune instead; the shared
+      // groups/assets are garbage-collected by `applyChecklistBatch`.
+      await (db.delete(db.ticketMateriali)..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(db.ticketControls)..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(db.ticketAssets)..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(db.cachedTicketControls)..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(db.checklistOmittedTickets)..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(db.tickets)..where((t) => t.id.isIn(drop))).go();
+    }
+    // Fabbisogno has no manifest of its own: it follows the ticket. This also clears rows that
+    // arrived for a ticket the mirror never held at all.
+    await db.customStatement(
+      'DELETE FROM ticket_materiali WHERE ticket_id NOT IN (SELECT id FROM tickets)',
+    );
+  }
+
+  /// Reports and their child rows.
+  ///
+  /// `draft_reports` holds two kinds of row, and each has its own manifest: a row still in
+  /// `Bozza` answers to `scope.draftReports`, a row that has left the draft state answers to
+  /// `scope.submittedReports`.
+  Future<void> _pruneReports(SyncScopeDto scope) async {
+    final draftScope = scope.draftReports?.toSet();
+    final submittedScope = scope.submittedReports?.toSet();
+    if (draftScope == null && submittedScope == null) return;
+
+    final submitted = DraftSubmissionState.submitted.toPersistedString();
+    final drop = <String>[];
+    for (final r in await db.select(db.draftReports).get()) {
+      // Rule 4: locally-authored rows are not server rows at all — no manifest describes them,
+      // and deleting one would destroy work the server has never seen.
+      if (r.isLocalOnly) continue;
+
+      final isDraft = r.stato == 'Bozza';
+      final manifest = isDraft ? draftScope : submittedScope;
+      // That collection had no authoritative set this time: no evidence of a deletion.
+      if (manifest == null) continue;
+      if (manifest.contains(r.id)) continue;
+
+      // A Bozza the device has not submitted yet is unsent work even when the row is
+      // server-known — the counter calls it "unsent" by exactly this predicate. Never delete it
+      // on the strength of a manifest.
+      if (isDraft && r.submissionState != submitted) continue;
+
+      drop.add(r.id);
+    }
+    if (drop.isEmpty) return;
+
+    // Report child rows first — none has a foreign key, but a child whose report is gone is a
+    // read path with nothing to resolve against.
+    await (db.delete(db.reportStaffTable)..where((r) => r.reportId.isIn(drop))).go();
+    await (db.delete(db.reportMateriali)..where((r) => r.reportId.isIn(drop))).go();
+    await (db.delete(db.reportControlli)..where((r) => r.reportId.isIn(drop))).go();
+    await (db.delete(db.reportStrumenti)..where((r) => r.reportId.isIn(drop))).go();
+    await (db.delete(db.draftReports)..where((r) => r.id.isIn(drop))).go();
+  }
+
+  /// Deletes every locally-held id that is neither in [inScope] nor [pinned].
+  ///
+  /// Computes the drop set from the LOCAL ids rather than issuing `id NOT IN (<scope>)`: the
+  /// scope list can name a whole tenant book, which would risk SQLite's bound-variable limit,
+  /// while the local mirror is by definition the small side of the comparison.
+  Future<void> _pruneIds<T extends Table, D extends DataClass>(
+    TableInfo<T, D> table,
+    GeneratedColumn<String> id,
+    List<String> inScope,
+    Set<String> pinned,
+  ) async {
+    final keep = {...inScope, ...pinned};
+    final drop = (await _localIds(table, id)).difference(keep);
+    if (drop.isEmpty) return;
+    await (db.delete(table)..where((_) => id.isIn(drop))).go();
+  }
+
+  Future<Set<String>> _localIds<T extends Table, D extends DataClass>(
+    TableInfo<T, D> table,
+    GeneratedColumn<String> id,
+  ) async {
+    final rows = await (db.selectOnly(table)..addColumns([id])).get();
+    return rows.map((r) => r.read(id)).whereType<String>().toSet();
   }
 
   // ── Upsert helpers ─────────────────────────────────────────────────────────
@@ -582,6 +880,20 @@ class SyncService {
           );
     }
   }
+}
+
+/// The id sets unsent local work still points at — the pins the authoritative-scope prune must
+/// never delete. One field per manifest collection; `reports` is absent because a report is
+/// either locally-owned (never pruned) or governed by its manifest, so it needs no pin.
+class _UnsentPins {
+  final Set<String> schedules = <String>{};
+  final Set<String> tickets = <String>{};
+  final Set<String> locations = <String>{};
+  final Set<String> customers = <String>{};
+  final Set<String> cantieri = <String>{};
+  final Set<String> agents = <String>{};
+  final Set<String> materiali = <String>{};
+  final Set<String> strumenti = <String>{};
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -276,9 +276,22 @@ Future<void> pruneOmittedWithoutTicket(AppDatabase db) {
 /// The instrument catalogue, replaced wholesale (the server sends every active tenant instrument
 /// each time; an empty list means the user lost `team.strumento.read`). A civil date is stored as
 /// 'yyyy-MM-dd' text.
-Future<void> replaceStrumenti(AppDatabase db, List<SyncStrumentoDto> list) {
+///
+/// [keepIds] are instruments an unsent local draft still references. They are absent from [list]
+/// precisely because they left the active catalogue, but the draft must still show and submit
+/// them, so they are pinned: kept, and still visible. Same owner rule (D11) the scope prune
+/// follows — a catalogue replace must not become a second data-loss path.
+Future<void> replaceStrumenti(
+  AppDatabase db,
+  List<SyncStrumentoDto> list, {
+  Set<String> keepIds = const <String>{},
+}) {
   return db.transaction(() async {
-    await db.delete(db.strumenti).go();
+    if (keepIds.isEmpty) {
+      await db.delete(db.strumenti).go();
+    } else {
+      await (db.delete(db.strumenti)..where((s) => s.id.isNotIn(keepIds))).go();
+    }
     await db.batch(
       (b) => b.insertAll(
         db.strumenti,

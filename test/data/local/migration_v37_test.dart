@@ -115,8 +115,11 @@ void main() {
 
   /// The schema-37 release deliberately did not reset every device's delta cursor - the reference
   /// queries carry no delta, so there was nothing a reset would fetch. Schema 42 (customers.agentId,
-  /// already on the wire for unedited customers) is the first reason to move it since: v10.
-  test('the sync cursor generation is the one schema 42 set', () {
-    expect(AppDatabase.syncCursorGeneration, 'v10');
+  /// already on the wire for unedited customers) was the first reason to move it since: v10. The
+  /// sync-v2 authoritative scope is the second: its cursor overlap and its prune both require a
+  /// complete payload, not a stale delta. This test is the record that no release moved the
+  /// generation silently.
+  test('the sync cursor generation is the one the current release set', () {
+    expect(AppDatabase.syncCursorGeneration, 'v11');
   });
 }
