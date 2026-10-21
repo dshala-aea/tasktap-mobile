@@ -1345,6 +1345,11 @@ void main() {
       await pump(tester, dio: dio, isOnline: true, attachmentCache: cache);
       await tapTab(tester, 'Allegati');
       await tester.tap(find.text('foto1.jpg'));
+      // The cache's hit/miss path touches dart:io (`Directory.exists`, the write-then-rename),
+      // and real I/O cannot complete while `pumpAndSettle` holds the fake-async loop — the
+      // viewer's FutureBuilder would spin on `CircularProgressIndicator` until the settle timeout.
+      // Yield to the real event loop first (same reason as step_riepilogo_signature_test.dart).
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
       await tester.pumpAndSettle();
 
       // The pushed screen's AppBar repeats the filename as its title. Its own copy is the only
@@ -1394,6 +1399,10 @@ void main() {
       await pump(tester, dio: dio, isOnline: true, attachmentCache: cache);
       await tapTab(tester, 'Allegati');
       await tester.tap(find.text('certificato.pdf'));
+      // Same fake-async/real-I/O rule as the image test above: `cache.lookup` calls
+      // `Directory.exists` before the (stubbed) request, so the failure only surfaces once the
+      // real event loop runs. Without this yield the assertion fires before the toast exists.
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
       await tester.pumpAndSettle();
 
       expect(find.byType(InteractiveViewer), findsNothing);
