@@ -28,8 +28,9 @@ final authRepositoryProvider = Provider<IAuthRepository>((ref) {
 
 // ── Session teardown ────────────────────────────────────────────────────────
 
-/// The teardown every "end this session" path runs — the logout button and the interceptor's forced
-/// sign-out alike. See [SessionEnder] for why there is only one.
+/// The one object every "end this session" path goes through — the logout button (`end()`, which
+/// wipes) and the interceptor's forced sign-out (`endForced()`, which keeps the local data). See
+/// [SessionEnder] for why they are deliberately different endings.
 ///
 /// A provider rather than a bare function so both callers get the *same* collaborators the app is
 /// really using: `dioProvider` (a `Provider<Dio>`, built once) reads this from inside the
@@ -137,10 +138,10 @@ class LoginNotifier extends StateNotifier<LoginState> {
   }
 
   Future<void> signOut() async {
-    // One sequence, shared with the forced path — the interceptor ends a session through the same
-    // `SessionEnder` (see `sessionEnderProvider`), because when this teardown lived here and a
-    // narrower one lived there, a forced sign-out left the previous user's database and prefs on
-    // the device.
+    // The CONSENTED ending: the logout dialog already told the technician how much unsent work
+    // this discards (see `UnsentWorkCounter` / `logout_flow.dart`). The forced path goes through
+    // the same `SessionEnder` but `endForced()`, which keeps the local data — a dead session is
+    // not consent to lose a day's work (audit F1).
     await _ref.read(sessionEnderProvider).end();
     state = const LoginState();
   }

@@ -3,13 +3,17 @@
 // The forced sign-out path, driven the way the app really wires it: the Dio instance that
 // `dioProvider` builds, its `AuthInterceptor`, and the shared teardown behind `onForcedSignOut`.
 //
-// Regression for a security finding: the interceptor's forced path used to call
-// `IAuthRepository.signOut()` only, which drops the secure-storage refresh token and the cached
-// identity and nothing else. So a session the identity provider had positively killed left the
-// previous user's Drift rows and SharedPreferences on the device — on a shared/rotating-device
-// field-service app, in front of whoever signs in next. The normal logout had its own, complete
-// teardown; there were two sequences and one of them was wrong. This test is the guard that they
-// stay one sequence: it asserts the *forced* path produces the same clean device.
+// History, because this test used to assert the opposite: a `SessionExpired` confirmed by the
+// identity provider used to be treated as a logout, wiping Drift and prefs. The security rationale
+// was sound (a dead session must leave no rows in front of the next person) and the consequence was
+// not: the forced path fires on the first refresh/flush after a long offline period, i.e. with
+// every outbox full, so it deleted the very work the flush was trying to send (offline audit F1).
+//
+// The contract now: the forced path drops credentials ONLY. The local data stays, with a marker
+// naming its owner, and the "whose data is this?" decision is made at the next sign-in by
+// `SessionRecoveryController` (same account → send it; other account → explicit, confirmed
+// discard — `test/data/auth/session_recovery_test.dart`). Manual logout still wipes
+// (`session_ender_test.dart`).
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
@@ -18,8 +22,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tasktap_mobile/core/time/business_time_providers.dart';
+import 'package:tasktap_mobile/core/time/business_time_providers.dart' show tenantTimeZonePrefsKey;
 import 'package:tasktap_mobile/data/api/dio_client.dart';
+import 'package:tasktap_mobile/data/auth/session_recovery.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
@@ -31,10 +36,13 @@ import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 /// `invalid_grant`. This IS the forced path — every other refresh failure deliberately leaves the
 /// session alone.
 class _DeadSessionRepo implements IAuthRepository {
+  _DeadSessionRepo({this.user});
+
+  AuthUser? user;
   int signOuts = 0;
 
   @override
-  AuthUser? get currentUser => null;
+  AuthUser? get currentUser => user;
 
   @override
   Stream<AuthUser?> get authStateChanges => const Stream<AuthUser?>.empty();
@@ -74,7 +82,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('a confirmed SessionExpired leaves the device as clean as the logout button does', () async {
+  test('a confirmed SessionExpired drops credentials and KEEPS the unsent local data', () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     await db
@@ -109,18 +117,49 @@ void main() {
 
     await interceptor.onError(_make401(), _MockErrorHandler());
 
-    expect(await db.select(db.customers).get(), isEmpty);
+    expect(
+      await db.select(db.customers).get(),
+      hasLength(1),
+      reason: 'F1: the forced path fires with every queue full — it must delete nothing',
+    );
     expect(
       prefs.getBool('autenticazioneBiometrica'),
-      isNull,
-      reason: 'the previous user\'s settings must not be readable by the next one',
+      isTrue,
+      reason: 'the device is unchanged; the next sign-in decides what happens to this data',
     );
-    expect(prefs.getString(tenantTimeZonePrefsKey), isNull);
-    expect(
-      container.read(businessZoneIdProvider),
-      'Europe/Rome',
-      reason: 'Riverpod state outlives the prefs wipe — the next tenant would inherit this one\'s',
+    expect(prefs.getString(tenantTimeZonePrefsKey), 'Asia/Tokyo');
+    expect(repo.signOuts, 1, reason: 'the credentials themselves do go');
+  });
+
+  test('the owner marker is left for the next sign-in when the subject is readable', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final repo = _DeadSessionRepo(
+      user: AuthUser(
+        id: 'zitadel-sub-owner',
+        email: 'tecnico@example.it',
+        accessToken: '', // skips the FCM unregister platform channel
+        refreshToken: 'refresh',
+        expiresAt: DateTime.utc(2030),
+      ),
     );
-    expect(repo.signOuts, 1, reason: 'the teardown still drops the credentials themselves');
+    final container = ProviderContainer(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(repo),
+        appDatabaseProvider.overrideWithValue(db),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final interceptor = container
+        .read(dioProvider)
+        .interceptors
+        .whereType<AuthInterceptor>()
+        .single;
+
+    await interceptor.onError(_make401(), _MockErrorHandler());
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(sessionRetainedOwnerSubKey), 'zitadel-sub-owner');
   });
 }

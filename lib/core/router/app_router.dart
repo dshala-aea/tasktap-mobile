@@ -67,6 +67,9 @@ import '../../features/timbra/cantiere_timbra_screen.dart';
 import '../../features/cantiere/cantieri_list_screen.dart';
 import '../../features/cantiere/cantiere_detail_screen.dart';
 import '../../features/altro/forbidden_screen.dart';
+import '../../features/altro/session_recovery_screen.dart';
+import '../../data/auth/session_recovery.dart';
+import '../../data/auth/session_recovery_providers.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../features/onboarding/onboarding_provider.dart';
 import '../../features/onboarding/onboarding_screen.dart';
@@ -87,6 +90,12 @@ abstract final class AppRoutes {
   /// is not held. Must never itself appear as a `_routeRequirements` prefix — that would
   /// self-redirect-loop.
   static const String forbidden = '/forbidden';
+
+  /// Where a forced sign-out's leftovers are resolved when a DIFFERENT account signs in on the
+  /// same device: the local database still holds the previous account's rows (and possibly
+  /// unsent work), and they are only discarded once the technician confirms. Never linked from
+  /// the UI — reached only through the redirect gate (see `SessionRecoveryController`).
+  static const String sessionRecovery = '/session-recovery';
 
   /// Where a device that has never been activated as a kiosk goes to redeem the credential the
   /// web admin issued (see `KioskActivationScreen`). Reached only via the hidden long-press on
@@ -336,7 +345,7 @@ GoRouter buildRouter(WidgetRef ref) {
     navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.dashboard,
     debugLogDiagnostics: false,
-    redirect: (context, state) {
+    redirect: (context, state) async {
       final kioskState = ref.read(kioskModeProvider);
       final isOnKioskActivate =
           state.matchedLocation == AppRoutes.kioskActivate;
@@ -358,66 +367,83 @@ GoRouter buildRouter(WidgetRef ref) {
       final authAsync = ref.read(authStateProvider);
       final isOnLogin = state.matchedLocation == AppRoutes.login;
       final isOnOnboarding = state.matchedLocation == AppRoutes.onboarding;
+      final isOnSessionRecovery = state.matchedLocation == AppRoutes.sessionRecovery;
 
-      return authAsync.when(
-        // While Supabase is restoring the session, stay put.
+      // Async redirect: the session-recovery gate below reads SharedPreferences (and, only when
+      // there is something to report, the unsent-work count) before the first authenticated frame
+      // is allowed to render. Awaiting it here is what keeps the previous account's rows from
+      // being visible for a frame on a shared device.
+      if (authAsync.isLoading) return null;
+      // On error (e.g. offline with no cached session), go to login.
+      if (authAsync.hasError) return isOnLogin ? null : AppRoutes.login;
+
+      final user = authAsync.valueOrNull;
+      if (user == null) return isOnLogin ? null : AppRoutes.login;
+      if (isOnLogin) return AppRoutes.dashboard;
+
+      // Forced-sign-out gate — a dead session no longer wipes the local database (audit F1), so
+      // the decision is made here, once, on the next sign-in:
+      //   same account  → keep the data (their work), flush the queues;
+      //   other account → the /session-recovery screen, which names what is at stake and only
+      //                   discards after an explicit confirmation.
+      // Runs before onboarding and the route requirements: showing the new account anything the
+      // previous one left behind is the leak this gate exists to close.
+      final recovery = await ref.read(sessionRecoveryProvider.notifier).resolveFor(user.id);
+      final needsDiscard = recovery is SessionRecoveryNeedsDiscard;
+      // Pinned: while the discard is pending, nothing else (onboarding, requirements) may steer
+      // the app away from the one screen that resolves it — coming back later would be an extra
+      // detour through screens that assume the local data is this account's.
+      if (needsDiscard) return isOnSessionRecovery ? null : AppRoutes.sessionRecovery;
+      if (isOnSessionRecovery) return AppRoutes.dashboard;
+
+      // Onboarding gate — evaluated only once we know who's signed in, and before the
+      // route-requirement guard below: an account that hasn't finished onboarding gets sent
+      // there regardless of what module/capability the destination route would otherwise
+      // require, rather than being bounced to /forbidden first.
+      final onboardingAsync = ref.read(onboardingCompletedProvider(user.id));
+      final onboardingRedirect = onboardingAsync.when(
         loading: () => null,
-        // On error (e.g. offline with no cached session), go to login.
-        error: (err, stack) => isOnLogin ? null : AppRoutes.login,
-        data: (user) {
-          final isAuthenticated = user != null;
-          if (!isAuthenticated && !isOnLogin) return AppRoutes.login;
-          if (isAuthenticated && isOnLogin) return AppRoutes.dashboard;
-          if (!isAuthenticated) return null; // unauthenticated and already on /login
-
-          // Onboarding gate — evaluated only once we know who's signed in, and before the
-          // route-requirement guard below: an account that hasn't finished onboarding gets sent
-          // there regardless of what module/capability the destination route would otherwise
-          // require, rather than being bounced to /forbidden first.
-          final onboardingAsync = ref.read(onboardingCompletedProvider(user.id));
-          final onboardingRedirect = onboardingAsync.when(
-            loading: () => null,
-            error: (err, stack) => null,
-            data: (completed) {
-              if (!completed && !isOnOnboarding) return AppRoutes.onboarding;
-              if (completed && isOnOnboarding) return AppRoutes.dashboard;
-              return null;
-            },
-          );
-          if (onboardingRedirect != null) return onboardingRedirect;
-
-          // Route-requirement guard — runs only once auth is confirmed and isn't itself
-          // redirecting. Never applies to AppRoutes.forbidden itself (see _routeRequirements'
-          // own doc comment on why that would self-redirect-loop).
-          if (state.matchedLocation != AppRoutes.forbidden) {
-            for (final (prefix, requirement, writeRequirement) in _routeRequirements) {
-              if (state.matchedLocation.startsWith(prefix)) {
-                final segments = state.matchedLocation.split('/');
-                final isWriteLeaf = segments.isNotEmpty && _writeLeafSegments.contains(segments.last);
-                final effective = isWriteLeaf && writeRequirement != null
-                    ? writeRequirement
-                    : requirement;
-                final satisfied = effective.isSatisfied(ref);
-                // satisfied == null: entitlement cache still loading — stay put, don't redirect
-                // yet (same "don't know yet" treatment as kioskState.loading/authAsync.loading
-                // above).
-                if (satisfied == false) return AppRoutes.forbidden;
-                break;
-              }
-            }
-          }
-
+        error: (err, stack) => null,
+        data: (completed) {
+          if (!completed && !isOnOnboarding) return AppRoutes.onboarding;
+          if (completed && isOnOnboarding) return AppRoutes.dashboard;
           return null;
         },
       );
+      if (onboardingRedirect != null) return onboardingRedirect;
+
+      // Route-requirement guard — runs only once auth is confirmed and isn't itself
+      // redirecting. Never applies to AppRoutes.forbidden itself (see _routeRequirements'
+      // own doc comment on why that would self-redirect-loop).
+      if (state.matchedLocation != AppRoutes.forbidden) {
+        for (final (prefix, requirement, writeRequirement) in _routeRequirements) {
+          if (state.matchedLocation.startsWith(prefix)) {
+            final segments = state.matchedLocation.split('/');
+            final isWriteLeaf = segments.isNotEmpty && _writeLeafSegments.contains(segments.last);
+            final effective = isWriteLeaf && writeRequirement != null
+                ? writeRequirement
+                : requirement;
+            final satisfied = effective.isSatisfied(ref);
+            // satisfied == null: entitlement cache still loading — stay put, don't redirect
+            // yet (same "don't know yet" treatment as kioskState.loading/authAsync.loading
+            // above).
+            if (satisfied == false) return AppRoutes.forbidden;
+            break;
+          }
+        }
+      }
+
+      return null;
     },
-    // Rebuild router on auth state, kiosk mode, onboarding-completion, OR entitlement cache
-    // changes so redirects are applied to all four.
+    // Rebuild router on auth state, kiosk mode, onboarding-completion, entitlement cache OR the
+    // session-recovery decision (discarding the previous account's data must let the redirect
+    // through to /dashboard) so redirects are applied to all five.
     refreshListenable: Listenable.merge([
       _AuthStateListenable(ref),
       _KioskStateListenable(ref),
       _OnboardingStateListenable(ref),
       _EntitlementStateListenable(ref),
+      _SessionRecoveryListenable(ref),
     ]),
     routes: [
       // ── Kiosk ───────────────────────────────────────────────────────────
@@ -434,6 +460,11 @@ GoRouter buildRouter(WidgetRef ref) {
       GoRoute(
         path: AppRoutes.login,
         builder: (context, state) => const LoginScreen(),
+      ),
+      // Never linked from the UI: only the redirect's forced-sign-out gate sends anyone here.
+      GoRoute(
+        path: AppRoutes.sessionRecovery,
+        builder: (context, state) => const SessionRecoveryScreen(),
       ),
       GoRoute(
         path: AppRoutes.onboarding,
@@ -1087,5 +1118,15 @@ class _OnboardingStateListenable extends ChangeNotifier {
 class _EntitlementStateListenable extends ChangeNotifier {
   _EntitlementStateListenable(WidgetRef ref) {
     ref.listenManual(cachedEntitlementProvider, (prev, next) => notifyListeners());
+  }
+}
+
+/// [Listenable] that notifies go_router when the forced-sign-out decision changes — i.e. when the
+/// recovery screen's confirmed discard turns [SessionRecoveryNeedsDiscard] into
+/// [SessionRecoveryIdle]. Without it the redirect would never re-run after the wipe and the
+/// technician would sit on the recovery screen with nothing left to confirm.
+class _SessionRecoveryListenable extends ChangeNotifier {
+  _SessionRecoveryListenable(WidgetRef ref) {
+    ref.listenManual(sessionRecoveryProvider, (prev, next) => notifyListeners());
   }
 }

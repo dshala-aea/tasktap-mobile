@@ -85,9 +85,13 @@ class PendingRecordingStore {
     return pending;
   }
 
-  /// Oldest first, for [userId] ONLY. Also sweeps: expired recordings, orphan audio (no readable
-  /// sidecar) and orphan sidecars (no audio), the latter two once older than [orphanGrace].
-  Future<List<PendingRecording>> list({required String userId}) async {
+  /// Oldest first, for [userId] ONLY — or for every owner when [userId] is null. Also sweeps:
+  /// expired recordings, orphan audio (no readable sidecar) and orphan sidecars (no audio), the
+  /// latter two once older than [orphanGrace].
+  ///
+  /// The all-owners form is what logout counts: wiping the directory takes every recording on the
+  /// device, so "N non inviati" must include the ones other technicians left behind too.
+  Future<List<PendingRecording>> list({String? userId}) async {
     if (!await directory.exists()) return const [];
     final now = DateTime.now();
     final out = <PendingRecording>[];
@@ -130,7 +134,7 @@ class PendingRecordingStore {
         if (await old(e)) await e.delete();
         continue;
       }
-      if (rec.userId == userId) out.add(rec);
+      if (userId == null || rec.userId == userId) out.add(rec);
     }
     for (final e in entries) {
       if (e is! File) continue;

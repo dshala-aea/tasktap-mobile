@@ -31,13 +31,14 @@ final dioProvider = Provider<Dio>((ref) {
   // session (access token) that the login flow established.
   final authRepo = ref.watch(authRepositoryProvider);
   final interceptor = AuthInterceptor(dio: dio, authRepo: authRepo);
-  // A forced sign-out must leave the device as clean as the logout button does — the interceptor's
-  // own path used to call only `authRepo.signOut()` and left the previous user's Drift rows and
-  // prefs behind. Read through the provider rather than building the teardown here, so both callers
-  // run one sequence (see `SessionEnder`). `ref.read`, not `watch`: this runs long after the Dio
-  // instance was built, and re-creating the client's interceptor on a dependency change is not
-  // something this provider should do.
-  interceptor.onForcedSignOut = () => ref.read(sessionEnderProvider).end();
+  // A forced sign-out is NOT a logout, and must not wipe like one: it fires after a long offline
+  // period precisely while the queues are full of unsent work (audit F1). `endForced` drops only
+  // the credentials and marks the local data's owner; `SessionRecoveryController` decides at the
+  // next sign-in. Read through the provider rather than building the teardown here, so there is
+  // one teardown class. `ref.read`, not `watch`: this runs long after the Dio instance was built,
+  // and re-creating the client's interceptor on a dependency change is not something this
+  // provider should do.
+  interceptor.onForcedSignOut = () => ref.read(sessionEnderProvider).endForced();
   dio.interceptors.add(interceptor);
 
   // What the network actually did, in debug builds only.
@@ -165,12 +166,16 @@ class AuthInterceptor extends Interceptor {
 
   /// End the session after a confirmed [SessionExpired].
   ///
-  /// The hook is the whole teardown (secure-storage credentials, the Drift database, prefs, the
-  /// business zone — [SessionEnder]); the local `signOut` is only the fallback for an interceptor
-  /// nobody wired, which is the case in this file's own tests. It is the *previous*, incomplete
-  /// behaviour: it drops the credentials but leaves the signed-out user's rows on the device. Still
-  /// strictly better than leaving a dead session in place, and unreachable from `dioProvider`, which
-  /// always sets the hook.
+  /// The hook is the forced ending (`SessionEnder.endForced`: credentials dropped, local data
+  /// and prefs kept, owner marked for the next sign-in); the local `signOut` is only the fallback
+  /// for an interceptor nobody wired, which is the case in this file's own tests. The two agree on
+  /// the part that matters here — neither wipes the local database, because this path can fire
+  /// while unsent work is still queued. The wipe belongs to the consented logout path.
+  ///
+  /// Note this used to be documented as "leaves the signed-out user's rows on the device" and
+  /// fixed by wiping there; that fix traded a tenant-isolation leak for data loss (audit F1). The
+  /// leak is now closed at the *next sign-in* instead (`SessionRecoveryController`), where it can
+  /// be done without destroying the queue.
   Future<void> _endSession() async {
     final hook = onForcedSignOut;
     if (hook != null) {
