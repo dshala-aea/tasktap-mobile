@@ -1275,4 +1275,74 @@ void main() {
       expect(draft.metadataJson, contains('gpsLatitude'));
     });
   });
+
+  // ── Read-only write guard (offline slice O-3 / audit F15, owner decision D8) ─
+
+  group('a server-known report past Bozza is never written by the editor', () {
+    Future<AppDatabase> seedServerReport(String stato) async {
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'srv-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 21, 10),
+              title: 'Rapportino ufficio',
+              insertedUserId: 'user-1',
+              locationId: 'loc-1',
+              stato: Value(stato),
+              isLocalOnly: const Value(false),
+              submissionState: const Value('submitted'),
+            ),
+          );
+      return db;
+    }
+
+    test('the first autosave cannot rewrite stato/isLocalOnly (the F15 corruption)', () async {
+      await seedServerReport('Inviato');
+      final repo = DraftReportRepository(db);
+      final notifier = ReportEditorNotifier(
+        initialState: const ReportEditorState(
+          reportId: 'srv-1',
+          tenantId: 'tenant-1',
+          insertedUserId: 'user-1',
+        ),
+        repo: repo,
+      );
+      await notifier.ready;
+
+      await notifier.setTitle('Titolo riscritto');
+      await notifier.setDetails('Descrizione riscritta');
+      await notifier.setMaterialiNotRequired(true);
+
+      final row = await repo.getDraft('srv-1');
+      expect(row!.title, 'Rapportino ufficio', reason: 'no header write at all');
+      expect(row.details, isNull);
+      expect(row.stato, 'Inviato', reason: 'a false Bozza blinds sync to the row forever');
+      expect(row.isLocalOnly, isFalse, reason: 'sync must keep owning this row');
+    });
+
+    test('a server-known BOZZA is still editable (imported for editing, isLocalOnly flipped '
+        'true by the import)', () async {
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'srv-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 21, 10),
+              title: 'Bozza importata',
+              insertedUserId: 'user-1',
+              locationId: 'loc-1',
+              isLocalOnly: const Value(true),
+              stato: const Value('Bozza'),
+            ),
+          );
+      final (notifier, repo) = await _makeEditor(db, reportId: 'srv-2');
+
+      await notifier.setTitle('Bozza corretta');
+
+      expect((await repo.getDraft('srv-2'))!.title, 'Bozza corretta');
+    });
+  });
 }

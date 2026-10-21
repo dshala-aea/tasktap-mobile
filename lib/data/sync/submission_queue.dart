@@ -35,6 +35,9 @@ export 'draft_submission_state.dart';
 //     (signature-customer | signature-technician): that endpoint works before the
 //     report row exists. The server allegato ids are then referenced by /submit.
 //   - Nothing is sent while offline: the row stays readyToSubmit (visible as pending).
+//   - A no-response failure while the device cannot reach the network leaves the row
+//     readyToSubmit and consumes NO retry attempt — being offline is never a failed send.
+//     Only a server-answered transient (5xx/408/429/401) spends the [maxAutoRetries] budget.
 //   - Rows stuck in uploadingMedia/submitting after an app kill are reset to
 //     readyToSubmit on startup (recoverInterrupted) — safe because uploads are tracked
 //     per allegato and submit is idempotent by key.
@@ -143,8 +146,9 @@ class SubmissionQueue {
   ///
   /// [force] is for a manual "Invia"/"Riprova": skip the connectivity gate and just attempt the
   /// network, so a real failure surfaces as a transient `failed` row with its Italian message
-  /// instead of a silent no-op. Automatic flushes keep the gate, but confirm "offline" with a
-  /// real probe before skipping.
+  /// instead of a silent no-op. A no-response failure with no reachable network is still not a
+  /// failure — the row goes back to `readyToSubmit` (see [_processDraft]). Automatic flushes keep
+  /// the gate, but confirm "offline" with a real probe before skipping.
   Future<void> processAll({bool force = false}) async {
     if (_running) return; // prevent re-entrant calls
     if (!force && !await _confirmedOnline()) return;
@@ -167,6 +171,23 @@ class SubmissionQueue {
     if (_isOnline()) return true;
     final probe = _recheckOnline;
     if (probe == null) return false;
+    try {
+      return await probe();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether the device can actually reach the network, asked authoritatively of the probe.
+  ///
+  /// Deliberately does NOT trust [_isOnline] first the way [_confirmedOnline] does: that value is
+  /// "the interface is up", which is true on a captive portal, a dead Wi-Fi and a radio with no
+  /// data. This is the question that decides whether a no-response failure was the device being
+  /// offline or the server genuinely not answering, so the cached value is only the fallback when
+  /// no probe is wired at all.
+  Future<bool> _networkReachable() async {
+    final probe = _recheckOnline;
+    if (probe == null) return _isOnline();
     try {
       return await probe();
     } catch (_) {
@@ -275,6 +296,29 @@ class SubmissionQueue {
       // Clear the isLocalOnly flag so the list no longer treats this as a local draft.
       await _repo.markSubmitted(draft.id);
     } catch (e) {
+      // ── Offline is not a failed send ──────────────────────────────────────
+      //
+      // A no-response failure (radio down, DNS, timeout — nothing answered at all) while the
+      // device has no reachable network is the ordinary state of a technician in a basement, not
+      // a rejection. The rapportino is intact and simply has not left the phone yet, so the row
+      // goes straight back to `readyToSubmit`: it keeps its place in the queue, keeps its whole
+      // retry budget, and shows the calm "In attesa di connessione" state instead of "Invio
+      // fallito". Before this, a manual Invia tapped five times in airplane mode burned all five
+      // auto-retries and stranded a signed rapportino behind a manual "Riprova".
+      //
+      // Only a failure the server actually ANSWERED with a retryable status (5xx/408/429/401) is
+      // allowed to consume the budget — see [_isServerAnsweredTransient].
+      if (_hasNoResponse(e) && !await _networkReachable()) {
+        await _repo.updateSubmissionState(
+          reportId: draft.id,
+          state: DraftSubmissionState.readyToSubmit,
+          error: null,
+          errorTransient: false,
+          attempts: draft.submissionAttempts,
+        );
+        return;
+      }
+
       final transient = _isTransient(e);
       // NEVER delete the draft on failure — keep it for retry.
       //
@@ -300,9 +344,12 @@ class SubmissionQueue {
         state: DraftSubmissionState.failed,
         error: message,
         errorTransient: transient,
-        // Only transient failures consume the auto-retry budget; permanent ones are never
-        // auto-retried, so their counter is irrelevant.
-        attempts: transient ? draft.submissionAttempts + 1 : draft.submissionAttempts,
+        // Only a server-answered transient consumes the auto-retry budget; a permanent failure is
+        // never auto-retried, and a no-response one the server never answered must not be able to
+        // spend a technician's retries either (see [_isServerAnsweredTransient]).
+        attempts: _isServerAnsweredTransient(e)
+            ? draft.submissionAttempts + 1
+            : draft.submissionAttempts,
       );
     }
   }
@@ -316,6 +363,23 @@ class SubmissionQueue {
     if (e is! DioException) return false;
     final status = e.response?.statusCode;
     if (status == null) return e.type != DioExceptionType.badResponse;
+    return status >= 500 || status == 401 || status == 408 || status == 429;
+  }
+
+  /// A failure with no HTTP response at all: the request never reached a server that answered.
+  /// That covers connectionError, connection/send/receive timeouts and a cancelled request — the
+  /// shapes a device with no usable network produces.
+  static bool _hasNoResponse(Object e) =>
+      e is DioException && e.response?.statusCode == null;
+
+  /// A transient the SERVER answered: a fault (5xx), back-pressure (408/429), or a 401 whose
+  /// silent refresh may not have taken. This is the only class that spends the retry budget —
+  /// the server is reachable, so "five attempts" is a real signal, not a measure of how often the
+  /// radio flapped.
+  static bool _isServerAnsweredTransient(Object e) {
+    if (e is! DioException) return false;
+    final status = e.response?.statusCode;
+    if (status == null) return false;
     return status >= 500 || status == 401 || status == 408 || status == 429;
   }
 
