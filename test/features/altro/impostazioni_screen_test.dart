@@ -14,13 +14,17 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
+import 'package:tasktap_mobile/data/auth/session_recovery_providers.dart';
+import 'package:tasktap_mobile/data/auth/unsent_work_counter.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/altro/impostazioni_screen.dart';
@@ -39,10 +43,15 @@ AuthUser _fakeUser({String? displayName}) => AuthUser(
   expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
 );
 
-Widget _buildScreen(MockAuthRepository repo) {
+Widget _buildScreen(MockAuthRepository repo, AppDatabase db) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
+      // The logout row now counts unsent work before it shows any dialog; an in-memory DB keeps
+      // the widget test off the real app database file.
+      unsentWorkCounterProvider.overrideWithValue(
+        UnsentWorkCounter(db: db, countVoiceRecordings: () async => 0),
+      ),
       // The "Preferenze notifiche" entry is behind a CapabilityGate; nothing cached = hidden.
       cachedEntitlementProvider.overrideWith((ref) async => null),
     ],
@@ -57,19 +66,22 @@ void main() {
 
   late MockAuthRepository repo;
   late StreamController<AuthUser?> authStream;
+  late AppDatabase db;
 
   setUp(() {
+    db = AppDatabase(NativeDatabase.memory());
     repo = MockAuthRepository();
     authStream = StreamController<AuthUser?>.broadcast();
     when(() => repo.authStateChanges).thenAnswer((_) => authStream.stream);
   });
 
   tearDown(() async {
-    authStream.close();
+    await db.close();
+    await authStream.close();
   });
 
   Future<void> pump(WidgetTester tester, {AuthUser? user}) async {
-    await tester.pumpWidget(_buildScreen(repo));
+    await tester.pumpWidget(_buildScreen(repo, db));
     await tester.pump();
     authStream.add(user);
     await tester.pump();

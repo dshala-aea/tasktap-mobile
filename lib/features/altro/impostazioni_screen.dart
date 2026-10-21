@@ -9,9 +9,12 @@ import '../../core/dictation/dictation_service.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/router/app_router.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/auth/session_recovery_providers.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'biometric_setup.dart';
 import 'impostazioni_provider.dart';
+import 'logout_dialog.dart';
+import 'logout_flow.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -632,15 +635,53 @@ class _LogoutSettingRow extends StatelessWidget {
     );
   }
 
+  /// Logout is destructive on this device (it wipes the local database), so it must say what it
+  /// destroys. The generic confirmation is only for a device with nothing unsent; otherwise the
+  /// count-naming dialog decides, and "Invia ora" gets one attempt before anything is lost.
+  ///
+  /// See `logout_flow.dart` for the decision logic and `UnsentWorkCounter` for what "unsent"
+  /// covers (reports, tickets, attachments, timbra and cantiere punches, voice recordings).
   Future<void> _confirmLogout(BuildContext context) async {
-    final confirmed = await confirmDeleteDialog(
-      context,
-      title: 'Esci dall\'account',
-      message: 'Sei sicuro di voler uscire dall\'account?',
-      confirmLabel: 'Esci',
+    final flow = LogoutFlow(
+      unsentCount: () async => (await ref.read(unsentWorkCounterProvider).count()).total,
+      flush: () => ref.read(unsentWorkFlusherProvider).flush(),
+      signOut: () => ref.read(loginProvider.notifier).signOut(),
     );
-    if (confirmed) {
-      await ref.read(loginProvider.notifier).signOut();
+
+    final prompt = await flow.prepare();
+    if (!context.mounted) return;
+
+    LogoutIntent? intent;
+    if (prompt.requiresConfirmation) {
+      intent = await showUnsentWorkLogoutDialog(context, unsentCount: prompt.unsentCount);
+    } else {
+      final confirmed = await confirmDeleteDialog(
+        context,
+        title: 'Esci dall\'account',
+        message: 'Sei sicuro di voler uscire dall\'account?',
+        confirmLabel: 'Esci',
+      );
+      intent = confirmed ? LogoutIntent.signOutAnyway : null;
+    }
+    if (intent == null || intent == LogoutIntent.cancel) return;
+    // Re-read through a fresh non-null local: a closure captures the *variable*, not the
+    // promotion, so `intent` cannot be used directly inside the callback below.
+    final chosen = intent;
+    if (!context.mounted) return;
+
+    final result = await runLogoutWithProgress(context, () => flow.apply(chosen));
+    if (result == null || result.signedOut) return;
+
+    // "Invia ora" could not send everything. Stay signed in — that is the point — and say how
+    // much is still stuck so the technician can retry or leave deliberately.
+    if (result.remaining > 0 && context.mounted) {
+      showAppToast(
+        context,
+        message: result.remaining == 1
+            ? '1 elemento non è stato inviato. Riprova o esci comunque.'
+            : '${result.remaining} elementi non sono stati inviati. Riprova o esci comunque.',
+        tone: ToastTone.warning,
+      );
     }
   }
 }
