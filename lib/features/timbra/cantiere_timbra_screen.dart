@@ -125,6 +125,20 @@ final cantiereHasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
   return events.any((e) => e.isPendingSync);
 });
 
+/// The first sync failure recorded against one of today's local cantiere events, if any.
+///
+/// Only a PERMANENT refusal (a 4xx the server will answer the same way again) writes it, and the
+/// sync stops retrying those unattended — so without this the punch would sit there as an
+/// indefinite amber dot with nothing to act on. See CantiereTimbraSyncService.
+final cantiereSyncErrorProvider = Provider.autoDispose<String?>((ref) {
+  final events = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
+  for (final e in events) {
+    final error = e.syncError;
+    if (error != null && error.isNotEmpty) return error;
+  }
+  return null;
+});
+
 /// Sums today's *closed* (ingresso→uscita) intervals on [cantiereId] into a total duration.
 ///
 /// Deliberately excludes a still-open interval at the end of the list — that portion needs a
@@ -1567,6 +1581,16 @@ class _ActiveSessionBody extends ConsumerWidget {
               color: context.colors.ink,
             ),
           ),
+
+          // A permanent refusal: the server said no and the automatic sweep has stopped retrying,
+          // so this is the one place the technician can learn why the punch is not arriving.
+          if (ref.watch(cantiereSyncErrorProvider) case final syncError?) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              syncError,
+              style: TextStyle(fontSize: 12, height: 1.35, color: context.colors.red),
+            ),
+          ],
 
           const SizedBox(height: 16),
 

@@ -1646,6 +1646,34 @@ void main() {
     );
 
     testWidgets(
+      'shows the sync error text for a punch the server permanently refused',
+      (tester) async {
+        // P0-3: a permanent 4xx marks the row with a human-readable syncError and the automatic
+        // sweep stops retrying it — this is the only place the technician can see why.
+        final eventTime = _businessTodayAt(8);
+        await db
+            .into(db.cantierePunches)
+            .insert(
+              CantierePunchesCompanion.insert(
+                id: 'e1',
+                eventTime: eventTime,
+                eventType: 'ingresso',
+                cantiereId: const Value('cant-1'),
+                syncError: const Value('Il cantiere non accetta più timbrature.'),
+              ),
+            );
+        final api = _FakeApiClient();
+        await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Il cantiere non accetta più timbrature.'), findsOneWidget);
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets(
       'still shows Timbra uscita cantiere for a session with no closed hours yet',
       (tester) async {
         // Coverage for the button's mere presence alongside the OGGI/live-elapsed assertions

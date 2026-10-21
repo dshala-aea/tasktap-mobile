@@ -42,10 +42,18 @@ class _FakeRepo implements ICantiereSessionRepository {
   Future<List<CantierePunche>> getTodayEvents() async => List.of(events);
 
   @override
+  Future<List<CantierePunche>> getPendingEvents() async =>
+      events.where((e) => e.isPendingSync).toList();
+
+  @override
+  Future<int> getPendingCount() async =>
+      events.where((e) => e.isPendingSync && e.notes != cantiereReconciledOrphanMarker).length;
+
+  @override
   Future<void> markSynced(List<String> ids) async {}
 
   @override
-  Future<void> markSyncError(String id, String message) async {}
+  Future<void> markSyncError(String id, String? message) async {}
 
   @override
   Future<void> markReconciledOrphan(String id) async {
@@ -87,12 +95,20 @@ class _FakeApiClient extends CantiereWorklogApiClient {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-CantierePunche _cp(String id, String type, DateTime time, {String? cantiereId}) => CantierePunche(
+CantierePunche _cp(
+  String id,
+  String type,
+  DateTime time, {
+  String? cantiereId,
+  bool isPendingSync = false,
+  String? notes,
+}) => CantierePunche(
   id: id,
   eventType: type,
   eventTime: time,
-  isPendingSync: true,
+  isPendingSync: isPendingSync,
   cantiereId: cantiereId,
+  notes: notes,
 );
 
 CantiereWorkLogDto _activeLog() => CantiereWorkLogDto(
@@ -115,7 +131,9 @@ void main() {
       final events = await repo.getTodayEvents();
       expect(events.length, 2);
       expect(events.last.eventType, 'uscita');
-      expect(repo.orphanedIds, ['open-1']);
+      // The opener AND the correction it appended, so the sync pushes neither.
+      expect(repo.orphanedIds.first, 'open-1');
+      expect(repo.orphanedIds.length, 2);
     });
 
     test('local open visit + server still has an active session → no-op', () async {
@@ -167,7 +185,76 @@ void main() {
       final events = await repo.getTodayEvents();
       expect(events.length, 2);
       expect(events.where((e) => e.eventType == 'uscita').length, 1);
-      expect(repo.orphanedIds, ['open-1']);
+      // The opener AND the correction it appended, so the sync pushes neither.
+      expect(repo.orphanedIds.first, 'open-1');
+      expect(repo.orphanedIds.length, 2);
+    });
+
+    test('the appended uscita is marked too, so it cannot freeze the unsynced guard', () async {
+      final t1 = DateTime.utc(2026, 8, 24, 8);
+      final repo = _FakeRepo([_cp('open-1', 'ingresso', t1, cantiereId: 'cant-1')]);
+      final reconciler = CantiereWorkLogReconciler(repo: repo, apiClient: _FakeApiClient());
+
+      await reconciler.reconcileWith(serverHasActiveSession: false);
+
+      final uscita = (await repo.getTodayEvents()).firstWhere((e) => e.eventType == 'uscita');
+      expect(uscita.notes, cantiereReconciledOrphanMarker);
+      // ... and it is not counted as unsent work that a sync would clear.
+      expect(await repo.getPendingCount(), 0);
+    });
+
+    // F3: a clock-in still waiting to be pushed must never be orphan-marked. The server has no
+    // active session precisely because the punch has not arrived yet — "correcting" here would
+    // mark the technician's own check-in and the sync would then filter it out: the punch is lost.
+    test('a PENDING opener + server with no active session → no-op (local unsynced wins)', () async {
+      final t1 = DateTime.utc(2026, 8, 24, 8);
+      final repo = _FakeRepo([
+        _cp('open-1', 'ingresso', t1, cantiereId: 'cant-1', isPendingSync: true),
+      ]);
+      final reconciler = CantiereWorkLogReconciler(repo: repo, apiClient: _FakeApiClient());
+
+      await reconciler.reconcileWith(serverHasActiveSession: false);
+
+      final events = await repo.getTodayEvents();
+      expect(events.length, 1, reason: 'no uscita appended over an unsent clock-in');
+      expect(events.single.notes, isNot(cantiereReconciledOrphanMarker));
+      expect(repo.orphanedIds, isEmpty);
+    });
+
+    test('a pending non-opener event also holds the correction off', () async {
+      final t1 = DateTime.utc(2026, 8, 24, 8);
+      final repo = _FakeRepo([
+        _cp('open-1', 'ingresso', t1, cantiereId: 'cant-1'),
+        _cp('gone-1', 'uscita', t1.add(const Duration(hours: 1)), isPendingSync: true),
+      ]);
+      final reconciler = CantiereWorkLogReconciler(repo: repo, apiClient: _FakeApiClient());
+
+      await reconciler.reconcileWith(serverHasActiveSession: false);
+
+      expect((await repo.getTodayEvents()).length, 2);
+      expect(repo.orphanedIds, isEmpty);
+    });
+
+    test('a marked correction does not hold the correction off forever', () async {
+      final t1 = DateTime.utc(2026, 8, 24, 8);
+      final repo = _FakeRepo([
+        // The reconciler's own output: pending by construction, never pushed, never a reason to
+        // stop reconciling.
+        _cp(
+          'marker-1',
+          'ingresso',
+          t1,
+          cantiereId: 'cant-1',
+          isPendingSync: true,
+          notes: cantiereReconciledOrphanMarker,
+        ),
+      ]);
+      final reconciler = CantiereWorkLogReconciler(repo: repo, apiClient: _FakeApiClient());
+
+      await reconciler.reconcileWith(serverHasActiveSession: false);
+
+      expect(repo.orphanedIds.first, 'marker-1');
+      expect((await repo.getTodayEvents()).length, 2);
     });
   });
 
@@ -182,7 +269,9 @@ void main() {
 
       final events = await repo.getTodayEvents();
       expect(events.last.eventType, 'uscita');
-      expect(repo.orphanedIds, ['open-1']);
+      // The opener AND the correction it appended, so the sync pushes neither.
+      expect(repo.orphanedIds.first, 'open-1');
+      expect(repo.orphanedIds.length, 2);
     });
 
     test('server still reports an active session → no correction', () async {

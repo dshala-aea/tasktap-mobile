@@ -272,6 +272,10 @@ class _StubRepoForSync implements IWorkSessionRepository {
   @override
   Future<List<WorkSession>> getTodaySessions() async => [];
   @override
+  Future<List<WorkSession>> getPendingSessions() async => [];
+  @override
+  Future<int> getPendingCount() async => 0;
+  @override
   Future<void> markSynced(List<String> ids) async {}
   @override
   Future<void> clearToday() async {}

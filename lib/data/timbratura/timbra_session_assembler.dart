@@ -66,7 +66,20 @@ class WorkInterval {
 /// - `fine`     → closes the open interval with that timestamp as endTime
 /// - An open interval (no closing event yet) → endTime null (active)
 /// - Events before a valid opener are ignored (defensive)
-List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
+///
+/// [businessDateOf] maps an instant to the business calendar date it belongs to ([BusinessTime]
+/// supplies this in the app; a plain function keeps this assembler pure and testable without a
+/// zone). The upload queue is no longer day-scoped — a pending punch from ANY day is sent — so one
+/// call can now see several days. Without this callback an 'ingresso' that finds an interval still
+/// open closes it at its own timestamp: right within one day (a tap sequence that lost its close),
+/// wrong across days, where it would invent up to a full day of paid time for a shift the
+/// technician simply never clocked out of. With the callback such an opener leaves that interval
+/// open instead (emitted as still active, which is what the local data actually says). A
+/// `fine`/`pausa` from a later day still closes it: that is a genuine overnight shift.
+List<WorkInterval> assembleIntervals(
+  List<WorkSession> sessions, {
+  DateTime Function(DateTime instant)? businessDateOf,
+}) {
   final intervals = <WorkInterval>[];
 
   String? openClientId;
@@ -83,11 +96,13 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
       case 'ripresa':
         // Close any accidentally-open interval (defensive: shouldn't happen in normal flow)
         if (openClientId != null && openStart != null) {
+          final crossesDay =
+              businessDateOf != null && businessDateOf(openStart) != businessDateOf(t);
           intervals.add(
             WorkInterval(
               clientId: openClientId,
               startTime: openStart,
-              endTime: t,
+              endTime: crossesDay ? null : t,
               latitude: openLatitude,
               longitude: openLongitude,
               gpsAccuracyMeters: openAccuracy,

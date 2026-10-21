@@ -48,6 +48,10 @@ class _StubRepo implements IWorkSessionRepository {
   @override
   Future<List<WorkSession>> getTodaySessions() async => [];
   @override
+  Future<List<WorkSession>> getPendingSessions() async => [];
+  @override
+  Future<int> getPendingCount() async => 0;
+  @override
   Future<void> markSynced(List<String> ids) async {}
   @override
   Future<void> clearToday() async {}
@@ -101,6 +105,10 @@ class _DelayedRepo implements IWorkSessionRepository {
   Stream<List<WorkSession>> watchTodaySessions() => _inner.watchTodaySessions();
   @override
   Future<List<WorkSession>> getTodaySessions() => _inner.getTodaySessions();
+  @override
+  Future<List<WorkSession>> getPendingSessions() => _inner.getPendingSessions();
+  @override
+  Future<int> getPendingCount() => _inner.getPendingCount();
   @override
   Future<void> markSynced(List<String> ids) => _inner.markSynced(ids);
   @override

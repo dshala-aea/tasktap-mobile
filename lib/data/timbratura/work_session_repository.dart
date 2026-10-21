@@ -52,6 +52,22 @@ abstract interface class IWorkSessionRepository {
   /// Snapshot of today's events in chronological order (one-shot).
   Future<List<WorkSession>> getTodaySessions();
 
+  /// Every event still waiting to reach the server, on ANY business day, in chronological order.
+  ///
+  /// The upload queue is deliberately not day-scoped: a punch recorded offline before midnight
+  /// must still be sent the next day (and the day after). "Today" is a display concern only — see
+  /// [getTodaySessions]. Reconciler corrections are included (they are pending by construction but
+  /// never pushed); the sync itself filters them out via [reconciledOrphanMarker].
+  Future<List<WorkSession>> getPendingSessions();
+
+  /// How many events still have to reach the server, on any day.
+  ///
+  /// Counts `isPendingSync` rows but NOT this device's own reconciler corrections, which are
+  /// pending by construction and never pushed — counting them would report unsent work that no
+  /// sync will ever clear. Permanently refused rows ([syncFailedMarker]) are not pending and are
+  /// not counted. This is the personal-timbra half of the app's unsent-work counter.
+  Future<int> getPendingCount();
+
   /// Mark the given event ids as synced (isPendingSync = false).
   Future<void> markSynced(List<String> ids);
 
@@ -94,6 +110,18 @@ class WorkSessionRepository implements IWorkSessionRepository {
       ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
   }
 
+  /// Every unsynced row, with no day window at all — the upload queue.
+  SimpleSelectStatement<$WorkSessionsTable, WorkSession> _pendingQuery() =>
+      _db.select(_db.workSessions)
+        ..where((s) => s.isPendingSync.equals(true))
+        ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
+
+  /// Pending rows that still need the server, i.e. excluding our own reconciler corrections.
+  Expression<bool> get _countablePending =>
+      _db.workSessions.isPendingSync.equals(true) &
+      (_db.workSessions.notes.isNull() |
+          _db.workSessions.notes.equals(reconciledOrphanMarker).not());
+
   @override
   Future<void> addEvent({
     required String id,
@@ -122,6 +150,18 @@ class WorkSessionRepository implements IWorkSessionRepository {
 
   @override
   Future<List<WorkSession>> getTodaySessions() => _todayQuery().get();
+
+  @override
+  Future<List<WorkSession>> getPendingSessions() => _pendingQuery().get();
+
+  @override
+  Future<int> getPendingCount() async {
+    final count = _db.workSessions.id.count();
+    final query = _db.selectOnly(_db.workSessions)
+      ..addColumns([count])
+      ..where(_countablePending);
+    return (await query.getSingle()).read(count) ?? 0;
+  }
 
   @override
   Future<void> markSynced(List<String> ids) async {
