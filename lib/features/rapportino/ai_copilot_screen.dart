@@ -344,6 +344,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         o.source = AiTurnSource.voice;
       }
       if (o.text!.trim().isEmpty) {
+        // Nothing to send: the recording holds no speech, so it must not linger in the pending list.
+        unawaited(_discardRecording(o));
         _finishRun();
         if (mounted) {
           showAppToast(
@@ -815,6 +817,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (mounted) Navigator.of(context).pop();
       return;
     }
+    final canResume = widget.ticketId != null;
     final voiceUpdate = _recording || _failed?.recording != null;
     final ok = await showDialog<bool>(
       context: context,
@@ -822,9 +825,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         title: const Text('Uscire?'),
         content: Text(
           _recording
-              ? 'Stai registrando. Se esci la registrazione viene salvata sul telefono e te la '
-                    'riproporremo la prossima volta.'
-              : 'Hai un aggiornamento non inviato. ${voiceUpdate ? 'La registrazione resta salvata sul telefono e potrai inviarla la prossima volta.' : 'Se esci andrà perso.'}',
+              ? (canResume
+                    ? 'Stai registrando. Se esci la registrazione viene salvata sul telefono e te la '
+                          'riproporremo la prossima volta.'
+                    : 'Stai registrando. Questa conversazione non è legata a un ticket e non si può '
+                          'riprendere: uscendo l\'aggiornamento andrà perso.')
+              : 'Hai un aggiornamento non inviato. ${voiceUpdate && canResume ? 'La registrazione resta salvata sul telefono e potrai inviarla la prossima volta.' : 'Se esci andrà perso.'}',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Resta qui')),
@@ -834,7 +840,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     );
     if (ok != true || !mounted) return;
     _forceLeave = true;
-    if (_recording) {
+    if (_recording && widget.ticketId != null) {
       // Saves the recording to the pending store (offered again on the next entry).
       unawaited(_voiceCtl?.stop().then((_) {}, onError: (_) {}));
     }

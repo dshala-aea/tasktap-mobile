@@ -198,6 +198,7 @@ class _FakeVoice extends VoiceCaptureController {
   final List<String> uploadKeys = [];
   RecordingStartResult startResult = RecordingStartResult.started;
   bool _rec = false;
+  int stopCalls = 0;
   int _n = 0;
 
   @override
@@ -211,6 +212,7 @@ class _FakeVoice extends VoiceCaptureController {
 
   @override
   Future<PendingRecording> stop() async {
+    stopCalls++;
     _rec = false;
     _n++;
     return PendingRecording(
@@ -484,7 +486,7 @@ void main() {
         find.byWidgetPredicate(
           (w) => w.key is ValueKey && '${(w.key! as ValueKey).value}'.startsWith('planned-unconfirmed-row'),
         ),
-        findsNWidgets(3),
+        findsNWidgets(2),
       );
       // The ticket's own hours are labelled as coming from the ticket, not as work reported.
       expect(find.text('Dal ticket'), findsOneWidget);
@@ -515,7 +517,9 @@ void main() {
       expect(u(AiFactSource.planned, AiResolutionState.needsConfirmation), isTrue);
       expect(u(AiFactSource.planned, AiResolutionState.resolvedBySystem), isTrue);
       expect(u(AiFactSource.planned, AiResolutionState.unresolved), isTrue, reason: 'unknown future state');
-      expect(u(AiFactSource.ticketRecord, AiResolutionState.resolvedBySystem), isTrue);
+      expect(u(AiFactSource.ticketRecord, AiResolutionState.resolvedBySystem), isFalse, reason: 'ticket data is authoritative');
+      expect(u(AiFactSource.ticketRecord, AiResolutionState.unresolved), isTrue);
+      expect(u(AiFactSource.ticketRecord, AiResolutionState.needsConfirmation), isTrue);
       expect(u(AiFactSource.planned, AiResolutionState.operatorConfirmed), isFalse);
       expect(u(AiFactSource.operatorInput, AiResolutionState.resolvedBySystem), isFalse);
       expect(u(AiFactSource.operatorInput, AiResolutionState.needsConfirmation), isTrue);
@@ -1154,6 +1158,66 @@ void main() {
         () => AiApiClient(dio).postTurn('s', text: 't', idempotencyKey: 'k'),
         throwsA(isA<AiConversationException>().having((e) => e.code, 'code', isNull)),
       );
+    });
+  });
+
+  group('fix round 2', () {
+    testWidgets('Ticketless_leave_says_the_update_is_lost_and_does_not_save_the_recording', (
+      tester,
+    ) async {
+      final ai = _FakeAi();
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(ai, voice, ticketId: null, pushed: true));
+      await _openPushed(tester);
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Esci'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('andrà perso'), findsOneWidget);
+      expect(find.textContaining('riproporremo'), findsNothing);
+      expect(find.textContaining('potrai inviarla'), findsNothing);
+      await tester.tap(find.text('Esci comunque'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('home-screen'), findsOneWidget);
+      expect(voice.stopCalls, 0, reason: 'a recording that can never be offered again is not saved');
+      expect(ai.abandoned, ['sess-new']);
+      await _unmount(tester);
+    });
+
+    testWidgets('Ticket_bound_leave_while_recording_saves_it_and_says_so', (tester) async {
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(_FakeAi(), voice, pushed: true));
+      await _openPushed(tester);
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Esci'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('riproporremo'), findsOneWidget);
+      await tester.tap(find.text('Esci comunque'));
+      await tester.pumpAndSettle();
+      expect(voice.stopCalls, 1);
+      await _unmount(tester);
+    });
+
+    testWidgets('Empty_transcript_of_a_pending_recording_is_removed_with_a_message', (tester) async {
+      final ai = _FakeAi();
+      final voice = _FakeVoice()
+        ..pending = [_rec('a')]
+        ..uploads.add(const AiTranscription(transcript: '  ', audioRef: 'a-1'));
+      await tester.pumpWidget(_wrap(ai, voice));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Invia'));
+      await tester.pumpAndSettle();
+
+      expect(ai.posted, isEmpty);
+      expect(voice.fakeStore.deleted, ['p-a']);
+      expect(find.textContaining('non inviate'), findsNothing);
+      expect(find.textContaining('Non ho sentito nulla'), findsOneWidget);
+      await _unmount(tester);
     });
   });
 }

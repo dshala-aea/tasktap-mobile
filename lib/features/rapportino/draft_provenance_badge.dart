@@ -39,7 +39,8 @@ String? provenanceLabel(AiFactSource source, AiResolutionState state) {
 }
 
 /// True for a value that came from the ticket or a plan (or is waiting for confirmation) and the
-/// technician has not confirmed: it must be rendered muted and never presented as done work. Any
+/// technician has not confirmed (ticket data that resolved normally is authoritative and is not
+/// held back): it must be rendered muted and never presented as done work. Any
 /// state counts, so an unknown future state on a planned value is muted too.
 bool isUnconfirmedProposal(AiFactSource source, AiResolutionState state) {
   if (state == AiResolutionState.ambiguous ||
@@ -48,7 +49,11 @@ bool isUnconfirmedProposal(AiFactSource source, AiResolutionState state) {
     return false;
   }
   if (state == AiResolutionState.needsConfirmation) return true;
-  return source == AiFactSource.planned || source == AiFactSource.ticketRecord;
+  if (source == AiFactSource.ticketRecord) {
+    // The ticket's own data is authoritative: only an unknown/unresolved state on it is held back.
+    return state != AiResolutionState.resolvedBySystem;
+  }
+  return source == AiFactSource.planned;
 }
 
 /// A small badge naming where a draft value came from.
