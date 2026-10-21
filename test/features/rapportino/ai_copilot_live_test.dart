@@ -5,6 +5,7 @@
 // voice turns (record -> transcribe -> turn), correction, and the 409/429 handling around a turn.
 // A fake AiApiClient and a fake VoiceCaptureController stand in for the network and the microphone.
 
+import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 
@@ -51,6 +52,9 @@ class _FakeAi extends AiApiClient {
 
   /// One entry consumed per postTurn: an exception is thrown, a result is returned.
   final Queue<Object> turnScript = Queue();
+
+  /// When set, postTurn waits for it (to observe the in-flight state).
+  Completer<void>? turnGate;
   final List<_Posted> posted = [];
   final List<String> resumeCalls = [];
   final List<String> startCalls = [];
@@ -98,6 +102,7 @@ class _FakeAi extends AiApiClient {
     required String idempotencyKey,
   }) async {
     posted.add(_Posted(text, source, audioRef, rawTranscript, replacesTurnId, idempotencyKey));
+    await turnGate?.future;
     final next = turnScript.isEmpty
         ? const AiConversationTurnResult(assistantReplyText: 'Ok.', draft: AiCopilotDraftDto.empty)
         : turnScript.removeFirst();
@@ -107,6 +112,36 @@ class _FakeAi extends AiApiClient {
 
   @override
   Future<void> abandonConversation(String sessionId) async => abandoned.add(sessionId);
+}
+
+class _ThrowingAbandonAi extends _FakeAi {
+  _ThrowingAbandonAi({super.detail});
+  int abandonAttempts = 0;
+  @override
+  Future<void> abandonConversation(String sessionId) async {
+    abandonAttempts++;
+    throw StateError('offline');
+  }
+}
+
+class _StubAdapter implements HttpClientAdapter {
+  _StubAdapter(this.status, this.body);
+  final int status;
+  final String body;
+  @override
+  void close({bool force = false}) {}
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody.fromString(
+    body,
+    status,
+    headers: {
+      Headers.contentTypeHeader: [Headers.jsonContentType],
+    },
+  );
 }
 
 class _NoRecorder implements AudioRecorderService {
@@ -123,16 +158,41 @@ class _GrantedMic implements MicPermissionService {
   Future<MicPermission> request() async => MicPermission.granted;
 }
 
+class _FakeStore extends PendingRecordingStore {
+  _FakeStore() : super(Directory.systemTemp);
+  final List<String> deleted = [];
+  @override
+  Future<void> delete(PendingRecording r) async => deleted.add(r.id);
+}
+
+PendingRecording _rec(String n, {String? ticketId = 'tkt-1', String userId = 'user-1'}) =>
+    PendingRecording(
+      id: 'p-$n',
+      file: File('p-$n.m4a'),
+      idempotencyKey: 'pk-$n',
+      createdAt: DateTime.now().toUtc(),
+      userId: userId,
+      ticketId: ticketId,
+    );
+
 class _FakeVoice extends VoiceCaptureController {
-  _FakeVoice()
+  _FakeVoice._(this.fakeStore)
     : super(
         recorder: _NoRecorder(),
         permissions: _GrantedMic(),
-        store: PendingRecordingStore(Directory.systemTemp),
+        store: fakeStore,
         consentAccepted: () async => true,
         currentUserId: () => 'user-1',
         upload: (f, k) async => throw StateError('unused'),
       );
+
+  factory _FakeVoice() => _FakeVoice._(_FakeStore());
+
+  final _FakeStore fakeStore;
+  List<PendingRecording> pending = [];
+
+  @override
+  Future<List<PendingRecording>> pendingForCurrentUser() async => pending;
 
   final Queue<Object> uploads = Queue();
   final List<String> uploadKeys = [];
@@ -163,7 +223,7 @@ class _FakeVoice extends VoiceCaptureController {
   }
 
   @override
-  Future<AiTranscription> upload(PendingRecording pending) async {
+  Future<AiTranscription> transcribe(PendingRecording pending) async {
     uploadKeys.add(pending.idempotencyKey);
     final next = uploads.isEmpty
         ? const AiTranscription(transcript: 'Ho cambiato il filtro', audioRef: 'audio-1')
@@ -223,12 +283,23 @@ class _NoopSync extends SyncNotifier {
   Future<void> performSync() async {}
 }
 
-Widget _wrap(_FakeAi ai, _FakeVoice voice, {String? ticketId = 'tkt-1'}) {
+Widget _wrap(_FakeAi ai, _FakeVoice voice, {String? ticketId = 'tkt-1', bool pushed = false}) {
   final db = AppDatabase(NativeDatabase.memory());
   addTearDown(db.close);
   final router = GoRouter(
-    initialLocation: '/copilot',
+    initialLocation: pushed ? '/home' : '/copilot',
     routes: [
+      GoRoute(
+        path: '/home',
+        builder: (context, state) => Scaffold(
+          body: Column(
+            children: [
+              const Text('home-screen'),
+              TextButton(onPressed: () => context.push('/copilot'), child: const Text('open')),
+            ],
+          ),
+        ),
+      ),
       GoRoute(
         path: '/copilot',
         builder: (context, state) =>
@@ -257,6 +328,31 @@ Future<void> _unmount(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(seconds: 1));
 }
+
+Future<void> _openPushed(WidgetTester tester) async {
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+}
+
+/// Types [text] and sends it.
+Future<void> _typeAndSend(WidgetTester tester, String text) async {
+  await tester.enterText(find.byType(TextFormField), text);
+  await tester.tap(find.byTooltip('Invia'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _failOneTypedTurn(_FakeAi ai, WidgetTester tester) async {
+  ai.turnScript.add(const AiConversationException(null, 'Nessuna connessione.', offline: true));
+  await _typeAndSend(tester, 'Primo aggiornamento');
+}
+
+bool _enabled(WidgetTester tester, String tooltip) =>
+    tester
+        .widget<IconButton>(
+          find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton)).first,
+        )
+        .onPressed !=
+    null;
 
 /// Tap the mic twice (start, then stop) and let the upload + turn run.
 Future<void> _recordOnce(WidgetTester tester) async {
@@ -388,7 +484,7 @@ void main() {
         find.byWidgetPredicate(
           (w) => w.key is ValueKey && '${(w.key! as ValueKey).value}'.startsWith('planned-unconfirmed-row'),
         ),
-        findsNWidgets(2),
+        findsNWidgets(3),
       );
       // The ticket's own hours are labelled as coming from the ticket, not as work reported.
       expect(find.text('Dal ticket'), findsOneWidget);
@@ -401,12 +497,29 @@ void main() {
     test('built from source and state', () {
       String? l(AiFactSource s, AiResolutionState st) => provenanceLabel(s, st);
       expect(l(AiFactSource.planned, AiResolutionState.needsConfirmation), 'Pianificato: conferma');
+      expect(l(AiFactSource.planned, AiResolutionState.resolvedBySystem), 'Pianificato: conferma');
       expect(l(AiFactSource.ticketRecord, AiResolutionState.resolvedBySystem), 'Dal ticket');
-      expect(l(AiFactSource.operatorInput, AiResolutionState.resolvedBySystem), 'Riferito');
-      expect(l(AiFactSource.operatorInput, AiResolutionState.operatorConfirmed), 'Confermato');
       expect(l(AiFactSource.ticketRecord, AiResolutionState.needsConfirmation), 'Dal ticket: conferma');
+      expect(l(AiFactSource.ticketRecord, AiResolutionState.unresolved), 'Dal ticket: conferma');
+      expect(l(AiFactSource.operatorInput, AiResolutionState.resolvedBySystem), 'Riferito');
+      expect(l(AiFactSource.operatorInput, AiResolutionState.operatorConfirmed), 'Riferito');
+      expect(l(AiFactSource.operatorInput, AiResolutionState.unresolved), 'Riferito');
+      expect(l(AiFactSource.operatorInput, AiResolutionState.needsConfirmation), 'Da confermare');
       expect(l(AiFactSource.operatorInput, AiResolutionState.ambiguous), 'Da chiarire');
-      expect(l(AiFactSource.operatorInput, AiResolutionState.conflict), 'In conflitto');
+      expect(l(AiFactSource.planned, AiResolutionState.conflict), 'In conflitto');
+      expect(l(AiFactSource.taskTapTool, AiResolutionState.unresolved), 'Non verificato');
+    });
+
+    test('planned and ticket values are unconfirmed proposals unless the technician confirmed', () {
+      bool u(AiFactSource s, AiResolutionState st) => isUnconfirmedProposal(s, st);
+      expect(u(AiFactSource.planned, AiResolutionState.needsConfirmation), isTrue);
+      expect(u(AiFactSource.planned, AiResolutionState.resolvedBySystem), isTrue);
+      expect(u(AiFactSource.planned, AiResolutionState.unresolved), isTrue, reason: 'unknown future state');
+      expect(u(AiFactSource.ticketRecord, AiResolutionState.resolvedBySystem), isTrue);
+      expect(u(AiFactSource.planned, AiResolutionState.operatorConfirmed), isFalse);
+      expect(u(AiFactSource.operatorInput, AiResolutionState.resolvedBySystem), isFalse);
+      expect(u(AiFactSource.operatorInput, AiResolutionState.needsConfirmation), isTrue);
+      expect(u(AiFactSource.planned, AiResolutionState.ambiguous), isFalse);
     });
   });
 
@@ -766,6 +879,281 @@ void main() {
       );
       expect(confirm.onPressed, isNull);
       await _unmount(tester);
+    });
+  });
+
+  group('a turn that did not go through (Important 1)', () {
+    testWidgets('Next_send_is_blocked_while_a_turn_has_failed', (tester) async {
+      final ai = _FakeAi();
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+      await _failOneTypedTurn(ai, tester);
+      expect(ai.posted, hasLength(1));
+
+      await tester.enterText(find.byType(TextFormField), 'Secondo');
+      expect(_enabled(tester, 'Invia'), isFalse);
+      expect(_enabled(tester, 'Registra un aggiornamento vocale'), isFalse);
+      expect(find.text('Riprova invio'), findsOneWidget);
+      expect(find.text('Scarta'), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('Discard_reenables_sending_and_removes_the_bubble', (tester) async {
+      final ai = _FakeAi();
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+      await _failOneTypedTurn(ai, tester);
+
+      await tester.tap(find.text('Scarta'));
+      await tester.pumpAndSettle();
+      expect(find.text('Primo aggiornamento'), findsNothing);
+      expect(find.text('Riprova invio'), findsNothing);
+
+      await _typeAndSend(tester, 'Secondo');
+      expect(ai.posted, hasLength(2));
+      expect(ai.posted[1].text, 'Secondo');
+      await _unmount(tester);
+    });
+
+    testWidgets('Discarding_a_failed_voice_turn_deletes_its_recording', (tester) async {
+      final ai = _FakeAi()
+        ..turnScript.add(const AiConversationException(null, 'Nessuna connessione.', offline: true));
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(ai, voice));
+      await tester.pumpAndSettle();
+      await _recordOnce(tester);
+      expect(voice.fakeStore.deleted, isEmpty, reason: 'kept until the turn is accepted');
+
+      await tester.tap(find.text('Scarta'));
+      await tester.pumpAndSettle();
+      expect(voice.fakeStore.deleted, ['rec-1']);
+      await _unmount(tester);
+    });
+
+    testWidgets('A_failed_bubble_is_marked_not_sent_until_accepted', (tester) async {
+      final ai = _FakeAi();
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+      await _failOneTypedTurn(ai, tester);
+      expect(find.text('Non inviato'), findsOneWidget);
+
+      await tester.tap(find.text('Riprova invio'));
+      await tester.pumpAndSettle();
+      expect(find.text('Non inviato'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('Confirm_is_disabled_while_failed_or_sending', (tester) async {
+      final ai = _FakeAi();
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+      // One accepted turn so Confirm is otherwise available.
+      await _typeAndSend(tester, 'Uno');
+      bool confirmOn() => tester
+          .widget<AppButton>(find.widgetWithText(AppButton, 'Conferma e apri il rapportino'))
+          .onPressed != null;
+      expect(confirmOn(), isTrue);
+
+      ai.turnGate = Completer<void>();
+      await tester.enterText(find.byType(TextFormField), 'Due');
+      await tester.tap(find.byTooltip('Invia'));
+      await tester.pump();
+      await tester.pump();
+      expect(confirmOn(), isFalse, reason: 'a turn is in flight');
+      ai.turnGate!.complete();
+      await tester.pumpAndSettle();
+      expect(confirmOn(), isTrue);
+
+      await _failOneTypedTurn(ai, tester);
+      expect(confirmOn(), isFalse, reason: 'a turn has failed');
+      await _unmount(tester);
+    });
+
+    testWidgets('typed send is blocked while recording', (tester) async {
+      await tester.pumpWidget(_wrap(_FakeAi(), _FakeVoice()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+      expect(_enabled(tester, 'Invia'), isFalse);
+      await _unmount(tester);
+    });
+  });
+
+  group('unsent recordings survive (Important 2)', () {
+    testWidgets('Pending_recording_is_kept_until_the_turn_is_accepted', (tester) async {
+      final ai = _FakeAi()
+        ..turnScript.add(const AiConversationException(null, 'Nessuna connessione.', offline: true));
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(ai, voice));
+      await tester.pumpAndSettle();
+      await _recordOnce(tester);
+      expect(voice.fakeStore.deleted, isEmpty);
+
+      await tester.tap(find.text('Riprova invio'));
+      await tester.pumpAndSettle();
+      expect(voice.fakeStore.deleted, ['rec-1'], reason: 'deleted only after the turn is accepted');
+      await _unmount(tester);
+    });
+
+    test('transcribe keeps the files; upload (legacy) still deletes them', () async {
+      final dir = await Directory.systemTemp.createTemp('pending_voice_test');
+      addTearDown(() => dir.delete(recursive: true));
+      final store = PendingRecordingStore(dir);
+      final src = File('${dir.path}/src.m4a')..writeAsBytesSync([1, 2, 3]);
+      final c = VoiceCaptureController(
+        recorder: _NoRecorder(),
+        permissions: _GrantedMic(),
+        store: store,
+        consentAccepted: () async => true,
+        currentUserId: () => 'user-1',
+        upload: (f, k) async => const AiTranscription(transcript: 't', audioRef: 'a'),
+      );
+      final rec = await store.add(src, userId: 'user-1', ticketId: 'tkt-1');
+      await c.transcribe(rec);
+      expect(rec.file.existsSync(), isTrue);
+      await c.upload(rec);
+      expect(rec.file.existsSync(), isFalse);
+    });
+
+    test('pendingForCurrentUser never returns another user\'s recordings', () async {
+      final dir = await Directory.systemTemp.createTemp('pending_voice_test2');
+      addTearDown(() => dir.delete(recursive: true));
+      final store = PendingRecordingStore(dir);
+      await store.add(File('${dir.path}/a.m4a')..writeAsBytesSync([1]), userId: 'user-1', ticketId: 't');
+      await store.add(File('${dir.path}/b.m4a')..writeAsBytesSync([1]), userId: 'user-2', ticketId: 't');
+      final c = VoiceCaptureController(
+        recorder: _NoRecorder(),
+        permissions: _GrantedMic(),
+        store: store,
+        consentAccepted: () async => true,
+        currentUserId: () => 'user-1',
+        upload: (f, k) async => throw StateError('unused'),
+      );
+      final mine = await c.pendingForCurrentUser();
+      expect(mine.map((r) => r.userId).toSet(), {'user-1'});
+    });
+
+    testWidgets('Entering_offers_pending_recordings_of_this_ticket_only', (tester) async {
+      final voice = _FakeVoice()
+        ..pending = [_rec('a'), _rec('b'), _rec('c', ticketId: 'other-ticket'), _rec('d', ticketId: null)];
+      await tester.pumpWidget(_wrap(_FakeAi(), voice));
+      await tester.pumpAndSettle();
+      expect(find.text('Hai 2 registrazioni non inviate'), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('no offer when nothing is pending', (tester) async {
+      await tester.pumpWidget(_wrap(_FakeAi(), _FakeVoice()));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('non inviate'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('Sending_pending_recordings_reuses_the_same_keys', (tester) async {
+      final ai = _FakeAi();
+      final voice = _FakeVoice()..pending = [_rec('a'), _rec('b')];
+      await tester.pumpWidget(_wrap(ai, voice));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Invia'));
+      await tester.pumpAndSettle();
+
+      expect(voice.uploadKeys, ['pk-a', 'pk-b']);
+      expect(ai.posted.map((p) => p.key), ['pk-a:turn', 'pk-b:turn']);
+      expect(voice.fakeStore.deleted, ['p-a', 'p-b']);
+      expect(find.textContaining('non inviate'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('Discarding_pending_recordings_deletes_them_after_confirmation', (tester) async {
+      final voice = _FakeVoice()..pending = [_rec('a'), _rec('b')];
+      await tester.pumpWidget(_wrap(_FakeAi(), voice));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Scarta'));
+      await tester.pumpAndSettle();
+      expect(voice.fakeStore.deleted, isEmpty, reason: 'asks first');
+      await tester.tap(find.text('Scarta').last);
+      await tester.pumpAndSettle();
+
+      expect(voice.fakeStore.deleted, ['p-a', 'p-b']);
+      expect(find.textContaining('non inviate'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('Leaving_with_a_failed_turn_asks_for_confirmation', (tester) async {
+      final ai = _FakeAi();
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), pushed: true));
+      await _openPushed(tester);
+      await _failOneTypedTurn(ai, tester);
+
+      await tester.tap(find.text('Esci'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('non inviato'), findsWidgets);
+      await tester.tap(find.text('Resta qui'));
+      await tester.pumpAndSettle();
+      expect(find.text('home-screen'), findsNothing);
+
+      await tester.tap(find.text('Esci'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Esci comunque'));
+      await tester.pumpAndSettle();
+      expect(find.text('home-screen'), findsOneWidget);
+      expect(ai.abandoned, isEmpty, reason: 'ticket-bound drafts are durable');
+      await _unmount(tester);
+    });
+  });
+
+  group('sessions without a ticket (Important 3)', () {
+    testWidgets('Context_free_session_is_abandoned_on_leave', (tester) async {
+      final ai = _FakeAi();
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), ticketId: null, pushed: true));
+      await _openPushed(tester);
+
+      await tester.tap(find.text('Esci'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('home-screen'), findsOneWidget);
+      expect(ai.abandoned, ['sess-new']);
+      await _unmount(tester);
+    });
+
+    testWidgets('Ticket_bound_session_is_kept_on_leave', (tester) async {
+      final ai = _FakeAi();
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), pushed: true));
+      await _openPushed(tester);
+
+      await tester.tap(find.text('Esci'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('home-screen'), findsOneWidget);
+      expect(ai.abandoned, isEmpty);
+      await _unmount(tester);
+    });
+  });
+
+  group('folded minors', () {
+    testWidgets('a failing DELETE on Abbandona bozza keeps the session and says so', (tester) async {
+      final ai = _ThrowingAbandonAi(detail: _detail(expires: DateTime.now().toUtc().add(const Duration(days: 1))));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Abbandona bozza'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Non sono riuscito'), findsOneWidget);
+      // Still usable: a second attempt reaches the server again.
+      await tester.tap(find.text('Abbandona bozza'));
+      await tester.pumpAndSettle();
+      expect(ai.abandonAttempts, 2);
+      await _unmount(tester);
+    });
+
+    test('a non-string 409 code does not throw a TypeError', () async {
+      final dio = Dio();
+      dio.httpClientAdapter = _StubAdapter(409, '{"code": 5, "error": {"x": 1}}');
+      await expectLater(
+        () => AiApiClient(dio).postTurn('s', text: 't', idempotencyKey: 'k'),
+        throwsA(isA<AiConversationException>().having((e) => e.code, 'code', isNull)),
+      );
     });
   });
 }

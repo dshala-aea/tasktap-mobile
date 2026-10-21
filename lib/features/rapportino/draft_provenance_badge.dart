@@ -6,41 +6,50 @@ import '../../core/widgets/widgets.dart';
 import '../../data/ai/ai_api_client.dart';
 
 /// The Italian provenance label of one draft value, built from where it came from and how sure the
-/// server is. State comes first: a value that is ambiguous, in conflict or still waiting for the
-/// technician is labelled as such whatever its source.
+/// server is. State comes first for the states that need the technician (ambiguous, conflict,
+/// needs-confirmation); after that any value whose source is the technician is `Riferito`
+/// (reported or recorded: dictated, typed or hand-edited), whatever its exact state.
 ///
 /// A planned or ticket-recorded value is never evidence that work happened, so those are never
-/// labelled as reported by the technician.
+/// labelled as reported by the technician (unless the technician confirmed it).
 String? provenanceLabel(AiFactSource source, AiResolutionState state) {
   switch (state) {
-    case AiResolutionState.needsConfirmation:
-      return switch (source) {
-        AiFactSource.planned => 'Pianificato: conferma',
-        AiFactSource.ticketRecord => 'Dal ticket: conferma',
-        _ => 'Da confermare',
-      };
     case AiResolutionState.ambiguous:
       return 'Da chiarire';
     case AiResolutionState.conflict:
       return 'In conflitto';
     case AiResolutionState.operatorConfirmed:
-      return 'Confermato';
-    case AiResolutionState.unresolved:
-      return 'Non verificato';
+      return 'Riferito';
+    case AiResolutionState.needsConfirmation:
     case AiResolutionState.resolvedBySystem:
-      return switch (source) {
-        AiFactSource.ticketRecord => 'Dal ticket',
-        AiFactSource.planned => 'Pianificato',
-        AiFactSource.operatorInput => 'Riferito',
-        AiFactSource.taskTapTool || AiFactSource.derived => 'Verificato da TaskTap',
-      };
+    case AiResolutionState.unresolved:
+      break;
+  }
+  switch (source) {
+    case AiFactSource.operatorInput:
+      return state == AiResolutionState.needsConfirmation ? 'Da confermare' : 'Riferito';
+    case AiFactSource.planned:
+      return 'Pianificato: conferma';
+    case AiFactSource.ticketRecord:
+      return state == AiResolutionState.resolvedBySystem ? 'Dal ticket' : 'Dal ticket: conferma';
+    case AiFactSource.taskTapTool:
+    case AiFactSource.derived:
+      return state == AiResolutionState.resolvedBySystem ? 'Verificato da TaskTap' : 'Non verificato';
   }
 }
 
-/// True for a value that came from the ticket or a plan and the technician has not confirmed yet:
-/// it must be rendered muted and never presented as done work.
-bool isUnconfirmedProposal(AiResolutionState state) =>
-    state == AiResolutionState.needsConfirmation;
+/// True for a value that came from the ticket or a plan (or is waiting for confirmation) and the
+/// technician has not confirmed: it must be rendered muted and never presented as done work. Any
+/// state counts, so an unknown future state on a planned value is muted too.
+bool isUnconfirmedProposal(AiFactSource source, AiResolutionState state) {
+  if (state == AiResolutionState.ambiguous ||
+      state == AiResolutionState.conflict ||
+      state == AiResolutionState.operatorConfirmed) {
+    return false;
+  }
+  if (state == AiResolutionState.needsConfirmation) return true;
+  return source == AiFactSource.planned || source == AiFactSource.ticketRecord;
+}
 
 /// A small badge naming where a draft value came from.
 class DraftProvenanceBadge extends StatelessWidget {
@@ -52,36 +61,32 @@ class DraftProvenanceBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = provenanceLabel(source, state) ?? '';
+    final unconfirmed = isUnconfirmedProposal(source, state);
     final Color bg;
     final Color fg;
-    switch (state) {
-      case AiResolutionState.needsConfirmation:
-        bg = context.colors.bg3;
-        fg = context.colors.inkMuted;
-      case AiResolutionState.ambiguous:
-        bg = context.colors.amber.withAlpha(31);
-        fg = context.colors.amber;
-      case AiResolutionState.conflict:
-        bg = context.colors.red.withAlpha(31);
-        fg = context.colors.red;
-      case AiResolutionState.operatorConfirmed:
-        bg = context.colors.green.withAlpha(31);
-        fg = context.colors.green;
-      case AiResolutionState.unresolved:
-        bg = context.colors.bg3;
-        fg = context.colors.inkMuted;
-      case AiResolutionState.resolvedBySystem:
-        bg = context.colors.green.withAlpha(31);
-        fg = context.colors.green;
+    if (unconfirmed) {
+      bg = context.colors.bg3;
+      fg = context.colors.inkMuted;
+    } else {
+      switch (state) {
+        case AiResolutionState.ambiguous:
+          bg = context.colors.amber.withAlpha(31);
+          fg = context.colors.amber;
+        case AiResolutionState.conflict:
+          bg = context.colors.red.withAlpha(31);
+          fg = context.colors.red;
+        case AiResolutionState.unresolved:
+          bg = context.colors.bg3;
+          fg = context.colors.inkMuted;
+        case AiResolutionState.operatorConfirmed:
+        case AiResolutionState.resolvedBySystem:
+        case AiResolutionState.needsConfirmation:
+          bg = context.colors.green.withAlpha(31);
+          fg = context.colors.green;
+      }
     }
-    // A planned/unconfirmed badge is outlined (a "stamp", not a filled "done" pill).
-    return AppBadge(
-      label: label,
-      small: true,
-      bgColor: bg,
-      fgColor: fg,
-      outlined: isUnconfirmedProposal(state),
-    );
+    // An unconfirmed badge is outlined (a "stamp", not a filled "done" pill).
+    return AppBadge(label: label, small: true, bgColor: bg, fgColor: fg, outlined: unconfirmed);
   }
 }
 

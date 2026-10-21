@@ -1129,7 +1129,8 @@ class AiApiClient {
 
     if (status == 409) {
       // ProblemDetails carries the stable code under `code`; older shapes used `error`.
-      final code = (map?['code'] ?? map?['error']) as String?;
+      final rawCode = map?['code'] ?? map?['error'];
+      final code = rawCode is String ? rawCode : null;
       return AiConversationException(
         status,
         switch (code) {
@@ -1146,7 +1147,8 @@ class AiApiClient {
     }
 
     if (status == 400) {
-      final reason = body is String ? body : ((map?['error'] ?? map?['message']) as String?);
+      final rawReason = map?['error'] ?? map?['message'];
+      final reason = body is String ? body : (rawReason is String ? rawReason : null);
       return AiConversationException(
         status,
         reason ?? 'Richiesta non valida.',

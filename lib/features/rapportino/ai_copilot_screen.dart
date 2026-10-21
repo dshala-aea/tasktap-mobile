@@ -70,6 +70,10 @@ class _ChatMessage {
 
   /// Replaced by a later correction: shown struck through.
   bool superseded = false;
+
+  /// False for an operator message the server has not accepted yet (in flight, failed, or held
+  /// back): rendered as NOT sent so it never looks delivered.
+  bool accepted = true;
 }
 
 /// One turn on its way to the server, kept whole until it succeeds so a retry re-sends exactly the
@@ -164,6 +168,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   bool _voiceDisabled = false;
   bool _recording = false;
   StreamSubscription<PendingRecording>? _interruptSub;
+  bool _stopping = false;
+  VoiceCaptureController? _voiceCtl;
+
+  /// Recordings of this user and ticket the phone still holds (not yet accepted as a turn).
+  List<PendingRecording> _pendingRecs = [];
+
+  /// Set once the technician decided to leave (or the draft was abandoned): no more confirmation.
+  bool _forceLeave = false;
 
   /// The turn that has not gone through yet (offered as "Riprova invio"), and why.
   _Outgoing? _failed;
@@ -243,6 +255,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         if (detail != null) _adopt(detail, withTurns: true);
       });
       _scrollToEnd();
+      unawaited(_loadPending());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -294,7 +307,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
-    if (text.isEmpty || _sessionId == null || _sending || _aiBlocked) return;
+    if (text.isEmpty || _sessionId == null || _sending || _aiBlocked || _recording) return;
+    if (_failed != null) return; // the unsent update must be retried or discarded first
     _inputCtrl.clear();
     await _run(_Outgoing(key: const Uuid().v4(), text: text));
   }
@@ -309,7 +323,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   /// bounded 409 handling), apply the draft. Every failure leaves [o] intact for "Riprova invio".
   Future<void> _run(_Outgoing o) async {
     final sessionId = _sessionId;
-    if (sessionId == null) return;
+    if (sessionId == null || _sending) return;
     setState(() {
       _sending = true;
       _failed = null;
@@ -323,7 +337,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (o.text == null) {
         final voice = o.voice!;
         // `upload` reuses the recording's OWN key and deletes the local files only on success.
-        final t = await voice.upload(o.recording!);
+        final t = await voice.transcribe(o.recording!);
         o.text = t.transcript;
         o.audioRef = t.audioRef;
         o.rawTranscript = t.transcript;
@@ -347,7 +361,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           source: o.source,
           audioRef: o.audioRef,
           rawTranscript: o.rawTranscript,
-        );
+        )..accepted = false;
         o.message = m;
         if (mounted) setState(() => _messages.add(m));
         _scrollToEnd();
@@ -358,11 +372,15 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       _cancelThinkingTimers();
       setState(() {
         o.supersedes?.superseded = true;
+        o.message?.accepted = true;
+        if (o.recording != null) _pendingRecs.removeWhere((r) => r.id == o.recording!.id);
         _messages.add(_ChatMessage(isOperator: false, text: result.assistantReplyText));
         _draft = result.draft;
         _sending = false;
       });
       _scrollToEnd();
+      // The turn is accepted: only now is the local recording no longer needed.
+      unawaited(_discardRecording(o));
       unawaited(_learnTurnIds());
     } on AiTranscribeException catch (e) {
       if (!mounted) return;
@@ -421,9 +439,72 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     });
   }
 
+  /// Explicit "Scarta": drops the unsent update (its bubble, and for audio its recording).
+  void _discardFailed() {
+    final o = _failed;
+    if (o == null) return;
+    setState(() {
+      if (o.message != null) _messages.remove(o.message);
+      _failed = null;
+      _failureMessage = null;
+    });
+    unawaited(_discardRecording(o));
+  }
+
+  Future<void> _loadPending() async {
+    final ticketId = widget.ticketId;
+    if (ticketId == null) return;
+    try {
+      final voice = await ref.read(voiceCaptureControllerProvider.future);
+      final all = await voice.pendingForCurrentUser();
+      if (!mounted) return;
+      setState(() {
+        _voiceCtl = voice;
+        _pendingRecs = all.where((r) => r.ticketId == ticketId).toList();
+      });
+    } catch (_) {
+      // No recorder on this device (or the store is unreadable): nothing to offer.
+    }
+  }
+
+  /// Sends the held recordings one by one: transcribe (the server replays the stored key) and post
+  /// with the key derived from the recording's own, so nothing can apply twice.
+  Future<void> _sendPending() async {
+    final voice = _voiceCtl;
+    if (voice == null || _sending || _failed != null || _recording) return;
+    for (final rec in List.of(_pendingRecs)) {
+      await _run(_Outgoing(key: '${rec.idempotencyKey}:turn', recording: rec, voice: voice));
+      if (!mounted || _failed != null || _aiBlocked) break;
+    }
+  }
+
+  Future<void> _discardPending() async {
+    final voice = _voiceCtl;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Scartare le registrazioni?'),
+        content: const Text('Le registrazioni non inviate verranno cancellate dal telefono.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Scarta')),
+        ],
+      ),
+    );
+    if (ok != true || voice == null || !mounted) return;
+    final recs = List.of(_pendingRecs);
+    setState(() => _pendingRecs = []);
+    for (final r in recs) {
+      try {
+        await voice.store.delete(r);
+      } catch (_) {}
+    }
+  }
+
   Future<void> _discardRecording(_Outgoing o) async {
     final r = o.recording;
     if (r == null) return;
+    _pendingRecs.removeWhere((p) => p.id == r.id);
     try {
       await o.voice?.store.delete(r);
     } catch (_) {
@@ -582,7 +663,19 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         setState(() => _recording = true);
         // The 9:30 hard stop or another app taking the microphone ends the recording without a tap.
         _interruptSub?.cancel();
-        _interruptSub = voice.completed.listen((rec) => _onRecordingEnded(voice, rec));
+        _voiceCtl = voice;
+        _interruptSub = voice.completed.listen(
+          (rec) => _onRecordingEnded(voice, rec),
+          onError: (Object e) {
+            if (!mounted) return;
+            setState(() => _recording = false);
+            showAppToast(
+              context,
+              message: 'La registrazione si è interrotta e non è stata salvata.',
+              tone: ToastTone.error,
+            );
+          },
+        );
       case RecordingStartResult.consentRequired:
         break;
       case RecordingStartResult.notSignedIn:
@@ -603,6 +696,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   }
 
   Future<void> _stopRecording(VoiceCaptureController voice) async {
+    if (_stopping) return;
+    _stopping = true;
     try {
       final rec = await voice.stop();
       // Not awaited: nothing depends on the cancel completing.
@@ -615,6 +710,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (!mounted) return;
       setState(() => _recording = false);
       showAppToast(context, message: 'Registrazione non riuscita: $e', tone: ToastTone.error);
+    } finally {
+      _stopping = false;
     }
   }
 
@@ -671,8 +768,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
       // The draft is in Drift, provenance included — applyConfirmedDraft wrote isAiAssisted in the
       // same companion. The session has now done its job and is released (the controller's own
-      // rule). Clearing _sessionId first keeps dispose()/_abandon from firing a second DELETE at an
-      // id the server has already forgotten.
+      // rule). Clearing _sessionId first keeps the leave handler (which releases a ticket-less
+      // session) from firing a second DELETE at an id the server has already forgotten.
       //
       // Do NOT call reportEditorProvider(localId).notifier.markAiAssisted() here. That provider has
       // just been constructed, its `state` is still the blank placeholder, and _hydrate() has not
@@ -695,18 +792,74 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     }
   }
 
-  /// Leaves the screen. The live draft is durable: it is resumed next time, never deleted here.
+  /// Leaves the screen. A TICKET-bound live draft is durable: it is resumed next time, never
+  /// deleted here. A session without a ticket has no resume route (Start makes a new one every
+  /// time), so leaving releases it (see [_releaseContextFree]).
   void _leave() {
     if (mounted) Navigator.of(context).maybePop();
+  }
+
+  bool get _needsLeaveConfirm =>
+      !_forceLeave && (_recording || _failed != null || _messages.any((m) => !m.accepted));
+
+  void _releaseContextFree() {
+    final id = _sessionId;
+    if (widget.ticketId == null && id != null) {
+      _sessionId = null;
+      unawaited(ref.read(aiApiClientProvider).abandonConversation(id));
+    }
+  }
+
+  Future<void> _onPopBlocked() async {
+    if (_forceLeave) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    final voiceUpdate = _recording || _failed?.recording != null;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Uscire?'),
+        content: Text(
+          _recording
+              ? 'Stai registrando. Se esci la registrazione viene salvata sul telefono e te la '
+                    'riproporremo la prossima volta.'
+              : 'Hai un aggiornamento non inviato. ${voiceUpdate ? 'La registrazione resta salvata sul telefono e potrai inviarla la prossima volta.' : 'Se esci andrà perso.'}',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Resta qui')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Esci comunque')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    _forceLeave = true;
+    if (_recording) {
+      // Saves the recording to the pending store (offered again on the next entry).
+      unawaited(_voiceCtl?.stop().then((_) {}, onError: (_) {}));
+    }
+    Navigator.of(context).pop();
   }
 
   /// The explicit, destructive act: delete the server-side draft, then leave.
   Future<void> _abandonDraft() async {
     final sessionId = _sessionId;
     if (sessionId != null) {
+      try {
+        await ref.read(aiApiClientProvider).abandonConversation(sessionId);
+      } catch (_) {
+        if (mounted) {
+          showAppToast(
+            context,
+            message: 'Non sono riuscito ad abbandonare la bozza. Controlla la connessione e riprova.',
+            tone: ToastTone.error,
+          );
+        }
+        return;
+      }
       _sessionId = null;
-      await ref.read(aiApiClientProvider).abandonConversation(sessionId);
     }
+    _forceLeave = true;
     if (mounted) Navigator.of(context).maybePop();
   }
 
@@ -766,7 +919,16 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     final blocked = _draft.hasBlockingOpenItems;
     final sessionReady = _sessionId != null;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_needsLeaveConfirm,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          _releaseContextFree();
+        } else {
+          unawaited(_onPopBlocked());
+        }
+      },
+      child: Scaffold(
       backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: Column(
@@ -834,7 +996,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                       // rapportino looks filed and is not.
                       child: AppButton(
                         label: _confirming ? 'Preparo il rapportino…' : 'Conferma e apri il rapportino',
-                        onPressed: !sessionReady || _messages.isEmpty || blocked || _confirming
+                        onPressed: !sessionReady ||
+                                _messages.isEmpty ||
+                                blocked ||
+                                _confirming ||
+                                _sending ||
+                                _failed != null
                             ? null
                             : _confirm,
                       ),
@@ -845,6 +1012,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
             ],
           ],
         ),
+      ),
       ),
     );
   }
@@ -884,7 +1052,19 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (_failed != null && _failureMessage != null)
         banner(context.colors.red, '$_failureMessage\nL\'aggiornamento non è stato inviato.', [
           TextButton(onPressed: _sending ? null : _retryFailed, child: const Text('Riprova invio')),
+          TextButton(onPressed: _sending ? null : _discardFailed, child: const Text('Scarta')),
         ]),
+      if (_pendingRecs.isNotEmpty && _failed == null)
+        banner(
+          context.colors.amber,
+          _pendingRecs.length == 1
+              ? 'Hai 1 registrazione non inviata'
+              : 'Hai ${_pendingRecs.length} registrazioni non inviate',
+          [
+            TextButton(onPressed: _sending || _recording ? null : _sendPending, child: const Text('Invia')),
+            TextButton(onPressed: _sending ? null : _discardPending, child: const Text('Scarta')),
+          ],
+        ),
     ];
   }
 
@@ -947,8 +1127,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           );
         }
         final m = _messages[i];
+        final notSent = !m.accepted && !_sending;
         final canCorrect =
-            i == lastCorrectable && m.source == AiTurnSource.voice && !_sending && !_aiBlocked;
+            i == lastCorrectable &&
+            m.source == AiTurnSource.voice &&
+            m.accepted &&
+            !_sending &&
+            _failed == null &&
+            !_aiBlocked;
         return Align(
           alignment: m.isOperator ? Alignment.centerRight : Alignment.centerLeft,
           child: Column(
@@ -959,21 +1145,28 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: m.isOperator ? AppColors.Y : context.colors.surface,
+                  color: notSent
+                      ? context.colors.bg3
+                      : (m.isOperator ? AppColors.Y : context.colors.surface),
                   borderRadius: BorderRadius.circular(12),
+                  border: notSent ? Border.all(color: context.colors.red) : null,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (m.isOperator && m.source == AiTurnSource.voice) ...[
-                      const Icon(LucideIcons.mic, size: 14, color: Colors.white),
+                      Icon(
+                        LucideIcons.mic,
+                        size: 14,
+                        color: notSent ? context.colors.ink : Colors.white,
+                      ),
                       const SizedBox(width: 6),
                     ],
                     Flexible(
                       child: Text(
                         m.text,
                         style: TextStyle(
-                          color: m.isOperator ? Colors.white : context.colors.ink,
+                          color: m.isOperator && !notSent ? Colors.white : context.colors.ink,
                           decoration: m.superseded ? TextDecoration.lineThrough : null,
                         ),
                       ),
@@ -981,6 +1174,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                   ],
                 ),
               ),
+              if (notSent)
+                Text(
+                  'Non inviato',
+                  style: TextStyle(color: context.colors.red, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
               if (canCorrect)
                 TextButton(
                   onPressed: () => _correct(m),
@@ -1085,7 +1283,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   /// One value of the draft with its provenance badge. A planned / ticket-recorded value the
   /// technician has not confirmed is muted and italic: it must never read as work that was done.
   Widget _draftRow(String label, AiResolutionState state, AiFactSource source) {
-    final unconfirmed = isUnconfirmedProposal(state);
+    final unconfirmed = isUnconfirmedProposal(source, state);
     return Padding(
       key: unconfirmed ? ValueKey('planned-unconfirmed-row:$label') : null,
       padding: const EdgeInsets.only(bottom: 4),
@@ -1133,14 +1331,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                   color: _recording ? context.colors.red : context.colors.ink,
                 ),
                 tooltip: _recording ? 'Ferma la registrazione' : 'Registra un aggiornamento vocale',
-                onPressed: enabled && (!_sending || _recording) ? _toggleMic : null,
+                onPressed: enabled && _failed == null && (!_sending || _recording) ? _toggleMic : null,
                 constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             DictateButton(controller: _inputCtrl, onChanged: (_) {}, explainWhenUnavailable: false),
             IconButton(
               icon: Icon(LucideIcons.send, size: 18, color: context.colors.ink),
               tooltip: 'Invia',
-              onPressed: enabled && !_sending ? _send : null,
+              onPressed: enabled && !_sending && !_recording && _failed == null ? _send : null,
               constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             ),
           ],

@@ -101,13 +101,20 @@ class VoiceCaptureController {
     return u == null ? const [] : store.list(userId: u);
   }
 
-  /// Uploads with the recording's OWN key. On success the local files are deleted; on any
-  /// failure they are kept and the same call can simply be repeated.
-  Future<AiTranscription> upload(PendingRecording pending) async {
+  /// Transcribes with the recording's OWN key and KEEPS the local files. The server replays a
+  /// repeated key (same transcript and `audioRef`, no new charge), so this is safe to repeat after a
+  /// restart. The caller deletes the recording only once the turn built from it was accepted.
+  Future<AiTranscription> transcribe(PendingRecording pending) async {
     if (pending.userId != currentUserId()) {
       throw StateError('Questa registrazione appartiene a un altro utente.');
     }
-    final result = await _uploader(pending.file, pending.idempotencyKey);
+    return _uploader(pending.file, pending.idempotencyKey);
+  }
+
+  /// [transcribe], then delete the local files. On any failure they are kept. Prefer [transcribe]
+  /// when the result still has to reach the server as a turn.
+  Future<AiTranscription> upload(PendingRecording pending) async {
+    final result = await transcribe(pending);
     await store.delete(pending);
     return result;
   }

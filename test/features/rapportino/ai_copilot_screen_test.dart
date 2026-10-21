@@ -86,6 +86,15 @@ class _FakeAiApiClient extends AiApiClient {
     cantiereId: cantiereId,
   );
 
+  @override
+  Future<AiConversationDetailDto> getConversation(String sessionId) async => AiConversationDetailDto(
+    sessionId: sessionId,
+    draft: AiCopilotDraftDto.empty,
+    turns: const [],
+    version: 1,
+    expiresAtUtc: DateTime.utc(9999),
+  );
+
   /// Task 11: entering from a ticket first asks for a live session; none exists here.
   @override
   Future<String?> resumeConversation(String ticketId) async => null;
