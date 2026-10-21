@@ -153,7 +153,7 @@ class AiCopilotScreen extends ConsumerStatefulWidget {
   ConsumerState<AiCopilotScreen> createState() => _AiCopilotScreenState();
 }
 
-class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
+class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsBindingObserver {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   final _messages = <_ChatMessage>[];
@@ -203,14 +203,54 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   /// A feed apply is writing the linked report.
   bool _applying = false;
 
+  /// This session's draft already went into a rapportino that was signed, queued or sent (or the
+  /// feed refused to write it for that reason). Re-seeding a new report from it would file the
+  /// same materials and hours twice: Compila and Conferma stay blocked until the technician
+  /// abandons it and starts again.
+  String? _usedDraftMessage;
+
+  /// Only the MICROPHONE is unavailable (transcription refused for credits): typed turns and
+  /// on-device dictation go on.
+  String? _micBlockedMessage;
+
+  /// The failed turn was refused for its length: offer to shorten it.
+  bool _failedTooLong = false;
+
+  /// Set when leaving the app stopped a recording; told to the technician on return.
+  String? _backgroundNote;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _start();
+  }
+
+  /// Leaving the app (screen off, another app, the home button) never keeps the microphone hot:
+  /// a ticket-bound recording is stopped and KEPT (offered again), a ticketless one is cancelled.
+  /// Nothing is uploaded until the technician is back and chooses to send it.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if ((state == AppLifecycleState.paused || state == AppLifecycleState.inactive) && _recording) {
+      _backgroundNote = widget.ticketId != null
+          ? 'La registrazione è stata fermata quando hai lasciato l\'app ed è salvata sul telefono: '
+                'puoi inviarla o scartarla.'
+          : 'La registrazione è stata annullata quando hai lasciato l\'app.';
+      _releaseMicrophone();
+      unawaited(_interruptSub?.cancel());
+      _interruptSub = null;
+      if (mounted) setState(() {});
+    } else if (state == AppLifecycleState.resumed && _backgroundNote != null && mounted) {
+      final note = _backgroundNote!;
+      _backgroundNote = null;
+      showAppToast(context, message: note, tone: ToastTone.warning);
+      unawaited(_loadPending());
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _releaseMicrophone();
     _cancelThinkingTimers();
     _interruptSub?.cancel();
@@ -275,7 +315,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       });
       _scrollToEnd();
       unawaited(_loadPending());
-      unawaited(_refreshLinked().then((_) => detail != null ? _feedApply() : null));
+      unawaited(_refreshLinked().then((_) => _checkLinkedReport(apply: detail != null)));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -352,10 +392,75 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     try {
       await ref.read(aiDraftFeedProvider).apply(id, _draft);
       if (mounted) ref.invalidate(reportEditorProvider(reportId));
+    } on AiFeedReportLockedException catch (e) {
+      // The report was signed, queued or sent meanwhile: the feed let go of it.
+      if (mounted) setState(() => _markDraftUsed(e.message));
+    } on AiFeedSessionGoneException catch (e) {
+      if (mounted) setState(() => _linkedReportId = null);
+      if (mounted) showAppToast(context, message: e.message, tone: ToastTone.warning);
     } catch (_) {
     } finally {
       if (mounted) setState(() => _applying = false);
     }
+  }
+
+  void _markDraftUsed(String reason) {
+    _linkedReportId = null;
+    _usedDraftMessage =
+        'Questa bozza è già stata usata per un rapportino inviato. $reason '
+        'Per un nuovo rapportino abbandonala e ricomincia.';
+  }
+
+  /// On entry (and before Compila): a linked report that is no longer an editable draft means
+  /// this draft was already used. It is never re-seeded silently into a new report.
+  Future<void> _checkLinkedReport({required bool apply}) async {
+    final sessionId = _sessionId;
+    final reportId = _linkedReportId;
+    if (sessionId == null || reportId == null) return;
+    try {
+      final existing = await ref.read(draftReportRepositoryProvider).getDraft(reportId);
+      if (existing == null) {
+        // The report was deleted from the phone: nothing was filed from it; the link just goes.
+        await ref.read(aiDraftFeedStoreProvider).unlink(sessionId);
+        if (mounted) setState(() => _linkedReportId = null);
+        return;
+      }
+      final refusal = feedWriteRefusal(existing);
+      if (refusal != null) {
+        await ref.read(aiDraftFeedStoreProvider).unlink(sessionId);
+        if (mounted) setState(() => _markDraftUsed(refusal));
+        return;
+      }
+    } catch (_) {
+      return;
+    }
+    if (apply) await _feedApply();
+  }
+
+  /// "Abbandona e ricomincia": deletes the used session on the server, then starts a fresh one.
+  Future<void> _abandonAndRestart() async {
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
+    final ok = await ref.read(aiApiClientProvider).tryAbandonConversation(sessionId);
+    if (!mounted) return;
+    if (!ok) {
+      showAppToast(
+        context,
+        message: 'Non sono riuscito ad abbandonare la bozza. Controlla la connessione e riprova.',
+        tone: ToastTone.error,
+      );
+      return;
+    }
+    unawaited(_quiet(ref.read(aiDraftFeedStoreProvider).unlink(sessionId)));
+    setState(() {
+      _sessionId = null;
+      _usedDraftMessage = null;
+      _linkedReportId = null;
+      _messages.clear();
+      _draft = AiCopilotDraftDto.empty;
+      _confirmKey = null;
+    });
+    await _start();
   }
 
   Future<List<AiConfirmedEdit>> _editsForTurn(String sessionId) async {
@@ -378,8 +483,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       var reportId = (await store.load(sessionId))?.reportId;
       if (reportId != null) {
         final existing = await ref.read(draftReportRepositoryProvider).getDraft(reportId);
-        // Only a Bozza still on this phone can be fed; a sent one is the office's now.
-        if (existing == null || existing.stato != 'Bozza') reportId = null;
+        if (existing == null) {
+          reportId = null; // deleted from the phone: a fresh report is linked below
+        } else if (feedWriteRefusal(existing) case final refusal?) {
+          // Signed, queued or sent: this draft was used. Never re-seed it into a new report.
+          await store.unlink(sessionId);
+          if (mounted) setState(() => _markDraftUsed(refusal));
+          return;
+        }
       }
       if (reportId == null) {
         reportId = await _createManualDraft();
@@ -395,6 +506,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (!mounted) return;
       setState(() => _linkedReportId = reportId);
       unawaited(context.push(AppRoutes.rapportiniEditor(reportId)));
+    } on AiFeedReportLockedException catch (e) {
+      if (mounted) setState(() => _markDraftUsed(e.message));
     } catch (e) {
       if (mounted) showAppToast(context, message: e.toString(), tone: ToastTone.error);
     } finally {
@@ -420,6 +533,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (draft != null) setState(() => _draft = draft);
       unawaited(_feedApply());
     } on AiEditSyncBlockedException catch (e) {
+      if (mounted) showAppToast(context, message: e.message, tone: ToastTone.warning);
+    } on AiFeedSessionGoneException catch (e) {
+      if (mounted) setState(() => _linkedReportId = null);
       if (mounted) showAppToast(context, message: e.message, tone: ToastTone.warning);
     } catch (e) {
       if (mounted) showAppToast(context, message: e.toString(), tone: ToastTone.error);
@@ -469,7 +585,26 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (o.text == null) {
         final voice = o.voice!;
         // `upload` reuses the recording's OWN key and deletes the local files only on success.
-        final t = await voice.transcribe(o.recording!);
+        final AiTranscription t;
+        try {
+          t = await voice.transcribe(o.recording!);
+        } on AiQuotaExhaustedException {
+          // Transcription is what credits pay for: only the MICROPHONE stops. The recording stays
+          // on the phone; typed turns and on-device dictation go on (the live session is never
+          // refused a turn for credits).
+          if (!mounted) return;
+          _cancelThinkingTimers();
+          setState(() {
+            _sending = false;
+            _micBlockedMessage =
+                'Crediti AI esauriti: la registrazione vocale non è disponibile. Puoi scrivere '
+                'o dettare sul telefono; la registrazione resta salvata.';
+            if (o.recording != null && !_pendingRecs.any((r) => r.id == o.recording!.id)) {
+              _pendingRecs = [..._pendingRecs, o.recording!];
+            }
+          });
+          return;
+        }
         o.text = t.transcript;
         o.audioRef = t.audioRef;
         o.rawTranscript = t.transcript;
@@ -486,6 +621,19 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
             tone: ToastTone.warning,
           );
         }
+        return;
+      }
+      if (o.text!.length > maxTurnCharacters) {
+        // Over the server's per-turn cap: refused before it is sent, and the technician can
+        // shorten it instead of losing the recording.
+        _cancelThinkingTimers();
+        setState(() => _sending = false);
+        _fail(
+          o,
+          'Il testo è troppo lungo per un solo aggiornamento (massimo $maxTurnCharacters '
+          'caratteri): accorcialo e invialo di nuovo.',
+          tooLong: true,
+        );
         return;
       }
       if (o.message == null) {
@@ -528,7 +676,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (!mounted) return;
       _cancelThinkingTimers();
       if (e.error == AiTranscribeError.voiceDisabled) {
-        // Retrying cannot help and the mic must not keep offering what the server refuses.
+        // Retrying cannot help and the mic must not keep offering what the server refuses; the
+        // file is deleted rather than offered again for a week.
+        unawaited(_discardRecording(o));
         setState(() {
           _voiceDisabled = true;
           _sending = false;
@@ -559,7 +709,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (e.isDraftTooLarge || e.isTurnLimitExceeded) {
         setState(() => _aiBlockedMessage = e.message);
       } else {
-        _fail(o, e.message);
+        _fail(o, e.message, tooLong: e.isTextTooLong);
       }
     } catch (e) {
       if (!mounted) return;
@@ -574,11 +724,32 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     if (mounted) setState(() => _sending = false);
   }
 
-  void _fail(_Outgoing o, String message) {
+  void _fail(_Outgoing o, String message, {bool tooLong = false}) {
     setState(() {
       _failed = o;
       _failureMessage = message;
+      _failedTooLong = tooLong;
     });
+  }
+
+  /// "Accorcia il testo": the over-long update is edited and re-sent (same key: a refused turn
+  /// claimed nothing on the server). The unedited transcript is kept beside it.
+  Future<void> _shortenFailed() async {
+    final o = _failed;
+    if (o == null || o.text == null) return;
+    final edited = await showDialog<String>(
+      context: context,
+      builder: (ctx) =>
+          _CorrectionDialog(initial: o.text!, title: 'Accorcia il testo', action: 'Invia'),
+    );
+    if (edited == null || edited.trim().isEmpty || !mounted) return;
+    setState(() {
+      if (o.message != null) _messages.remove(o.message);
+      o.message = null;
+      o.text = edited.trim();
+      _failedTooLong = false;
+    });
+    await _retryFailed();
   }
 
   /// Explicit "Scarta": drops the unsent update (its bubble, and for audio its recording).
@@ -667,7 +838,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           text: o.text!,
           source: o.source,
           audioRef: o.audioRef,
-          rawTranscript: o.rawTranscript,
+          // The unedited transcript is kept, capped at what the server stores for one turn.
+          rawTranscript: (o.rawTranscript?.length ?? 0) > maxTurnCharacters
+              ? o.rawTranscript!.substring(0, maxTurnCharacters)
+              : o.rawTranscript,
           replacesTurnId: o.replacesTurnId,
           confirmedEdits: (o.edits == null || o.edits!.isEmpty)
               ? null
@@ -681,13 +855,20 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           if (!mounted) rethrow;
           continue;
         }
-        if (e.statusCode == 400 && (o.edits?.isNotEmpty ?? false)) {
+        if ((e.statusCode == 400 || e.statusCode == 422) &&
+            !e.isTextTooLong &&
+            (o.edits?.isNotEmpty ?? false)) {
           // The server refused the turn: one of the hand edits riding in it, most likely. The
           // spoken/typed update must still go through: the edits are sent edits-only, where a
-          // refused one is isolated and recorded as unsendable (shown on the editor card), and the
-          // turn is re-sent WITHOUT them under the same key (a 400 claims nothing server-side).
+          // refused one is isolated, whatever is still undelivered is recorded as refused (shown
+          // on the editor card, never riding again), and the turn is re-sent WITHOUT them under
+          // the same key (a refused turn claims nothing server-side).
+          final syncer = ref.read(aiEditSyncerProvider);
           try {
-            await ref.read(aiEditSyncerProvider).sync(sessionId);
+            await syncer.sync(sessionId);
+          } catch (_) {}
+          try {
+            await syncer.refuseTurnEdits(sessionId, o.edits!, e.code ?? 'turn_refused');
           } catch (_) {}
           if (!mounted) rethrow;
           o.edits = const [];
@@ -818,7 +999,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     switch (result) {
       case RecordingStartResult.started:
         setState(() => _recording = true);
-        // The 9:30 hard stop or another app taking the microphone ends the recording without a tap.
+        // The 5-minute hard stop or another app taking the microphone ends the recording without a tap.
         _interruptSub?.cancel();
         _voiceCtl = voice;
         _interruptSub = voice.completed.listen(
@@ -909,13 +1090,24 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       // can move on underneath us between the two calls.
       // A session already feeding a report confirms INTO it (matched by identity: no duplicate
       // lines); otherwise a new local report is created, as before.
-      final localId = await applyConfirmedDraft(
-        ref,
-        response: response,
-        ticketId: widget.ticketId,
-        cantiereId: widget.cantiereId,
-        sessionId: _linkedReportId != null ? sessionId : null,
-      );
+      final String? localId;
+      try {
+        localId = await applyConfirmedDraft(
+          ref,
+          response: response,
+          ticketId: widget.ticketId,
+          cantiereId: widget.cantiereId,
+          sessionId: _linkedReportId != null ? sessionId : null,
+        );
+      } on AiFeedReportLockedException catch (e) {
+        // The linked report was signed, queued or sent: Confirm never writes into it.
+        if (!mounted) return;
+        setState(() {
+          _confirming = false;
+          _markDraftUsed(e.message);
+        });
+        return;
+      }
       if (!mounted) return;
 
       if (localId == null) {
@@ -1202,8 +1394,17 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                   isLoading: _opening,
                   // Never while a turn, an edit or an apply is in flight: the editor would hydrate
                   // rows that are about to change underneath it.
+                  // Nor while recording: the editor would be pushed over a hot microphone whose
+                  // transcript is then posted and applied under it.
                   onPressed:
-                      !sessionReady || _opening || _confirming || _sending || _editing || _applying
+                      !sessionReady ||
+                          _opening ||
+                          _confirming ||
+                          _sending ||
+                          _editing ||
+                          _applying ||
+                          _recording ||
+                          _usedDraftMessage != null
                       ? null
                       : _openInEditor,
                 ),
@@ -1232,6 +1433,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                                 _confirming ||
                                 _sending ||
                                 _editing ||
+                                _recording ||
+                                _usedDraftMessage != null ||
                                 _failed != null
                             ? null
                             : _confirm,
@@ -1268,6 +1471,23 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     );
 
     return [
+      if (_usedDraftMessage != null)
+        banner(context.colors.amber, _usedDraftMessage!, [
+          TextButton(
+            key: const ValueKey('abandon-and-restart'),
+            onPressed: _sending ? null : _abandonAndRestart,
+            child: const Text('Abbandona e ricomincia'),
+          ),
+        ]),
+      if (_sessionId != null && (ref.watch(aiQuotaProvider).valueOrNull?.exhausted ?? false))
+        banner(
+          context.colors.amber,
+          'Crediti AI esauriti: puoi finire questa bozza, per nuove bozze servono crediti.',
+          const [],
+        ),
+      if (_micBlockedMessage != null) banner(context.colors.amber, _micBlockedMessage!, const []),
+      if (_backgroundNote != null && !_recording)
+        banner(context.colors.amber, _backgroundNote!, const []),
       if (_expiringSoon)
         banner(context.colors.amber, _expiryText(), [
           TextButton(
@@ -1282,7 +1502,15 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         ]),
       if (_failed != null && _failureMessage != null)
         banner(context.colors.red, '$_failureMessage\nL\'aggiornamento non è stato inviato.', [
-          TextButton(onPressed: _sending ? null : _retryFailed, child: const Text('Riprova invio')),
+          if (_failedTooLong)
+            TextButton(
+              key: const ValueKey('shorten-failed'),
+              onPressed: _sending ? null : _shortenFailed,
+              child: const Text('Accorcia il testo'),
+            )
+          else
+            TextButton(
+                onPressed: _sending ? null : _retryFailed, child: const Text('Riprova invio')),
           TextButton(onPressed: _sending ? null : _discardFailed, child: const Text('Scarta')),
         ]),
       if (_pendingRecs.isNotEmpty && _failed == null)
@@ -1585,7 +1813,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   }
 
   Widget _buildInputRow(BuildContext context, bool sessionReady, bool quotaExhausted) {
-    final enabled = sessionReady && !quotaExhausted && !_aiBlocked;
+    // A LIVE session is never locked by credits: the server accepts its turns whatever the balance
+    // (spec 3.4), so the quota only matters before a session exists (Start refuses then).
+    final enabled = sessionReady && !_aiBlocked;
+    final micEnabled = enabled && _micBlockedMessage == null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
@@ -1610,7 +1841,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                   color: _recording ? context.colors.red : context.colors.ink,
                 ),
                 tooltip: _recording ? 'Ferma la registrazione' : 'Registra un aggiornamento vocale',
-                onPressed: enabled && _failed == null && (!_sending || _recording) ? _toggleMic : null,
+                onPressed: micEnabled && _failed == null && (!_sending || _recording) ? _toggleMic : null,
                 constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             DictateButton(controller: _inputCtrl, onChanged: (_) {}, explainWhenUnavailable: false),
@@ -1628,8 +1859,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 }
 
 class _CorrectionDialog extends StatefulWidget {
-  const _CorrectionDialog({required this.initial});
+  const _CorrectionDialog({
+    required this.initial,
+    this.title = 'Correggi la trascrizione',
+    this.action = 'Invia correzione',
+  });
   final String initial;
+  final String title;
+  final String action;
 
   @override
   State<_CorrectionDialog> createState() => _CorrectionDialogState();
@@ -1647,7 +1884,7 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Correggi la trascrizione'),
+      title: Text(widget.title),
       content: TextField(
         key: const ValueKey('correction-field'),
         controller: _ctrl,
@@ -1659,7 +1896,7 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annulla')),
         TextButton(
           onPressed: () => Navigator.pop(context, _ctrl.text),
-          child: const Text('Invia correzione'),
+          child: Text(widget.action),
         ),
       ],
     );

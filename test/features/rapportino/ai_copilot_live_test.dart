@@ -29,6 +29,7 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart'
     show SyncNotifier, SyncService, appDatabaseProvider, syncProvider;
 import 'package:tasktap_mobile/features/rapportino/ai_copilot_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/ai_draft_feed.dart';
 import 'package:tasktap_mobile/features/rapportino/draft_provenance_badge.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
@@ -68,13 +69,22 @@ class _FakeAi extends AiApiClient {
   /// Called on every getConversation after the first (so a test can change what a refetch returns).
   AiConversationDetailDto Function()? onRefetch;
 
+  AiQuotaDto quota = const AiQuotaDto(monthlyLimit: 20, used: 1, remaining: 19);
+  bool abandonOk = true;
+
   @override
-  Future<AiQuotaDto> getQuota() async => const AiQuotaDto(monthlyLimit: 20, used: 1, remaining: 19);
+  Future<AiQuotaDto> getQuota() async => quota;
+
+  @override
+  Future<bool> tryAbandonConversation(String sessionId) async {
+    if (abandonOk) abandoned.add(sessionId);
+    return abandonOk;
+  }
 
   @override
   Future<String?> resumeConversation(String ticketId) async {
     resumeCalls.add(ticketId);
-    return liveSessionId;
+    return abandoned.contains(liveSessionId) ? null : liveSessionId;
   }
 
   @override
@@ -1526,6 +1536,310 @@ void main() {
       expect(ai.postedEdits.single, [
         {'kind': 'material', 'id': 'm-1', 'remove': true},
       ]);
+      await _unmount(tester);
+    });
+  });
+
+  group('final review fixes (mobile)', () {
+    const sess = 'sess-new';
+    const reportId = 'rep-linked';
+
+    AiCopilotDraftDto liveDraft({bool withCable = false}) => AiCopilotDraftDto(
+      workers: const [
+        AiDraftWorkerRef(
+          userId: 'me-1',
+          fullName: 'Marco Rossi',
+          hours: 3,
+          state: AiResolutionState.resolvedBySystem,
+          source: AiFactSource.ticketRecord,
+        ),
+      ],
+      materials: [
+        if (withCable)
+          const AiDraftMaterialUsage(
+            materialId: 'm-2',
+            name: 'Cavo',
+            quantity: 2,
+            state: AiResolutionState.operatorConfirmed,
+            source: AiFactSource.operatorInput,
+          ),
+      ],
+      controlli: const [],
+      activities: const [],
+      openItems: const [],
+    );
+
+    Future<AppDatabase> dbWithLinkedReport({String submission = 'draft', String stato = 'Bozza'}) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.into(db.draftReports).insert(
+        DraftReportsCompanion.insert(
+          id: reportId,
+          tenantId: 'ten-1',
+          createdAt: DateTime.utc(2026, 10, 20),
+          title: 'Rapportino',
+          insertedUserId: 'internal-guid-2',
+          locationId: 'loc-1',
+          stato: Value(stato),
+          submissionState: Value(submission),
+        ),
+      );
+      await AiDraftFeedStore().link(sessionId: sess, reportId: reportId);
+      return db;
+    }
+
+    AppButton button(WidgetTester tester, String label) => tester.widget<AppButton>(
+      find.ancestor(of: find.text(label), matching: find.byType(AppButton)),
+    );
+
+    // ── MUST FIX 5 ─────────────────────────────────────────────────────────────
+    testWidgets('Compila and Conferma are disabled while recording', (tester) async {
+      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(ai, voice));
+      await tester.pumpAndSettle();
+      await _typeAndSend(tester, 'Ho iniziato'); // a message makes Conferma available
+      expect(button(tester, 'Compila nel rapportino').onPressed, isNotNull);
+      expect(button(tester, 'Conferma e apri il rapportino').onPressed, isNotNull);
+
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+
+      expect(button(tester, 'Compila nel rapportino').onPressed, isNull);
+      expect(button(tester, 'Conferma e apri il rapportino').onPressed, isNull);
+      await _unmount(tester);
+    });
+
+    // ── SHOULD FIX (a): backgrounding ──────────────────────────────────────────
+    testWidgets('backgrounding while recording stops and keeps a ticket-bound recording', (
+      tester,
+    ) async {
+      final ai = _FakeAi();
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(ai, voice));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+
+      for (final st in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(st);
+      }
+      await tester.pumpAndSettle();
+      expect(voice.stopCalls, 1);
+      expect(voice.cancelCalls, 0);
+      expect(voice.uploadKeys, isEmpty, reason: 'nothing is uploaded behind the technician');
+
+      for (final st in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(st);
+      }
+      await tester.pumpAndSettle();
+      expect(find.textContaining('hai lasciato l\'app'), findsWidgets);
+      await _unmount(tester);
+    });
+
+    testWidgets('backgrounding while recording cancels a ticketless recording', (tester) async {
+      final ai = _FakeAi();
+      final voice = _FakeVoice();
+      await tester.pumpWidget(_wrap(ai, voice, ticketId: null));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pumpAndSettle();
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pumpAndSettle();
+      expect(voice.cancelCalls, 1);
+      expect(voice.stopCalls, 0);
+      await _unmount(tester);
+    });
+
+    // ── MUST FIX 4: credits ────────────────────────────────────────────────────
+    testWidgets('an exhausted balance never locks a live session (typing and mic stay on)', (
+      tester,
+    ) async {
+      final ai = _FakeAi(detail: _detail(draft: liveDraft()))
+        ..quota = const AiQuotaDto(monthlyLimit: 20, used: 20, remaining: 0);
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Crediti AI esauriti: puoi finire questa bozza'), findsOneWidget);
+      expect(_enabled(tester, 'Registra un aggiornamento vocale'), isTrue);
+      await _typeAndSend(tester, 'Ho finito');
+      expect(ai.posted.single.text, 'Ho finito');
+      await _unmount(tester);
+    });
+
+    testWidgets('a transcribe 429 disables ONLY the microphone; typed turns continue', (
+      tester,
+    ) async {
+      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
+      final voice = _FakeVoice()..uploads.add(const AiQuotaExhaustedException());
+      ai.turnScript.add(AiConversationTurnResult(assistantReplyText: 'Ok.', draft: liveDraft()));
+      await tester.pumpWidget(_wrap(ai, voice));
+      await tester.pumpAndSettle();
+
+      await _recordOnce(tester);
+
+      expect(_enabled(tester, 'Registra un aggiornamento vocale'), isFalse);
+      expect(find.textContaining('registrazione vocale non è disponibile'), findsOneWidget);
+      expect(find.text('Continua senza AI'), findsNothing, reason: 'the session is not blocked');
+      await _typeAndSend(tester, 'Scrivo a mano');
+      expect(ai.posted.single.text, 'Scrivo a mano');
+      expect(find.textContaining('Luca').evaluate().length + find.textContaining('Marco').evaluate().length,
+          greaterThan(0), reason: 'the draft stays readable');
+      await _unmount(tester);
+    });
+
+    // ── SHOULD FIX (d): voice disabled deletes the file ────────────────────────
+    testWidgets('a transcribe 404 deletes the pending file instead of re-offering it', (tester) async {
+      final ai = _FakeAi();
+      final voice = _FakeVoice()
+        ..uploads.add(
+          const AiTranscribeException(AiTranscribeError.voiceDisabled, 'La trascrizione non è attiva.'),
+        );
+      await tester.pumpWidget(_wrap(ai, voice));
+      await tester.pumpAndSettle();
+      await _recordOnce(tester);
+      expect(voice.fakeStore.deleted, ['rec-1']);
+      await _unmount(tester);
+    });
+
+    // ── SHOULD FIX (c): long text ──────────────────────────────────────────────
+    testWidgets('a 422 text-too-long offers to shorten and re-sends the shortened text', (
+      tester,
+    ) async {
+      final ai = _FakeAi(detail: _detail(draft: liveDraft()))
+        ..turnScript.add(
+          const AiConversationException(
+            422,
+            'Il testo è troppo lungo',
+            code: AiConversationException.textTooLongCode,
+          ),
+        );
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+      await _typeAndSend(tester, 'Testo lunghissimo');
+
+      expect(find.text('Accorcia il testo'), findsOneWidget);
+      expect(find.text('Riprova invio'), findsNothing);
+      await tester.tap(find.text('Accorcia il testo'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('correction-field')), 'Testo corto');
+      await tester.tap(find.text('Invia'));
+      await tester.pumpAndSettle();
+
+      expect(ai.posted.map((p) => p.text).toList(), ['Testo lunghissimo', 'Testo corto']);
+      expect(find.text('Accorcia il testo'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('a transcript over the server cap is never posted and can be shortened', (
+      tester,
+    ) async {
+      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
+      final voice = _FakeVoice()
+        ..uploads.add(AiTranscription(transcript: 'a' * (maxTurnCharacters + 1), audioRef: 'audio-9'));
+      await tester.pumpWidget(_wrap(ai, voice));
+      await tester.pumpAndSettle();
+      await _recordOnce(tester);
+
+      expect(ai.posted, isEmpty, reason: 'refused locally, no doomed request');
+      expect(find.text('Accorcia il testo'), findsOneWidget);
+      await tester.tap(find.text('Accorcia il testo'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('correction-field')), 'Riassunto');
+      await tester.tap(find.text('Invia'));
+      await tester.pumpAndSettle();
+      expect(ai.posted.single.text, 'Riassunto');
+      expect(ai.posted.single.rawTranscript!.length, maxTurnCharacters);
+      await _unmount(tester);
+    });
+
+    // ── MUST FIX 1: refused edits-only never jams ──────────────────────────────
+    testWidgets('a 404 on an Accetta unlinks the feed and tells the technician', (tester) async {
+      final db = await dbWithLinkedReport();
+      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: _seededDraft()))
+        ..turnScript.add(const AiConversationException(404, 'gone'));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+      expect(find.text('Apri il rapportino collegato'), findsOneWidget);
+
+      await tester.tap(find.text('Accetta').last);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('non esiste più sul server'), findsOneWidget);
+      expect(find.text('Compila nel rapportino'), findsOneWidget, reason: 'the feed was released');
+      expect(await AiDraftFeedStore().sessionForReport(reportId), isNull);
+      await _unmount(tester);
+    });
+
+    // ── MUST FIX 2 + 3: a used report is never rewritten or re-seeded ──────────
+    for (final submission in ['readyToSubmit', 'failed', 'submitted', 'uploadingMedia']) {
+      testWidgets('resuming a draft whose report is $submission blocks Compila and Conferma', (
+        tester,
+      ) async {
+        final db = await dbWithLinkedReport(submission: submission);
+        final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
+        await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('già stata usata per un rapportino inviato'), findsOneWidget);
+        expect(button(tester, 'Compila nel rapportino').onPressed, isNull);
+        expect(db.select(db.reportMateriali).get(), completion(isEmpty), reason: 'not rewritten');
+        // The AI draft itself stays readable.
+        expect(find.textContaining('Cavo'), findsWidgets);
+        await _unmount(tester);
+      });
+    }
+
+    testWidgets('Abbandona e ricomincia deletes the used session and starts a fresh one', (
+      tester,
+    ) async {
+      final db = await dbWithLinkedReport(submission: 'submitted');
+      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Abbandona e ricomincia'));
+      await tester.pumpAndSettle();
+
+      expect(ai.abandoned, [sess]);
+      expect(ai.startCalls, hasLength(1));
+      expect(find.textContaining('già stata usata'), findsNothing);
+      expect(button(tester, 'Compila nel rapportino').onPressed, isNotNull);
+      await _unmount(tester);
+    });
+
+    testWidgets('a report submitted while the copilot is open refuses the next turn apply and '
+        'the open-in-editor path creates no new report', (tester) async {
+      final db = await dbWithLinkedReport();
+      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft()));
+      ai.turnScript.add(
+        AiConversationTurnResult(
+          assistantReplyText: 'Aggiunto il cavo.',
+          draft: liveDraft(withCable: true),
+        ),
+      );
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+      // Signed and queued on weak signal from the editor, then back to the copilot.
+      await (db.update(db.draftReports)..where((r) => r.id.equals(reportId))).write(
+        const DraftReportsCompanion(submissionState: Value('readyToSubmit')),
+      );
+
+      await _typeAndSend(tester, 'ho usato anche 2 m di cavo');
+
+      expect(await db.select(db.reportMateriali).get(), isEmpty, reason: 'the queued report is untouched');
+      expect(find.textContaining('già stata usata per un rapportino inviato'), findsOneWidget);
+      expect(find.textContaining('Cavo'), findsWidgets, reason: 'the draft stays readable');
+      expect(await db.select(db.draftReports).get(), hasLength(1), reason: 'no second report');
       await _unmount(tester);
     });
   });
