@@ -37,7 +37,7 @@ class VoiceCaptureController {
 
   bool get isRecording => _recording;
 
-  /// Emits the saved recording when it ended without [stop] — the 9:30 hard stop or an
+  /// Emits the saved recording when it ended without [stop] — the 5-minute hard stop or an
   /// interruption by another app/call. [stop] returns the same value for a manual stop.
   Stream<PendingRecording> get completed => _completed.stream;
 
@@ -67,7 +67,7 @@ class VoiceCaptureController {
         await cancel();
       }
     }
-    // A recording still being saved (9:30 stop, interruption) finishes before the recorder restarts.
+    // A recording still being saved (5-minute stop, interruption) finishes before the recorder restarts.
     final ending = _finishing;
     if (ending != null) await ending.then((_) {}, onError: (_) {});
     if (currentUserId() == null) return RecordingStartResult.notSignedIn;
@@ -96,7 +96,7 @@ class VoiceCaptureController {
 
   /// Abandons the recording in progress: stops the recorder, closes its subscription, resets the
   /// recording state and deletes the file it produced. Nothing is saved and nothing is emitted on
-  /// [completed]. A recording that is already ENDING (the 9:30 stop or an interruption fired, or a
+  /// [completed]. A recording that is already ENDING (the 5-minute stop or an interruption fired, or a
   /// [stop] is in flight) is still abandoned: once it is saved it is deleted again and not emitted.
   /// A no-op when idle or once a recording has been fully saved.
   Future<void> cancel() async {

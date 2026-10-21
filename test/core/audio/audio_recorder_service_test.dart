@@ -186,13 +186,13 @@ void main() {
     await c.start(ticketId: 'T1');
     final done = c.completed.first;
 
-    recorder.tick(const Duration(minutes: 9, seconds: 29));
+    recorder.tick(const Duration(minutes: 4, seconds: 59));
     await Future<void>.delayed(Duration.zero);
     expect(recorder.stops, 0);
 
     recorder.tick(maxRecordingLength);
     final pending = await done.timeout(const Duration(seconds: 2));
-    expect(maxRecordingLength, const Duration(minutes: 9, seconds: 30));
+    expect(maxRecordingLength, const Duration(minutes: 5));
     expect(recorder.stops, 1);
     expect(pending.file.existsSync(), isTrue);
     expect(c.isRecording, isFalse);
@@ -223,7 +223,7 @@ void main() {
     expect(File('${tmp.path}/rec_1.m4a').existsSync(), isFalse, reason: 'the produced file is deleted');
     expect(await store.list(userId: 'userA'), isEmpty);
     expect(completedEvents, 0);
-    // The 9:30 limit of the cancelled recording must not fire later.
+    // The 5-minute limit of the cancelled recording must not fire later.
     recorder.tick(maxRecordingLength);
     await Future<void>.delayed(Duration.zero);
     expect(recorder.stops, 1);

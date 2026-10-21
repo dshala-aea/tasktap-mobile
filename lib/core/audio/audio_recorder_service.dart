@@ -7,9 +7,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 /// Hard stop for one recording. The server rejects anything over 10 minutes
-/// (`audio_too_long`), so the client stops 30 s earlier and never produces an upload that is
+/// (`audio_too_long`), so the client stops well before and keeps the transcript under the server's 8000-character turn cap and never produces an upload that is
 /// refused for length.
-const Duration maxRecordingLength = Duration(minutes: 9, seconds: 30);
+const Duration maxRecordingLength = Duration(minutes: 5);
 
 /// Records one voice update to a local file. This is the ONLINE path (upload to
 /// `POST /api/ai/transcribe`); on-device dictation lives in `lib/core/dictation/` and is separate.
