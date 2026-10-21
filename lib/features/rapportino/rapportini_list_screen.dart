@@ -1,6 +1,7 @@
 // dart format width=100
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
@@ -328,9 +330,12 @@ class _RapportinoRow extends ConsumerWidget {
 
     final statusLabel = rapportinoStatusLabel(draft);
     final isSubmitted = rapportinoIsSubmitted(draft);
-    // Item 13: edit/delete now follow the backend's own "before office review" boundary
-    // (ReportStateMachine.CanEditOrDelete — Bozza/Inviato/Respinto), not draft-only.
-    final canEditOrDelete = rapportinoCanEditOrDelete(draft);
+    // Owner decision D8: mobile edits Bozza only. Every other state (Inviato / Respinto /
+    // Controllato / Fatturato / Annullato) opens the read-only view — never the editor, whose
+    // first autosave would rewrite the row to Bozza/local-only and blind sync to it forever
+    // (audit F15). Delete is Bozza-only and never mid-send; see rapportinoCanDelete.
+    final opensEditor = rapportinoOpensEditor(draft);
+    final canDelete = rapportinoCanDelete(draft);
     // The signed-badge marks a report carrying the signature the SEND actually requires — the
     // technician's. The customer's is collected on site when possible but is never a precondition,
     // so keying the badge on both would hide every correctly-sent unsigned report.
@@ -356,7 +361,10 @@ class _RapportinoRow extends ConsumerWidget {
 
     final row = InkWell(
       onTap: () async {
-        if (canEditOrDelete) {
+        // Only a Bozza opens the editor. Inviato / Respinto / Controllato / Fatturato (and an
+        // Annullato) always open the view; a Respinto offers "Rielabora" there, which goes through
+        // createReworkDraft for a NEW draft rather than editing the server's row.
+        if (opensEditor) {
           // A Bozza that only arrived through sync (created server-side, e.g. by the AI copilot,
           // or on another device) is a header with no staff/materiali/controlli: opening it as is
           // would show a blank form whose submit deletes the server's data. Pull the full report
@@ -487,7 +495,7 @@ class _RapportinoRow extends ConsumerWidget {
               // A swipe is the only way a mouse/keyboard/TalkBack/VoiceOver user cannot perform —
               // this button reaches the exact same delete path (_confirmDeleteDraft) so both ways
               // to delete a draft agree on what "delete" does, not just on how you trigger it.
-              if (canEditOrDelete)
+              if (canDelete)
                 IconButton(
                   icon: Icon(LucideIcons.trash2, size: 18, color: context.colors.inkMuted),
                   tooltip: 'Elimina',
@@ -501,10 +509,10 @@ class _RapportinoRow extends ConsumerWidget {
       ),
     );
 
-    // Only a report still before office review can be deleted here — one already reviewed goes
-    // through the office Annulla workflow instead (ReportsController.Delete/ReportStateMachine.
-    // CanEditOrDelete reject anything Controllato onward, or Annullato/NonFatturabile).
-    if (!canEditOrDelete) return row;
+    // Bozza only, and never mid-send — a report the office has already seen leaves through the
+    // office Annulla workflow, and the backend's own DELETE refuses it (ReportStateMachine.
+    // CanEditOrDelete blocks Controllato onward). See rapportinoCanDelete.
+    if (!canDelete) return row;
 
     return Dismissible(
       key: ValueKey('rapportino-${draft.id}'),
@@ -532,21 +540,47 @@ Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftRepor
   );
   if (!confirmed) return false;
 
-  await ref.read(draftReportRepositoryProvider).deleteDraft(draft.id);
-
-  // Best-effort, not awaited by the dismiss animation: the draft may or may not exist
-  // server-side yet (an attachment upload can create the row before Invia does) — either way
-  // local state is authoritative for a Bozza the technician is still working on, so a failure
-  // here (offline, already gone, 404) is not worth surfacing.
-  unawaited(_bestEffortServerDelete(ref, draft.id));
-
-  return true;
-}
-
-Future<void> _bestEffortServerDelete(WidgetRef ref, String reportId) async {
-  try {
-    await ref.read(dioProvider).delete<void>('/api/reports/$reportId');
-  } catch (_) {
-    // See _confirmDeleteDraft's doc comment.
+  // ── Server-known rows: the server delete must succeed FIRST ──────────────────
+  //
+  // A report with isLocalOnly == false exists on the server (created by the AI copilot, imported
+  // for editing, or submitted from here). Deleting it locally first and firing the server DELETE
+  // best-effort was a silent resurrection: offline, the server copy survived and the next sync
+  // re-inserted the row. So the local row is only removed once the server has acknowledged —
+  // deletion of a server-known report is online-only, and says so when it cannot reach the
+  // server.
+  //
+  // A local-only Bozza has nothing to delete server-side: it never existed there under this id,
+  // and the old best-effort DELETE could only ever 404.
+  if (!draft.isLocalOnly) {
+    try {
+      await ref.read(dioProvider).delete<void>('/api/reports/${draft.id}');
+    } on DioException catch (e) {
+      if (!context.mounted) return false;
+      // 404 = the server copy is already gone (deleted by the office, or the id was never there):
+      // that is the outcome we wanted, so fall through and clear the local mirror.
+      if (e.response?.statusCode != 404) {
+        showAppToast(
+          context,
+          message: e.response == null
+              // No response at all: nothing was reached, nothing changed anywhere.
+              ? 'Per eliminare questo rapportino serve la connessione: riprova quando sei '
+                    'online. Il rapportino non è stato eliminato.'
+              : humanErrorMessage(e, azione: 'eliminare il rapportino'),
+          tone: ToastTone.error,
+        );
+        return false;
+      }
+    } catch (e) {
+      if (!context.mounted) return false;
+      showAppToast(
+        context,
+        message: humanErrorMessage(e, azione: 'eliminare il rapportino'),
+        tone: ToastTone.error,
+      );
+      return false;
+    }
   }
+
+  await ref.read(draftReportRepositoryProvider).deleteDraft(draft.id);
+  return true;
 }

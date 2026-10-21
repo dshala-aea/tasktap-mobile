@@ -54,6 +54,14 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   bool _submitting = false;
   String? _submitError;
 
+  /// True when the last manual "Invia" finished with the row still queued, because the device
+  /// could not reach the network. The cached `isOnlineProvider` value cannot answer this
+  /// honestly — it says "the interface is up", which is also true on a captive portal or a Wi-Fi
+  /// with no internet — so the screen asks the persisted row instead: a forced attempt that ends
+  /// with the row still `readyToSubmit` did not leave the phone. Drives the calm blue "In attesa
+  /// di connessione" card, never "Invio fallito".
+  bool _deferredOffline = false;
+
   // Opened once, not re-called from build() — build() runs on every setState during submit
   // (_submitting flips twice per _onInvia), and calling repo.watchDraft(...) inline there tore
   // down and reopened the underlying DB stream on each of those, instead of just re-subscribing
@@ -98,6 +106,11 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   void _handleDraftUpdateForNavigation(DraftReport? draft) {
     if (_hasHandledSubmitSuccess) return;
     final subState = DraftSubmissionState.fromString(draft?.submissionState ?? 'draft');
+    // The offline card describes "queued, waiting for a connection" — the moment the row leaves
+    // that state (a later reconnect sent it, or a real failure arrived) the card no longer applies.
+    if (_deferredOffline && subState != DraftSubmissionState.readyToSubmit) {
+      setState(() => _deferredOffline = false);
+    }
     if (subState != DraftSubmissionState.submitted) {
       // Real submissions always start from a non-submitted state within this sheet's own
       // lifetime — only after seeing that do we trust the next `submitted` as one this session
@@ -190,17 +203,31 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     setState(() {
       _submitting = true;
       _submitError = null;
+      _deferredOffline = false;
     });
     try {
       await queue.enqueue(widget.reportId);
       // Manual send: attempt the network regardless of the cached connectivity value, so a real
       // failure becomes a visible "Invio fallito" instead of a silent no-op.
       await queue.processAll(force: true);
+
+      // A row that is STILL readyToSubmit after a forced attempt never left the phone: the queue
+      // puts it back there (no error, no attempt spent) when the failure was "no response, no
+      // network". Say so calmly instead of leaving "Pronto per l'invio" on screen, which would
+      // read as if the send had gone through.
+      final after = await ref.read(draftReportRepositoryProvider).getDraft(widget.reportId);
+      final deferred =
+          after != null &&
+          DraftSubmissionState.fromString(after.submissionState) ==
+              DraftSubmissionState.readyToSubmit;
+      if (mounted && deferred) setState(() => _deferredOffline = true);
     } catch (e) {
       // The red line under the submit button. It printed `e.toString()`, which put a Dio stack at
       // the exact moment two people have just signed and the only question is whether the record
       // survived.
-      setState(() => _submitError = humanErrorMessage(e, azione: 'inviare il rapportino'));
+      if (mounted) {
+        setState(() => _submitError = humanErrorMessage(e, azione: 'inviare il rapportino'));
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -472,14 +499,24 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
               }
 
               // Draft state — show validation + invia button
+              //
+              // Read unconditionally (not inside the condition below) so the subscription is
+              // stable across rebuilds: a `ref.watch` that only runs on some branches
+              // subscribes/unsubscribes as the state flips, and a conditional provider read in a
+              // build is a lint trap besides.
+              final isOnline = ref.watch(isOnlineProvider);
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Queued but the device is offline: say so, instead of a form that looks unsent.
                   // The button below stays live — a stale connectivity value must never remove the
                   // technician's manual, forced send. The queue also flushes on reconnect/resume.
+                  //
+                  // `_deferredOffline` covers the case the cached value gets wrong: the interface
+                  // is up (so `isOnlineProvider` reads true) but nothing is reachable, and the
+                  // forced attempt came straight back. Same card — the send is queued, not failed.
                   if (subState == DraftSubmissionState.readyToSubmit &&
-                      !ref.watch(isOnlineProvider))
+                      (_deferredOffline || !isOnline))
                     _StatusCard(
                       color: context.colors.blue,
                       icon: LucideIcons.refreshCw,

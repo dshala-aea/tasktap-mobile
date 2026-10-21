@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -8,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/files/capture_store.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/time/business_time.dart' show BusinessTime, formatWorkDate;
@@ -1267,12 +1266,24 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
       final xfile = await picker.pickImage(source: source, imageQuality: 80);
       if (xfile == null) return;
 
-      final file = File(xfile.path);
-      final bytes = await file.readAsBytes();
+      // Copy into the app's own `captures/` BEFORE anything queues it: a ticket attachment can sit
+      // in the offline outbox for days, and image_picker's path is in purgeable temp storage — a
+      // purge in between turns the queued photo into a permanent "non trovato" (audit F6). A copy
+      // failure throws into the catch below, so the queue never receives a temp path.
+      final store = await ref.read(captureStoreProvider.future);
+      final captured = await store.save(
+        xfile.path,
+        fileName: xfile.name,
+        // The plugin re-encodes to JPEG (imageQuality is set); an unknown extension is still jpeg.
+        contentType: contentTypeForFileName(xfile.name, fallback: 'image/jpeg'),
+      );
 
       // Rejected client-side, before it is ever queued or sent: a rejection after the file sat
       // in the offline outbox for a while would read as a delayed, unexplained failure.
-      if (bytes.length > kMaxTicketAttachmentBytes) {
+      if (captured.sizeBytes > kMaxTicketAttachmentBytes) {
+        // The pick was refused, so nothing will ever reference this copy — don't leave a 10 MB
+        // orphan in the app's documents directory.
+        await store.discard(captured);
         if (!mounted) return;
         showAppToast(
           context,
@@ -1288,10 +1299,10 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
           .read(ticketAttachmentUploadQueueProvider)
           .upload(
             ticketId: widget.ticketId,
-            localPath: xfile.path,
-            fileName: xfile.name,
-            contentType: 'image/jpeg',
-            sizeBytes: bytes.length,
+            localPath: captured.path,
+            fileName: captured.fileName,
+            contentType: captured.contentType,
+            sizeBytes: captured.sizeBytes,
             isOnline: isOnline,
           );
 

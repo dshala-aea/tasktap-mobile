@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/catalog_constants.dart';
+import '../../../core/files/capture_store.dart';
 import '../../../core/utils/error_message.dart';
 import '../../admin/admin_widgets.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
@@ -551,16 +552,25 @@ class StepMaterialiFold extends ConsumerWidget {
     try {
       final xfile = await picker.pickImage(source: source, imageQuality: 80);
       if (xfile == null) return;
-      final file = File(xfile.path);
-      final bytes = await file.readAsBytes();
+      // Copy into the app's own `captures/` BEFORE anything points at it: the picker's path lives
+      // in purgeable temp storage, and a purge between now and submit is a rapportino that can
+      // never be sent (audit F6). A copy failure throws into the catch below, so a temp path is
+      // never what the draft ends up holding.
+      final captured = await (await ref.read(captureStoreProvider.future)).save(
+        xfile.path,
+        fileName: xfile.name,
+        // The plugin re-encodes a picked image to JPEG (imageQuality is set), so an unknown
+        // extension is still jpeg rather than the octet-stream default.
+        contentType: contentTypeForFileName(xfile.name, fallback: 'image/jpeg'),
+      );
       final id = 'photo-${DateTime.now().millisecondsSinceEpoch}';
       await notifier.addAllegato(
         AllegatoRow(
           id: id,
-          localPath: xfile.path,
-          fileName: xfile.name,
-          contentType: 'image/jpeg',
-          sizeBytes: bytes.length,
+          localPath: captured.path,
+          fileName: captured.fileName,
+          contentType: captured.contentType,
+          sizeBytes: captured.sizeBytes,
         ),
       );
     } catch (e) {
@@ -590,16 +600,21 @@ class StepMaterialiFold extends ConsumerWidget {
       // Path-based, like image_picker's XFile above — this app ships mobile-only (no web/
       // target), where FilePicker always returns a real file path.
       if (picked.path == null) return;
-      final file = File(picked.path!);
-      final bytes = await file.readAsBytes();
+      // Same durable-copy rule as the photo picker above (audit F6): the picked document is
+      // copied into `captures/` now, and only that path is stored on the draft.
+      final captured = await (await ref.read(captureStoreProvider.future)).save(
+        picked.path!,
+        fileName: picked.name,
+        contentType: contentTypeForFileName(picked.name, fallback: 'application/pdf'),
+      );
       final id = 'doc-${DateTime.now().millisecondsSinceEpoch}';
       await notifier.addAllegato(
         AllegatoRow(
           id: id,
-          localPath: picked.path!,
-          fileName: picked.name,
-          contentType: 'application/pdf',
-          sizeBytes: bytes.length,
+          localPath: captured.path,
+          fileName: captured.fileName,
+          contentType: captured.contentType,
+          sizeBytes: captured.sizeBytes,
         ),
       );
     } catch (e) {
