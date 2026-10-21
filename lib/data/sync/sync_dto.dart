@@ -686,6 +686,10 @@ class SyncCantiereCrewAssignmentDto {
     this.isLead = false,
   });
 
+  /// Exactly the keys [fromJson] reads — the inbound contract test compares this with the
+  /// server's declared schema in both directions, so a member added on one side alone fails.
+  static const Set<String> wireKeys = {'id', 'cantiereId', 'userId', 'isLead'};
+
   factory SyncCantiereCrewAssignmentDto.fromJson(Map<String, dynamic> j) =>
       SyncCantiereCrewAssignmentDto(
         id: j['id'] as String,

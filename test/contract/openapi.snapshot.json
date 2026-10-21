@@ -28300,6 +28300,13 @@
             },
             "description": "Cantieri the technician is assigned to (via `CantiereAssignment`).\nFalls back to the tenant's active cantieri if the technician has no explicit assignments.\nUsed by the mobile rapportino cantiere picker for offline-first operation.\nDelta filter (`UpdatedAt &gt; since`) is applied when DateTime? MobileUserSyncResult.Since is set."
           },
+          "cantiereCrewAssignments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncCantiereCrewAssignmentDto"
+            },
+            "description": "The \u003Cb\u003Efull crew\u003C/b\u003E \u2014 every person assignment and its lead flag \u2014 of every cantiere carried\nin IReadOnlyList\u0026lt;Cantiere\u0026gt; MobileUserSyncResult.Cantieri. Lets the lead\u0027s offline batch clock-in and the teammate picker work\nwith no live \u0060/api/cantieri/{id}/assegnazioni\u0060 call."
+          },
           "ticketStatuses": {
             "type": "array",
             "items": {
@@ -34186,6 +34193,37 @@
           }
         },
         "description": "A colleague the technician can name on a rapportino \u2014 just enough to pick them from a list\nand send back the right id."
+      },
+      "SyncCantiereCrewAssignmentDto": {
+        "required": [
+          "id",
+          "cantiereId",
+          "userId",
+          "isLead"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Identity of the assignment row, so the device can upsert rather than duplicate.",
+            "format": "uuid"
+          },
+          "cantiereId": {
+            "type": "string",
+            "description": "The cantiere the assignment belongs to.",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "description": "The assigned person \u2014 not necessarily the caller: the lead\u0027s picker needs the rest of the crew\n(see IReadOnlyList\u0026lt;SyncCantiereCrewAssignmentDto\u0026gt; MobileUserSyncResult.CantiereCrewAssignments).",
+            "format": "uuid"
+          },
+          "isLead": {
+            "type": "boolean",
+            "description": "Whether this person may batch-start clock-in (\u0060CantiereWorkLogController.BatchStart\u0060) for\neveryone else named on the same cantiere. Without it on the phone, the lead-only affordances\nhave nothing to check and disappear offline."
+          }
+        },
+        "description": "One person\u0027s place on a cantiere\u0027s crew, mirrored so the phone can answer \u0022who is with me on\nthis site\u0022 offline \u2014 the lead\u0027s batch clock-in picker and the teammate list both come from here."
       },
       "SyncControlGroupDto": {
         "required": [
