@@ -194,9 +194,25 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
       events,
       businessDateOf: _businessTime.businessDateOf,
     );
+    // Re-stamped to UTC on the way out: Drift hands a `DateTimeColumn` back as a LOCAL-kind
+    // `DateTime` for the same instant, while [CantiereWorkInterval] documents its instants as UTC
+    // and every consumer serialises them with `toUtc()`. Same moment either way — this just keeps
+    // the type's own contract true, so a future caller that prints `toIso8601String()` without the
+    // conversion cannot emit a local wall-clock time the server would read in its own zone.
     return [
       for (final i in intervals)
-        if (i.cantiereId == cantiereId && i.endTime != null) i,
+        if (i.cantiereId == cantiereId && i.endTime != null)
+          CantiereWorkInterval(
+            clientId: i.clientId,
+            cantiereId: i.cantiereId,
+            customerId: i.customerId,
+            ticketId: i.ticketId,
+            description: i.description,
+            startTime: i.startTime.toUtc(),
+            endTime: i.endTime?.toUtc(),
+            latitude: i.latitude,
+            longitude: i.longitude,
+          ),
     ];
   }
 

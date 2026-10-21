@@ -155,6 +155,11 @@ void main() {
       expect(intervals.single.customerId, 'cust-1');
       expect(intervals.single.startTime, in8);
       expect(intervals.single.endTime, out10);
+      // Drift reads a `DateTimeColumn` back as LOCAL-kind; the repository re-stamps to UTC so the
+      // interval's documented "UTC timestamp" contract holds for a caller that writes an ISO string
+      // without `toUtc()`. Without this the two above still pass (same instant) on a machine whose
+      // zone is UTC — i.e. never on CI, only here.
+      expect(intervals.single.startTime.isUtc, isTrue);
     });
 
     test('excludes an interval that is still open — it has no hours yet', () async {
