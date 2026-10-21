@@ -143,6 +143,9 @@ void main() {
         localTicketTimersProvider.overrideWith(
           (ref) => Stream.value([serverTicket, localOnly]),
         ),
+        // A site session is covered by visible_trackers_local_cantiere_test.dart; overriding keeps
+        // this container off the real Drift database.
+        localCantiereTimersProvider.overrideWith((ref) => Stream.value(const <ActiveTracker>[])),
       ],
     );
     addTearDown(c.dispose);
