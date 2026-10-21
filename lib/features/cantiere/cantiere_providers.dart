@@ -10,10 +10,14 @@ import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/location/geocoding_service.dart';
+import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
+import '../../data/timbratura/cantiere_timbra_sync_service.dart'
+    show cantiereSessionRepositoryProvider;
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
+import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 
 /// A single cantiere by id, or null if none is synced locally with that id. Not filtered by
 /// status (unlike `cantieriProvider`) — a cantiere reached via a ticket's link may be
@@ -97,13 +101,48 @@ final cantiereGeocodedLocationProvider = FutureProvider.autoDispose.family<Geoco
 /// suggestion, which only applies when the report has no ticket (or the ticket tier found
 /// nothing) but does have a cantiereId.
 ///
-/// Returns an empty list while offline rather than throwing: every call site here only ever
-/// reads `.valueOrNull` and treats "nothing" and "couldn't ask" identically (no suggestion is
-/// not an error state), so there is nothing for a thrown exception to communicate that an empty
-/// list doesn't already.
+/// While offline this answers from the phone's own punch log instead of returning nothing
+/// (P2-6): the cantiere work logs this device clocked are exactly the ones a technician drafting
+/// a rapportino on site needs, and they used to be invisible precisely when they mattered most —
+/// an empty list meant "no suggestion", so every offline rapportino's hours were typed by hand
+/// from memory. Only the signed-in user's own row is answered from local data (the device has
+/// nobody else's punches); a request for a teammate's hours still resolves to nothing while
+/// offline, which is the honest answer rather than borrowing this technician's hours.
+///
+/// A network failure is still swallowed into an empty list rather than thrown: every call site
+/// here only ever reads `.valueOrNull` and treats "nothing" and "couldn't ask" identically (no
+/// suggestion is not an error state), so there is nothing for a thrown exception to communicate
+/// that an empty list doesn't already.
 final cantiereWorklogsProvider = FutureProvider.autoDispose
     .family<List<CantiereWorkLogDto>, ({String userId, String cantiereId})>((ref, key) async {
-      if (!ref.watch(isOnlineProvider)) return const [];
+      if (!ref.watch(isOnlineProvider)) {
+        final me = await ref.watch(internalUserIdProvider.future);
+        if (me == null || me != key.userId) return const [];
+        final businessTime = ref.watch(businessTimeProvider);
+        final intervals = await ref
+            .watch(cantiereSessionRepositoryProvider)
+            .getClosedIntervalsFor(key.cantiereId);
+        // Shaped like `CantiereWorkLogDto.fromJson` would read off the server: the Rome-local
+        // wall clock (`startTime`/`endTime` are "HH:mm:ss" strings there) and the business date,
+        // so the suggestion code downstream cannot tell a local entry from a server one.
+        return [
+          for (final interval in intervals)
+            CantiereWorkLogDto(
+              id: interval.clientId,
+              cantiereId: interval.cantiereId,
+              customerId: interval.customerId,
+              ticketId: interval.ticketId,
+              userId: key.userId,
+              workDate: businessTime.businessDateOf(interval.startTime),
+              startTime: businessTime.formatInZone(interval.startTime, 'HH:mm:ss'),
+              endTime: interval.endTime == null
+                  ? null
+                  : businessTime.formatInZone(interval.endTime!, 'HH:mm:ss'),
+              description: interval.description,
+              duration: interval.endTime?.difference(interval.startTime),
+            ),
+        ];
+      }
       final api = ref.watch(cantiereWorklogApiClientProvider);
       return api.fetchForCantiere(userId: key.userId, cantiereId: key.cantiereId);
     });

@@ -83,11 +83,13 @@ class SubmissionQueue {
     required ReportSubmitApiClient apiClient,
     bool Function()? isOnline,
     Future<bool> Function()? recheckOnline,
+    Future<List<String>> Function(String cantiereId)? claimedCantiereWorkLogClientIds,
     this.maxAutoRetries = 5,
   }) : _repo = repo,
        _apiClient = apiClient,
        _isOnline = isOnline ?? (() => true),
-       _recheckOnline = recheckOnline;
+       _recheckOnline = recheckOnline,
+       _claimedCantiereWorkLogClientIds = claimedCantiereWorkLogClientIds;
 
   final DraftReportRepository _repo;
   final ReportSubmitApiClient _apiClient;
@@ -97,6 +99,11 @@ class SubmissionQueue {
   /// false until the first check resolves and is never re-polled) says offline, so a stale
   /// value cannot hold rows forever. Null = no probe: the cached value stands.
   final Future<bool> Function()? _recheckOnline;
+
+  /// The device's own closed cantiere punches for a cantiere, as client ids (P2-6). Null = no
+  /// source wired (tests, and any build without local punch storage): the submit then carries no
+  /// claims, exactly the pre-P2-6 wire shape.
+  final Future<List<String>> Function(String cantiereId)? _claimedCantiereWorkLogClientIds;
 
   /// Consecutive transient failures after which a `failed` row stops being retried unattended.
   final int maxAutoRetries;
@@ -434,8 +441,24 @@ class SubmissionQueue {
         .map((a) => a.id)
         .toList();
 
+    // P2-6: a rapportino drafted from a cantiere carries that cantiere, and claims the phone's own
+    // closed punches for it so the server can mark those hours consumed instead of letting the next
+    // cantiere-originated rapportino count them a second time. Best-effort: a local read failure
+    // must never block a submit — the server treats an empty claim list as "nothing to claim".
+    var claimedCantierePunchIds = const <String>[];
+    final claimSource = _claimedCantiereWorkLogClientIds;
+    if (draft.cantiereId != null && claimSource != null) {
+      try {
+        claimedCantierePunchIds = await claimSource(draft.cantiereId!);
+      } catch (_) {
+        // Fall through with no claims; the submit itself is what matters.
+      }
+    }
+
     return SubmitReportRequest(
       id: draft.id,
+      cantiereId: draft.cantiereId,
+      consumedCantiereWorkLogClientIds: claimedCantierePunchIds,
       // The version captured when this device last SAW the server's copy (import / cantiere-create),
       // read straight off the persisted draft. Read here, never fetched: a version fetched at submit
       // time would always match the row being compared and the guard would be inert. Null for a

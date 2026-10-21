@@ -4,6 +4,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/timbratura/cantiere_session_assembler.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_work_log_reconciler.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
@@ -44,6 +45,18 @@ class _FakeRepo implements ICantiereSessionRepository {
   @override
   Future<List<CantierePunche>> getPendingEvents() async =>
       events.where((e) => e.isPendingSync).toList();
+
+  // Not exercised here (the reconciler never asks); implemented off the same assembler the real
+  // repository uses so the fake stays a faithful stand-in for the interface.
+  @override
+  Future<List<CantiereWorkInterval>> getClosedIntervalsFor(String cantiereId) async => [
+    for (final i in assembleCantiereIntervals(events))
+      if (i.cantiereId == cantiereId && i.endTime != null) i,
+  ];
+
+  @override
+  Future<List<String>> getClosedIntervalClientIds(String cantiereId) async =>
+      [for (final i in await getClosedIntervalsFor(cantiereId)) i.clientId];
 
   @override
   Future<int> getPendingCount() async =>

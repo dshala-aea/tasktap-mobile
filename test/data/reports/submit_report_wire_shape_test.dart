@@ -97,6 +97,37 @@ void main() {
     });
   });
 
+  group('SubmitReportRequest cantiere link (P2-6)', () {
+    const base = SubmitReportRequest(id: 'r1', locationId: 'l1', title: 'T');
+
+    test('cantiereId is omitted when null — that is the server\'s "keep yours"', () {
+      expect(base.toJson().containsKey('cantiereId'), isFalse);
+    });
+
+    test('cantiereId is sent when set, under the server\'s own name', () {
+      final json = const SubmitReportRequest(
+        id: 'r1',
+        locationId: 'l1',
+        title: 'T',
+        cantiereId: 'c1',
+      ).toJson();
+      expect(json['cantiereId'], 'c1');
+    });
+
+    test('the claim list is always sent, empty included', () {
+      expect(base.toJson()['consumedCantiereWorkLogClientIds'], isEmpty);
+
+      final json = const SubmitReportRequest(
+        id: 'r1',
+        locationId: 'l1',
+        title: 'T',
+        cantiereId: 'c1',
+        consumedCantiereWorkLogClientIds: ['punch-a', 'punch-b'],
+      ).toJson();
+      expect(json['consumedCantiereWorkLogClientIds'], ['punch-a', 'punch-b']);
+    });
+  });
+
   group('asset answers and instruments on the wire', () {
     test(
       'a note is sent when non-blank and omitted otherwise (a blank never wipes a stored note)',

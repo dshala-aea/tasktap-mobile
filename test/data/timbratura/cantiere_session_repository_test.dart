@@ -120,6 +120,93 @@ void main() {
     expect(await repo.getTodayEvents(), isEmpty);
   });
 
+  group('getClosedIntervalsFor (P2-6)', () {
+    test('returns only this cantiere\'s CLOSED intervals, keyed by the ingresso id', () async {
+      final in8 = _businessTodayAt(8);
+      final out10 = _businessTodayAt(10);
+      // cant-1: 08→10 closed.
+      await repo.addEvent(
+        id: 'punch-a',
+        eventTime: in8,
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+      );
+      await repo.addEvent(id: 'punch-a-out', eventTime: out10, eventType: 'uscita');
+      // cant-2: a different site, also closed — must not leak into cant-1's answer.
+      await repo.addEvent(
+        id: 'punch-b',
+        eventTime: in8.add(const Duration(minutes: 30)),
+        eventType: 'ingresso',
+        cantiereId: 'cant-2',
+        customerId: 'cust-2',
+      );
+      await repo.addEvent(
+        id: 'punch-b-out',
+        eventTime: out10.add(const Duration(minutes: 30)),
+        eventType: 'uscita',
+      );
+
+      final intervals = await repo.getClosedIntervalsFor('cant-1');
+
+      expect(intervals, hasLength(1));
+      expect(intervals.single.clientId, 'punch-a');
+      expect(intervals.single.cantiereId, 'cant-1');
+      expect(intervals.single.customerId, 'cust-1');
+      expect(intervals.single.startTime, in8);
+      expect(intervals.single.endTime, out10);
+    });
+
+    test('excludes an interval that is still open — it has no hours yet', () async {
+      await repo.addEvent(
+        id: 'punch-open',
+        eventTime: _businessTodayAt(8),
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+      );
+
+      expect(await repo.getClosedIntervalsFor('cant-1'), isEmpty);
+    });
+
+    test('getClosedIntervalClientIds answers the ingresso ids only', () async {
+      final in8 = _businessTodayAt(8);
+      await repo.addEvent(
+        id: 'punch-a',
+        eventTime: in8,
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+      );
+      await repo.addEvent(
+        id: 'punch-a-out',
+        eventTime: in8.add(const Duration(hours: 2)),
+        eventType: 'uscita',
+      );
+
+      expect(await repo.getClosedIntervalClientIds('cant-1'), ['punch-a']);
+    });
+
+    test('answers from already-synced punches too — upload order is irrelevant', () async {
+      final in8 = _businessTodayAt(8);
+      await repo.addEvent(
+        id: 'punch-a',
+        eventTime: in8,
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+      );
+      await repo.addEvent(
+        id: 'punch-a-out',
+        eventTime: in8.add(const Duration(hours: 1)),
+        eventType: 'uscita',
+      );
+      await repo.markSynced(['punch-a', 'punch-a-out']);
+
+      expect(await repo.getClosedIntervalClientIds('cant-1'), ['punch-a']);
+    });
+  });
+
   test('events are returned in chronological order', () async {
     // getTodayEvents() buckets by the business (Rome) day, so a fixed literal date is wrong on
     // every day but that one and DateTime.now() + 2h can cross into tomorrow. Anchor to today's

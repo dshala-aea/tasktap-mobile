@@ -34091,6 +34091,21 @@
             "description": "Optional ticket the report belongs to.",
             "format": "uuid"
           },
+          "cantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional cantiere (worksite) this rapportino belongs to.\n\nCarried on the submit path so a rapportino drafted ON THE PHONE for a worksite keeps\nthat link server-side. Before this field, only the server-side creation path\n(POST /api/reports/from-cantiere-worklogs) could set it: a rapportino created from a\ncantiere while offline reached the server with no cantiere at all, so the office could not\ntell which site it belonged to.Null means \"this client does not own the field\", not \"clear it\" — same rule as\nstring? SubmitReportRequest.Diagnosi. An existing report keeps the cantiere it already has, so a client\nbuild that predates this field can still submit a server-created draft (e.g. one started\nfrom a schedule) without wiping the cantiere off it.",
+            "format": "uuid"
+          },
+          "consumedCantiereWorkLogClientIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The cantiere punches whose already-counted hours this rapportino carries, as the device's\nown `CantiereWorkLog.ClientId` values (the punch id the phone generated when the\ntechnician clocked in).\n\nWhy the client states them instead of the server re-deriving \"unconsumed worklogs\":\nthe server-side rule (Task&lt;Guid&gt; IReportService.CreateFromCantiereWorkLogsAsync(Guid? tenantId, Guid creatingUserId, Guid cantiereId, CancellationToken ct = default(CancellationToken), bool skipAssignmentCheck = false))\nconsumes EVERY unconsumed worklog of the cantiere, but an offline rapportino is drafted\nbefore its punches have even reached the server, and the hours it carries are whatever the\ntechnician entered. Naming the punches makes the bookkeeping exact: the server stamps\nexactly those rows (CantiereWorkLog.ReportStaffId) onto this report's staff row for\nthe same user, so they can never be counted a second time by a later rapportino.Ids that do not (yet) resolve — the punch upload had not landed, the row belongs to\nanother cantiere, or it was already consumed by an earlier rapportino — are ignored, never\nan error: consumption is corrective bookkeeping, not a precondition for the submit. Empty\n(the default) means \"nothing to claim\" and skips the lookup entirely."
+          },
           "locationId": {
             "type": "string",
             "description": "Location of the intervention.",
