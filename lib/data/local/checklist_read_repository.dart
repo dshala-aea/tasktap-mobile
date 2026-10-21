@@ -39,6 +39,27 @@ class ChecklistReadRepository {
 
   Future<List<ControlGroupRow>> getControlGroups() => _db.select(_db.controlGroups).get();
 
+  /// Whether [ticketId] itself reached this device in a sync payload.
+  ///
+  /// This is the first half of the "can the mirror be trusted for this ticket" test. The payload
+  /// carries a ticket's checklist wholesale — controls, coverage, assets — so a ticket the device
+  /// knows has a mirror that is its own complete answer, empty result included. A ticket that was
+  /// never synced proves nothing: zero rows there is "unknown", not "no controls".
+  Future<bool> hasSyncedTicket(String ticketId) async =>
+      await (_db.select(_db.tickets)..where((t) => t.id.equals(ticketId))).getSingleOrNull() !=
+      null;
+
+  /// Whether the last payload that carried [ticketId] deliberately left its checklist out (size
+  /// cap) and the batched re-request (`checklist_refetch_service`) has not delivered it yet.
+  ///
+  /// The second half of the same test: while this is true the mirror is known to be incomplete, so
+  /// it must not be read as "this ticket has no controls".
+  Future<bool> isChecklistOmitted(String ticketId) async =>
+      await (_db.select(
+        _db.checklistOmittedTickets,
+      )..where((o) => o.ticketId.equals(ticketId))).getSingleOrNull() !=
+      null;
+
   Stream<TicketChecklist> watchTicketChecklist(String ticketId) {
     // No prodottoAssistenzaId filter: ticket-level rows must reach [TicketChecklist.ticketLevel].
     // The asset tree below ignores them by construction (it only keys rows by a non-null asset id),
