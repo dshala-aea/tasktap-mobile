@@ -1998,7 +1998,13 @@ void main() {
     test('a check-in left open overnight is still the active session', () async {
       // Recorded yesterday evening, never closed. The screen must not offer "Ingresso" again: a
       // second opener would orphan this interval, and the technician could not close it at all.
-      final start = DateTime.now().toUtc().subtract(const Duration(hours: 14));
+      // Drift stores a `dateTime()` column as whole seconds, so the mirrored instant is what a
+      // second-precision clock would have written — compare at that precision, not to the
+      // microsecond this test's own `now` happened to carry.
+      final start = DateTime.now()
+          .toUtc()
+          .subtract(const Duration(hours: 14))
+          .copyWith(millisecond: 0, microsecond: 0);
       await CantiereSessionRepository(db).addEvent(
         id: 'overnight-in',
         eventTime: start,

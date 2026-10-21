@@ -1,7 +1,8 @@
 // Unit tests for CantiereSessionRepository — the Drift-backed implementation of
 // ICantiereSessionRepository. Uses an in-memory NativeDatabase, no file system.
 
-import 'package:drift/drift.dart';
+// `isNull` is also Drift's SQL expression builder; the matcher is the one these assertions mean.
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';

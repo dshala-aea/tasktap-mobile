@@ -38,6 +38,12 @@ class _FakeRepo implements ICantiereSessionRepository {
   @override
   Stream<List<CantierePunche>> watchTodayEvents() => Stream.value(events);
 
+  /// The screen's "is a session open" read — the latest punch of the whole log. This fake holds
+  /// one day's events, so its last row is that punch.
+  @override
+  Stream<CantierePunche?> watchLatestPunch() =>
+      Stream.value(events.isEmpty ? null : events.last);
+
   @override
   Future<List<CantierePunche>> getTodayEvents() async => events;
 

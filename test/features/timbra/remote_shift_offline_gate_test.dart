@@ -134,8 +134,21 @@ void main() {
   });
 
   test('a Fine on a remote shift is never stamped before its opener (phone clock behind the server)', () async {
-    final n0 = DateTime.now().toUtc().add(const Duration(minutes: 5)); // server ahead of phone
-    final opener = DateTime.utc(n0.year, n0.month, n0.day, n0.hour, n0.minute, n0.second);
+    // The opener must be (a) ahead of the phone's clock — that is the premise — and (b) inside
+    // TODAY's business day, because `getTodaySessions()` is the window `local()`, `punch()` and
+    // the assertion all read. Five minutes ahead breaks (b) in the last five minutes of the Rome
+    // day: the fine then lands in tomorrow's window and the assertion finds no `fine` at all.
+    // Two seconds is the same scenario at the precision the one-second floor works at, and only
+    // the final three seconds of the day can still straddle midnight.
+    final phoneNow = DateTime.now().toUtc();
+    final opener = DateTime.utc(
+      phoneNow.year,
+      phoneNow.month,
+      phoneNow.day,
+      phoneNow.hour,
+      phoneNow.minute,
+      phoneNow.second,
+    ).add(const Duration(seconds: 2)); // server ahead of phone
     await repo.addEvent(id: 'remote-i', eventTime: opener, eventType: 'ingresso');
     await repo.markReconciledOrphan('remote-i');
     final n = notifier();

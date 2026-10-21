@@ -15,6 +15,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
@@ -521,12 +522,20 @@ void main() {
       // mark them synced — resolveGuard deliberately ignores a stale server
       // refusal while events are still pending (see timbra_guard_test.dart),
       // so an unsynced seed here would pass for the wrong reason.
+      //
+      // Anchored to the start of today's business day rather than to `now`: the day-scoped
+      // `todaySessionsProvider` window ends at Rome midnight, so `now` + 5 minutes pushed the
+      // pausa into TOMORROW's window during the last five minutes of the Rome day — the derived
+      // state stayed "on shift", the guard then agreed with the server's EndBreak refusal
+      // instead of overriding it, and the assertion failed for a reason that had nothing to do
+      // with the code under test.
+      final bt = BusinessTime.fallback();
+      final dayStart = bt.utcRangeForBusinessDate(bt.businessToday()).$1;
       final sessionRepo = container.read(workSessionRepositoryProvider);
-      final now = DateTime.now().toUtc();
-      await sessionRepo.addEvent(id: 'a', eventTime: now, eventType: 'ingresso');
+      await sessionRepo.addEvent(id: 'a', eventTime: dayStart, eventType: 'ingresso');
       await sessionRepo.addEvent(
         id: 'b',
-        eventTime: now.add(const Duration(minutes: 5)),
+        eventTime: dayStart.add(const Duration(minutes: 5)),
         eventType: 'pausa',
       );
       await sessionRepo.markSynced(['a', 'b']);
