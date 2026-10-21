@@ -12,6 +12,7 @@ import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_preferences_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
+import 'package:tasktap_mobile/data/timbratura/ticket_timer_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/data/magazzino/magazzino_api_client.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
@@ -449,6 +450,21 @@ void main() {
     contractTest('stopping the ticket timer matches the server', () {
       final client = TicketWorkflowApiClient(dio);
       return capture(() => client.stopTimer(_id(12)));
+    });
+
+    contractTest('the offline ticket timer session upsert matches the server', () {
+      final client = TicketTimerApiClient(dio);
+      return capture(
+        () => client.upsertSessions([
+          TicketMobileSessionDto(
+            clientId: _id(70),
+            ticketId: _id(71),
+            startTime: DateTime.utc(2026, 8, 16, 7),
+            endTime: DateTime.utc(2026, 8, 16, 16),
+            description: 'sostituzione pompa',
+          ),
+        ]),
+      );
     });
 
     contractTest('a manually entered worklog matches the server', () {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -24,6 +25,9 @@ import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_attachment_state.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_deletion.dart';
+import '../../data/timbratura/ticket_timer_sync_service.dart'
+    show ticketTimerRepositoryProvider, ticketTimerSyncServiceProvider;
+import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import '../cantiere/cantiere_providers.dart';
@@ -1844,13 +1848,75 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
       // Re-read rather than patching local state: the server owns whether a clock is running, and
       // this screen has just changed it.
       ref.invalidate(ticketWorklogsProvider(widget.ticketId));
-      await ref.read(ticketWorklogsProvider(widget.ticketId).future);
+      try {
+        await ref.read(ticketWorklogsProvider(widget.ticketId).future);
+      } on TicketDetailOfflineException {
+        // The write landed; only the re-read had nothing to say (offline, empty mirror). The bar's
+        // own note already covers it — a second error on top would be noise.
+      }
     } on TicketWorkflowFailure catch (e) {
       if (!mounted) return;
       showAppToast(context, message: e.message, tone: ToastTone.error);
+    } catch (e) {
+      if (!mounted) return;
+      showAppToast(
+        context,
+        message: humanErrorMessage(e, azione: 'aggiornare il timer del ticket'),
+        tone: ToastTone.error,
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Starts the clock online when the server can be reached, locally when it cannot.
+  ///
+  /// The online route is check-then-act and cannot be retried, which is why the offline path is a
+  /// different endpoint with a client-generated key (see `TicketTimerApiClient`). A failure that
+  /// carried a RESPONSE is a decision the server already made — "you already have an active
+  /// ticket work log" — and is surfaced; one with no response never reached it, so the session is
+  /// written to the device and queued.
+  Future<void> _startTimer() async {
+    final repo = ref.read(ticketTimerRepositoryProvider);
+    Future<void> locally() async {
+      final userId = await ref.read(internalUserIdProvider.future) ?? '';
+      await repo.start(ticketId: widget.ticketId, userId: userId);
+      unawaited(ref.read(ticketTimerSyncServiceProvider).syncNow());
+    }
+
+    if (!ref.read(isOnlineProvider)) return locally();
+    try {
+      await ref.read(ticketWorkflowApiClientProvider).startTimer(widget.ticketId);
+    } on TicketWorkflowFailure catch (e) {
+      if (e.cause?.response != null) rethrow;
+      await locally();
+    }
+  }
+
+  Future<void> _stopTimer() async {
+    final repo = ref.read(ticketTimerRepositoryProvider);
+    // Closing in the mirror happens on BOTH paths: a session this device started lives nowhere
+    // else, and a server session that gets closed here is re-sent as a close, which the batch
+    // upsert accepts and applies idempotently.
+    Future<void> closeLocally() async {
+      final closed = await repo.stop(widget.ticketId);
+      if (closed != null) {
+        unawaited(ref.read(ticketTimerSyncServiceProvider).syncNow());
+      }
+    }
+
+    if (!ref.read(isOnlineProvider)) return closeLocally();
+    try {
+      await ref.read(ticketWorkflowApiClientProvider).stopTimer(widget.ticketId);
+    } on TicketWorkflowFailure catch (e) {
+      // The mirror is closed either way: a technician who tapped "Ferma" ends the clock they see,
+      // and the queued close re-sends it through the idempotent upsert. A refused close still has
+      // to be told, so the failure is not swallowed.
+      await closeLocally();
+      if (e.cause?.response != null) rethrow;
+      return;
+    }
+    await closeLocally();
   }
 
   @override
@@ -1858,24 +1924,13 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
     final c = context.colors;
     final async = ref.watch(ticketWorklogsProvider(widget.ticketId));
 
-    // Offline is stated, not hidden behind a disabled button with no explanation. These writes
-    // have no idempotent upsert to queue against, so there is nothing to promise here.
-    if (async.hasError && async.error is TicketDetailOfflineException) {
-      return AppCard(
-        child: Row(
-          children: [
-            Icon(LucideIcons.cloudOff, size: 16, color: c.inkMuted),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Timer non disponibile offline',
-                style: TextStyle(fontSize: 12, color: c.inkMuted),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    // The timer bar used to disappear offline ("Timer non disponibile offline"), which was true of
+    // the old design and is not any more: a tap writes to the mirror and queues. What can still be
+    // unknown is whether this ticket has hours at all — an empty mirror is not evidence of zero —
+    // so that is said in a line under the bar rather than replacing it.
+    final mirrorEmpty =
+        async.hasError && async.error is TicketDetailOfflineException;
+    final offline = !ref.watch(isOnlineProvider);
 
     final running = ref.watch(runningTicketWorklogProvider(widget.ticketId));
     final isRunning = running != null;
@@ -1889,81 +1944,98 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
           )
         : null;
 
-    return AppCard(
-      child: Row(
-        children: [
-          if (isRunning) ...[const LiveDot(), const SizedBox(width: 10)],
-          Icon(
-            isRunning ? LucideIcons.timer : LucideIcons.clock,
-            size: 18,
-            color: isRunning ? c.ink : c.inkMuted,
+    final bar = Row(
+      children: [
+        if (isRunning) ...[const LiveDot(), const SizedBox(width: 10)],
+        Icon(
+          isRunning ? LucideIcons.timer : LucideIcons.clock,
+          size: 18,
+          color: isRunning ? c.ink : c.inkMuted,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            switch ((async.isLoading, isRunning)) {
+              (true, _) => 'Verifica timer…',
+              (false, true) => 'Timer in corso',
+              (false, false) => 'Nessun timer attivo',
+            },
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isRunning ? FontWeight.w700 : FontWeight.w500,
+              color: isRunning ? c.ink : c.inkMuted,
+            ),
+          ),
+        ),
+        if (elapsed != null) ...[
+          Text(
+            formatElapsed(elapsed),
+            style: TextStyle(
+              fontFamily: 'Archivo Narrow',
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              color: c.ink,
+              // Tabular figures: without them the row shifts width every second as digit
+              // widths change, the same reasoning active_tracker_strip.dart's clock uses.
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
           const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              switch ((async.isLoading, isRunning)) {
-                (true, _) => 'Verifica timer…',
-                (false, true) => 'Timer in corso',
-                (false, false) => 'Nessun timer attivo',
-              },
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isRunning ? FontWeight.w700 : FontWeight.w500,
-                color: isRunning ? c.ink : c.inkMuted,
-              ),
-            ),
+        ],
+        if (_busy)
+          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+        else if (isRunning)
+          // AppButton has no gradientColors escape hatch (VetroButton's own — the old fixed
+          // stopLight/stopDark pair had no themed equivalent to move to). "Ferma" ends a running
+          // clock, exactly the case AppButton's own `danger` variant exists for — its fill/fg
+          // already read through `context.colors.redSoft`/`context.colors.red` rather than a
+          // fixed hex pair, matching the same "ending" language step_riepilogo.dart's resubmit
+          // button uses.
+          //
+          // fullWidth: false — same reasoning as _PendingTicketRow's own Riprova button below:
+          // AppButton defaults to full-width and this sits directly in a Row with no Expanded/
+          // Flexible around it, so the unbounded-width SizedBox blows up layout otherwise.
+          AppButton.danger(
+            label: 'Ferma',
+            size: AppButtonSize.sm,
+            fullWidth: false,
+            // No loading gate any more: the button must work offline, where the list provider
+            // has nothing to load from.
+            onPressed: () => _run(_stopTimer),
+          )
+        else
+          AppButton(
+            label: 'Avvia',
+            size: AppButtonSize.sm,
+            fullWidth: false,
+            onPressed: () => _run(_startTimer),
           ),
-          if (elapsed != null) ...[
-            Text(
-              formatElapsed(elapsed),
-              style: TextStyle(
-                fontFamily: 'Archivo Narrow',
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                color: c.ink,
-                // Tabular figures: without them the row shifts width every second as digit
-                // widths change, the same reasoning active_tracker_strip.dart's clock uses.
-                fontFeatures: const [FontFeature.tabularFigures()],
+      ],
+    );
+
+    if (!mirrorEmpty && !offline) return AppCard(child: bar);
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          bar,
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(LucideIcons.cloudOff, size: 14, color: c.inkMuted),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  mirrorEmpty
+                      ? 'Ore di questo ticket non ancora sincronizzate. Il timer funziona: '
+                            'verrà inviato appena torni online.'
+                      : 'Offline: il timer funziona e verrà inviato appena torni online.',
+                  style: TextStyle(fontSize: 11, color: c.inkMuted),
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-          ],
-          if (_busy)
-            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-          else if (isRunning)
-            // AppButton has no gradientColors escape hatch (VetroButton's own — the old fixed
-            // stopLight/stopDark pair had no themed equivalent to move to). "Ferma" ends a running
-            // clock, exactly the case AppButton's own `danger` variant exists for — its fill/fg
-            // already read through `context.colors.redSoft`/`context.colors.red` rather than a
-            // fixed hex pair, matching the same "ending" language step_riepilogo.dart's resubmit
-            // button uses.
-            //
-            // fullWidth: false — same reasoning as _PendingTicketRow's own Riprova button below:
-            // AppButton defaults to full-width and this sits directly in a Row with no Expanded/
-            // Flexible around it, so the unbounded-width SizedBox blows up layout otherwise.
-            AppButton.danger(
-              label: 'Ferma',
-              size: AppButtonSize.sm,
-              fullWidth: false,
-              onPressed: async.isLoading
-                  ? null
-                  : () => _run(() {
-                      final api = ref.read(ticketWorkflowApiClientProvider);
-                      return api.stopTimer(widget.ticketId);
-                    }),
-            )
-          else
-            AppButton(
-              label: 'Avvia',
-              size: AppButtonSize.sm,
-              fullWidth: false,
-              onPressed: async.isLoading
-                  ? null
-                  : () => _run(() {
-                      final api = ref.read(ticketWorkflowApiClientProvider);
-                      return api.startTimer(widget.ticketId);
-                    }),
-            ),
+            ],
+          ),
         ],
       ),
     );

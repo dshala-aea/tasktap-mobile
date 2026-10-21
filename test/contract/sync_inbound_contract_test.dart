@@ -113,6 +113,9 @@ void main() {
     'SyncReportControlloDto': SyncReportControlloDto.wireKeys,
     'SyncReportAllegatoDto': SyncReportAllegatoDto.wireKeys,
     'SyncReportVersionDto': SyncReportVersionDto.wireKeys,
+    // O-9: the caller's own ticket timer sessions. `SyncScopeDto.ticketWorkLogs` is the prune
+    // manifest for the same rows, so both sides of the loop are pinned here.
+    'SyncTicketWorkLogDto': SyncTicketWorkLogDto.wireKeys,
     // The I2 confirm response. The draft and resolved shapes are different DTOs, so these are
     // pinned here rather than inferred from the draft summary's classes.
     'AiConversationConfirmResponse': AiConversationConfirmResponse.wireKeys,
