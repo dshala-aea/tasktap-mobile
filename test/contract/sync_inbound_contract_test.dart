@@ -242,6 +242,9 @@ void main() {
         'prodottiAssistenza': [instance('SyncProdottoAssistenzaDto')],
         'agents': [instance('SyncAgentDto')],
         'maintenanceTemplates': [instance('SyncMaintenanceTemplateDto')],
+        // Present-but-empty is enough for the flag: what the applier does with the rows is
+        // covered in test/data/sync/sync_ticket_materiali_test.dart.
+        'ticketMateriali': <Object>[],
       });
       expect(full.carriesChecklist, isTrue);
       expect(full.carriesStrumenti, isTrue);
@@ -250,6 +253,7 @@ void main() {
       expect(full.carriesProdottiAssistenza, isTrue);
       expect(full.carriesAgents, isTrue);
       expect(full.carriesMaintenanceTemplates, isTrue);
+      expect(full.carriesTicketMateriali, isTrue);
       expect(full.ticketControls, hasLength(1));
       expect(full.checklistTruncated, isTrue);
       expect(full.checklistOmittedTicketIds, [
@@ -282,6 +286,12 @@ void main() {
         isFalse,
         reason:
             'an older backend must NOT look like "every maintenance template was deleted"',
+      );
+      expect(
+        older.carriesTicketMateriali,
+        isFalse,
+        reason:
+            'an older backend must NOT look like "every fabbisogno was cleared"',
       );
     },
   );

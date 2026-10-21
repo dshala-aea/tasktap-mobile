@@ -83,6 +83,10 @@ class SyncResultDto {
   /// replace would wipe the picker.
   final bool carriesMaintenanceTemplates;
 
+  /// False when the payload came from a backend that predates the per-ticket fabbisogno mirror.
+  /// Without it an older backend would look like "every ticket's planned materials were cleared"
+  /// and the per-ticket replace would empty the Fabbisogno tab.
+  final bool carriesTicketMateriali;
   /// False when the payload came from a backend that predates the cantiere-crew member. Without it
   /// an older backend would look like "every crew is empty" and the per-cantiere replace would wipe
   /// the mirror — the same trap [carriesMaintenanceTemplates] closes for the template catalogue.
@@ -99,6 +103,9 @@ class SyncResultDto {
     'checklistOmittedTicketIds',
   };
 
+  /// The reference members, kept apart from [checklistWireKeys]: they carry the mirror the create
+  /// wizard reads, not a ticket's checklist state. `ticketMateriali` rides here too — it is a
+  /// mirrored, replace-on-arrival list like the rest, just scoped per ticket rather than per tenant.
   /// The reference members, kept apart from [checklistWireKeys]: they carry local mirrors, not a
   /// ticket's checklist state.
   ///
@@ -114,6 +121,7 @@ class SyncResultDto {
     'prodottiAssistenza',
     'agents',
     'maintenanceTemplates',
+    'ticketMateriali',
     'cantiereCrewAssignments',
   };
 
@@ -154,6 +162,7 @@ class SyncResultDto {
     this.carriesProdottiAssistenza = false,
     this.carriesAgents = false,
     this.carriesMaintenanceTemplates = false,
+    this.carriesTicketMateriali = false,
     this.carriesCantiereCrewAssignments = false,
   });
 
@@ -215,6 +224,7 @@ class SyncResultDto {
       carriesProdottiAssistenza: j.containsKey('prodottiAssistenza'),
       carriesAgents: j.containsKey('agents'),
       carriesMaintenanceTemplates: j.containsKey('maintenanceTemplates'),
+      carriesTicketMateriali: j.containsKey('ticketMateriali'),
       carriesCantiereCrewAssignments: j.containsKey('cantiereCrewAssignments'),
     );
   }
