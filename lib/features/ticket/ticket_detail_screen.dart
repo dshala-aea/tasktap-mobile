@@ -41,6 +41,7 @@ import 'ticket_detail_api_client.dart';
 import 'ticket_label.dart';
 import 'ticket_materiali_editor.dart';
 import 'ticket_providers.dart';
+import 'steps/step_assegnazione.dart' show techniciansProvider;
 import 'ticket_workflow_api_client.dart';
 import 'package:uuid/uuid.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -1686,17 +1687,17 @@ class _PianificazioniTab extends ConsumerWidget {
   }
 }
 
-class _AssignSheet extends StatefulWidget {
+class _AssignSheet extends ConsumerStatefulWidget {
   const _AssignSheet({required this.api, required this.ticket});
 
   final AdminApiClient api;
   final Ticket ticket;
 
   @override
-  State<_AssignSheet> createState() => _AssignSheetState();
+  ConsumerState<_AssignSheet> createState() => _AssignSheetState();
 }
 
-class _AssignSheetState extends State<_AssignSheet> {
+class _AssignSheetState extends ConsumerState<_AssignSheet> {
   String? _selectedUserId;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -1711,7 +1712,10 @@ class _AssignSheetState extends State<_AssignSheet> {
 
   Future<void> _loadTechnicians() async {
     try {
-      final techs = await widget.api.fetchTechnicians();
+      // The shared provider, not a direct call: online it is the live list, offline (or when the
+      // call fails) the synced colleagues mirror, so assigning a ticket with the radio off offers
+      // the same technicians instead of an empty dropdown.
+      final techs = await ref.read(techniciansProvider.future);
       if (mounted) {
         setState(() {
           _technicians = techs;
