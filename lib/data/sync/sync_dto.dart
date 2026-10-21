@@ -1,6 +1,7 @@
 // Dart DTOs for the MobileUserSyncResult payload.
 // These mirror the C# entities serialised as JSON from GET /api/sync/mobile.
-import '../../core/time/business_time.dart' show parseDateOnly;
+import '../../core/time/business_time.dart' show parseDateOnly, parseDateOnlyOrThrow;
+import '../../core/time/work_time.dart' show parseTimeSpan;
 import 'checklist_sync_dto.dart';
 
 class SyncResultDto {
@@ -76,6 +77,11 @@ class SyncResultDto {
   /// `{reportId, version}` — the version `GET /api/reports/{id}` reports for that row, which is
   /// what the submit's stale-copy guard compares against (`DraftReports.expectedVersion`).
   final List<SyncReportVersionDto> reportVersions;
+
+  /// The caller's OWN ticket timer sessions, replaced wholesale on every sync (see
+  /// `SyncService._applyTicketTimers`). Only rows this user owns travel, so a supervisor's view of
+  /// a colleague's hours stays an online read.
+  final List<SyncTicketWorkLogDto> ticketWorkLogs;
 
   /// False when the payload came from a backend that predates the report aggregate. Without it an
   /// older backend would look like "every report lost its staff, materials and answers", and the
@@ -176,6 +182,12 @@ class SyncResultDto {
     'reportVersions',
   };
 
+  /// The caller's own ticket timer sessions (O-9). Its own set for the same reason as the report
+  /// aggregate: these rows fill the Ore tab and the running-timer indicator, not a ticket
+  /// checklist, and the contract gate checks this group still names members
+  /// `MobileUserSyncResult` declares.
+  static const Set<String> ticketTimerWireKeys = {'ticketWorkLogs'};
+
   const SyncResultDto({
     required this.syncedAt,
     required this.since,
@@ -209,6 +221,7 @@ class SyncResultDto {
     this.reportControlli = const [],
     this.allegati = const [],
     this.reportVersions = const [],
+    this.ticketWorkLogs = const [],
     this.carriesReportAggregate = false,
     this.carriesAllegati = false,
     this.checklistTruncated = false,
@@ -286,6 +299,10 @@ class SyncResultDto {
         j['reportVersions'],
         SyncReportVersionDto.fromJson,
       ),
+      ticketWorkLogs: _list(
+        j['ticketWorkLogs'],
+        SyncTicketWorkLogDto.fromJson,
+      ),
       checklistTruncated: j['checklistTruncated'] as bool? ?? false,
       checklistOmittedTicketIds:
           ((j['checklistOmittedTicketIds'] as List<dynamic>?) ?? const [])
@@ -334,6 +351,7 @@ class SyncScopeDto {
     this.materiali,
     this.materialiBarcodes,
     this.strumenti,
+    this.ticketWorkLogs,
   });
 
   final List<String>? schedules;
@@ -347,6 +365,11 @@ class SyncScopeDto {
   final List<String>? materiali;
   final List<String>? materialiBarcodes;
   final List<String>? strumenti;
+
+  /// The caller's own ticket timer sessions the server currently holds in scope (the 90-day window
+  /// plus any still running). Null on an older backend → no prune. Never includes another user's
+  /// session, so this never says a colleague's rows were deleted.
+  final List<String>? ticketWorkLogs;
 
   /// The exact keys `fromJson` reads — compared with the OpenAPI snapshot by the inbound
   /// contract gate.
@@ -362,6 +385,7 @@ class SyncScopeDto {
     'materiali',
     'materialiBarcodes',
     'strumenti',
+    'ticketWorkLogs',
   };
 
   factory SyncScopeDto.fromJson(Map<String, dynamic> j) => SyncScopeDto(
@@ -376,6 +400,7 @@ class SyncScopeDto {
     materiali: _idList(j['materiali']),
     materialiBarcodes: _idList(j['materialiBarcodes']),
     strumenti: _idList(j['strumenti']),
+    ticketWorkLogs: _idList(j['ticketWorkLogs']),
   );
 
   /// Null stays null ("no authoritative set"); an empty array stays an empty list ("nothing in
@@ -1747,8 +1772,92 @@ class SyncReportVersionDto {
       );
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+/// One ticket timer session the caller owns, as the server holds it (O-9).
+///
+/// Mirrors `SyncTicketWorkLogDto` on the backend. `workDate` + `startTime`/`endTime` are the
+/// Rome-local frame every ticket worklog reader uses; `startUtc`/`endUtc` are the true instants and
+/// are null on rows the backend wrote before it recorded them. Durations must prefer the instants:
+/// subtracting two bare times of day gives a negative number for an overnight session.
+class SyncTicketWorkLogDto {
+  final String id;
+  final String tenantId;
+  final String ticketId;
+  final String userId;
+  final DateTime workDate;
+  final Duration startTime;
+  final Duration? endTime;
+  final DateTime? startUtc;
+  final DateTime? endUtc;
 
+  /// `WorkLogApprovalStatusEnum` ordinal: 0 Draft, 1 Submitted, 2 Approved, 3 Rejected.
+  final int approvalStatus;
+  final String? description;
+  final bool isManualEntry;
+
+  /// The device's own id for this session, when it was born on a phone; null for a row created in
+  /// the office or by the online start/stop pair. Lets the device recognise the server row of a
+  /// session it may still be holding in its own queue.
+  final String? clientId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'ticketId',
+    'userId',
+    'workDate',
+    'startTime',
+    'endTime',
+    'startUtc',
+    'endUtc',
+    'approvalStatus',
+    'description',
+    'isManualEntry',
+    'clientId',
+    'createdAt',
+    'updatedAt',
+  };
+
+  const SyncTicketWorkLogDto({
+    required this.id,
+    required this.tenantId,
+    required this.ticketId,
+    required this.userId,
+    required this.workDate,
+    required this.startTime,
+    this.endTime,
+    this.startUtc,
+    this.endUtc,
+    this.approvalStatus = 0,
+    this.description,
+    this.isManualEntry = false,
+    this.clientId,
+    required this.createdAt,
+    this.updatedAt,
+  });
+
+  factory SyncTicketWorkLogDto.fromJson(Map<String, dynamic> j) =>
+      SyncTicketWorkLogDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        ticketId: j['ticketId'] as String,
+        userId: j['userId'] as String,
+        workDate: parseDateOnlyOrThrow(j['workDate']),
+        startTime: parseTimeSpan(j['startTime']) ?? Duration.zero,
+        endTime: j['endTime'] == null ? null : parseTimeSpan(j['endTime']),
+        startUtc: _dt(j['startUtc']),
+        endUtc: _dt(j['endUtc']),
+        approvalStatus: _intOrNull(j['approvalStatus']) ?? 0,
+        description: j['description'] as String?,
+        isManualEntry: j['isManualEntry'] as bool? ?? false,
+        clientId: j['clientId'] as String?,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+      );
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 DateTime? _dt(dynamic v) => v == null ? null : DateTime.parse(v as String);
 
 /// `int32` may arrive as a JSON number or a numeric string (see checklist_sync_dto.dart). Unlike

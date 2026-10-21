@@ -852,6 +852,60 @@ class CantierePunches extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── ticket_timers (Ore tab and ticket timer bar) ──────────────────────────────
+/// The caller's own ticket timer sessions: the server's rows, plus any row this device started
+/// offline and has not managed to send yet.
+///
+/// Unlike [WorkSessions] (raw punch events for simple attendance) and [CantierePunches] (raw site
+/// events), a ticket timer is already a session — the backend stores it as one row and its mobile
+/// upsert takes start/end instants directly. So this table mirrors that row rather than folding
+/// events, and `clientId` is the idempotency key the batch endpoint upserts on.
+///
+/// `workDate`/`startSeconds`/`endSeconds` are the Rome-local frame every ticket worklog reader
+/// uses; `startUtc`/`endUtc` are the true instants. A row born offline has the instants first and
+/// the local frame is derived for display; a server row carries both (the instants are null on
+/// legacy rows written before the instant columns existed).
+class TicketTimers extends Table {
+  @override
+  String get tableName => 'ticket_timers';
+
+  /// Server id once known; the local uuid before the first successful upload.
+  TextColumn get id => text()();
+
+  /// The idempotency key. Device rows are born with the local uuid as their client id; a row
+  /// created in the office or online carries no client id on the wire, and stays null here.
+  TextColumn get clientId => text().nullable()();
+
+  TextColumn get ticketId => text()();
+
+  /// The owning user's internal id, so the offline list renders the same shape as the server's.
+  TextColumn get userId => text().withDefault(const Constant(''))();
+
+  /// Rome-local date and time of day; null only for a device row not yet sent.
+  DateTimeColumn get workDate => dateTime().nullable()();
+  IntColumn get startSeconds => integer().nullable()();
+  IntColumn get endSeconds => integer().nullable()();
+
+  DateTimeColumn get startUtc => dateTime().nullable()();
+  DateTimeColumn get endUtc => dateTime().nullable()();
+
+  IntColumn get approvalStatus => integer().nullable()();
+  TextColumn get description => text().nullable()();
+  BoolColumn get isManualEntry => boolean().withDefault(const Constant(false))();
+
+  /// True while this row is a session the server has not confirmed.
+  BoolColumn get isPendingSync => boolean().withDefault(const Constant(false))();
+
+  /// Human-readable reason the last upload attempt was refused (null when nothing is wrong).
+  TextColumn get syncError => text().nullable()();
+
+  /// The server row's `updatedAt`, when it sent one.
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── notifications ─────────────────────────────────────────────────────────────
 /// Cached notifications from the backend. Used for offline display of the
 /// notification center. Synced via GET /api/notifications; individual
@@ -1232,6 +1286,7 @@ class ChecklistOmittedTickets extends Table {
     WorkSessions,
     AppNotifications,
     CantierePunches,
+    TicketTimers,
     PendingTickets,
     Colleagues,
     Entitlements,
@@ -1256,7 +1311,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 44;
+  int get schemaVersion => 45;
 
   @override
   MigrationStrategy get migration {
@@ -1691,6 +1746,15 @@ class AppDatabase extends _$AppDatabase {
           if (!await _columnExists(m.database, 'report_allegati', 'content_hash')) {
             await m.addColumn(reportAllegati, reportAllegati.contentHash);
           }
+        }
+        if (from < 45) {
+          // Ticket timers: a technician on site could read a ticket but not book a minute of work
+          // against it without a network. The mirror also holds rows the device starts offline
+          // until the batch upsert accepts them.
+          //
+          // 45, not 44: 44 is already the report-allegati step once this stacks on O-8b/O-8c, and
+          // a device that ran a build of that step must still get this table.
+          await m.createTable(ticketTimers);
         }
       },
     );

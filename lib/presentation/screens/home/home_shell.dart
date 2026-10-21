@@ -19,6 +19,7 @@ import '../../../data/timbratura/cantiere_timbra_sync_watcher.dart';
 import '../../../data/timbratura/cantiere_work_log_reconcile_watcher.dart';
 import '../../../data/timbratura/cantiere_work_log_reconciler.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
+import '../../../data/timbratura/ticket_timer_sync_watcher.dart';
 import '../../../data/timbratura/timbra_notice.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
 import '../../../data/timbratura/work_log_reconcile_watcher.dart';
@@ -89,6 +90,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
       // Offline-first cantiere (worksite) timbratura — same push-on-reconnect pattern as
       // personal attendance. See cantiere_timbra_sync_service.dart.
       _reconnectUnsubs.add(initCantiereTimbraSyncWatcher(ref));
+      // Ticket timers recorded offline (features/ticket/ticket_detail_screen.dart) — same
+      // push-on-reconnect treatment, because those hours are what the customer is billed from.
+      _reconnectUnsubs.add(initTicketTimerSyncWatcher(ref));
       // Offline-created tickets are queued locally (see
       // features/ticket/new_ticket_form_screen.dart); this flushes the
       // ones that are safe to auto-retry as soon as connectivity returns.

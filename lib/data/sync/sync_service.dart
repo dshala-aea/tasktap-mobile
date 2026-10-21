@@ -72,6 +72,8 @@ class SyncService {
       // The full aggregate of those reports (children, files, versions) — after both header
       // upserts, because a child is only written for a report row this device already holds.
       await _applyReportAggregate(payload);
+      // The caller's own ticket timer sessions, after the tickets they point at.
+      await _applyTicketTimers(payload);
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
@@ -421,6 +423,14 @@ class SyncService {
       // Rule 2: null means this caller has no authoritative instrument set — skip. `[]` means
       // nothing is in scope and does prune (the wholesale replace above already ran with the pins).
       await _pruneIds(db.strumenti, db.strumenti.id, scope.strumenti!, pins.strumenti);
+    }
+    if (scope.ticketWorkLogs != null) {
+      // A pending row is a session this device still owes the server: absent from scope because
+      // it has not been sent yet, not because it was deleted. Only confirmed rows are pruned.
+      final keep = scope.ticketWorkLogs!.toSet();
+      await (db.delete(db.ticketTimers)..where(
+        (t) => t.id.isNotIn(keep) & t.isPendingSync.equals(false),
+      )).go();
     }
   }
 
@@ -1148,6 +1158,46 @@ class SyncService {
   ) => entityType == AllegatoEntityType.ticket
       ? '/api/tickets/$entityId/attachments/$allegatoId/content'
       : '/api/reports/$entityId/attachments/$allegatoId/content';
+
+  /// The caller's own ticket timer sessions (O-9).
+  ///
+  /// Upsert only; the prune runs in `_pruneToScope` against `scope.ticketWorkLogs`, which is the
+  /// server's authoritative set. A server row that carries a `clientId` is the confirmed copy of a
+  /// session this device may still be holding as pending — matching on that id is what stops the
+  /// Ore tab from showing the same session twice once the batch upload lands.
+  Future<void> _applyTicketTimers(SyncResultDto payload) async {
+    for (final w in payload.ticketWorkLogs) {
+      final clientId = w.clientId;
+      if (clientId != null) {
+        // The queued copy has been accepted: drop it before inserting the server's row, so the
+        // display keeps one entry and stops counting the session as unsent.
+        await (db.delete(db.ticketTimers)..where(
+          (t) => t.clientId.equals(clientId) & t.isPendingSync.equals(true),
+        )).go();
+      }
+      await db
+          .into(db.ticketTimers)
+          .insertOnConflictUpdate(
+            TicketTimersCompanion.insert(
+              id: w.id,
+              clientId: Value(clientId),
+              ticketId: w.ticketId,
+              userId: Value(w.userId),
+              workDate: Value(w.workDate),
+              startSeconds: Value(w.startTime.inSeconds),
+              endSeconds: Value(w.endTime?.inSeconds),
+              startUtc: Value(w.startUtc),
+              endUtc: Value(w.endUtc),
+              approvalStatus: Value(w.approvalStatus),
+              description: Value(w.description),
+              isManualEntry: Value(w.isManualEntry),
+              isPendingSync: const Value(false),
+              syncError: const Value(null),
+              updatedAt: Value(w.updatedAt),
+            ),
+          );
+    }
+  }
 
   Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {
     for (final s in list) {

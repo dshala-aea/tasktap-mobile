@@ -8,6 +8,8 @@ import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
+import '../../data/timbratura/ticket_timer_sync_service.dart'
+    show ticketTimerRepositoryProvider;
 import '../admin/admin_api_client.dart';
 import '../checklist/checklist_providers.dart' show checklistReadRepositoryProvider;
 import 'ticket_controls_mirror.dart';
@@ -372,17 +374,90 @@ final ticketMaterialiProvider = StreamProvider.autoDispose
 
 /// Time booked against a ticket, newest first — and the one entry still running, if any.
 ///
-/// Online-only for the same reason the writes are: there is no local mirror of ticket worklogs,
-/// and inventing one would mean showing a technician a timer state the server may already
-/// disagree with.
+/// Online the server's list is authoritative, but a session this device started and has not
+/// managed to upload yet is still shown alongside it: the technician started it, and hiding a
+/// running timer until the server confirms would invite a second one on another ticket.
+/// Offline the mirror answers (sync fills it for the caller's own sessions, 90-day window plus
+/// anything still running), and an empty mirror throws rather than drawing "no hours booked".
 final ticketWorklogsProvider = FutureProvider.autoDispose
     .family<List<TicketWorkLogDto>, String>((ref, ticketId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      final repo = ref.watch(ticketTimerRepositoryProvider);
+      final rows = await repo.forTicket(ticketId);
+
+      if (ref.watch(isOnlineProvider)) {
+        final api = ref.watch(ticketWorkflowApiClientProvider);
+        final pending = rows.where((r) => r.isPendingSync);
+        final List<TicketWorkLogDto> server;
+        try {
+          server = await api.fetchWorklogs(ticketId);
+        } catch (_) {
+          // The read failed although the radio says online: the mirror is what there is, below.
+          return _ticketWorklogsFromMirror(rows);
+        }
+        final merged = [...pending.map(ticketWorkLogFromTimer), ...server];
+        merged.sortNewestFirst();
+        return merged;
       }
-      final api = ref.watch(ticketWorkflowApiClientProvider);
-      return api.fetchWorklogs(ticketId);
+
+      return _ticketWorklogsFromMirror(rows);
     });
+
+List<TicketWorkLogDto> _ticketWorklogsFromMirror(
+  List<TicketTimer> rows,
+) {
+  if (rows.isEmpty) {
+    // An empty mirror is not evidence of "no hours booked": it may simply never have synced.
+    // Saying so beats drawing a zero the technician cannot distinguish from real work.
+    throw const TicketDetailOfflineException();
+  }
+  return rows.map(ticketWorkLogFromTimer).toList()..sortNewestFirst();
+}
+
+extension TicketWorkLogSorting on List<TicketWorkLogDto> {
+  /// Newest first, and a running entry before a closed one on the same day — the order the
+  /// online endpoint returns. An open session sorts last on its day by date alone, which would
+  /// put the live timer below hours already booked.
+  void sortNewestFirst() => sort((a, b) {
+    final byDate = b.workDate.compareTo(a.workDate);
+    if (byDate != 0) return byDate;
+    if (a.isRunning != b.isRunning) return a.isRunning ? -1 : 1;
+    return b.startTime.compareTo(a.startTime);
+  });
+}
+
+/// A mirrored row in the shape the screens already render.
+TicketWorkLogDto ticketWorkLogFromTimer(TicketTimer row) {
+  final start = row.startUtc;
+  final end = row.endUtc;
+  final workDate = row.workDate;
+  final startSeconds = row.startSeconds;
+  if (workDate == null && start == null) {
+    // Neither frame present: nothing truthful can be shown for this row.
+    throw StateError('Timer ${row.id} has no date');
+  }
+  return TicketWorkLogDto(
+    id: row.id,
+    ticketId: row.ticketId,
+    userId: row.userId,
+    workDate: workDate ?? DateTime.utc(start!.year, start.month, start.day),
+    startTime: startSeconds != null
+        ? Duration(seconds: startSeconds)
+        : Duration(
+            hours: start!.hour,
+            minutes: start.minute,
+            seconds: start.second,
+          ),
+    endTime: row.endSeconds == null ? null : Duration(seconds: row.endSeconds!),
+    isManualEntry: row.isManualEntry,
+    description: row.description,
+    approvalStatus: row.approvalStatus?.toString(),
+    // The instants are the truth when both are known: subtracting two bare times of day gives a
+    // negative duration for an overnight session (see TicketWorkLogDto.duration's own comment).
+    duration: start != null && end != null
+        ? (end.isAfter(start) ? end.difference(start) : Duration.zero)
+        : null,
+  );
+}
 
 /// The running entry on this ticket, or null.
 ///
