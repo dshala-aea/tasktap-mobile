@@ -6,7 +6,13 @@ import '../../data/ai/ai_api_client.dart';
 import 'audio_recorder_service.dart';
 import 'pending_recording_store.dart';
 
-enum RecordingStartResult { started, consentRequired, permissionDenied, permissionPermanentlyDenied }
+enum RecordingStartResult {
+  started,
+  consentRequired,
+  notSignedIn,
+  permissionDenied,
+  permissionPermanentlyDenied,
+}
 
 /// Orchestrates one voice update: consent, then microphone permission, then record, persist,
 /// upload. Every refusal is a returned [RecordingStartResult], never an exception.
@@ -16,6 +22,7 @@ class VoiceCaptureController {
     required this.permissions,
     required this.store,
     required this.consentAccepted,
+    required this.currentUserId,
     required Future<AiTranscription> Function(File audio, String idempotencyKey) upload,
   }) : _uploader = upload;
 
@@ -23,6 +30,9 @@ class VoiceCaptureController {
   final MicPermissionService permissions;
   final PendingRecordingStore store;
   final Future<bool> Function() consentAccepted;
+
+  /// The signed-in user, or null when signed out (recording is then refused).
+  final String? Function() currentUserId;
   final Future<AiTranscription> Function(File audio, String idempotencyKey) _uploader;
 
   bool get isRecording => _recording;
@@ -34,11 +44,13 @@ class VoiceCaptureController {
   final _completed = StreamController<PendingRecording>.broadcast();
   StreamSubscription<Duration>? _sub;
   String? _ticketId;
+  String? _userId;
   bool _recording = false;
   Future<PendingRecording>? _finishing;
 
   Future<RecordingStartResult> start({String? ticketId}) async {
     if (_recording) return RecordingStartResult.started;
+    if (currentUserId() == null) return RecordingStartResult.notSignedIn;
     if (!await consentAccepted()) return RecordingStartResult.consentRequired;
     switch (await permissions.request()) {
       case MicPermission.denied:
@@ -49,6 +61,7 @@ class VoiceCaptureController {
         break;
     }
     _ticketId = ticketId;
+    _userId = currentUserId();
     await recorder.start();
     _recording = true;
     _finishing = null;
@@ -78,13 +91,22 @@ class VoiceCaptureController {
       await _sub?.cancel();
       _sub = null;
       final file = await recorder.stop();
-      return store.add(file, ticketId: _ticketId);
+      return store.add(file, userId: _userId!, ticketId: _ticketId);
     }();
+  }
+
+  /// Pending recordings of the current user only.
+  Future<List<PendingRecording>> pendingForCurrentUser() async {
+    final u = currentUserId();
+    return u == null ? const [] : store.list(userId: u);
   }
 
   /// Uploads with the recording's OWN key. On success the local files are deleted; on any
   /// failure they are kept and the same call can simply be repeated.
   Future<AiTranscription> upload(PendingRecording pending) async {
+    if (pending.userId != currentUserId()) {
+      throw StateError('Questa registrazione appartiene a un altro utente.');
+    }
     final result = await _uploader(pending.file, pending.idempotencyKey);
     await store.delete(pending);
     return result;

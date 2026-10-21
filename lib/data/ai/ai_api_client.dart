@@ -520,6 +520,12 @@ class AiConversationConfirmResponse {
       );
 }
 
+/// Per-request limits for `transcribe` only (the shared Dio allows 30 s to receive, with no send
+/// limit). The server reads the whole upload and calls the transcription provider before it
+/// answers, so a 5-9 minute recording legitimately takes far longer than 30 s.
+const Duration transcribeSendTimeout = Duration(minutes: 5);
+const Duration transcribeReceiveTimeout = Duration(minutes: 4);
+
 /// What `POST /api/ai/transcribe` returns: the transcript and the id of the retained audio.
 class AiTranscription {
   const AiTranscription({required this.transcript, required this.audioRef});
@@ -547,6 +553,16 @@ enum AiTranscribeError {
   audioTooShort,
   audioTooLarge,
   audioTypeNotAllowed,
+
+  /// 400 without a recognised stable code: repeating the same upload cannot help.
+  badRequest,
+
+  /// 403 that is a plain permission failure (not the tenant's AI switch).
+  forbidden,
+
+  /// The request ran out of time (upload or waiting for the transcript). Retry with the SAME key:
+  /// the server may already have finished it and will replay the result.
+  timeout,
   offline,
   unavailable,
 }
@@ -560,7 +576,9 @@ class AiTranscribeException implements Exception {
   /// True when the SAME file may succeed later (connection, server hiccup). False when the audio
   /// itself or the feature switch is the problem: repeating the upload cannot help.
   bool get retryable =>
-      error == AiTranscribeError.offline || error == AiTranscribeError.unavailable;
+      error == AiTranscribeError.offline ||
+      error == AiTranscribeError.timeout ||
+      error == AiTranscribeError.unavailable;
 
   @override
   String toString() => message;
@@ -695,7 +713,11 @@ class AiApiClient {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/ai/transcribe',
         data: form,
-        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+        options: Options(
+          headers: {'Idempotency-Key': idempotencyKey},
+          sendTimeout: transcribeSendTimeout,
+          receiveTimeout: transcribeReceiveTimeout,
+        ),
       );
       final data = response.data;
       if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
@@ -718,10 +740,15 @@ class AiApiClient {
       );
     }
     if (status == null &&
+        (e.type == DioExceptionType.sendTimeout || e.type == DioExceptionType.receiveTimeout)) {
+      return const AiTranscribeException(
+        AiTranscribeError.timeout,
+        'La trascrizione sta impiegando troppo tempo. La registrazione è salvata: riprova.',
+      );
+    }
+    if (status == null &&
         (e.type == DioExceptionType.connectionError ||
-            e.type == DioExceptionType.connectionTimeout ||
-            e.type == DioExceptionType.sendTimeout ||
-            e.type == DioExceptionType.receiveTimeout)) {
+            e.type == DioExceptionType.connectionTimeout)) {
       return const AiTranscribeException(
         AiTranscribeError.offline,
         'Nessuna connessione. La registrazione è salvata: riprova quando torna la rete.',
@@ -734,9 +761,24 @@ class AiApiClient {
       );
     }
     if (status == 403) {
+      // The controller's AI-switch refusal is `{error: "La generazione di bozze con AI è
+      // disattivata ..."}`; any other 403 is a permission/entitlement failure.
+      final text = (map?['error'] as String?) ?? '';
+      if (text.contains('disattivata')) {
+        return const AiTranscribeException(
+          AiTranscribeError.aiDisabled,
+          'La bozza con AI è disattivata per questa azienda.',
+        );
+      }
       return const AiTranscribeException(
-        AiTranscribeError.aiDisabled,
-        'La bozza con AI è disattivata per questa azienda.',
+        AiTranscribeError.forbidden,
+        'Non hai i permessi per usare la trascrizione vocale.',
+      );
+    }
+    if (status == 413) {
+      return const AiTranscribeException(
+        AiTranscribeError.audioTooLarge,
+        'Il file audio è troppo grande.',
       );
     }
     if (status == 400) {
@@ -769,6 +811,10 @@ class AiApiClient {
         _ => null,
       };
       if (reason != null) return AiTranscribeException(reason.$1, reason.$2);
+      return const AiTranscribeException(
+        AiTranscribeError.badRequest,
+        'Il server ha rifiutato la registrazione.',
+      );
     }
     return const AiTranscribeException(
       AiTranscribeError.unavailable,

@@ -97,7 +97,7 @@ dependencies:
   sentry_flutter: ^9.27.0
   speech_to_text: ^7.4.0
   # Online voice update recorder (m4a/AAC) — see lib/core/audio/.
-  record: ^6.1.2
+  record: ^6.2.1
   crypto: ^3.0.7
 
   # Reactive utilities (Rx.combineLatest for stream composition)

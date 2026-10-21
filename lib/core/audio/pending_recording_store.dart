@@ -15,6 +15,7 @@ class PendingRecording {
     required this.file,
     required this.idempotencyKey,
     required this.createdAt,
+    required this.userId,
     this.ticketId,
   });
 
@@ -22,6 +23,10 @@ class PendingRecording {
   final File file;
   final String idempotencyKey;
   final DateTime createdAt;
+
+  /// Owner. Shared/rotating devices: a recording is only ever listed for, and uploaded by, the
+  /// user who made it (the server's idempotency is per user).
+  final String userId;
   final String? ticketId;
 }
 
@@ -39,57 +44,99 @@ class PendingRecordingStore {
 
   final Directory directory;
 
-  /// Moves [recorded] into the store and writes its sidecar with a fresh key.
-  Future<PendingRecording> add(File recorded, {String? ticketId}) async {
+  /// Recordings older than this are deleted when [list] runs.
+  static const Duration timeToLive = Duration(days: 7);
+
+  /// Files younger than this are never treated as orphans: they may belong to an [add] in flight.
+  static const Duration orphanGrace = Duration(minutes: 10);
+
+  /// Saves [recorded] with a fresh key. The sidecar is written FIRST (temp file, atomic rename),
+  /// then the audio is moved in, so a crash can leave an orphan sidecar or an audio file with no
+  /// sidecar, never a hidden recording that nothing will ever clean up ([list] sweeps both).
+  Future<PendingRecording> add(File recorded, {required String userId, String? ticketId}) async {
     await directory.create(recursive: true);
     final id = const Uuid().v4();
     final audio = File(p.join(directory.path, '$id.m4a'));
+    final pending = PendingRecording(
+      id: id,
+      file: audio,
+      idempotencyKey: const Uuid().v4(),
+      createdAt: DateTime.now().toUtc(),
+      userId: userId,
+      ticketId: ticketId,
+    );
+    final tmp = File(p.join(directory.path, '$id.json.tmp'));
+    await tmp.writeAsString(
+      jsonEncode({
+        'idempotencyKey': pending.idempotencyKey,
+        'createdAt': pending.createdAt.toIso8601String(),
+        'userId': userId,
+        'ticketId': ticketId,
+      }),
+      flush: true,
+    );
+    await tmp.rename(_sidecar(id));
     try {
       await recorded.rename(audio.path);
     } on FileSystemException {
       await recorded.copy(audio.path); // rename fails across volumes
       await recorded.delete();
     }
-    final pending = PendingRecording(
-      id: id,
-      file: audio,
-      idempotencyKey: const Uuid().v4(),
-      createdAt: DateTime.now().toUtc(),
-      ticketId: ticketId,
-    );
-    await File(_sidecar(id)).writeAsString(
-      jsonEncode({
-        'idempotencyKey': pending.idempotencyKey,
-        'createdAt': pending.createdAt.toIso8601String(),
-        'ticketId': ticketId,
-      }),
-      flush: true,
-    );
     return pending;
   }
 
-  /// Oldest first. A sidecar without audio (or unreadable) is skipped, not fatal.
-  Future<List<PendingRecording>> list() async {
+  /// Oldest first, for [userId] ONLY. Also sweeps: expired recordings, orphan audio (no readable
+  /// sidecar) and orphan sidecars (no audio), the latter two once older than [orphanGrace].
+  Future<List<PendingRecording>> list({required String userId}) async {
     if (!await directory.exists()) return const [];
+    final now = DateTime.now();
     final out = <PendingRecording>[];
-    await for (final e in directory.list()) {
+    final claimedAudio = <String>{};
+    final entries = await directory.list().toList();
+
+    Future<bool> old(File f) async => now.difference(await f.lastModified()) > orphanGrace;
+
+    for (final e in entries) {
       if (e is! File || !e.path.endsWith('.json')) continue;
       final id = p.basenameWithoutExtension(e.path);
       final audio = File(p.join(directory.path, '$id.m4a'));
-      if (!await audio.exists()) continue;
+      claimedAudio.add(audio.path);
+      PendingRecording? rec;
       try {
         final map = jsonDecode(await e.readAsString()) as Map<String, dynamic>;
-        out.add(
-          PendingRecording(
-            id: id,
-            file: audio,
-            idempotencyKey: map['idempotencyKey'] as String,
-            createdAt: DateTime.parse(map['createdAt'] as String).toUtc(),
-            ticketId: map['ticketId'] as String?,
-          ),
+        rec = PendingRecording(
+          id: id,
+          file: audio,
+          idempotencyKey: map['idempotencyKey'] as String,
+          createdAt: DateTime.parse(map['createdAt'] as String).toUtc(),
+          userId: map['userId'] as String,
+          ticketId: map['ticketId'] as String?,
         );
       } catch (_) {
+        rec = null;
+      }
+      if (rec == null) {
+        if (await old(e)) {
+          await e.delete();
+          claimedAudio.remove(audio.path); // audio without a readable sidecar: orphan below
+        }
         continue;
+      }
+      if (now.toUtc().difference(rec.createdAt) > timeToLive) {
+        await delete(rec);
+        continue;
+      }
+      if (!await audio.exists()) {
+        if (await old(e)) await e.delete();
+        continue;
+      }
+      if (rec.userId == userId) out.add(rec);
+    }
+    for (final e in entries) {
+      if (e is! File) continue;
+      final orphanAudio = e.path.endsWith('.m4a') && !claimedAudio.contains(e.path);
+      if ((orphanAudio || e.path.endsWith('.tmp')) && await old(e) && await e.exists()) {
+        await e.delete();
       }
     }
     out.sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -100,6 +147,11 @@ class PendingRecordingStore {
     final sidecar = File(_sidecar(r.id));
     if (await r.file.exists()) await r.file.delete();
     if (await sidecar.exists()) await sidecar.delete();
+  }
+
+  /// Removes everything, for every user (logout on a shared device).
+  Future<void> wipe() async {
+    if (await directory.exists()) await directory.delete(recursive: true);
   }
 
   String _sidecar(String id) => p.join(directory.path, '$id.json');

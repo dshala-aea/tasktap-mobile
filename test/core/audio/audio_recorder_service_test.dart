@@ -11,6 +11,11 @@ import 'package:tasktap_mobile/core/audio/pending_recording_store.dart';
 import 'package:tasktap_mobile/core/audio/voice_capture_controller.dart';
 import 'package:tasktap_mobile/core/audio/voice_consent.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
+import 'package:tasktap_mobile/data/auth/session_ender.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/domain/auth/auth_user.dart';
+import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
+import 'package:drift/native.dart';
 
 class _FakeRecorder implements AudioRecorderService {
   _FakeRecorder(this.dir);
@@ -80,6 +85,17 @@ AiApiClient _client(Future<ResponseBody> Function(RequestOptions, Stream<List<in
   return AiApiClient(dio);
 }
 
+class _FakeAuth implements IAuthRepository {
+  @override
+  AuthUser? get currentUser => null;
+  @override
+  Stream<AuthUser?> get authStateChanges => const Stream.empty();
+  @override
+  Future<void> signOut() async {}
+  @override
+  dynamic noSuchMethod(Invocation i) => throw UnimplementedError('${i.memberName}');
+}
+
 void main() {
   late Directory tmp;
   late PendingRecordingStore store;
@@ -89,7 +105,9 @@ void main() {
   VoiceCaptureController controller({
     Future<AiTranscription> Function(File, String)? upload,
     Future<bool> Function()? consent,
+    String? user,
   }) => VoiceCaptureController(
+    currentUserId: () => user ?? 'userA',
     recorder: recorder,
     permissions: perms,
     store: store,
@@ -124,10 +142,10 @@ void main() {
 
     await expectLater(c.upload(pending), throwsA(isA<AiFailure>()));
     expect(pending.file.existsSync(), isTrue);
-    expect(await store.list(), hasLength(1));
+    expect(await store.list(userId: 'userA'), hasLength(1));
 
     fail = false;
-    final result = await c.upload((await store.list()).single);
+    final result = await c.upload((await store.list(userId: 'userA')).single);
     expect(result.audioRef, 'abc');
     expect(keys, hasLength(2));
     expect(keys[0], keys[1]);
@@ -191,7 +209,7 @@ void main() {
     final pending = await c.stop();
 
     final reloaded = PendingRecordingStore(Directory('${tmp.path}/pending'));
-    final list = await reloaded.list();
+    final list = await reloaded.list(userId: 'userA');
     expect(list, hasLength(1));
     expect(list.single.idempotencyKey, pending.idempotencyKey);
     expect(list.single.ticketId, 'T9');
@@ -204,8 +222,82 @@ void main() {
     await c.start(ticketId: 'T1');
     final pending = await c.stop();
     await c.upload(pending);
-    expect(await store.list(), isEmpty);
+    expect(await store.list(userId: 'userA'), isEmpty);
     expect(pending.file.existsSync(), isFalse);
+  });
+
+  test('User_B_never_sees_user_A_pending_recording', () async {
+    final a = controller(user: 'userA');
+    await a.start(ticketId: 'T1');
+    final pending = await a.stop();
+    expect(pending.userId, 'userA');
+
+    expect(await store.list(userId: 'userB'), isEmpty);
+    final b = controller(user: 'userB');
+    await expectLater(b.upload(pending), throwsA(isA<StateError>()));
+    expect(pending.file.existsSync(), isTrue);
+    expect(await store.list(userId: 'userA'), hasLength(1));
+  });
+
+  test('Recordings_older_than_seven_days_are_deleted_on_list', () async {
+    final c = controller();
+    await c.start();
+    final pending = await c.stop();
+    final sidecar = File('${store.directory.path}/${pending.id}.json');
+    final map = jsonDecode(await sidecar.readAsString()) as Map<String, dynamic>;
+    map['createdAt'] = DateTime.now().toUtc().subtract(const Duration(days: 8)).toIso8601String();
+    await sidecar.writeAsString(jsonEncode(map));
+
+    expect(await store.list(userId: 'userA'), isEmpty);
+    expect(pending.file.existsSync(), isFalse);
+    expect(sidecar.existsSync(), isFalse);
+  });
+
+  test('Orphan_files_are_cleaned_but_only_once_old_enough', () async {
+    await store.directory.create(recursive: true);
+    final old = DateTime.now().subtract(const Duration(minutes: 30));
+    final orphanAudio = File('${store.directory.path}/o1.m4a')..writeAsBytesSync([1]);
+    final freshAudio = File('${store.directory.path}/o2.m4a')..writeAsBytesSync([1]);
+    final orphanSidecar = File('${store.directory.path}/o3.json')..writeAsStringSync('{}');
+    await orphanAudio.setLastModified(old);
+    await orphanSidecar.setLastModified(old);
+
+    expect(await store.list(userId: 'userA'), isEmpty);
+    expect(orphanAudio.existsSync(), isFalse);
+    expect(orphanSidecar.existsSync(), isFalse);
+    expect(freshAudio.existsSync(), isTrue); // may belong to an add() still in flight
+  });
+
+  test('Logout_removes_the_pending_directory', () async {
+    final c = controller();
+    await c.start();
+    await c.stop();
+    expect(store.directory.existsSync(), isTrue);
+
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    SharedPreferences.setMockInitialValues({'x': true});
+    var zoneReset = false;
+    final ender = SessionEnder(
+      repo: _FakeAuth(),
+      db: db,
+      resetBusinessZone: () async => zoneReset = true,
+      wipePendingVoice: store.wipe,
+    );
+    await ender.end();
+
+    expect(store.directory.existsSync(), isFalse);
+    expect(zoneReset, isTrue);
+
+    // best-effort: a failing wipe must not stop the rest of the teardown.
+    zoneReset = false;
+    await SessionEnder(
+      repo: _FakeAuth(),
+      db: db,
+      resetBusinessZone: () async => zoneReset = true,
+      wipePendingVoice: () async => throw const FileSystemException('boom'),
+    ).end();
+    expect(zoneReset, isTrue);
   });
 
   group('AiApiClient.transcribe', () {
@@ -228,6 +320,10 @@ void main() {
       expect(seen.path, '/api/ai/transcribe');
       expect(seen.method, 'POST');
       expect(seen.headers['Idempotency-Key'], 'key-123');
+      expect(seen.sendTimeout, transcribeSendTimeout);
+      expect(seen.receiveTimeout, transcribeReceiveTimeout);
+      expect(seen.headers['content-type'] ?? seen.contentType, startsWith('multipart/form-data'));
+      expect(seen.headers['content-type'] ?? seen.contentType, contains('boundary='));
       final form = seen.data as FormData;
       expect(form.files.single.key, 'audio');
       expect(form.files.single.value.contentType.toString(), 'audio/mp4');
@@ -267,9 +363,42 @@ void main() {
         AiTranscribeError.audioTooLarge,
       );
       expect(reason(await run(404, {})), AiTranscribeError.voiceDisabled);
-      expect(reason(await run(403, {'error': 'x'})), AiTranscribeError.aiDisabled);
+      expect(
+        reason(
+          await run(403, {
+            'error': 'La generazione di bozze con AI è disattivata per questa azienda.',
+          }),
+        ),
+        AiTranscribeError.aiDisabled,
+      );
+      expect(reason(await run(403, {'error': 'Forbidden'})), AiTranscribeError.forbidden);
+      expect(reason(await run(403, {})), AiTranscribeError.forbidden);
+      expect(reason(await run(413, {})), AiTranscribeError.audioTooLarge);
+      expect(reason(await run(400, {'error': 'weird'})), AiTranscribeError.badRequest);
+      expect(reason(await run(400, 'bare string')), AiTranscribeError.badRequest);
+      for (final e in [
+        AiTranscribeError.audioTooLarge,
+        AiTranscribeError.badRequest,
+        AiTranscribeError.forbidden,
+        AiTranscribeError.aiDisabled,
+        AiTranscribeError.voiceDisabled,
+      ]) {
+        expect(AiTranscribeException(e, '').retryable, isFalse, reason: '$e');
+      }
       expect(reason(await run(500, {})), AiTranscribeError.unavailable);
       expect(await run(429, {'error': 'QuotaExceeded'}), isA<AiQuotaExhaustedException>());
+
+      for (final t in [DioExceptionType.receiveTimeout, DioExceptionType.sendTimeout]) {
+        final slow = _client((o, b) async => throw DioException(requestOptions: o, type: t));
+        Object? err;
+        try {
+          await slow.transcribe(audio, idempotencyKey: 'k');
+        } catch (e) {
+          err = e;
+        }
+        expect(reason(err), AiTranscribeError.timeout, reason: '$t');
+        expect((err as AiTranscribeException).retryable, isTrue);
+      }
 
       final offline = _client(
         (o, b) async => throw DioException(
