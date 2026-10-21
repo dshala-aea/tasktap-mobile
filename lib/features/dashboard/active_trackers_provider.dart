@@ -1,10 +1,12 @@
 // dart format width=100
 import 'dart:async';
 
+import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart' show WorkSession;
+import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../data/timbratura/work_session_repository.dart' show reconciledOrphanMarker;
 import '../../data/worklogs/active_tracker_api_client.dart';
 import '../timbra/timbra_providers.dart';
@@ -110,13 +112,55 @@ String formatElapsed(Duration elapsed) {
 /// stop is a new one, started elsewhere, and is shown.
 ///
 /// The local row reuses the server's id when there is one, so the two never render as two clocks.
-/// Cantiere and ticket clocks have no local mirror and always come from the server.
+/// Ticket clocks come from the server **and** from the ticket timer mirror; cantiere clocks have no
+/// local mirror and always come from the server.
+/// Ticket timers running on this device, in the dashboard's own shape.
+///
+/// The ticket timer has a Drift mirror (O-9), so a clock the technician started with no signal is
+/// a real running session whether or not the server has heard of it — and the dashboard used to
+/// state the opposite by rendering only what `GET /api/worklog/active` returned. The mirror is
+/// watched rather than fetched so a start/stop taken on the ticket screen shows up here without
+/// waiting for the next poll.
+///
+/// A row whose start instant was never recorded cannot be turned into a timer without inventing
+/// one (see `ActiveTracker.startedAtUtc`'s own doc comment), so it is left out rather than drawn
+/// with a wrong elapsed time.
+final localTicketTimersProvider = StreamProvider.autoDispose<List<ActiveTracker>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final query = db.select(db.ticketTimers).join([
+    leftOuterJoin(db.tickets, db.tickets.id.equalsExp(db.ticketTimers.ticketId)),
+  ])..where(db.ticketTimers.endUtc.isNull() & db.ticketTimers.endSeconds.isNull());
+
+  return query.watch().map(
+    (rows) => [
+      for (final row in rows)
+        if (row.readTable(db.ticketTimers).startUtc case final start?)
+          ActiveTracker(
+            kind: ActiveTrackerKind.ticket,
+            id: row.readTable(db.ticketTimers).id,
+            startedAtUtc: start,
+            label: row.readTableOrNull(db.tickets)?.title,
+            entityId: row.readTable(db.ticketTimers).ticketId,
+          ),
+    ],
+  );
+});
+
 final visibleTrackersProvider = Provider.autoDispose<List<ActiveTracker>>((ref) {
   final remote = ref.watch(activeTrackersProvider).valueOrNull ?? const <ActiveTracker>[];
   final timbra = ref.watch(timbraStateProvider);
   final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? const <WorkSession>[];
+  final localTicketTimers =
+      ref.watch(localTicketTimersProvider).valueOrNull ?? const <ActiveTracker>[];
 
-  final others = remote.where((t) => t.kind != ActiveTrackerKind.attendance).toList();
+  // A ticket clock the server already reports is in `remote`; the mirror holds the same session
+  // under the id the server gave it after its upload, so deduplicating by id keeps it from being
+  // drawn twice.
+  final remoteIds = {for (final t in remote) t.id};
+  final others = [
+    ...remote.where((t) => t.kind != ActiveTrackerKind.attendance),
+    ...localTicketTimers.where((t) => !remoteIds.contains(t.id)),
+  ];
   final serverAttendance = remote.where((t) => t.kind == ActiveTrackerKind.attendance).firstOrNull;
 
   final hasUnsynced = sessions.any((s) => s.isPendingSync && s.notes != reconciledOrphanMarker);
