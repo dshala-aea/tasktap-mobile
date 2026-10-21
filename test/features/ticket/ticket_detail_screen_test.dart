@@ -1308,7 +1308,36 @@ void main() {
       await pump(tester, isOnline: false);
       await tapTab(tester, 'Allegati');
 
-      expect(find.text('Allegati non disponibili offline'), findsOneWidget);
+      expect(find.text('Allegati non ancora sul telefono'), findsOneWidget);
+      expect(find.text('Nessun allegato'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('offline it lists the attachments already mirrored on the phone', (tester) async {
+      await seedBase(db);
+      await db
+          .into(db.reportAllegati)
+          .insert(
+            ReportAllegatiCompanion.insert(
+              id: 'att-9',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1, 9),
+              fileName: 'preventivo.pdf',
+              contentType: 'application/pdf',
+              sizeBytes: 4096,
+              storagePath: '',
+              url: '/api/tickets/ticket-1/attachments/att-9/content',
+              entityType: 0,
+              entityId: 'ticket-1',
+              uploadedByUserId: 'user-1',
+            ),
+          );
+
+      await pump(tester, isOnline: false);
+      await tapTab(tester, 'Allegati');
+
+      expect(find.text('preventivo.pdf'), findsOneWidget);
+      expect(find.text('Allegati non ancora sul telefono'), findsNothing);
       expect(find.text('Nessun allegato'), findsNothing);
       await resetAndDispose(tester);
     });

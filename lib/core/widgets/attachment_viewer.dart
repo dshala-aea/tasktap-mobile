@@ -1,13 +1,14 @@
 // dart format width=100
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../data/attachments/attachment_content_cache.dart';
 import 'app_toast.dart';
 import 'screen_header.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
@@ -38,12 +39,20 @@ Future<void> openAttachment(
   required String contentType,
   String? url,
   String? localPath,
+  AttachmentContentCache? cache,
+  AttachmentRef? contentRef,
 }) async {
   if (contentType.startsWith('image/')) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            _FullscreenImageViewer(dio: dio, fileName: fileName, url: url, localPath: localPath),
+        builder: (_) => _FullscreenImageViewer(
+          dio: dio,
+          fileName: fileName,
+          url: url,
+          localPath: localPath,
+          cache: cache,
+          contentRef: contentRef,
+        ),
       ),
     );
     return;
@@ -68,11 +77,13 @@ Future<void> openAttachment(
   }
 
   try {
-    final bytes = await _fetchBytes(dio, url);
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/$fileName');
-    await file.writeAsBytes(bytes, flush: true);
-
+    final file = await _fileFor(
+      dio: dio,
+      url: url,
+      fileName: fileName,
+      cache: cache,
+      ref: contentRef,
+    );
     final result = await OpenFilex.open(file.path);
     if (result.type != ResultType.done && context.mounted) {
       showAppToast(
@@ -88,7 +99,7 @@ Future<void> openAttachment(
     showAppToast(
       context,
       message: offline
-          ? 'Nessuna connessione — riprova quando sei online.'
+          ? 'File non disponibile offline: si scarica alla prossima connessione.'
           : 'Impossibile scaricare il file. Riprova più tardi.',
       tone: ToastTone.error,
     );
@@ -96,6 +107,24 @@ Future<void> openAttachment(
     if (!context.mounted) return;
     showAppToast(context, message: 'Impossibile scaricare il file.', tone: ToastTone.error);
   }
+}
+
+/// The bytes on this device: the cache when the caller knows what the file is (every synced
+/// attachment does), else the old fetch-to-temp path for callers that only hold a URL.
+Future<File> _fileFor({
+  required Dio dio,
+  required String url,
+  required String fileName,
+  AttachmentContentCache? cache,
+  AttachmentRef? ref,
+}) async {
+  if (cache != null && ref != null) return cache.ensure(ref);
+
+  final bytes = await _fetchBytes(dio, url);
+  final dir = await getTemporaryDirectory();
+  final file = File('${dir.path}/$fileName');
+  await file.writeAsBytes(bytes, flush: true);
+  return file;
 }
 
 Future<List<int>> _fetchBytes(Dio dio, String url) async {
@@ -106,6 +135,44 @@ Future<List<int>> _fetchBytes(Dio dio, String url) async {
   final bytes = response.data;
   if (bytes == null) throw StateError('empty attachment response');
   return bytes;
+}
+
+/// A square/thumbnail view of an attachment's bytes, cache-first.
+///
+/// `Image.network` cannot be used for these: the URL is a path on the TaskTap API, so it needs the
+/// authenticated client and never resolves on its own. Worse, it has no idea whether the bytes are
+/// already on the phone. This reads [attachmentFileProvider] instead — cached file when there is
+/// one, one download when online, nothing offline — and draws [placeholder] for every case where
+/// there is no image to show. A placeholder is not an error here: a photo that has not been
+/// prefetched over Wi-Fi yet is a normal state.
+class AttachmentThumbnail extends ConsumerWidget {
+  const AttachmentThumbnail({
+    super.key,
+    required this.attachment,
+    required this.placeholder,
+    this.fit = BoxFit.cover,
+    this.cacheWidth,
+    this.cacheHeight,
+  });
+
+  final AttachmentRef attachment;
+  final Widget placeholder;
+  final BoxFit fit;
+  final int? cacheWidth;
+  final int? cacheHeight;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final file = ref.watch(attachmentFileProvider(attachment)).valueOrNull;
+    if (file == null) return placeholder;
+    return Image.file(
+      file,
+      fit: fit,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
+      errorBuilder: (_, _, _) => placeholder,
+    );
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -129,12 +196,16 @@ class _FullscreenImageViewer extends StatelessWidget {
     required this.fileName,
     this.url,
     this.localPath,
+    this.cache,
+    this.contentRef,
   });
 
   final Dio dio;
   final String fileName;
   final String? url;
   final String? localPath;
+  final AttachmentContentCache? cache;
+  final AttachmentRef? contentRef;
 
   @override
   Widget build(BuildContext context) {
@@ -152,8 +223,17 @@ class _FullscreenImageViewer extends StatelessWidget {
               )
             : (url == null || url!.isEmpty)
             ? _errorBuilder(context, StateError('no source'), null)
-            : FutureBuilder<List<int>>(
-                future: _fetchBytes(dio, url!),
+            : FutureBuilder<File>(
+                // Cache first: a prefetched or previously opened photo opens instantly and, more
+                // importantly, opens at all when there is no network. Without a ref the fallback
+                // is the old in-memory fetch.
+                future: _fileFor(
+                  dio: dio,
+                  url: url!,
+                  fileName: fileName,
+                  cache: cache,
+                  ref: contentRef,
+                ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState != ConnectionState.done) {
                     return const CircularProgressIndicator(color: Colors.white);
@@ -164,10 +244,7 @@ class _FullscreenImageViewer extends StatelessWidget {
                   return InteractiveViewer(
                     minScale: 1,
                     maxScale: 5,
-                    child: Image.memory(
-                      Uint8List.fromList(snapshot.data!),
-                      errorBuilder: _errorBuilder,
-                    ),
+                    child: Image.file(snapshot.data!, errorBuilder: _errorBuilder),
                   );
                 },
               ),
@@ -176,13 +253,19 @@ class _FullscreenImageViewer extends StatelessWidget {
   }
 
   Widget _errorBuilder(BuildContext context, Object error, StackTrace? stackTrace) {
+    final offline =
+        error is DioException &&
+        (error.type == DioExceptionType.connectionError ||
+            error.type == DioExceptionType.connectionTimeout);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(LucideIcons.imageOff, size: 48, color: AppColors.WHITE.withAlpha(150)),
         const SizedBox(height: 12),
         Text(
-          'Impossibile caricare l\'immagine',
+          offline
+              ? 'Immagine non disponibile offline'
+              : 'Impossibile caricare l\'immagine',
           style: TextStyle(color: AppColors.WHITE.withAlpha(200), fontFamily: 'Archivo'),
         ),
       ],

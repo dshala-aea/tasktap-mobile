@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/attachments/attachment_content_cache.dart' show AllegatoEntityType;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
@@ -223,13 +224,43 @@ final ticketProdottiProvider = FutureProvider.autoDispose
     });
 
 /// Files uploaded directly to a ticket (Allegati tab).
+///
+/// Server-authoritative online; offline it reads the mirror sync fills (`report_allegati`, with
+/// [AllegatoEntityType.ticket]), so the files a technician already knows about stay listed on site.
+/// An empty mirror throws rather than answering with nothing: the table is pruned to the ticket
+/// scope on every sync, but it is also empty on a device that has not run one yet, and the tab
+/// must not state "nessun allegato" when it simply does not know.
 final ticketAttachmentsProvider = FutureProvider.autoDispose
     .family<List<TicketAttachmentDto>, String>((ref, ticketId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      if (ref.watch(isOnlineProvider)) {
+        final api = ref.watch(ticketDetailApiClientProvider);
+        return api.fetchAttachments(ticketId);
       }
-      final api = ref.watch(ticketDetailApiClientProvider);
-      return api.fetchAttachments(ticketId);
+      final db = ref.watch(appDatabaseProvider);
+      final rows =
+          await (db.select(db.reportAllegati)
+                ..where(
+                  (a) =>
+                      a.entityType.equals(AllegatoEntityType.ticket) &
+                      a.entityId.equals(ticketId) &
+                      a.isActive.equals(true) &
+                      a.isPendingUpload.equals(false),
+                )
+                ..orderBy([(a) => OrderingTerm.desc(a.createdAt)]))
+              .get();
+      if (rows.isEmpty) throw const TicketDetailOfflineException();
+      return rows
+          .map(
+            (a) => TicketAttachmentDto(
+              id: a.id,
+              fileName: a.fileName,
+              contentType: a.contentType,
+              sizeBytes: a.sizeBytes,
+              contentUrl: a.url,
+              createdAt: a.createdAt,
+            ),
+          )
+          .toList();
     });
 
 /// Attachments picked from this ticket's Allegati tab that have not yet reached the server —

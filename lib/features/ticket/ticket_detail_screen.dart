@@ -17,6 +17,7 @@ import '../../core/widgets/app_compartment_tile.dart';
 import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
+import '../../data/attachments/attachment_content_cache.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
@@ -1184,10 +1185,10 @@ class _AllegatiTab extends ConsumerWidget {
           error: (e, _) => UnavailableState.forFetchError(
             icon: LucideIcons.paperclip,
             offline: e is TicketDetailOfflineException,
-            offlineTitle: 'Allegati non disponibili offline',
+            offlineTitle: 'Allegati non ancora sul telefono',
             offlineBody:
-                'Gli allegati già caricati su questo ticket richiedono una connessione per '
-                'essere elencati: riprova quando torni online.',
+                'Gli allegati di questo ticket si sincronizzano quando torni online: riprova più '
+                'tardi.',
             errorTitle: 'Impossibile caricare gli allegati',
             errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
           ).paddedForTab(),
@@ -1230,6 +1231,15 @@ class _AllegatiTab extends ConsumerWidget {
                       fileName: a.fileName,
                       contentType: a.contentType,
                       url: a.contentUrl,
+                      cache: ref.read(attachmentContentCacheProvider),
+                      // The server's attachment DTO carries no hash (ticket attachments predate
+                      // the allegati hash column): the cache falls back to the id + size key.
+                      contentRef: (
+                        allegatoId: a.id,
+                        contentHash: null,
+                        sizeBytes: a.sizeBytes,
+                        url: a.contentUrl,
+                      ),
                     ),
                   );
                 }).toList(),

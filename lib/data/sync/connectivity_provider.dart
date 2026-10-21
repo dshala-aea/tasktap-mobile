@@ -73,3 +73,21 @@ final connectivityProvider = AsyncNotifierProvider<ConnectivityNotifier, bool>(
 final isOnlineProvider = Provider<bool>((ref) {
   return ref.watch(connectivityProvider).valueOrNull ?? false;
 });
+
+/// True only on an unmetered Wi-Fi link. Asked at the moment it matters (a prefetch sweep), not
+/// watched — nothing in the UI branches on it.
+///
+/// Decision D-4 (2026-10-21 offline audit): downloading a report's photos is fine on Wi-Fi and
+/// expensive on mobile data, so the [AttachmentPrefetcher] stays off it. Ethernet is accepted: no
+/// phone has one, and a docked tablet on a cable is not metered either.
+Future<bool> onUnmeteredWifi() async {
+  try {
+    final results = await Connectivity().checkConnectivity();
+    return results.any(
+      (r) => r == ConnectivityResult.wifi || r == ConnectivityResult.ethernet,
+    );
+  } catch (_) {
+    // No platform answer (tests, an unsupported runner): treat as "do not spend the user's data".
+    return false;
+  }
+}

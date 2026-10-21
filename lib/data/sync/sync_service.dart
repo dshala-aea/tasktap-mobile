@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -7,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/time/business_time.dart' show formatDateOnly;
 import '../api/dio_client.dart';
+import '../attachments/attachment_content_cache.dart'
+    show AllegatoEntityType, attachmentPrefetcherProvider;
 import '../local/app_database.dart';
 import '../reference/reference_cache_repository.dart';
 import '../timbratura/cantiere_session_repository.dart' show cantiereReconciledOrphanMarker;
@@ -999,9 +1002,9 @@ class SyncService {
 
       final byEntity = <String, List<SyncReportAllegatoDto>>{};
       for (final a in payload.allegati) {
-        final writable = a.entityType == _entityTypeReport
+        final writable = a.entityType == AllegatoEntityType.report
             ? reportEntities.contains(a.entityId)
-            : a.entityType == _entityTypeTicket &&
+            : a.entityType == AllegatoEntityType.ticket &&
                   (ticketScope?.contains(a.entityId) ?? false);
         if (!writable) continue;
         (byEntity['${a.entityType}:${a.entityId}'] ??= []).add(a);
@@ -1049,15 +1052,10 @@ class SyncService {
         }
       }
 
-      await replaceEntity(_entityTypeReport, reportEntities);
-      if (ticketScope != null) await replaceEntity(_entityTypeTicket, ticketScope);
+      await replaceEntity(AllegatoEntityType.report, reportEntities);
+      if (ticketScope != null) await replaceEntity(AllegatoEntityType.ticket, ticketScope);
     }
   }
-
-  /// AllegatoEntityTypeEnum, as the wire sends it (ordinals): Ticket=0, Report=1, Materiale=2. Kept
-  /// as ints because the table stores ordinals — there is no Dart enum for this type in the client.
-  static const int _entityTypeTicket = 0;
-  static const int _entityTypeReport = 1;
 
   /// The route a synced file's bytes are fetched from — the same strings the backend builds
   /// (`AttachmentService.ContentPath`), derived here rather than sent, because the payload carries
@@ -1066,7 +1064,7 @@ class SyncService {
     int entityType,
     String entityId,
     String allegatoId,
-  ) => entityType == _entityTypeTicket
+  ) => entityType == AllegatoEntityType.ticket
       ? '/api/tickets/$entityId/attachments/$allegatoId/content'
       : '/api/reports/$entityId/attachments/$allegatoId/content';
 
@@ -1175,12 +1173,17 @@ class SyncState {
 }
 
 class SyncNotifier extends StateNotifier<SyncState> {
-  SyncNotifier(this._service, this._db) : super(const SyncState()) {
+  SyncNotifier(this._service, this._db, {this.prefetchAttachments}) : super(const SyncState()) {
     _loadLastSync();
   }
 
   final SyncService _service;
   final AppDatabase _db;
+
+  /// Fills the attachment byte cache after a successful sync (O-8c). A callback, not the
+  /// prefetcher itself, so this file stays free of the cache's own dependencies; the provider
+  /// wires it and it is already a no-op unless the link is unmetered Wi-Fi.
+  final Future<int> Function()? prefetchAttachments;
 
   Future<void> _loadLastSync() async {
     final last = await _db.getLastSync();
@@ -1195,6 +1198,17 @@ class SyncNotifier extends StateNotifier<SyncState> {
     try {
       final ts = await _service.sync();
       state = SyncState(status: SyncStatus.done, lastSync: ts);
+      // Deliberately after the state is published and never awaited: the technician sees the
+      // fresh data immediately, and a slow or failing prefetch cannot hold the sync hostage.
+      final prefetch = prefetchAttachments;
+      if (prefetch != null) {
+        unawaited(
+          prefetch().catchError((Object e) {
+            debugPrint('attachment prefetch failed: $e');
+            return 0;
+          }),
+        );
+      }
     } catch (e) {
       state = state.copyWith(
         status: SyncStatus.error,
@@ -1208,5 +1222,6 @@ final syncProvider = StateNotifierProvider<SyncNotifier, SyncState>((ref) {
   return SyncNotifier(
     ref.watch(syncServiceProvider),
     ref.watch(appDatabaseProvider),
+    prefetchAttachments: () => ref.read(attachmentPrefetcherProvider).run(),
   );
 });
