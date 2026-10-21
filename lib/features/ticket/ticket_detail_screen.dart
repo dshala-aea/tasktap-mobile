@@ -985,9 +985,12 @@ class _ControlloTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controlsAsync = ref.watch(ticketControlsProvider(ticketId));
-    // Asset checklists come from the local mirror (offline); the ticket-level list below is still
-    // the online-only REST read. A ticket without assets renders exactly as before.
-    final showAssets = ref.watch(ticketChecklistProvider(ticketId)).valueOrNull?.hasAnything ?? false;
+    // Asset checklists come from the local mirror; the ticket-level list below is answered by
+    // [ticketControlsProvider] from the REST read online and from that same mirror offline. A
+    // ticket without assets renders exactly as before — [TicketChecklist.hasAssetChecklists], not
+    // `hasAnything`, so ticket-level rows alone never put the asset card on this tab.
+    final showAssets =
+        ref.watch(ticketChecklistProvider(ticketId)).valueOrNull?.hasAssetChecklists ?? false;
     final assetCard = TicketAssetChecklistsCard(ticketId: ticketId);
     Widget wrap(Widget ticketLevel) => showAssets
         ? Column(

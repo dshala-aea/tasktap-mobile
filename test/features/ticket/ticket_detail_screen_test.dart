@@ -1086,14 +1086,60 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+    testWidgets('offline, shows the ticket-level controls from the local mirror', (tester) async {
+      await seedBase(db);
+      // The checklist sync mirrors ticket-level rows (`prodottoAssistenzaId` null), so the
+      // Controllo tab answers with them instead of the "non disponibili offline" state.
+      await applyChecklistBatch(
+        db,
+        ChecklistBatch(
+          authoritativeTicketIds: {'ticket-1'},
+          controlGroups: const [
+            SyncControlGroupDto(
+              id: 'g1',
+              maintenanceTemplateVersionId: 'v1',
+              name: 'Sicurezza',
+              sortOrder: 0,
+            ),
+          ],
+          ticketControls: const [
+            SyncTicketControlDto(
+              id: 'tl-1',
+              ticketId: 'ticket-1',
+              templateControlId: 'tpl-1',
+              controlLineageId: 'lin-1',
+              groupId: 'g1',
+              label: 'Pressione OK',
+              type: ControlType.checkbox,
+              isRequired: true,
+              status: 'Completed',
+              boolValue: true,
+            ),
+          ],
+          ticketAssets: const [],
+          assets: const [],
+        ),
+      );
+
+      await pump(tester, isOnline: false);
+      await tapTab(tester, 'Controllo');
+
+      expect(find.text('Pressione OK'), findsOneWidget);
+      expect(find.text('Sicurezza'), findsOneWidget);
+      expect(find.text('Controlli non disponibili offline'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('offline with an empty mirror says no controls are planned', (tester) async {
       await seedBase(db);
 
       await pump(tester, isOnline: false);
       await tapTab(tester, 'Controllo');
 
-      expect(find.text('Controlli non disponibili offline'), findsOneWidget);
-      expect(find.text('Nessun controllo previsto'), findsNothing);
+      // The mirror is the answer offline: an empty one is an honest "nothing planned", not an
+      // unreachable server.
+      expect(find.text('Nessun controllo previsto'), findsOneWidget);
+      expect(find.text('Controlli non disponibili offline'), findsNothing);
       await resetAndDispose(tester);
     });
 
