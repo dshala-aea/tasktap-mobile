@@ -70,6 +70,7 @@ class SyncService {
       await _upsertTicketMateriali(payload.ticketMateriali);
       await _upsertMaterialeBarcodes(payload.materialiBarcodes);
       await _upsertCantieri(payload.cantieri);
+      await _replaceCantiereCrewAssignments(payload);
       await _replaceColleagues(payload.colleagues);
       await _applyReferenceCache(payload);
       await _replaceMaintenanceTemplates(payload);
@@ -346,6 +347,51 @@ class SyncService {
             ),
           );
     }
+  }
+
+  /// The crew mirror behind the lead-only clock-in affordances and the teammate picker.
+  ///
+  /// Replaced, not upserted, but only for the cantieri *this payload* carries. The member holds the
+  /// complete crew of each of those cantieri with no delta filter on the crew rows — a lead change
+  /// must reach a device whose cantiere row itself is unchanged — so the delete-then-insert below
+  /// is what makes a person removed from a crew stop appearing. It is scoped to the payload's
+  /// cantiere ids because absence is a delta-scope fact, never a deletion signal: a cantiere the
+  /// payload does not carry this time keeps the crew it already mirrored. That is also why nothing
+  /// is pruned for cantieri that are absent — the server never says their crew is gone, it says
+  /// nothing about them.
+  ///
+  /// Skipped entirely when the payload does not carry the member, so an older backend cannot look
+  /// like "every crew is empty" and wipe the mirror.
+  Future<void> _replaceCantiereCrewAssignments(SyncResultDto payload) async {
+    if (!payload.carriesCantiereCrewAssignments) return;
+
+    final cantiereIds = payload.cantieri.map((c) => c.id).toSet();
+    // No cantiere in scope means there is no set to replace. Returning also keeps an empty `IN ()`
+    // (which SQLite treats as a syntax error) out of the delete below.
+    if (cantiereIds.isEmpty) return;
+
+    await db.transaction(() async {
+      await (db.delete(db.cantiereCrewAssignments)..where((a) => a.cantiereId.isIn(cantiereIds)))
+          .go();
+      await db.batch(
+        (b) => b.insertAll(
+          db.cantiereCrewAssignments,
+          // Defensive: the contract scopes this member to the payload's cantieri. Filtering keeps
+          // a row for any other cantiere out of the mirror — such a row would be inserted without
+          // its cantiere's previous set having been deleted, leaving a stale mix behind.
+          payload.cantiereCrewAssignments
+              .where((a) => cantiereIds.contains(a.cantiereId))
+              .map(
+                (a) => CantiereCrewAssignmentsCompanion.insert(
+                  id: a.id,
+                  cantiereId: a.cantiereId,
+                  userId: a.userId,
+                  isLead: Value(a.isLead),
+                ),
+              ),
+        ),
+      );
+    });
   }
 
   Future<void> _upsertCustomers(List<CustomerDto> list) async {

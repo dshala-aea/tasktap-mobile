@@ -50,6 +50,7 @@ import '../../core/time/work_time.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
@@ -416,26 +417,62 @@ final cantiereActiveSessionProvider = Provider.autoDispose<CantiereActiveSession
   );
 });
 
-/// Crew assignments for a cantiere — GET /api/cantieri/{id}/assegnazioni. Used to derive whether
-/// the current user is lead (see [isLeadForCantiereProvider]) and to populate the teammate
-/// picker's checkbox list.
+/// Crew assignments for a cantiere — GET /api/cantieri/{id}/assegnazioni online, the
+/// `cantiere_crew_assignments` Drift mirror offline. Used to derive whether the current user is
+/// lead (see [isLeadForCantiereProvider]) and to populate the teammate picker's checkbox list.
 ///
-/// A live fetch-and-derive provider, not a Drift mirror: this concept is new and has no local
-/// offline table of its own. Failing (including offline) leaves this provider in `AsyncError`,
-/// which [isLeadForCantiereProvider] reads as "not lead" — the explicit single-button fallback per
-/// the plan's Global Constraints, not a bug.
+/// Two axes, deliberately separate:
+///
+///   - **Freshness (online):** the live answer wins. Online this app always shows the latest server
+///     data, so the fetch is attempted first and its result is returned as-is — the mirror is not
+///     merged into it.
+///   - **Availability (offline):** the mirror is the answer. No network call is attempted and no
+///     timeout is waited out, because there is nothing to wait for: the device already holds the
+///     crew the last sync carried. On a *failed* live fetch while online the mirror is used too, so
+///     a flaky connection degrades to the last known crew instead of to "not lead".
+///
+/// This is what makes the provider offline-safe rather than a live-fetch-and-derive one: before the
+/// mirror existed, being offline left it in `AsyncError`, which [isLeadForCantiereProvider] read as
+/// "not lead" and which emptied the teammate picker — the lead could not start a squad clock-in
+/// without signal even though the punches themselves already queue offline. With the mirror, a
+/// `false` from [isLeadForCantiereProvider] now only ever means "genuinely not lead" or "nothing
+/// mirrored yet" (a device that has never synced with a backend that carries the crew member).
 final cantiereCrewAssignmentsProvider = FutureProvider.autoDispose
     .family<List<CantiereCrewAssignmentDto>, String>((ref, cantiereId) async {
-      final client = ref.watch(cantiereWorklogApiClientProvider);
-      return client.getAssegnazioni(cantiereId);
+      final db = ref.watch(appDatabaseProvider);
+
+      Future<List<CantiereCrewAssignmentDto>> mirrored() async {
+        final rows =
+            await (db.select(db.cantiereCrewAssignments)
+                  ..where((a) => a.cantiereId.equals(cantiereId)))
+                .get();
+        return rows
+            .map(
+              (r) => CantiereCrewAssignmentDto(id: r.id, userId: r.userId, isLead: r.isLead),
+            )
+            .toList();
+      }
+
+      // Availability: offline, the mirror answers immediately — no call, no waiting.
+      if (!ref.watch(isOnlineProvider)) return mirrored();
+
+      // Freshness: online, the live answer is the answer; only its failure falls back.
+      try {
+        return await ref.watch(cantiereWorklogApiClientProvider).getAssegnazioni(cantiereId);
+      } catch (e) {
+        debugPrint('cantiereCrewAssignments: live fetch failed, using the mirror ($e)');
+        return mirrored();
+      }
     });
 
 /// Whether the signed-in technician is the lead for the given cantiere, derived from
 /// [cantiereCrewAssignmentsProvider].
 ///
-/// False (never null) while loading, on error, or offline — this screen only ever needs a yes/no
-/// answer to decide which button set to render, and a lead-only affordance has no business
-/// blocking anyone else's — or a temporarily-unreachable lead's — plain single-button clock-in.
+/// False (never null) while loading or when the provider has no answer at all — this screen only
+/// ever needs a yes/no answer to decide which button set to render, and a lead-only affordance has
+/// no business blocking anyone else's plain single-button clock-in. Offline the provider answers
+/// from the Drift mirror, so being offline no longer reads as "not lead" by itself: a true lead
+/// stays lead without signal.
 final isLeadForCantiereProvider = Provider.autoDispose.family<bool, String>((ref, cantiereId) {
   // The internal database Guid, not currentUserProvider.id (the Zitadel OIDC sub) — assignment
   // rows' userId is the internal Guid, so comparing against the sub never matched anyone.
