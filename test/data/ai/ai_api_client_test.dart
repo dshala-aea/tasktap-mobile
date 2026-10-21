@@ -573,5 +573,86 @@ void main() {
         throwsA(isA<AiConversationException>().having((e) => e.offline, 'offline', isTrue)),
       );
     });
+
+    test('postTurn gives the server its full 45 s turn budget (per-request timeouts)', () async {
+      RequestOptions? seen;
+      final client = AiApiClient(
+        dioWith((o) async {
+          seen = o;
+          return json({'assistantReplyText': 'Ok', 'draft': <String, dynamic>{}});
+        }),
+      );
+      await client.postTurn('s', text: 'x', idempotencyKey: 'k');
+      expect(seen!.receiveTimeout, const Duration(seconds: 60));
+      expect(seen!.sendTimeout, const Duration(seconds: 60));
+    });
+
+    test('a 422 for an over-long text is a typed, Italian, shortenable refusal', () async {
+      final client = AiApiClient(
+        dioWith(
+          (o) async => json({
+            'code': 'validation_failed',
+            'errors': {
+              'Text': ['Text must not exceed 8000 characters.'],
+            },
+          }, 422),
+        ),
+      );
+      await expectLater(
+        () => client.postTurn('s', text: 't', idempotencyKey: 'k'),
+        throwsA(
+          isA<AiConversationException>()
+              .having((e) => e.statusCode, 'status', 422)
+              .having((e) => e.isTextTooLong, 'tooLong', isTrue)
+              .having((e) => e.message, 'message', contains('troppo lungo')),
+        ),
+      );
+    });
+
+    test('any other 422 gets an honest Italian sentence, never the service-silent copy', () async {
+      final client = AiApiClient(
+        dioWith(
+          (o) async => json({
+            'code': 'validation_failed',
+            'errors': {
+              'Text': ['Text must not be empty.'],
+            },
+          }, 422),
+        ),
+      );
+      await expectLater(
+        () => client.postTurn('s', text: 't', idempotencyKey: 'k'),
+        throwsA(
+          isA<AiConversationException>()
+              .having((e) => e.statusCode, 'status', 422)
+              .having((e) => e.isTextTooLong, 'tooLong', isFalse)
+              .having((e) => e.message, 'message', contains('rifiutato'))
+              .having((e) => e.message, 'message', isNot(contains('validation_failed'))),
+        ),
+      );
+    });
+
+    test('a 400 with a code the app does not know never shows the raw code', () async {
+      for (final code in ['audio_ref_invalid', 'something_new']) {
+        final client = AiApiClient(dioWith((o) async => json({'error': code, 'message': 'x'}, 400)));
+        await expectLater(
+          () => client.postTurn('s', text: 't', idempotencyKey: 'k'),
+          throwsA(
+            isA<AiConversationException>()
+                .having((e) => e.code, 'code', code)
+                .having((e) => e.message, 'message', isNot(contains('_'))),
+          ),
+        );
+      }
+    });
+
+    test('tryAbandonConversation reports whether the session is gone and never throws', () async {
+      final ok = AiApiClient(dioWith((o) async => json({}, 204)));
+      expect(await ok.tryAbandonConversation('s'), isTrue);
+      final gone = AiApiClient(dioWith((o) async => json({'title': 'nf'}, 404)));
+      expect(await gone.tryAbandonConversation('s'), isTrue);
+      final down = _clientThrowing(_err(type: DioExceptionType.connectionError));
+      expect(await down.tryAbandonConversation('s'), isFalse);
+    });
   });
 }

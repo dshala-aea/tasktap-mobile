@@ -140,6 +140,12 @@ class AiConversationException implements Exception {
   bool get isDraftTooLarge => statusCode == 409 && code == 'draft_too_large';
   bool get isTurnLimitExceeded => statusCode == 409 && code == 'turn_limit_exceeded';
 
+  /// 422: the turn text (or raw transcript) is over the server's per-turn character cap. The
+  /// technician can shorten it and send again.
+  bool get isTextTooLong => code == textTooLongCode;
+
+  static const textTooLongCode = 'text_too_long';
+
   @override
   String toString() => message;
 }
@@ -774,8 +780,17 @@ class AiConversationConfirmResponse {
 
 /// Per-request limits for `transcribe` only (the shared Dio allows 30 s to receive, with no send
 /// limit). The server reads the whole upload and calls the transcription provider before it
-/// answers, so a 5-9 minute recording legitimately takes far longer than 30 s.
+/// answers, so a 5 minute recording legitimately takes far longer than 30 s.
 const Duration transcribeSendTimeout = Duration(minutes: 5);
+
+/// Per-request limits for a turn. The server may work up to 45 s on one turn
+/// (`AiAgentLimits.MaxExecutionTimePerTurn`); the shared Dio's 30 s would abandon a turn the
+/// server is still completing (and charging).
+const Duration turnSendTimeout = Duration(seconds: 60);
+const Duration turnReceiveTimeout = Duration(seconds: 60);
+
+/// The server's per-turn text cap (`AiAgentLimits.MaxOperatorTurnCharacters`).
+const int maxTurnCharacters = 8000;
 const Duration transcribeReceiveTimeout = Duration(minutes: 4);
 
 /// What `POST /api/ai/transcribe` returns: the transcript and the id of the retained audio.
@@ -962,7 +977,11 @@ class AiApiClient {
           'replacesTurnId': ?replacesTurnId,
           'confirmedEdits': ?confirmedEdits,
         },
-        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+        options: Options(
+          headers: {'Idempotency-Key': idempotencyKey},
+          sendTimeout: turnSendTimeout,
+          receiveTimeout: turnReceiveTimeout,
+        ),
       );
       final data = response.data;
       if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
@@ -1153,6 +1172,19 @@ class AiApiClient {
     );
   }
 
+  /// DELETE /api/ai/conversations/{id}, reporting whether the session is gone afterwards (a 404
+  /// counts: it already was). Never throws.
+  Future<bool> tryAbandonConversation(String sessionId) async {
+    try {
+      await _dio.delete<void>('/api/ai/conversations/$sessionId');
+      return true;
+    } on DioException catch (e) {
+      return e.response?.statusCode == 404;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// DELETE /api/ai/conversations/{id} — abandon. Best-effort: a session that's already gone
   /// (already confirmed, expired) is not a failure from the caller's point of view.
   Future<void> abandonConversation(String sessionId) async {
@@ -1162,6 +1194,21 @@ class AiApiClient {
       // best-effort — see doc comment above
     }
   }
+
+  static String _italian400(String? code) => switch (code) {
+    'turn_empty' => 'L\'aggiornamento è vuoto: scrivi o registra qualcosa.',
+    'audio_ref_invalid' =>
+      'La registrazione non è più disponibile sul server: registrala di nuovo o scrivi '
+          'l\'aggiornamento.',
+    'too_many_edits' => 'Troppe modifiche in una volta: riprova.',
+    'edit_reference_not_found' =>
+      'Una modifica riguarda una voce che non esiste più o non appartiene a questo ticket.',
+    'edit_value_invalid' || 'edit_property_unknown' || 'edit_kind_unknown' || 'edit_id_required' =>
+      'Una modifica fatta nel rapportino non è stata accettata dal server.',
+    'edit_sync_extras_not_allowed' => 'Le modifiche non possono essere inviate insieme alla voce.',
+    _ => 'Il server ha rifiutato l\'aggiornamento. Riprova; se il problema resta, continua a mano '
+        'nel rapportino.',
+  };
 
   static Exception _translate(DioException e) {
     final status = e.response?.statusCode;
@@ -1257,15 +1304,38 @@ class AiApiClient {
     }
 
     if (status == 400) {
-      final rawReason = map?['error'] ?? map?['message'];
-      final reason = body is String ? body : (rawReason is String ? rawReason : null);
       // The AI endpoints answer 400 with `{error: <stable code>, message}`: keep the code so a
-      // caller can tell WHICH refusal it was (an edit the server will never accept, say).
+      // caller can tell WHICH refusal it was (an edit the server will never accept, say), and
+      // show an Italian sentence, never the raw code.
       final rawCode = map?['error'];
+      final code = rawCode is String ? rawCode : null;
+      return AiConversationException(status, _italian400(code), code: code);
+    }
+
+    if (status == 422) {
+      // The validation filter's ProblemDetails: `{code: 'validation_failed', errors: {Text: [...]}}`.
+      final errors = map?['errors'];
+      final tooLong =
+          errors is Map &&
+          errors.entries.any(
+            (e) =>
+                ['text', 'rawtranscript'].contains(e.key.toString().toLowerCase()) &&
+                '${e.value}'.contains('exceed'),
+          );
+      if (tooLong) {
+        return AiConversationException(
+          status,
+          'Il testo è troppo lungo per un solo aggiornamento (massimo $maxTurnCharacters '
+          'caratteri): accorcialo e invialo di nuovo.',
+          code: AiConversationException.textTooLongCode,
+        );
+      }
+      final rawCode = map?['code'];
       return AiConversationException(
         status,
-        reason ?? 'Richiesta non valida.',
-        code: rawCode is String ? rawCode : null,
+        'Il server ha rifiutato i dati inviati. Controlla l\'aggiornamento e riprova; se il '
+        'problema resta, continua a mano nel rapportino.',
+        code: rawCode is String ? rawCode : 'validation_failed',
       );
     }
 

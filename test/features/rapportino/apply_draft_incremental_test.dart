@@ -44,6 +44,10 @@ class _FakeAi extends AiApiClient {
   /// A request whose edits match is refused with a 400, as the server refuses an unknown id.
   bool Function(List<Map<String, dynamic>> edits)? rejectIf;
 
+  /// When set, every EDITS-ONLY request (empty text) is refused with this status, as the real
+  /// backend's validator refuses an empty `Text` (422) or a vanished session (404).
+  int? editsOnlyStatus;
+
   @override
   Future<AiConversationTurnResult> postTurn(
     String sessionId, {
@@ -56,6 +60,9 @@ class _FakeAi extends AiApiClient {
     required String idempotencyKey,
   }) async {
     calls.add(_Sync(confirmedEdits, idempotencyKey, text));
+    if (editsOnlyStatus != null && text.isEmpty) {
+      throw AiConversationException(editsOnlyStatus, 'refused', code: 'validation_failed');
+    }
     if (rejectIf != null && confirmedEdits != null && rejectIf!(confirmedEdits)) {
       throw const AiConversationException(
         400,
@@ -806,4 +813,163 @@ void main() {
       expect((await h.store.load(_session))!.applying, isFalse);
     });
   });
+
+  group('final review fixes', () {
+    Future<void> hand(String userId, double hours) => h.db
+        .into(h.db.reportStaffTable)
+        .insert(
+          ReportStaffTableCompanion.insert(
+            id: 'hand-$userId',
+            tenantId: 'ten-1',
+            createdAt: DateTime.utc(2026, 10, 20),
+            reportId: _report,
+            userId: userId,
+            hoursWorked: Value(hours),
+          ),
+        );
+
+    test('a_422_on_a_derived_edits_only_batch_is_terminal_and_the_edit_still_rides_in_a_turn',
+        () async {
+      await h.feed.apply(_session, _draft(workers: [_worker(_me, hours: 3)]));
+      await h.db.delete(h.db.reportStaffTable).go();
+      h.ai.editsOnlyStatus = 422;
+
+      await h.syncer.sync(_session); // does not throw: derived edits are not an explicit action
+      expect((await h.store.load(_session))!.batches, isEmpty, reason: 'the queue is not jammed');
+      final before = h.ai.calls.length;
+      await h.syncer.sync(_session);
+      expect(h.ai.calls, hasLength(before), reason: 'not resent edits-only');
+
+      final forTurn = await h.syncer.editsForTurn(_session);
+      expect(forTurn, [const AiConfirmedEdit(kind: 'worker', id: _me, remove: true)]);
+      await h.syncer.acknowledge(_session, forTurn);
+      expect(await h.feed.pendingEdits(_session), isEmpty);
+    });
+
+    test('a_422_on_an_explicit_action_is_reported_and_leaves_the_queue_empty', () async {
+      h.ai.editsOnlyStatus = 422;
+      await expectLater(
+        h.syncer.sync(_session, extra: [const AiConfirmedEdit(kind: 'material', id: _mat)]),
+        throwsA(isA<AiConversationException>().having((e) => e.statusCode, 'status', 422)),
+      );
+      expect((await h.store.load(_session))!.batches, isEmpty);
+    });
+
+    test('a_stuck_queue_never_stops_pending_edits_riding_in_a_turn', () async {
+      await h.feed.apply(_session, _draft(workers: [_worker(_me, hours: 3)]));
+      await h.db.delete(h.db.reportStaffTable).go();
+      h.ai.replies.add(const AiConversationException(null, 'offline', offline: true));
+      await expectLater(h.syncer.sync(_session), throwsA(isA<AiConversationException>()));
+      expect((await h.store.load(_session))!.batches, isNotEmpty);
+
+      h.ai.replies.add(const AiConversationException(500, 'boom')); // the flush fails again
+      final forTurn = await h.syncer.editsForTurn(_session);
+      expect(forTurn, [const AiConfirmedEdit(kind: 'worker', id: _me, remove: true)]);
+    });
+
+    test('a_404_unlinks_the_feed_and_says_the_session_is_gone', () async {
+      await h.feed.apply(_session, _draft(workers: [_worker(_me, hours: 3)]));
+      await h.db.delete(h.db.reportStaffTable).go();
+      h.ai.editsOnlyStatus = 404;
+      await expectLater(h.syncer.sync(_session), throwsA(isA<AiFeedSessionGoneException>()));
+      expect(await h.store.load(_session), isNull);
+      expect(await h.store.sessionForReport(_report), isNull);
+    });
+
+    group('the report is signed, queued or sent', () {
+      final locks = <String, DraftReportsCompanion>{
+        'readyToSubmit': const DraftReportsCompanion(submissionState: Value('readyToSubmit')),
+        'failed': const DraftReportsCompanion(submissionState: Value('failed')),
+        'uploadingMedia': const DraftReportsCompanion(submissionState: Value('uploadingMedia')),
+        'submitted': const DraftReportsCompanion(submissionState: Value('submitted')),
+        'stato_not_bozza': const DraftReportsCompanion(stato: Value('Inviato')),
+        'signed': const DraftReportsCompanion(customerSignatureAllegatoId: Value('sig-1')),
+      };
+      for (final entry in locks.entries) {
+        test('apply_refuses_and_unlinks_on_${entry.key}', () async {
+          await (h.db.update(h.db.draftReports)..where((r) => r.id.equals(_report))).write(entry.value);
+          await expectLater(
+            h.feed.apply(_session, _draft(materials: [_material(_mat, 2)])),
+            throwsA(isA<AiFeedReportLockedException>()),
+          );
+          expect(await h.materials(), isEmpty, reason: 'the signed/queued report is not rewritten');
+          expect(await h.store.sessionForReport(_report), isNull);
+        });
+
+        test('applyConfirmResponse_refuses_on_${entry.key}', () async {
+          await (h.db.update(h.db.draftReports)..where((r) => r.id.equals(_report))).write(entry.value);
+          await expectLater(
+            h.feed.applyConfirmResponse(
+              _session,
+              const AiConversationConfirmResponse(
+                title: 'T',
+                materials: [AiResolvedMaterial(materialeId: _mat, quantity: 2)],
+              ),
+            ),
+            throwsA(isA<AiFeedReportLockedException>()),
+          );
+          expect(await h.materials(), isEmpty);
+        });
+      }
+
+      test('an_editable_draft_is_still_written', () async {
+        await h.feed.apply(_session, _draft(materials: [_material(_mat, 2)]));
+        expect(await h.materials(), hasLength(1));
+      });
+
+      test('reportWasSubmitted_is_true_for_a_queued_report_only_when_not_a_draft', () async {
+        expect(await h.feed.reportWasSubmitted(_report), isFalse);
+        await (h.db.update(h.db.draftReports)..where((r) => r.id.equals(_report))).write(
+          const DraftReportsCompanion(submissionState: Value('readyToSubmit')),
+        );
+        expect(await h.feed.reportWasSubmitted(_report), isTrue);
+      });
+
+      test('release_abandons_the_session_and_unlinks_it_once_the_server_confirmed', () async {
+        final ai = _AbandonAi(ok: true);
+        await releaseAiSessionForSubmittedReport(store: h.store, client: ai, reportId: _report);
+        expect(ai.abandoned, [_session]);
+        expect(await h.store.sessionForReport(_report), isNull);
+      });
+
+      test('release_keeps_the_link_when_the_server_could_not_be_reached', () async {
+        final ai = _AbandonAi(ok: false);
+        await releaseAiSessionForSubmittedReport(store: h.store, client: ai, reportId: _report);
+        expect(await h.store.sessionForReport(_report), _session);
+      });
+    });
+
+    test('a_throwing_apply_never_leaves_the_crash_marker_set', () async {
+      await (h.db.update(h.db.draftReports)..where((r) => r.id.equals(_report))).write(
+        const DraftReportsCompanion(submissionState: Value('readyToSubmit')),
+      );
+      await expectLater(h.feed.apply(_session, _draft()), throwsA(isA<AiFeedReportLockedException>()));
+      expect((await h.store.load(_session))?.applying ?? false, isFalse);
+    });
+
+    test('recovery_adopts_a_local_value_only_where_it_equals_the_server_value', () async {
+      // The interrupted apply left hours 3 locally; the server holds 4 now. 3 != 4: normal
+      // adoption, so the local 3 is a hand edit and is sent, never silently adopted as baseline.
+      await hand(_me, 3);
+      final state = (await h.store.load(_session))!..applying = true;
+      await h.store.save(state);
+      await h.feed.apply(_session, _draft(workers: [_worker(_me, hours: 4)]));
+      expect((await h.staff()).single.hoursWorked, 3, reason: 'the local value is not overwritten');
+      expect(await h.feed.pendingEdits(_session), [
+        const AiConfirmedEdit(kind: 'worker', id: _me, property: 'hours', value: 3.0),
+      ], reason: 'it is a hand edit against the server value, not a silently adopted baseline');
+      expect((await h.store.load(_session))!.applying, isFalse);
+    });
+  });
+}
+
+class _AbandonAi extends AiApiClient {
+  _AbandonAi({required this.ok}) : super(Dio());
+  final bool ok;
+  final List<String> abandoned = [];
+  @override
+  Future<bool> tryAbandonConversation(String sessionId) async {
+    if (ok) abandoned.add(sessionId);
+    return ok;
+  }
 }

@@ -8,7 +8,7 @@ import '../../data/local/app_database.dart';
 import '../../data/reports/import_server_report.dart' show controlRowId;
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider;
-import 'ai_draft_feed.dart' show aiDraftFeedProvider;
+import 'ai_draft_feed.dart' show AiFeedReportLockedException, aiDraftFeedProvider;
 import 'create_draft.dart';
 
 const _uuid = Uuid();
@@ -61,6 +61,8 @@ Future<String?> applyConfirmedDraft(
           await feed.applyConfirmResponse(sessionId, response)) {
         return linked;
       }
+    } on AiFeedReportLockedException {
+      rethrow; // a signed/queued/sent report is never re-seeded into a new one
     } catch (_) {
       // No readable feed state: fall through to the ordinary new-report path.
     }

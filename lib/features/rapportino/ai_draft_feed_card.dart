@@ -38,6 +38,7 @@ class _AiDraftFeedCardState extends ConsumerState<AiDraftFeedCard> {
   AiFeedStatus _status = const AiFeedStatus();
   late final AiEditSyncer _syncer;
   late final AiDraftFeed _feed;
+  late final AiApiClient _client;
 
   @override
   void initState() {
@@ -45,6 +46,7 @@ class _AiDraftFeedCardState extends ConsumerState<AiDraftFeedCard> {
     // Read once: dispose() must not touch `ref`.
     _syncer = ref.read(aiEditSyncerProvider);
     _feed = ref.read(aiDraftFeedProvider);
+    _client = ref.read(aiApiClientProvider);
     unawaited(_load());
   }
 
@@ -76,13 +78,27 @@ class _AiDraftFeedCardState extends ConsumerState<AiDraftFeedCard> {
     // an unacknowledged batch is persisted and resent, same key, by the next sync or turn.
     final id = _sessionId;
     if (id != null) {
-      unawaited(
-        _syncer.sync(id).then((d) async {
-          if (d != null) await _feed.apply(id, d);
-        }, onError: (Object _) {}),
-      );
+      unawaited(_leave(id));
     }
     super.dispose();
+  }
+
+  Future<void> _leave(String id) async {
+    try {
+      // Submitted (or queued) from this editor: the draft behind it was used. Release the session
+      // so a later visit never re-applies this visit's lines (best effort; the copilot's resume
+      // check covers a release that did not get through). Nothing is written to the report.
+      if (await _feed.reportWasSubmitted(widget.reportId)) {
+        await releaseAiSessionForSubmittedReport(
+          store: _feed.store,
+          client: _client,
+          reportId: widget.reportId,
+        );
+        return;
+      }
+      final d = await _syncer.sync(id);
+      if (d != null) await _feed.apply(id, d);
+    } catch (_) {}
   }
 
   Future<void> _run(Future<String> Function(String sessionId) op) async {

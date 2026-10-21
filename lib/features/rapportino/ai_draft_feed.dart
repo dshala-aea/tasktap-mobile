@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../data/ai/ai_api_client.dart';
 import '../../data/local/app_database.dart';
 import '../../data/reports/import_server_report.dart' show controlRowId;
+import '../../data/sync/draft_submission_state.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -77,12 +78,14 @@ class AiDraftFeedState {
     this.blocked = false,
     Set<String>? knownControls,
     Map<String, String>? rejected,
+    Set<String>? editsOnlyRefused,
     this.applying = false,
   }) : applied = applied ?? {},
        synced = synced ?? {},
        batches = batches ?? [],
        knownControls = knownControls ?? {},
-       rejected = rejected ?? {};
+       rejected = rejected ?? {},
+       editsOnlyRefused = editsOnlyRefused ?? {};
 
   final String sessionId;
 
@@ -106,6 +109,11 @@ class AiDraftFeedState {
   /// on the editor card. A different value is a different edit and is tried again.
   final Map<String, String> rejected;
 
+  /// Edits the server would not take as an EDITS-ONLY request (422: the request shape, not the
+  /// edit, e.g. a server that still requires turn text). Not resent edits-only, but they still
+  /// ride in the next voice/typed turn, which is the channel that works.
+  final Set<String> editsOnlyRefused;
+
   /// Set before an apply writes Drift and cleared after its baseline is saved. Found set on load,
   /// the last apply was interrupted in between: its rows have no baseline and must not be mistaken
   /// for hand-added lines.
@@ -128,6 +136,7 @@ class AiDraftFeedState {
     'blocked': blocked,
     'knownControls': knownControls.toList(),
     'rejected': rejected,
+    'editsOnlyRefused': editsOnlyRefused.toList(),
     'applying': applying,
   };
 
@@ -156,6 +165,9 @@ class AiDraftFeedState {
     },
     knownControls: {
       for (final k in (json['knownControls'] as List<dynamic>? ?? const [])) k.toString(),
+    },
+    editsOnlyRefused: {
+      for (final k in (json['editsOnlyRefused'] as List<dynamic>? ?? const [])) k.toString(),
     },
   );
 }
@@ -431,6 +443,7 @@ class AiDraftFeed {
     final state = await _store.load(sessionId);
     final reportId = state?.reportId;
     if (state == null || reportId == null) return false;
+    await _guardWritable(state, reportId);
     final lines = _linesOfDraft(draft);
     state.knownControls
       ..clear()
@@ -445,14 +458,49 @@ class AiDraftFeed {
 
   /// Runs [write] between the persisted "apply in progress" marker and the baseline save.
   /// [write] receives whether an earlier apply was interrupted (see [AiDraftFeedState.applying]).
+  ///
+  /// A write that THROWS rolled its Drift transaction back, so nothing is half-written: the marker
+  /// is cleared then too. Only a killed process leaves it set.
   Future<void> _marked(AiDraftFeedState state, Future<void> Function(bool recovering) write) async {
     final recovering = state.applying;
     state.applying = true;
     await _store.save(state);
-    await write(recovering);
-    state.applying = false;
-    await _store.save(state);
+    try {
+      await write(recovering);
+    } finally {
+      state.applying = false;
+      await _store.save(state);
+    }
   }
+
+  /// The one guard every AI writer goes through: the linked report must still be the
+  /// technician's editable draft. A signed, queued, failed-in-queue or sent report is never
+  /// touched (the queue reads its lines from Drift at send time): the session is unlinked and
+  /// [AiFeedReportLockedException] says why. The AI draft itself stays readable in the copilot.
+  Future<void> _guardWritable(AiDraftFeedState state, String reportId) async {
+    final header = await (_db.select(
+      _db.draftReports,
+    )..where((t) => t.id.equals(reportId))).getSingleOrNull();
+    final refusal = feedWriteRefusal(header);
+    if (refusal == null) return;
+    await _store.unlink(state.sessionId);
+    throw AiFeedReportLockedException(refusal);
+  }
+
+  /// Whether [reportId] was handed to the submission queue or sent (not merely signed): the AI
+  /// draft behind it has then been used.
+  Future<bool> reportWasSubmitted(String reportId) async {
+    final r = await (_db.select(_db.draftReports)..where((t) => t.id.equals(reportId)))
+        .getSingleOrNull();
+    if (r == null) return false;
+    return r.stato != 'Bozza' ||
+        DraftSubmissionState.fromString(r.submissionState) != DraftSubmissionState.draft;
+  }
+
+  /// Whether [reportId] may still be written by the AI feed (see [feedWriteRefusal]).
+  Future<String?> writeRefusalFor(String reportId) async => feedWriteRefusal(
+    await (_db.select(_db.draftReports)..where((t) => t.id.equals(reportId))).getSingleOrNull(),
+  );
 
   /// The end-of-flow Confirm response, applied into the SAME report the incremental path fed:
   /// matched by identity, so nothing is duplicated, and hand edits still win. Header text is only
@@ -462,6 +510,7 @@ class AiDraftFeed {
         final state = await _store.load(sessionId);
         final reportId = state?.reportId;
         if (state == null || reportId == null) return false;
+        await _guardWritable(state, reportId);
         // No `present` set: Confirm leaves out conflicts and plans, so absence proves nothing here.
         await _marked(
           state,
@@ -669,7 +718,7 @@ class AiDraftFeed {
           for (final p in line.values.keys) {
             final local = row.values[p];
             final server = line.values[p];
-            if (recovering) {
+            if (recovering && _same(local, server)) {
               adopted[p] = local; // written by the interrupted apply itself
             } else if (_isEditorDefault(p, local)) {
               if (!_isEditorDefault(p, server) && !_same(server, local)) updates[p] = server;
@@ -857,14 +906,15 @@ class AiDraftFeed {
     return v is String && v.trim().isEmpty;
   }
 
-  Future<List<AiConfirmedEdit>> _pending(AiDraftFeedState state) async =>
-      (await _derive(state)).sendable;
+  Future<List<AiConfirmedEdit>> _pending(AiDraftFeedState state, {bool forTurn = false}) async =>
+      (await _derive(state, forTurn: forTurn)).sendable;
 
   /// The hand edits split into those that can be sent and those that cannot (refused by the
   /// client-side mirror of `ConfirmedEditValidator`, or refused earlier by the server).
   Future<({List<AiConfirmedEdit> sendable, List<(AiConfirmedEdit, String)> unsendable})> _derive(
-    AiDraftFeedState state,
-  ) async {
+    AiDraftFeedState state, {
+    bool forTurn = false,
+  }) async {
     final sendable = <AiConfirmedEdit>[];
     final unsendable = <(AiConfirmedEdit, String)>[];
     // An interrupted apply leaves rows with no baseline: derive nothing until it is recovered.
@@ -876,7 +926,7 @@ class AiDraftFeed {
         unsendable.add((e, local));
       } else if (server != null) {
         unsendable.add((e, serverRejectionReason(server)));
-      } else {
+      } else if (forTurn || !state.editsOnlyRefused.contains(editSignature(e))) {
         sendable.add(e);
       }
     }
@@ -1032,6 +1082,55 @@ String describeUnsendable(AiConfirmedEdit e, String reason) {
   return '$what$label$field: $reason';
 }
 
+/// Null when [r] may still be written by an AI path; otherwise the Italian reason it may not.
+/// Editable means: a Bozza, never handed to the submission queue (`draft`: not ready, uploading,
+/// submitting, submitted or failed-in-queue), and not signed by the customer.
+String? feedWriteRefusal(DraftReport? r) {
+  if (r == null) return 'Il rapportino collegato non è più su questo telefono.';
+  final submission = DraftSubmissionState.fromString(r.submissionState);
+  if (r.stato != 'Bozza' || submission != DraftSubmissionState.draft) {
+    return 'Il rapportino collegato è già stato inviato o è in coda di invio: la bozza AI non lo '
+        'modifica più.';
+  }
+  if (r.customerSignatureAllegatoId != null) {
+    return 'Il rapportino collegato è già firmato dal cliente: la bozza AI non lo modifica più.';
+  }
+  return null;
+}
+
+/// The linked report may no longer be written by the AI (see [feedWriteRefusal]); the session
+/// was unlinked from it.
+class AiFeedReportLockedException implements Exception {
+  const AiFeedReportLockedException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+/// The server no longer has the AI session (404): the feed was released.
+class AiFeedSessionGoneException implements Exception {
+  const AiFeedSessionGoneException();
+  String get message =>
+      'La bozza AI non esiste più sul server (scaduta o chiusa): le modifiche restano nel '
+      'rapportino, ma non arrivano più all\'AI.';
+  @override
+  String toString() => message;
+}
+
+/// Releases the AI session behind [reportId] once that report was submitted on this device, so
+/// a later visit to the same ticket can never re-apply this visit's lines into a new report.
+/// Best effort: the feed is unlinked only once the server confirmed the release; otherwise the
+/// copilot's resume check still sees the link to a sent report and asks the technician.
+Future<void> releaseAiSessionForSubmittedReport({
+  required AiDraftFeedStore store,
+  required AiApiClient client,
+  required String reportId,
+}) async {
+  final sessionId = await store.sessionForReport(reportId);
+  if (sessionId == null) return;
+  if (await client.tryAbandonConversation(sessionId)) await store.unlink(sessionId);
+}
+
 /// The server refuses further edit syncs for this draft; retrying cannot help.
 class AiEditSyncBlockedException implements Exception {
   const AiEditSyncBlockedException(this.message);
@@ -1125,18 +1224,45 @@ class AiEditSyncer {
     if (state == null || state.blocked || state.reportId == null) {
       return const <AiConfirmedEdit>[];
     }
-    try {
-      if (state.batches.isNotEmpty) await _sync(sessionId, const []);
-      final fresh = await _store.load(sessionId);
-      if (fresh == null || fresh.blocked) return const <AiConfirmedEdit>[];
-      final pending = await _feed._pending(fresh);
-      if (pending.length <= AiConfirmedEdit.maxPerRequest) return pending;
-      await _sync(sessionId, const []);
-    } catch (_) {
-      // Offline or refused: the edits stay pending and go with a later sync.
+    // A queued batch is flushed first; whether that works or not, the derivable edits still
+    // ride in the turn (idempotent under the turn's own key): a stuck queue never silences them.
+    if (state.batches.isNotEmpty) {
+      try {
+        await _sync(sessionId, const []);
+      } catch (_) {}
     }
-    return const <AiConfirmedEdit>[];
+    final fresh = await _store.load(sessionId);
+    if (fresh == null || fresh.blocked || fresh.reportId == null) {
+      return const <AiConfirmedEdit>[];
+    }
+    var pending = await _feed._pending(fresh, forTurn: true);
+    if (pending.length > AiConfirmedEdit.maxPerRequest) {
+      try {
+        await _sync(sessionId, const []);
+      } catch (_) {}
+      final after = await _store.load(sessionId);
+      if (after == null || after.reportId == null) return const <AiConfirmedEdit>[];
+      pending = await _feed._pending(after, forTurn: true);
+    }
+    return pending.take(AiConfirmedEdit.maxPerRequest).toList();
   });
+
+  /// A turn carrying [edits] was refused (400/422) and is being resent without them: whatever of
+  /// [edits] is still unacknowledged is refused for good (shown on the card), so it can never
+  /// silence another turn. A changed value is a new edit and is tried again.
+  Future<void> refuseTurnEdits(String sessionId, List<AiConfirmedEdit> edits, String code) =>
+      _locked(sessionId, () async {
+        final state = await _store.load(sessionId);
+        if (state == null || state.reportId == null) return;
+        final still = {
+          for (final e in await _feed._pending(state, forTurn: true)) editSignature(e),
+        };
+        for (final e in edits) {
+          final sig = editSignature(e);
+          if (still.contains(sig)) state.rejected[sig] = code;
+        }
+        await _store.save(state);
+      });
 
   /// The turn that carried [edits] was accepted.
   Future<void> acknowledge(String sessionId, List<AiConfirmedEdit> edits) =>
@@ -1212,7 +1338,28 @@ class AiEditSyncer {
         state.batches.removeAt(0);
         await _store.save(state);
       } on AiConversationException catch (e) {
-        if (e.statusCode != 400) rethrow;
+        if (e.statusCode == 404) {
+          // The session is gone (expired, abandoned, confirmed elsewhere): nothing queued for it
+          // can ever be delivered. The feed is released and the technician told.
+          await _store.unlink(state.sessionId);
+          throw const AiFeedSessionGoneException();
+        }
+        if (e.statusCode == 422) {
+          // The REQUEST was refused (validation of its shape), not one edit: halving cannot help.
+          // Derived edits stop going edits-only and ride in the next turn instead; an explicit
+          // action is reported.
+          state.batches.removeAt(0);
+          for (var i = 0; i < batch.edits.length; i++) {
+            if (batch.derived[i]) {
+              state.editsOnlyRefused.add(editSignature(batch.edits[i]));
+            } else {
+              refusedAction = e;
+            }
+          }
+          await _store.save(state);
+          continue;
+        }
+        if (e.statusCode != 400 && e.statusCode != 413) rethrow;
         state.batches.removeAt(0);
         if (batch.edits.length > 1) {
           // Halve it: new keys (a 400 claims nothing on the server), same order, persisted.
