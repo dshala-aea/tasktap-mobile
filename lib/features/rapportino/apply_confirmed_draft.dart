@@ -8,6 +8,7 @@ import '../../data/local/app_database.dart';
 import '../../data/reports/import_server_report.dart' show controlRowId;
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider;
+import 'ai_draft_feed.dart' show aiDraftFeedProvider;
 import 'create_draft.dart';
 
 const _uuid = Uuid();
@@ -39,12 +40,32 @@ const _uuid = Uuid();
 /// `_hydrate()` resolves, so calling it here would overwrite everything this function just wrote.
 /// ADR-0016 §2 makes the flag coarse provenance, set where generated text enters the draft — which
 /// is here, so the value is `true` and not a caller's choice.
+///
+/// When [sessionId] already feeds a local report (the live draft was opened in the editor, Task
+/// 12), the response is applied into THAT report instead, through the same identity-matched,
+/// hand-edit-preserving path as the incremental apply (`AiDraftFeed.applyConfirmResponse`): no
+/// second report, no duplicated line. Its id is returned.
 Future<String?> applyConfirmedDraft(
   WidgetRef ref, {
   required AiConversationConfirmResponse response,
   String? ticketId,
   String? cantiereId,
+  String? sessionId,
 }) async {
+  if (sessionId != null) {
+    try {
+      final feed = ref.read(aiDraftFeedProvider);
+      final linked = (await feed.store.load(sessionId))?.reportId;
+      if (linked != null &&
+          await ref.read(draftReportRepositoryProvider).getDraft(linked) != null &&
+          await feed.applyConfirmResponse(sessionId, response)) {
+        return linked;
+      }
+    } catch (_) {
+      // No readable feed state: fall through to the ordinary new-report path.
+    }
+  }
+
   final id = await createLocalDraft(
     ref,
     title: response.title,

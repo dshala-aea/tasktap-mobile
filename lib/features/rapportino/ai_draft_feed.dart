@@ -1,0 +1,1056 @@
+// dart format width=100
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+
+import '../../data/ai/ai_api_client.dart';
+import '../../data/local/app_database.dart';
+import '../../data/reports/import_server_report.dart' show controlRowId;
+import '../../data/sync/sync_service.dart' show appDatabaseProvider;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// The AI draft as a LIVE FEED into the ordinary rapportino (AI report builder MVP, Task 12).
+//
+// The server's durable draft (one per technician and ticket) is applied into the phone's own Drift
+// report REPEATEDLY: after every turn, on resume, on "Aggiorna dalla bozza". Three rules:
+//
+// 1. Only the confirmed subset is written. A line enters the report when its entry is NOT
+//    `NeedsConfirmation` (a plan, an assignment, a checklist question with no answer) and NOT
+//    `Ambiguous`/`Conflict` (an open item the technician has to settle) — exactly the set
+//    `ConfirmPlanBuilder` writes at Confirm, so the incremental path and Confirm agree. Planned
+//    entries stay out and are offered as proposals with an explicit "Accetta" (a property-less
+//    confirmed edit); once the server returns them confirmed, the next apply writes them.
+//
+// 2. Applying is incremental and idempotent, and never overwrites a hand edit. "Hand-edited" is
+//    DERIVED, never flagged by the editor: for each line the apply writes, the values it wrote are
+//    kept as a per-session baseline (`applied`). A Drift value that differs from its baseline was
+//    changed by the technician; a baselined line with no Drift row was removed by hand; a Drift
+//    line with no baseline was added by hand. No Drift column or table: the baseline is a small
+//    JSON document in SharedPreferences keyed by session id (wiped with every other preference on
+//    logout, like the Drift database it describes).
+//
+// 3. Every hand change goes back to the server as a `ConfirmedEdit` (it then folds as
+//    OperatorConfirmed, so a later voice turn that disagrees is flagged, never applied): riding in
+//    the next turn's `confirmedEdits`, or as an edits-only request (empty text: no model, no
+//    charge) when the technician leaves the editor or taps "Sincronizza modifiche". `synced`
+//    records what the server acknowledged so nothing is sent twice; an edits-only batch is
+//    persisted with its Idempotency-Key until acknowledged, so a retry (even after a restart)
+//    resends the same body under the same key.
+//
+// Lines are identified the way the server identifies entries: a worker by user id, a material by
+// catalogue id or (free text) by its normalised name, a checklist answer by ticket control id.
+// Activities have no line in the local report (Confirm derives the title/description from them):
+// they are not written here.
+//
+// Customer sign-off is never written by this path, and nothing here submits or signs.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _uuid = Uuid();
+const _emptyGuid = '00000000-0000-0000-0000-000000000000';
+
+/// The marker Confirm writes on a free-text material line; written by the incremental path too so
+/// the two paths produce the same row.
+const freeTextMaterialNote = 'Da verificare: materiale non trovato a catalogo.';
+
+bool _isRealId(String? id) => id != null && id.isNotEmpty && id != _emptyGuid;
+
+String _normaliseName(String? s) =>
+    (s ?? '').trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+bool _same(Object? a, Object? b) {
+  if (a is num && b is num) return a.toDouble() == b.toDouble();
+  return a == b;
+}
+
+/// The persisted feed of one AI session.
+class AiDraftFeedState {
+  AiDraftFeedState({
+    required this.sessionId,
+    this.reportId,
+    Map<String, Map<String, Object?>>? applied,
+    Map<String, Map<String, Object?>>? synced,
+    this.batch,
+    this.blocked = false,
+    Set<String>? knownControls,
+  }) : applied = applied ?? {},
+       synced = synced ?? {},
+       knownControls = knownControls ?? {};
+
+  final String sessionId;
+
+  /// The local Drift report this session feeds; null until the technician opens the draft in the
+  /// editor (accepting a proposal works without one).
+  String? reportId;
+
+  /// Per line key: the values the last apply wrote (plus `_id`/`_name` to rebuild an edit).
+  final Map<String, Map<String, Object?>> applied;
+
+  /// Per line key: the values the server acknowledged as confirmed edits, `__present` once any
+  /// non-removal edit was acknowledged, `__removed` once a removal was.
+  final Map<String, Map<String, Object?>> synced;
+
+  /// The edits-only batch sent and not yet acknowledged.
+  AiEditBatch? batch;
+
+  /// The server refused further edit syncs for this session (409 `draft_too_large`).
+  bool blocked;
+
+  /// The checklist controls the server draft holds (its ticket's own controls). A Drift answer
+  /// for any other control (an asset checklist) is not the draft's business, and the server would
+  /// refuse the whole request for it (`edit_reference_not_found`): it is never sent.
+  final Set<String> knownControls;
+
+  Map<String, dynamic> toJson() => {
+    'sessionId': sessionId,
+    'reportId': reportId,
+    'applied': applied,
+    'synced': synced,
+    'batch': batch?.toJson(),
+    'blocked': blocked,
+    'knownControls': knownControls.toList(),
+  };
+
+  static Map<String, Map<String, Object?>> _lines(Object? raw) => {
+    if (raw is Map)
+      for (final e in raw.entries)
+        if (e.value is Map) e.key.toString(): Map<String, Object?>.from(e.value as Map),
+  };
+
+  factory AiDraftFeedState.fromJson(Map<String, dynamic> json) => AiDraftFeedState(
+    sessionId: json['sessionId'] as String? ?? '',
+    reportId: json['reportId'] as String?,
+    applied: _lines(json['applied']),
+    synced: _lines(json['synced']),
+    batch: json['batch'] is Map<String, dynamic>
+        ? AiEditBatch.fromJson(json['batch'] as Map<String, dynamic>)
+        : null,
+    blocked: json['blocked'] == true,
+    knownControls: {
+      for (final k in (json['knownControls'] as List<dynamic>? ?? const [])) k.toString(),
+    },
+  );
+}
+
+/// One edits-only request: its key and its body, kept until the server acknowledges it.
+class AiEditBatch {
+  AiEditBatch({required this.key, required this.edits, required this.derived});
+
+  final String key;
+  final List<AiConfirmedEdit> edits;
+
+  /// Parallel to [edits]: true for an edit derived from the report (acknowledged into `synced`),
+  /// false for an explicit action (accept a proposal, settle a held removal).
+  final List<bool> derived;
+
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'edits': [for (final e in edits) e.toJson()],
+    'derived': derived,
+  };
+
+  factory AiEditBatch.fromJson(Map<String, dynamic> json) {
+    final edits = [
+      for (final e in (json['edits'] as List<dynamic>? ?? const []))
+        if (e is Map<String, dynamic>) AiConfirmedEdit.fromJson(e),
+    ];
+    final derived = [
+      for (final d in (json['derived'] as List<dynamic>? ?? const [])) d == true,
+    ];
+    return AiEditBatch(
+      key: json['key'] as String? ?? _uuid.v4(),
+      edits: edits,
+      derived: [for (var i = 0; i < edits.length; i++) i < derived.length && derived[i]],
+    );
+  }
+}
+
+/// SharedPreferences-backed state per AI session, plus the report -> session index.
+class AiDraftFeedStore {
+  AiDraftFeedStore({Future<SharedPreferences> Function()? prefs})
+    : _prefs = prefs ?? SharedPreferences.getInstance;
+
+  final Future<SharedPreferences> Function() _prefs;
+
+  static String _sessionKey(String sessionId) => 'ai_feed.session.$sessionId';
+  static String _reportKey(String reportId) => 'ai_feed.report.$reportId';
+
+  Future<AiDraftFeedState?> load(String sessionId) async {
+    final raw = (await _prefs()).getString(_sessionKey(sessionId));
+    if (raw == null) return null;
+    try {
+      final json = jsonDecode(raw);
+      if (json is Map<String, dynamic>) return AiDraftFeedState.fromJson(json);
+    } catch (_) {
+      // An unreadable state is treated as none: the next apply rebuilds the baseline.
+    }
+    return null;
+  }
+
+  Future<void> save(AiDraftFeedState state) async {
+    await (await _prefs()).setString(_sessionKey(state.sessionId), jsonEncode(state.toJson()));
+  }
+
+  /// The session that feeds [reportId], if any.
+  Future<String?> sessionForReport(String reportId) async =>
+      (await _prefs()).getString(_reportKey(reportId));
+
+  /// Binds [sessionId] to the local report it feeds (keeping any state it already has).
+  Future<void> link({required String sessionId, required String reportId}) async {
+    final state = await load(sessionId) ?? AiDraftFeedState(sessionId: sessionId);
+    if (state.reportId != null && state.reportId != reportId) {
+      // A different report: the old baseline describes rows that are not in it.
+      await (await _prefs()).remove(_reportKey(state.reportId!));
+      state.applied.clear();
+      state.synced.clear();
+    }
+    state.reportId = reportId;
+    await save(state);
+    await (await _prefs()).setString(_reportKey(reportId), sessionId);
+  }
+
+  /// Forgets the session (Confirm released it, or it was abandoned).
+  Future<void> unlink(String sessionId) async {
+    final prefs = await _prefs();
+    final state = await load(sessionId);
+    if (state?.reportId != null) await prefs.remove(_reportKey(state!.reportId!));
+    await prefs.remove(_sessionKey(sessionId));
+  }
+}
+
+// ── per-session serialisation ─────────────────────────────────────────────────
+
+final Map<String, Future<void>> _locks = {};
+
+/// Runs [body] after every earlier locked call for [sessionId]: an apply, a pending-edits read and
+/// an acknowledgement read-modify-write the same persisted document.
+Future<T> _locked<T>(String sessionId, Future<T> Function() body) {
+  final previous = _locks[sessionId] ?? Future<void>.value();
+  final done = Completer<void>();
+  final mine = done.future;
+  _locks[sessionId] = mine;
+  return previous.then((_) => body()).whenComplete(() {
+    done.complete();
+    if (identical(_locks[sessionId], mine)) _locks.remove(sessionId);
+  });
+}
+
+// ── lines ─────────────────────────────────────────────────────────────────────
+
+enum _Kind { worker, material, control }
+
+/// One report line in the server's identity terms. [values] use the edit property names.
+class _Line {
+  _Line(this.kind, this.key, {this.id, this.name, required this.values, this.notes});
+
+  final _Kind kind;
+  final String key;
+  final String? id;
+  final String? name;
+  final Map<String, Object?> values;
+  final String? notes;
+
+  /// Drift row id of the local row this line was read from.
+  String? rowId;
+
+  String get editKind => switch (kind) {
+    _Kind.worker => AiConfirmedEdit.kindWorker,
+    _Kind.material => AiConfirmedEdit.kindMaterial,
+    _Kind.control => AiConfirmedEdit.kindControl,
+  };
+}
+
+String _workerKey(String userId) => 'worker:${userId.toLowerCase()}';
+String _controlKey(String id) => 'control:${id.toLowerCase()}';
+String? _materialKey(String? id, String? name) {
+  if (_isRealId(id)) return 'material:id:${id!.toLowerCase()}';
+  final n = _normaliseName(name);
+  return n.isEmpty ? null : 'material:name:$n';
+}
+
+/// The local line key an edit addresses.
+String? lineKeyForEdit(AiConfirmedEdit e) => switch (e.kind) {
+  AiConfirmedEdit.kindWorker when _isRealId(e.id) => _workerKey(e.id!),
+  AiConfirmedEdit.kindMaterial => _materialKey(e.id, e.name),
+  AiConfirmedEdit.kindControl when _isRealId(e.id) => _controlKey(e.id!),
+  _ => null,
+};
+
+String? _iso(DateTime? d) => d?.toUtc().toIso8601String();
+
+bool _applicable(AiResolutionState s) =>
+    s != AiResolutionState.needsConfirmation &&
+    s != AiResolutionState.ambiguous &&
+    s != AiResolutionState.conflict;
+
+class _DraftLines {
+  _DraftLines(this.lines, this.present);
+  final List<_Line> lines;
+
+  /// Every key the draft holds in ANY state: an entry that turned into a conflict is still there.
+  final Set<String> present;
+}
+
+_DraftLines _linesOfDraft(AiCopilotDraftDto d) {
+  final lines = <_Line>[];
+  final present = <String>{};
+  for (final w in d.workers) {
+    if (!_isRealId(w.userId)) continue;
+    final key = _workerKey(w.userId);
+    present.add(key);
+    if (!_applicable(w.state)) continue;
+    lines.add(
+      _Line(
+        _Kind.worker,
+        key,
+        id: w.userId,
+        name: w.fullName,
+        values: {'hours': w.hours, 'km': w.km ?? 0.0, 'vehicle': w.vehicle},
+      ),
+    );
+  }
+  for (final m in d.materials) {
+    final id = m.isFreeText ? null : m.materialId;
+    final key = _materialKey(id, m.name);
+    if (key == null) continue;
+    present.add(key);
+    // A material with no quantity is not a used material: Confirm does not record it either.
+    if (!_applicable(m.state) || m.quantity <= 0) continue;
+    final freeText = !_isRealId(id);
+    lines.add(
+      _Line(
+        _Kind.material,
+        key,
+        id: freeText ? null : id,
+        name: m.name,
+        values: {'quantity': m.quantity, 'unit': m.unit},
+        notes: freeText ? freeTextMaterialNote : null,
+      ),
+    );
+  }
+  for (final c in d.controlli) {
+    if (!_isRealId(c.ticketControlId)) continue;
+    final key = _controlKey(c.ticketControlId);
+    present.add(key);
+    final hasAnswer =
+        c.stringValue != null || c.boolValue != null || c.numberValue != null || c.dateValue != null;
+    if (!_applicable(c.state) || !hasAnswer) continue;
+    lines.add(
+      _Line(
+        _Kind.control,
+        key,
+        id: c.ticketControlId,
+        values: {
+          'stringValue': c.stringValue,
+          'boolValue': c.boolValue,
+          'dateValue': _iso(c.dateValue),
+          'numberValue': c.numberValue,
+        },
+      ),
+    );
+  }
+  return _DraftLines(lines, present);
+}
+
+List<_Line> _linesOfConfirm(AiConversationConfirmResponse r) => [
+  for (final s in r.staff)
+    if (_isRealId(s.userId))
+      _Line(
+        _Kind.worker,
+        _workerKey(s.userId),
+        id: s.userId,
+        values: {'hours': s.hoursWorked, 'km': s.kmTraveled, 'vehicle': s.vehicle},
+      ),
+  for (final m in r.materials)
+    if (_materialKey(m.materialeId, m.freeTextName) case final key?)
+      _Line(
+        _Kind.material,
+        key,
+        id: _isRealId(m.materialeId) ? m.materialeId : null,
+        name: m.freeTextName,
+        values: {'quantity': m.quantity, 'unit': m.unitOfMeasure},
+        notes: m.notes,
+      ),
+  for (final c in r.controlli)
+    if (_isRealId(c.ticketControlId))
+      _Line(
+        _Kind.control,
+        _controlKey(c.ticketControlId),
+        id: c.ticketControlId,
+        values: {
+          'stringValue': c.stringValue,
+          'boolValue': c.boolValue,
+          'dateValue': _iso(c.dateValue),
+          'numberValue': c.numberValue,
+        },
+      ),
+];
+
+/// Applies the server draft into the linked report and derives the technician's hand edits.
+class AiDraftFeed {
+  AiDraftFeed({required AppDatabase db, required AiDraftFeedStore store})
+    : _db = db,
+      _store = store;
+
+  final AppDatabase _db;
+  final AiDraftFeedStore _store;
+
+  AiDraftFeedStore get store => _store;
+
+  /// Writes the confirmed subset of [draft] into the report linked to [sessionId]. Returns false
+  /// (and writes nothing) when the session feeds no report.
+  Future<bool> apply(String sessionId, AiCopilotDraftDto draft) => _locked(sessionId, () async {
+    final state = await _store.load(sessionId);
+    final reportId = state?.reportId;
+    if (state == null || reportId == null) return false;
+    final lines = _linesOfDraft(draft);
+    state.knownControls
+      ..clear()
+      ..addAll(lines.present.where((k) => k.startsWith('control:')));
+    await _applyLines(state, reportId, lines.lines, present: lines.present);
+    await _store.save(state);
+    return true;
+  });
+
+  /// The end-of-flow Confirm response, applied into the SAME report the incremental path fed:
+  /// matched by identity, so nothing is duplicated, and hand edits still win. Header text is only
+  /// filled where the technician left it empty. Returns false when no report is linked.
+  Future<bool> applyConfirmResponse(String sessionId, AiConversationConfirmResponse r) =>
+      _locked(sessionId, () async {
+        final state = await _store.load(sessionId);
+        final reportId = state?.reportId;
+        if (state == null || reportId == null) return false;
+        // No `present` set: Confirm leaves out conflicts and plans, so absence proves nothing here.
+        await _applyLines(state, reportId, _linesOfConfirm(r), present: null);
+        final header = await (_db.select(
+          _db.draftReports,
+        )..where((t) => t.id.equals(reportId))).getSingleOrNull();
+        if (header != null) {
+          final hasMaterials = (await _rows(reportId)).any((l) => l.kind == _Kind.material);
+          await (_db.update(_db.draftReports)..where((t) => t.id.equals(reportId))).write(
+            DraftReportsCompanion(
+              title: header.title.trim().isEmpty && r.title.trim().isNotEmpty
+                  ? Value(r.title)
+                  : const Value.absent(),
+              details: (header.details ?? '').trim().isEmpty && (r.details ?? '').isNotEmpty
+                  ? Value(r.details)
+                  : const Value.absent(),
+              materialiNotRequired: r.materialiNotRequired && !hasMaterials
+                  ? const Value(true)
+                  : const Value.absent(),
+              isAiAssisted: const Value(true),
+              updatedAt: Value(DateTime.now().toUtc()),
+            ),
+          );
+        }
+        await _store.save(state);
+        return true;
+      });
+
+  /// Every hand change since the last acknowledgement, as confirmed edits.
+  Future<List<AiConfirmedEdit>> pendingEdits(String sessionId) => _locked(sessionId, () async {
+    final state = await _store.load(sessionId);
+    if (state == null || state.reportId == null) return const <AiConfirmedEdit>[];
+    return _pending(state);
+  });
+
+  /// Records [edits] as acknowledged by the server (derived edits only).
+  Future<void> acknowledge(String sessionId, List<AiConfirmedEdit> edits) =>
+      _locked(sessionId, () async {
+        final state = await _store.load(sessionId);
+        if (state == null) return;
+        acknowledgeInto(state, edits);
+        await _store.save(state);
+      });
+
+  /// Drops a line from the baseline and the acknowledgements, so the next apply re-inserts it
+  /// (a held removal the technician chose to bring back).
+  Future<void> forgetLine(String sessionId, String lineKey) => _locked(sessionId, () async {
+    final state = await _store.load(sessionId);
+    if (state == null) return;
+    state.applied.remove(lineKey);
+    state.synced.remove(lineKey);
+    await _store.save(state);
+  });
+
+  // ── internals (callers hold the session lock) ──────────────────────────────
+
+  static void acknowledgeInto(AiDraftFeedState state, Iterable<AiConfirmedEdit> edits) {
+    for (final e in edits) {
+      final key = lineKeyForEdit(e);
+      if (key == null) continue;
+      final s = state.synced.putIfAbsent(key, () => <String, Object?>{});
+      if (e.id != null) s['_id'] = e.id;
+      if (e.name != null) s['_name'] = e.name;
+      if (e.remove) {
+        s.removeWhere((k, _) => !k.startsWith('_'));
+        s['__removed'] = true;
+      } else {
+        s.remove('__removed');
+        s['__present'] = true;
+        if (e.property != null) s[e.property!] = e.value;
+      }
+    }
+  }
+
+  Future<List<_Line>> _rows(String reportId) async {
+    final out = <_Line>[];
+    final staff = await (_db.select(
+      _db.reportStaffTable,
+    )..where((t) => t.reportId.equals(reportId))).get();
+    for (final s in staff) {
+      if (s.userId.isEmpty) continue;
+      out.add(
+        _Line(
+            _Kind.worker,
+            _workerKey(s.userId),
+            id: s.userId,
+            values: {'hours': s.hoursWorked, 'km': s.kmTraveled, 'vehicle': s.vehicle},
+          )
+          ..rowId = s.id,
+      );
+    }
+    final materials = await (_db.select(
+      _db.reportMateriali,
+    )..where((t) => t.reportId.equals(reportId))).get();
+    for (final m in materials) {
+      final key = _materialKey(m.materialeId, m.freeTextName);
+      if (key == null) continue;
+      out.add(
+        _Line(
+            _Kind.material,
+            key,
+            id: _isRealId(m.materialeId) ? m.materialeId : null,
+            name: m.freeTextName,
+            values: {'quantity': m.quantity, 'unit': m.unitOfMeasure},
+          )
+          ..rowId = m.id,
+      );
+    }
+    final controls = await (_db.select(
+      _db.reportControlli,
+    )..where((t) => t.reportId.equals(reportId))).get();
+    for (final c in controls) {
+      out.add(
+        _Line(
+            _Kind.control,
+            _controlKey(c.controlId),
+            id: c.controlId,
+            values: {
+              'stringValue': c.stringValue,
+              'boolValue': c.boolValue,
+              'dateValue': _iso(c.dateValue),
+              'numberValue': c.numberValue,
+            },
+          )
+          ..rowId = c.id,
+      );
+    }
+    return out;
+  }
+
+  Map<String, _Line> _byKey(List<_Line> lines) {
+    final map = <String, _Line>{};
+    for (final l in lines) {
+      map.putIfAbsent(l.key, () => l);
+    }
+    return map;
+  }
+
+  Future<void> _applyLines(
+    AiDraftFeedState state,
+    String reportId,
+    List<_Line> incoming, {
+    required Set<String>? present,
+  }) async {
+    final header = await (_db.select(
+      _db.draftReports,
+    )..where((t) => t.id.equals(reportId))).getSingleOrNull();
+    if (header == null) return;
+    final rows = _byKey(await _rows(reportId));
+    final now = DateTime.now().toUtc();
+    var changed = false;
+
+    await _db.transaction(() async {
+      final seen = <String>{};
+      for (final line in incoming) {
+        if (!seen.add(line.key)) continue; // the first entry wins, as at Confirm
+        final row = rows[line.key];
+        final base = state.applied[line.key];
+        if (base != null) {
+          if (row == null) continue; // removed by hand: never re-added by an apply
+          final updates = <String, Object?>{};
+          for (final p in line.values.keys) {
+            final local = row.values[p];
+            if (_same(local, base[p])) {
+              if (!_same(line.values[p], local)) updates[p] = line.values[p];
+              base[p] = line.values[p];
+            } else if (_same(line.values[p], local)) {
+              base[p] = line.values[p]; // the server caught up with the hand edit
+            }
+            // else: hand-edited, and the server says otherwise — the technician's value stays.
+          }
+          if (updates.isNotEmpty) {
+            await _update(row, updates, now);
+            changed = true;
+          }
+          continue;
+        }
+        // Not ours: a line the technician added (or touched) by hand is theirs.
+        if (row != null || state.synced.containsKey(line.key)) continue;
+        await _insert(line, reportId, header.tenantId, now);
+        state.applied[line.key] = {
+          ...line.values,
+          '_id': ?line.id,
+          '_name': ?line.name,
+        };
+        changed = true;
+      }
+
+      // An entry the server no longer has at all (removed by voice, or re-identified) leaves the
+      // report too — unless the technician changed the line, which makes it theirs.
+      if (present != null) {
+        for (final key in state.applied.keys.toList()) {
+          if (present.contains(key)) continue;
+          final row = rows[key];
+          final base = state.applied[key]!;
+          if (row == null) {
+            state.applied.remove(key);
+            continue;
+          }
+          final untouched = row.values.keys.every((p) => _same(row.values[p], base[p]));
+          if (untouched) {
+            await _delete(row);
+            state.applied.remove(key);
+            changed = true;
+          }
+        }
+      }
+
+      if (changed) {
+        // Provenance only. Sign-off, signatures and the submission state are never touched.
+        await (_db.update(_db.draftReports)..where((t) => t.id.equals(reportId))).write(
+          DraftReportsCompanion(isAiAssisted: const Value(true), updatedAt: Value(now)),
+        );
+      }
+    });
+  }
+
+  Future<void> _insert(_Line l, String reportId, String tenantId, DateTime now) async {
+    final v = l.values;
+    switch (l.kind) {
+      case _Kind.worker:
+        await _db
+            .into(_db.reportStaffTable)
+            .insert(
+              ReportStaffTableCompanion.insert(
+                id: _uuid.v4(),
+                tenantId: tenantId,
+                createdAt: now,
+                reportId: reportId,
+                userId: l.id!,
+                hoursWorked: Value((v['hours'] as num?)?.toDouble()),
+                kmTraveled: Value((v['km'] as num?)?.toDouble() ?? 0),
+                vehicle: Value(v['vehicle'] as String?),
+              ),
+            );
+      case _Kind.material:
+        await _db
+            .into(_db.reportMateriali)
+            .insert(
+              ReportMaterialiCompanion.insert(
+                id: _uuid.v4(),
+                tenantId: tenantId,
+                createdAt: now,
+                reportId: reportId,
+                materialeId: Value(l.id),
+                freeTextName: Value(l.id == null ? l.name?.trim() : null),
+                quantity: (v['quantity'] as num).toDouble(),
+                unitOfMeasure: Value(v['unit'] as String?),
+                notes: Value(l.notes),
+                // No magazzino: guessing one would move stock nobody asked for.
+              ),
+            );
+      case _Kind.control:
+        await _db
+            .into(_db.reportControlli)
+            .insertOnConflictUpdate(
+              ReportControlliCompanion.insert(
+                // The Controlli step's own row id, so its next edit updates this row.
+                id: controlRowId(reportId, l.id!),
+                tenantId: tenantId,
+                createdAt: now,
+                reportId: reportId,
+                controlId: l.id!,
+                stringValue: Value(v['stringValue'] as String?),
+                boolValue: Value(v['boolValue'] as bool?),
+                dateValue: Value(_parseDate(v['dateValue'])),
+                numberValue: Value((v['numberValue'] as num?)?.toDouble()),
+              ),
+            );
+    }
+  }
+
+  static DateTime? _parseDate(Object? v) => v is String ? DateTime.tryParse(v) : null;
+
+  Future<void> _update(_Line row, Map<String, Object?> u, DateTime now) async {
+    final id = row.rowId!;
+    switch (row.kind) {
+      case _Kind.worker:
+        await (_db.update(_db.reportStaffTable)..where((t) => t.id.equals(id))).write(
+          ReportStaffTableCompanion(
+            hoursWorked: u.containsKey('hours')
+                ? Value((u['hours'] as num?)?.toDouble())
+                : const Value.absent(),
+            kmTraveled: u.containsKey('km')
+                ? Value((u['km'] as num?)?.toDouble() ?? 0)
+                : const Value.absent(),
+            vehicle: u.containsKey('vehicle') ? Value(u['vehicle'] as String?) : const Value.absent(),
+            updatedAt: Value(now),
+          ),
+        );
+      case _Kind.material:
+        await (_db.update(_db.reportMateriali)..where((t) => t.id.equals(id))).write(
+          ReportMaterialiCompanion(
+            quantity: u['quantity'] is num
+                ? Value((u['quantity'] as num).toDouble())
+                : const Value.absent(),
+            unitOfMeasure: u.containsKey('unit') ? Value(u['unit'] as String?) : const Value.absent(),
+            updatedAt: Value(now),
+          ),
+        );
+      case _Kind.control:
+        await (_db.update(_db.reportControlli)..where((t) => t.id.equals(id))).write(
+          ReportControlliCompanion(
+            stringValue: u.containsKey('stringValue')
+                ? Value(u['stringValue'] as String?)
+                : const Value.absent(),
+            boolValue: u.containsKey('boolValue')
+                ? Value(u['boolValue'] as bool?)
+                : const Value.absent(),
+            dateValue: u.containsKey('dateValue')
+                ? Value(_parseDate(u['dateValue']))
+                : const Value.absent(),
+            numberValue: u.containsKey('numberValue')
+                ? Value((u['numberValue'] as num?)?.toDouble())
+                : const Value.absent(),
+            updatedAt: Value(now),
+          ),
+        );
+    }
+  }
+
+  Future<void> _delete(_Line row) async {
+    final id = row.rowId!;
+    switch (row.kind) {
+      case _Kind.worker:
+        await (_db.delete(_db.reportStaffTable)..where((t) => t.id.equals(id))).go();
+      case _Kind.material:
+        await (_db.delete(_db.reportMateriali)..where((t) => t.id.equals(id))).go();
+      case _Kind.control:
+        await (_db.delete(_db.reportControlli)..where((t) => t.id.equals(id))).go();
+    }
+  }
+
+  /// A value worth confirming on a line the technician added: km 0 and an empty vehicle are the
+  /// editor's defaults, not something the technician stated.
+  static bool _meaningful(String property, Object? v) {
+    if (v == null) return false;
+    if (property == 'km' && v is num && v == 0) return false;
+    if (v is String && v.trim().isEmpty) return false;
+    return true;
+  }
+
+  Future<List<AiConfirmedEdit>> _pending(AiDraftFeedState state) async {
+    final rows = _byKey(await _rows(state.reportId!));
+    final edits = <AiConfirmedEdit>[];
+
+    AiConfirmedEdit edit(_Line l, {String? property, Object? value, bool remove = false}) =>
+        AiConfirmedEdit(
+          kind: l.editKind,
+          id: l.id,
+          // A free-text material is identified by its name; an id-keyed entry needs none.
+          name: l.id == null ? l.name?.trim() : null,
+          property: property,
+          value: value,
+          remove: remove,
+        );
+
+    for (final row in rows.values) {
+      final s = state.synced[row.key] ?? const <String, Object?>{};
+      final base = state.applied[row.key];
+      final reAdded = s['__removed'] == true;
+      if (row.kind == _Kind.control && base == null && !state.knownControls.contains(row.key)) {
+        continue;
+      }
+      if (base != null && !reAdded) {
+        for (final p in row.values.keys) {
+          final v = row.values[p];
+          if (v == null || _same(v, base[p]) || (s.containsKey(p) && _same(s[p], v))) continue;
+          edits.add(edit(row, property: p, value: v));
+        }
+        continue;
+      }
+      // Added by hand (or brought back after a removal): the entry itself, then its values.
+      if (row.kind != _Kind.control && (s['__present'] != true || reAdded)) edits.add(edit(row));
+      for (final p in row.values.keys) {
+        final v = row.values[p];
+        if (!_meaningful(p, v) || (s.containsKey(p) && _same(s[p], v))) continue;
+        edits.add(edit(row, property: p, value: v));
+      }
+    }
+
+    // Removed by hand: a baselined line, or a hand line the server already knows.
+    for (final entry in state.applied.entries) {
+      if (rows.containsKey(entry.key)) continue;
+      if (state.synced[entry.key]?['__removed'] == true) continue;
+      final r = _removal(entry.key, entry.value);
+      if (r != null) edits.add(r);
+    }
+    for (final entry in state.synced.entries) {
+      if (rows.containsKey(entry.key) || state.applied.containsKey(entry.key)) continue;
+      if (entry.value['__present'] != true || entry.value['__removed'] == true) continue;
+      final r = _removal(entry.key, entry.value);
+      if (r != null) edits.add(r);
+    }
+    return edits;
+  }
+
+  static AiConfirmedEdit? _removal(String key, Map<String, Object?> meta) {
+    final id = meta['_id'] as String?;
+    final name = meta['_name'] as String?;
+    if (key.startsWith('worker:')) {
+      return _isRealId(id) ? AiConfirmedEdit(kind: 'worker', id: id, remove: true) : null;
+    }
+    if (key.startsWith('control:')) {
+      return _isRealId(id) ? AiConfirmedEdit(kind: 'control', id: id, remove: true) : null;
+    }
+    if (key.startsWith('material:id:')) {
+      return AiConfirmedEdit(kind: 'material', id: id ?? key.substring(12), remove: true);
+    }
+    if (key.startsWith('material:name:')) {
+      return AiConfirmedEdit(kind: 'material', name: name ?? key.substring(14), remove: true);
+    }
+    return null;
+  }
+}
+
+/// The server refuses further edit syncs for this draft; retrying cannot help.
+class AiEditSyncBlockedException implements Exception {
+  const AiEditSyncBlockedException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+const _blockedMessage =
+    'La bozza AI ha raggiunto il limite di modifiche sincronizzabili: le tue modifiche restano nel '
+    'rapportino, ma l\'AI non le vedrà più.';
+
+/// Delivers hand edits to the server: in a turn's `confirmedEdits`, or as edits-only batches of
+/// at most [AiConfirmedEdit.maxPerRequest], each persisted with its Idempotency-Key until
+/// acknowledged.
+class AiEditSyncer {
+  AiEditSyncer({
+    required AiApiClient client,
+    required AiDraftFeed feed,
+    required AiDraftFeedStore store,
+    this.retryDelay = const Duration(seconds: 2),
+    String Function()? newKey,
+  }) : _client = client,
+       _feed = feed,
+       _store = store,
+       _newKey = newKey ?? _uuid.v4;
+
+  final AiApiClient _client;
+  final AiDraftFeed _feed;
+  final AiDraftFeedStore _store;
+  final Duration retryDelay;
+  final String Function() _newKey;
+
+  static const _maxInProgressRetries = 5;
+
+  /// "Accetta" on a planned/assigned worker: accepted as shown.
+  static AiConfirmedEdit acceptWorker(AiDraftWorkerRef w) =>
+      AiConfirmedEdit(kind: AiConfirmedEdit.kindWorker, id: w.userId);
+
+  /// "Accetta" on a planned material: accepted as shown (its planned quantity and unit included).
+  static AiConfirmedEdit acceptMaterial(AiDraftMaterialUsage m) =>
+      _isRealId(m.materialId) && !m.isFreeText
+      ? AiConfirmedEdit(kind: AiConfirmedEdit.kindMaterial, id: m.materialId)
+      : AiConfirmedEdit(kind: AiConfirmedEdit.kindMaterial, name: m.name);
+
+  /// The edit that settles a held removal (`removed.<collection>.<id:…|name:…>`): [reAdd] brings
+  /// the entry back by hand (by id and name), otherwise the removal is confirmed again. Null when
+  /// the entry cannot be re-added without a value (a checklist answer, a worker known by name only).
+  static AiConfirmedEdit? heldRemovalEdit(AiCandidateFact fact, {required bool reAdd}) {
+    if (!fact.isHeldRemoval) return null;
+    final collection = fact.removedCollection;
+    if (collection == null) return null;
+    final key = fact.field.substring('removed.'.length + collection.length + 1);
+    final kind = switch (collection) {
+      'workers' => AiConfirmedEdit.kindWorker,
+      'materials' => AiConfirmedEdit.kindMaterial,
+      'activities' => AiConfirmedEdit.kindActivity,
+      'controlli' => AiConfirmedEdit.kindControl,
+      _ => null,
+    };
+    if (kind == null) return null;
+    final id = key.startsWith('id:') ? key.substring(3) : null;
+    final keyName = key.startsWith('name:') ? key.substring(5) : null;
+    final label = fact.conflictOperatorValue ?? keyName;
+    if (!reAdd) {
+      if (id == null && keyName == null) return null;
+      return AiConfirmedEdit(kind: kind, id: id, name: id == null ? keyName : null, remove: true);
+    }
+    if (kind == AiConfirmedEdit.kindControl) return null;
+    if (kind == AiConfirmedEdit.kindWorker && id == null) return null;
+    if (id == null && (label == null || label.trim().isEmpty)) return null;
+    return AiConfirmedEdit(kind: kind, id: id, name: label);
+  }
+
+  /// Sends every pending hand edit, plus [extra] explicit actions, as edits-only batches. Returns
+  /// the draft of the last acknowledged batch, or null when nothing was sent. Throws
+  /// [AiEditSyncBlockedException] once the server refuses more syncs; any other failure leaves the
+  /// unacknowledged batch persisted for the next attempt.
+  Future<AiCopilotDraftDto?> sync(
+    String sessionId, {
+    List<AiConfirmedEdit> extra = const [],
+  }) => _locked(sessionId, () => _sync(sessionId, extra));
+
+  /// The edits to ride in the next turn of [sessionId] (at most one request's worth). An
+  /// unacknowledged batch, or more pending edits than one request holds, is flushed edits-only
+  /// first. Never throws: if the flush fails the turn still goes, without edits.
+  Future<List<AiConfirmedEdit>> editsForTurn(String sessionId) => _locked(sessionId, () async {
+    final state = await _store.load(sessionId);
+    if (state == null || state.blocked || state.reportId == null) {
+      return const <AiConfirmedEdit>[];
+    }
+    try {
+      if (state.batch != null) await _sync(sessionId, const []);
+      final fresh = await _store.load(sessionId);
+      if (fresh == null || fresh.blocked) return const <AiConfirmedEdit>[];
+      final pending = await _feed._pending(fresh);
+      if (pending.length <= AiConfirmedEdit.maxPerRequest) return pending;
+      await _sync(sessionId, const []);
+    } catch (_) {
+      // Offline or refused: the edits stay pending and go with a later sync.
+    }
+    return const <AiConfirmedEdit>[];
+  });
+
+  /// The turn that carried [edits] was accepted.
+  Future<void> acknowledge(String sessionId, List<AiConfirmedEdit> edits) =>
+      _feed.acknowledge(sessionId, edits);
+
+  /// "Reinserisci" ([reAdd]) or "Mantieni rimosso" on a held removal. Returns the server's draft.
+  Future<AiCopilotDraftDto?> resolveHeldRemoval(
+    String sessionId,
+    AiCandidateFact fact, {
+    required bool reAdd,
+  }) async {
+    final edit = heldRemovalEdit(fact, reAdd: reAdd);
+    if (edit == null) throw ArgumentError.value(fact.field, 'fact', 'cannot be resolved so');
+    final draft = await sync(sessionId, extra: [edit]);
+    if (reAdd) {
+      final key = lineKeyForEdit(edit);
+      if (key != null) await _feed.forgetLine(sessionId, key);
+    }
+    return draft;
+  }
+
+  Future<AiCopilotDraftDto?> _sync(String sessionId, List<AiConfirmedEdit> extra) async {
+    final state = await _store.load(sessionId) ?? AiDraftFeedState(sessionId: sessionId);
+    if (state.blocked) {
+      if (extra.isNotEmpty) throw const AiEditSyncBlockedException(_blockedMessage);
+      return null;
+    }
+    AiCopilotDraftDto? last;
+    if (state.batch != null) last = await _send(state, state.batch!);
+
+    final derived = state.reportId == null ? const <AiConfirmedEdit>[] : await _feed._pending(state);
+    final all = [...derived, ...extra];
+    final flags = [for (var i = 0; i < all.length; i++) i < derived.length];
+    for (var i = 0; i < all.length; i += AiConfirmedEdit.maxPerRequest) {
+      final end = (i + AiConfirmedEdit.maxPerRequest).clamp(0, all.length);
+      final batch = AiEditBatch(
+        key: _newKey(),
+        edits: all.sublist(i, end),
+        derived: flags.sublist(i, end),
+      );
+      state.batch = batch;
+      await _store.save(state);
+      last = await _send(state, batch);
+    }
+    return last;
+  }
+
+  Future<AiCopilotDraftDto> _send(AiDraftFeedState state, AiEditBatch batch) async {
+    var inProgress = 0;
+    var concurrent = false;
+    while (true) {
+      try {
+        final result = await _client.syncEdits(
+          state.sessionId,
+          batch.edits,
+          idempotencyKey: batch.key,
+        );
+        _settle(state, batch);
+        await _store.save(state);
+        return result.draft;
+      } on AiConversationException catch (e) {
+        if (e.isTurnInProgress && inProgress < _maxInProgressRetries) {
+          inProgress++;
+          await Future<void>.delayed(retryDelay);
+          continue;
+        }
+        if (e.isConcurrentUpdate && !concurrent) {
+          concurrent = true; // same key: the server replays or applies it once
+          continue;
+        }
+        if (e.isDraftTooLarge || e.isTurnLimitExceeded) {
+          state
+            ..blocked = true
+            ..batch = null;
+          await _store.save(state);
+          throw const AiEditSyncBlockedException(_blockedMessage);
+        }
+        if (e.statusCode == 400) {
+          // The body itself is refused: resending it can never succeed. It is dropped (and its
+          // edits counted as delivered) so one bad value cannot wedge every later sync.
+          _settle(state, batch);
+          await _store.save(state);
+        }
+        rethrow;
+      }
+    }
+  }
+
+  static void _settle(AiDraftFeedState state, AiEditBatch batch) {
+    AiDraftFeed.acknowledgeInto(state, [
+      for (var i = 0; i < batch.edits.length; i++)
+        if (batch.derived[i]) batch.edits[i],
+    ]);
+    state.batch = null;
+  }
+}
+
+final aiDraftFeedStoreProvider = Provider<AiDraftFeedStore>((ref) => AiDraftFeedStore());
+
+final aiDraftFeedProvider = Provider<AiDraftFeed>(
+  (ref) => AiDraftFeed(
+    db: ref.watch(appDatabaseProvider),
+    store: ref.watch(aiDraftFeedStoreProvider),
+  ),
+);
+
+final aiEditSyncerProvider = Provider<AiEditSyncer>(
+  (ref) => AiEditSyncer(
+    client: ref.watch(aiApiClientProvider),
+    feed: ref.watch(aiDraftFeedProvider),
+    store: ref.watch(aiDraftFeedStoreProvider),
+  ),
+);

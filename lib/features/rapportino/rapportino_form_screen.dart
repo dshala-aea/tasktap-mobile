@@ -18,6 +18,7 @@ import '../../presentation/providers/report_editor_providers.dart';
 import '../checklist/checklist_providers.dart';
 import '../ticket/ticket_detail_api_client.dart' show flattenTicketControls;
 import 'ai_draft_action.dart';
+import 'ai_draft_feed_card.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
 import 'steps/step_ore.dart';
@@ -235,6 +236,8 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                     // reading order for a technician who just opened the report. Always visible (no
                     // tile tap required), unlike the old buried-in-Dettagli button it replaces.
                     AiDraftAction(reportId: reportId),
+                    // Only for a rapportino fed by a live AI draft (Task 12): sync hand edits back.
+                    AiDraftFeedCard(reportId: reportId),
                     GridView.count(
                       // 2 columns on a phone, 4 on a tablet/wide window — same width-driven
                       // breakpoint (AppBottomNav.wideBreakpoint) altro_hub_screen.dart's Gestione

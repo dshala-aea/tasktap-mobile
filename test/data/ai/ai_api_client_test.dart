@@ -474,6 +474,60 @@ void main() {
       expect(seen!.data, {'text': 'x', 'source': 'Typed'});
     });
 
+    test('syncEdits is an edits-only turn with the exact ConfirmedEditDto wire keys', () async {
+      RequestOptions? seen;
+      final client = AiApiClient(
+        dioWith((o) async {
+          seen = o;
+          return json({'assistantReplyText': '', 'draft': <String, dynamic>{}});
+        }),
+      );
+      await client.syncEdits(
+        'sess-1',
+        const [
+          AiConfirmedEdit(kind: 'worker', id: 'u-1', property: 'hours', value: 5.5),
+          AiConfirmedEdit(kind: 'material', name: 'Nastro teflon'),
+          AiConfirmedEdit(kind: 'material', id: 'm-1', remove: true),
+        ],
+        idempotencyKey: 'batch-1',
+      );
+      expect(seen!.path, '/api/ai/conversations/sess-1/turns');
+      expect(seen!.headers['Idempotency-Key'], 'batch-1');
+      expect(seen!.data, {
+        'text': '',
+        'source': 'Typed',
+        'confirmedEdits': [
+          {'kind': 'worker', 'id': 'u-1', 'property': 'hours', 'value': 5.5, 'remove': false},
+          {'kind': 'material', 'name': 'Nastro teflon', 'remove': false},
+          {'kind': 'material', 'id': 'm-1', 'remove': true},
+        ],
+      });
+      for (final e in (seen!.data as Map)['confirmedEdits'] as List) {
+        expect(AiConfirmedEdit.wireKeys, containsAll((e as Map).keys));
+      }
+    });
+
+    test('draft entries carry km, vehicle, unit, isFreeText and a control date; unknown '
+        'strings never throw', () {
+      final d = AiCopilotDraftDto.fromJson({
+        'workers': [
+          {'userId': 'u', 'fullName': 'A', 'km': 12, 'vehicle': 'Doblò', 'state': 'Nuovo'},
+        ],
+        'materials': [
+          {'materialId': 'm', 'name': 'n', 'quantity': 1, 'unit': 'pz', 'isFreeText': true},
+        ],
+        'controlli': [
+          {'ticketControlId': 'c', 'dateValue': '2026-10-20T00:00:00Z', 'state': 'X'},
+        ],
+      });
+      expect(d.workers.single.km, 12);
+      expect(d.workers.single.vehicle, 'Doblò');
+      expect(d.workers.single.state, AiResolutionState.unresolved);
+      expect(d.materials.single.unit, 'pz');
+      expect(d.materials.single.isFreeText, isTrue);
+      expect(d.controlli.single.dateValue, DateTime.utc(2026, 10, 20));
+    });
+
     test('409 codes are surfaced, not collapsed', () async {
       for (final code in [
         'turn_in_progress',

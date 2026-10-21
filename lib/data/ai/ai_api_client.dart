@@ -250,6 +250,8 @@ class AiDraftWorkerRef {
     this.hours,
     required this.state,
     this.source = AiFactSource.operatorInput,
+    this.km,
+    this.vehicle,
   });
 
   final String userId;
@@ -258,12 +260,18 @@ class AiDraftWorkerRef {
   final AiResolutionState state;
   final AiFactSource source;
 
+  /// Only ever stated by the technician (the server never seeds km or a vehicle).
+  final double? km;
+  final String? vehicle;
+
   factory AiDraftWorkerRef.fromJson(Map<String, dynamic> json) => AiDraftWorkerRef(
     userId: json['userId'] as String? ?? '',
     fullName: json['fullName'] as String? ?? '',
     hours: asDouble(json['hours']),
     state: _parseResolutionState(json['state']),
     source: _parseFactSource(json['source']),
+    km: asDouble(json['km']),
+    vehicle: json['vehicle'] is String ? json['vehicle'] as String : null,
   );
 }
 
@@ -274,13 +282,20 @@ class AiDraftMaterialUsage {
     required this.quantity,
     required this.state,
     this.source = AiFactSource.operatorInput,
+    this.unit,
+    this.isFreeText = false,
   });
 
+  /// The catalogue id; the server sends the empty guid for a free-text material.
   final String materialId;
   final String name;
   final double quantity;
   final AiResolutionState state;
   final AiFactSource source;
+  final String? unit;
+
+  /// No verified catalogue id: the name is what the technician said.
+  final bool isFreeText;
 
   factory AiDraftMaterialUsage.fromJson(Map<String, dynamic> json) => AiDraftMaterialUsage(
     materialId: json['materialId'] as String? ?? '',
@@ -288,6 +303,8 @@ class AiDraftMaterialUsage {
     quantity: asDoubleOr0(json['quantity']),
     state: _parseResolutionState(json['state']),
     source: _parseFactSource(json['source']),
+    unit: json['unit'] is String ? json['unit'] as String : null,
+    isFreeText: json['isFreeText'] == true,
   );
 }
 
@@ -297,6 +314,7 @@ class AiDraftControlAnswer {
     this.stringValue,
     this.boolValue,
     this.numberValue,
+    this.dateValue,
     required this.state,
   });
 
@@ -304,6 +322,7 @@ class AiDraftControlAnswer {
   final String? stringValue;
   final bool? boolValue;
   final double? numberValue;
+  final DateTime? dateValue;
   final AiResolutionState state;
 
   factory AiDraftControlAnswer.fromJson(Map<String, dynamic> json) => AiDraftControlAnswer(
@@ -311,6 +330,7 @@ class AiDraftControlAnswer {
     stringValue: json['stringValue'] as String?,
     boolValue: json['boolValue'] as bool?,
     numberValue: asDouble(json['numberValue']),
+    dateValue: json['dateValue'] is String ? DateTime.tryParse(json['dateValue'] as String) : null,
     state: _parseResolutionState(json['state']),
   );
 
@@ -417,6 +437,81 @@ class AiConversationTurnResult {
           (json['draft'] as Map<String, dynamic>?) ?? const {},
         ),
       );
+}
+
+/// One value the technician set, accepted or removed by hand — backend `ConfirmedEditDto`
+/// (`AiConversationTurnRequest.ConfirmedEdits`). The server folds it as `OperatorConfirmed`
+/// before the model runs, so a later voice turn that disagrees becomes a flagged conflict instead
+/// of overwriting it.
+///
+/// [kind]: `worker` | `material` | `activity` | `control` | `materialiNotRequired`. Properties:
+/// worker `hours`/`km` (number), `vehicle` (string); material `quantity` (number), `unit`
+/// (string); activity `hours`; control `stringValue`/`boolValue`/`dateValue`/`numberValue`. No
+/// [property] and no [value] = "accepted as shown" (confirms every planned value of the entry).
+/// [remove] = the removal is itself confirmed: a later proposal for the entry is held, never
+/// re-added.
+class AiConfirmedEdit {
+  const AiConfirmedEdit({
+    required this.kind,
+    this.id,
+    this.name,
+    this.property,
+    this.value,
+    this.remove = false,
+  });
+
+  static const kindWorker = 'worker';
+  static const kindMaterial = 'material';
+  static const kindActivity = 'activity';
+  static const kindControl = 'control';
+
+  /// Server cap per request (`ConfirmedEditValidator.MaxEdits`).
+  static const maxPerRequest = 50;
+
+  final String kind;
+  final String? id;
+  final String? name;
+  final String? property;
+
+  /// A JSON scalar: num, bool or String (an ISO date for `dateValue`).
+  final Object? value;
+  final bool remove;
+
+  static const Set<String> wireKeys = {'kind', 'id', 'name', 'property', 'value', 'remove'};
+
+  Map<String, dynamic> toJson() => {
+    'kind': kind,
+    'id': ?id,
+    'name': ?name,
+    'property': ?property,
+    'value': ?value,
+    'remove': remove,
+  };
+
+  factory AiConfirmedEdit.fromJson(Map<String, dynamic> json) => AiConfirmedEdit(
+    kind: json['kind'] as String? ?? '',
+    id: json['id'] as String?,
+    name: json['name'] as String?,
+    property: json['property'] as String?,
+    value: json['value'],
+    remove: json['remove'] == true,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is AiConfirmedEdit &&
+      other.kind == kind &&
+      other.id == id &&
+      other.name == name &&
+      other.property == property &&
+      other.value == value &&
+      other.remove == remove;
+
+  @override
+  int get hashCode => Object.hash(kind, id, name, property, value, remove);
+
+  @override
+  String toString() => 'AiConfirmedEdit(${toJson()})';
 }
 
 /// One visible turn of a resumed session: text and how it arrived, never tool calls.
@@ -876,6 +971,21 @@ class AiApiClient {
       throw _translateConversation(e);
     }
   }
+
+  /// POST /api/ai/conversations/{id}/turns with EMPTY text: an edits-only sync. The server folds
+  /// [edits] as operator-confirmed facts and never calls the model or charges for it. At most
+  /// [AiConfirmedEdit.maxPerRequest] per call. [idempotencyKey] is the batch's own key, reused
+  /// unchanged on every retry of the same batch.
+  Future<AiConversationTurnResult> syncEdits(
+    String sessionId,
+    List<AiConfirmedEdit> edits, {
+    required String idempotencyKey,
+  }) => postTurn(
+    sessionId,
+    text: '',
+    confirmedEdits: [for (final e in edits) e.toJson()],
+    idempotencyKey: idempotencyKey,
+  );
 
   /// POST /api/ai/conversations/{id}/turns — one operator utterance.
   Future<AiConversationTurnResult> sendTurn(String sessionId, String text) async {

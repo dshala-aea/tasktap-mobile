@@ -21,6 +21,9 @@ import '../../core/widgets/widgets.dart';
 import '../../data/ai/ai_api_client.dart';
 import '../../data/local/app_database.dart' show Ticket;
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
+import '../../presentation/providers/report_editor_providers.dart'
+    show draftReportRepositoryProvider;
+import 'ai_draft_feed.dart';
 import 'apply_confirmed_draft.dart';
 import 'create_draft.dart';
 import 'draft_provenance_badge.dart';
@@ -109,6 +112,11 @@ class _Outgoing {
   /// The message a correction replaces (to strike it through once the correction lands).
   final _ChatMessage? supersedes;
   _ChatMessage? message;
+
+  /// The technician's hand edits from the editor that ride in this turn (Task 12). Frozen on the
+  /// first attempt so every retry sends the same body under the same key; acknowledged only once
+  /// the turn is accepted.
+  List<AiConfirmedEdit>? edits;
 }
 
 // A turn can legitimately take up to the server's ~45s wall-clock ceiling — a single static
@@ -185,6 +193,13 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   /// technician is offered the manual path.
   String? _aiBlockedMessage;
 
+  /// The local rapportino this session feeds (Task 12), once the technician opened it.
+  String? _linkedReportId;
+
+  /// An edits-only request (accept a proposal, settle a held removal) is in flight.
+  bool _editing = false;
+  bool _opening = false;
+
   @override
   void initState() {
     super.initState();
@@ -257,6 +272,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       });
       _scrollToEnd();
       unawaited(_loadPending());
+      unawaited(_refreshLinked().then((_) => detail != null ? _feedApply() : null));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -301,6 +317,108 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         );
     }
   }
+
+  // ── live feed into the editor (Task 12) ──────────────────────────────────────
+
+  static Future<void> _quiet(Future<void> f) => f.then((_) {}, onError: (Object _) {});
+
+  /// Reads which local report (if any) this session already feeds.
+  Future<void> _refreshLinked() async {
+    final id = _sessionId;
+    if (id == null) return;
+    try {
+      final linked = (await ref.read(aiDraftFeedStoreProvider).load(id))?.reportId;
+      if (mounted && linked != _linkedReportId) setState(() => _linkedReportId = linked);
+    } catch (_) {
+      // No readable feed state: the session feeds nothing yet.
+    }
+  }
+
+  /// Writes the confirmed subset of the current draft into the linked report. A no-op when the
+  /// draft was never opened in the editor. Never throws: the feed is a convenience over the
+  /// server draft, which stays the source of truth.
+  Future<void> _feedApply() async {
+    final id = _sessionId;
+    if (id == null || _linkedReportId == null) return;
+    try {
+      await ref.read(aiDraftFeedProvider).apply(id, _draft);
+    } catch (_) {}
+  }
+
+  Future<List<AiConfirmedEdit>> _editsForTurn(String sessionId) async {
+    try {
+      return await ref.read(aiEditSyncerProvider).editsForTurn(sessionId);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// "Compila nel rapportino": the draft goes into the ordinary editor and keeps feeding it. The
+  /// session is NOT confirmed or released: the technician can come back, keep talking, and every
+  /// later turn updates the same rapportino without touching what they changed by hand.
+  Future<void> _openInEditor() async {
+    final sessionId = _sessionId;
+    if (sessionId == null || _opening) return;
+    setState(() => _opening = true);
+    try {
+      final store = ref.read(aiDraftFeedStoreProvider);
+      var reportId = (await store.load(sessionId))?.reportId;
+      if (reportId != null) {
+        final existing = await ref.read(draftReportRepositoryProvider).getDraft(reportId);
+        // Only a Bozza still on this phone can be fed; a sent one is the office's now.
+        if (existing == null || existing.stato != 'Bozza') reportId = null;
+      }
+      if (reportId == null) {
+        reportId = await _createManualDraft();
+        if (reportId == null) {
+          if (mounted) {
+            showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+          }
+          return;
+        }
+        await store.link(sessionId: sessionId, reportId: reportId);
+      }
+      await ref.read(aiDraftFeedProvider).apply(sessionId, _draft);
+      if (!mounted) return;
+      setState(() => _linkedReportId = reportId);
+      unawaited(context.push(AppRoutes.rapportiniEditor(reportId)));
+    } catch (e) {
+      if (mounted) showAppToast(context, message: e.toString(), tone: ToastTone.error);
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  /// An explicit edit action (accept a proposal, settle a held removal), sent edits-only: no
+  /// model call, no charge. The returned draft is adopted and fed into the linked report.
+  Future<void> _runEdits(
+    Future<AiCopilotDraftDto?> Function(AiEditSyncer syncer, String sessionId) op,
+  ) async {
+    final sessionId = _sessionId;
+    if (sessionId == null || _sending || _editing) return;
+    setState(() {
+      _editing = true;
+      // The draft's Version moves on: a pending confirm key is stale.
+      _confirmKey = null;
+    });
+    try {
+      final draft = await op(ref.read(aiEditSyncerProvider), sessionId);
+      if (!mounted) return;
+      if (draft != null) setState(() => _draft = draft);
+      unawaited(_feedApply());
+    } on AiEditSyncBlockedException catch (e) {
+      if (mounted) showAppToast(context, message: e.message, tone: ToastTone.warning);
+    } catch (e) {
+      if (mounted) showAppToast(context, message: e.toString(), tone: ToastTone.error);
+    } finally {
+      if (mounted) setState(() => _editing = false);
+    }
+  }
+
+  void _accept(AiConfirmedEdit edit) => _runEdits((s, id) => s.sync(id, extra: [edit]));
+
+  void _resolveHeld(AiCandidateFact item, {required bool reAdd}) =>
+      _runEdits((s, id) => s.resolveHeldRemoval(id, item, reAdd: reAdd));
 
   // ── sending ──────────────────────────────────────────────────────────────────
 
@@ -370,6 +488,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         _scrollToEnd();
       }
 
+      // Hand edits made in the editor since the last sync ride in this turn, folded as confirmed
+      // BEFORE the model reads it (Task 12).
+      // Only a session that feeds a report has hand edits; an unlinked one never touches the store.
+      o.edits ??= _linkedReportId == null ? const [] : await _editsForTurn(sessionId);
       final result = await _postWithRetry(sessionId, o);
       if (!mounted) return;
       _cancelThinkingTimers();
@@ -381,6 +503,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         _draft = result.draft;
         _sending = false;
       });
+      if (o.edits!.isNotEmpty) {
+        unawaited(_quiet(ref.read(aiEditSyncerProvider).acknowledge(sessionId, o.edits!)));
+      }
+      unawaited(_feedApply());
       _scrollToEnd();
       // The turn is accepted: only now is the local recording no longer needed.
       unawaited(_discardRecording(o));
@@ -530,6 +656,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           audioRef: o.audioRef,
           rawTranscript: o.rawTranscript,
           replacesTurnId: o.replacesTurnId,
+          confirmedEdits: (o.edits == null || o.edits!.isEmpty)
+              ? null
+              : [for (final e in o.edits!) e.toJson()],
           idempotencyKey: o.key,
         );
       } on AiConversationException catch (e) {
@@ -730,8 +859,18 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     final sessionId = _sessionId;
     if (sessionId == null || _confirming) return;
 
-    _confirmKey ??= const Uuid().v4();
     setState(() => _confirming = true);
+
+    // Hand edits made in the editor reach the server before it resolves the draft, so Confirm
+    // returns the technician's values. Best effort: offline, they still win locally (the confirm
+    // apply never overwrites a hand-edited field).
+    if (_linkedReportId != null) {
+      try {
+        if (await ref.read(aiEditSyncerProvider).sync(sessionId) != null) _confirmKey = null;
+      } catch (_) {}
+      if (!mounted) return;
+    }
+    _confirmKey ??= const Uuid().v4();
 
     try {
       final response = await ref
@@ -743,11 +882,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       // save/submit path. Nothing is created server-side — Confirm resolves, it does not create
       // (§5.4) — so there is no server object to download, no import to retry, and no state that
       // can move on underneath us between the two calls.
+      // A session already feeding a report confirms INTO it (matched by identity: no duplicate
+      // lines); otherwise a new local report is created, as before.
       final localId = await applyConfirmedDraft(
         ref,
         response: response,
         ticketId: widget.ticketId,
         cantiereId: widget.cantiereId,
+        sessionId: _linkedReportId != null ? sessionId : null,
       );
       if (!mounted) return;
 
@@ -780,6 +922,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       // See the markAiAssisted constraint in the plan's Global Constraints; the flag is already set.
       _sessionId = null;
       unawaited(ref.read(aiApiClientProvider).abandonConversation(sessionId));
+      // The report no longer has a live draft behind it.
+      if (_linkedReportId != null) {
+        unawaited(_quiet(ref.read(aiDraftFeedStoreProvider).unlink(sessionId)));
+      }
 
       if (!mounted) return;
       context.go(AppRoutes.rapportiniEditor(localId));
@@ -896,6 +1042,18 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   /// "Continua senza AI": the ordinary manual editor, prefilled from the ticket exactly like the
   /// ticket screen's own "Crea rapportino". The AI draft (if any) stays on the server untouched.
   Future<void> _continueWithoutAi() async {
+    final id = await _createManualDraft();
+    if (!mounted) return;
+    if (id == null) {
+      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+      return;
+    }
+    context.go(AppRoutes.rapportiniEditor(id));
+  }
+
+  /// A local Bozza prefilled from the ticket exactly like the ticket screen's own "Crea
+  /// rapportino"; null when nobody is signed in.
+  Future<String?> _createManualDraft() async {
     Ticket? ticket;
     final ticketId = widget.ticketId;
     if (ticketId != null) {
@@ -915,12 +1073,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       customerId: ticket?.customerId,
       tenantId: ticket?.tenantId,
     );
-    if (!mounted) return;
-    if (id == null) {
-      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
-      return;
-    }
-    context.go(AppRoutes.rapportiniEditor(id));
+    return id;
   }
 
   void _scrollToEnd() {
@@ -1008,6 +1161,23 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                   ),
                 ),
               _buildInputRow(context, sessionReady, quotaExhausted),
+              // The live feed (Task 12): the confirmed part of the draft goes into the ordinary
+              // rapportino and keeps updating it after every later turn.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.sm,
+                  AppSpacing.pagePadding,
+                  0,
+                ),
+                child: AppButton.secondary(
+                  label: _linkedReportId != null
+                      ? 'Apri il rapportino collegato'
+                      : 'Compila nel rapportino',
+                  isLoading: _opening,
+                  onPressed: !sessionReady || _opening || _confirming ? null : _openInEditor,
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.pagePadding,
@@ -1031,6 +1201,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                                 blocked ||
                                 _confirming ||
                                 _sending ||
+                                _editing ||
                                 _failed != null
                             ? null
                             : _confirm,
@@ -1252,14 +1423,26 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                 a.state,
                 a.source,
               ),
+            // A planned/assigned entry stays out of the rapportino until the technician accepts
+            // it here (a property-less confirmed edit): assignment is not participation.
             for (final w in _draft.workers)
               _draftRow(
                 '${w.fullName.isEmpty ? '—' : w.fullName}${w.hours != null ? ' · ${w.hours}h' : ''}',
                 w.state,
                 w.source,
+                accept: w.state == AiResolutionState.needsConfirmation && w.userId.isNotEmpty
+                    ? AiEditSyncer.acceptWorker(w)
+                    : null,
               ),
             for (final m in _draft.materials)
-              _draftRow('${m.name.isEmpty ? '—' : m.name} × ${m.quantity}', m.state, m.source),
+              _draftRow(
+                '${m.name.isEmpty ? '—' : m.name} × ${m.quantity}',
+                m.state,
+                m.source,
+                accept: m.state == AiResolutionState.needsConfirmation
+                    ? AiEditSyncer.acceptMaterial(m)
+                    : null,
+              ),
             for (final c in _draft.controlli)
               _draftRow(c.describe(), c.state, AiFactSource.operatorInput),
             if (_draft.openItems.isNotEmpty) ...[
@@ -1275,7 +1458,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                   ),
                 ),
               ),
-              for (final item in _draft.openItems)
+              for (final item in _draft.openItems) ...[
                 Padding(
                   padding: const EdgeInsets.only(top: 3),
                   child: Text(
@@ -1288,6 +1471,30 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                     ),
                   ),
                 ),
+                // A held removal is settled by the technician, never by the AI.
+                if (item.isHeldRemoval)
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      if (AiEditSyncer.heldRemovalEdit(item, reAdd: true) != null)
+                        TextButton(
+                          onPressed: _sending || _editing
+                              ? null
+                              : () => _resolveHeld(item, reAdd: true),
+                          style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                          child: const Text('Reinserisci'),
+                        ),
+                      if (AiEditSyncer.heldRemovalEdit(item, reAdd: false) != null)
+                        TextButton(
+                          onPressed: _sending || _editing
+                              ? null
+                              : () => _resolveHeld(item, reAdd: false),
+                          style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                          child: const Text('Mantieni rimosso'),
+                        ),
+                    ],
+                  ),
+              ],
             ],
           ],
         ),
@@ -1312,7 +1519,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
   /// One value of the draft with its provenance badge. A planned / ticket-recorded value the
   /// technician has not confirmed is muted and italic: it must never read as work that was done.
-  Widget _draftRow(String label, AiResolutionState state, AiFactSource source) {
+  Widget _draftRow(
+    String label,
+    AiResolutionState state,
+    AiFactSource source, {
+    AiConfirmedEdit? accept,
+  }) {
     final unconfirmed = isUnconfirmedProposal(source, state);
     return Padding(
       key: unconfirmed ? ValueKey('planned-unconfirmed-row:$label') : null,
@@ -1330,6 +1542,13 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
             ),
           ),
           DraftProvenanceBadge(source: source, state: state),
+          if (accept != null)
+            TextButton(
+              key: ValueKey('accept-proposal:$label'),
+              onPressed: _sending || _editing ? null : () => _accept(accept),
+              style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+              child: const Text('Accetta'),
+            ),
         ],
       ),
     );

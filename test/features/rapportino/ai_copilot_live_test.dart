@@ -10,6 +10,7 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -56,6 +57,9 @@ class _FakeAi extends AiApiClient {
   /// When set, postTurn waits for it (to observe the in-flight state).
   Completer<void>? turnGate;
   final List<_Posted> posted = [];
+
+  /// `confirmedEdits` of each postTurn, parallel to [posted] (Task 12).
+  final List<List<Map<String, dynamic>>?> postedEdits = [];
   final List<String> resumeCalls = [];
   final List<String> startCalls = [];
   final List<String> getCalls = [];
@@ -102,6 +106,7 @@ class _FakeAi extends AiApiClient {
     required String idempotencyKey,
   }) async {
     posted.add(_Posted(text, source, audioRef, rawTranscript, replacesTurnId, idempotencyKey));
+    postedEdits.add(confirmedEdits);
     await turnGate?.future;
     final next = turnScript.isEmpty
         ? const AiConversationTurnResult(assistantReplyText: 'Ok.', draft: AiCopilotDraftDto.empty)
@@ -306,9 +311,15 @@ class _NoopSync extends SyncNotifier {
   Future<void> performSync() async {}
 }
 
-Widget _wrap(_FakeAi ai, _FakeVoice voice, {String? ticketId = 'tkt-1', bool pushed = false}) {
-  final db = AppDatabase(NativeDatabase.memory());
-  addTearDown(db.close);
+Widget _wrap(
+  _FakeAi ai,
+  _FakeVoice voice, {
+  String? ticketId = 'tkt-1',
+  bool pushed = false,
+  AppDatabase? database,
+}) {
+  final db = database ?? AppDatabase(NativeDatabase.memory());
+  if (database == null) addTearDown(db.close);
   final router = GoRouter(
     initialLocation: pushed ? '/home' : '/copilot',
     routes: [
@@ -1340,6 +1351,121 @@ void main() {
       await tester.pumpAndSettle();
       await _unmount(tester);
       expect(voice.cancelCalls, 1);
+    });
+  });
+
+  group('live feed into the editor (Task 12)', () {
+    AiCopilotDraftDto liveDraft() => const AiCopilotDraftDto(
+      workers: [
+        AiDraftWorkerRef(
+          userId: 'me-1',
+          fullName: 'Marco Rossi',
+          hours: 3,
+          state: AiResolutionState.resolvedBySystem,
+          source: AiFactSource.ticketRecord,
+        ),
+        AiDraftWorkerRef(
+          userId: 'u-1',
+          fullName: 'Luca Bianchi',
+          state: AiResolutionState.needsConfirmation,
+          source: AiFactSource.planned,
+        ),
+      ],
+      materials: [
+        AiDraftMaterialUsage(
+          materialId: 'm-1',
+          name: 'Filtro olio',
+          quantity: 1,
+          state: AiResolutionState.needsConfirmation,
+          source: AiFactSource.planned,
+        ),
+      ],
+      controlli: [],
+      activities: [],
+      openItems: [],
+    );
+
+    testWidgets('Accetta on a planned entry sends a property-less edits-only request', (
+      tester,
+    ) async {
+      final ai = _FakeAi(detail: _detail(draft: _seededDraft()));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Accetta'), findsNWidgets(2), reason: 'one per planned entry');
+      await tester.tap(find.text('Accetta').last);
+      await tester.pumpAndSettle();
+
+      expect(ai.posted.single.text, '', reason: 'edits-only: no model call, no charge');
+      expect(ai.postedEdits.single, [
+        {'kind': 'material', 'id': 'm-1', 'remove': false},
+      ]);
+      await _unmount(tester);
+    });
+
+    testWidgets('Compila nel rapportino writes only the confirmed subset; a hand edit then rides '
+        'in the next turn', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
+      ai.turnScript.add(AiConversationTurnResult(assistantReplyText: 'Ok.', draft: liveDraft()));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Compila nel rapportino'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('editor:'), findsOneWidget);
+
+      final staff = await db.select(db.reportStaffTable).get();
+      expect(staff.map((s) => (s.userId, s.hoursWorked)), [('me-1', 3.0)]);
+      expect(await db.select(db.reportMateriali).get(), isEmpty, reason: 'planned stays out');
+
+      // The technician corrects the hours in the editor, then comes back and talks.
+      await (db.update(db.reportStaffTable)..where((r) => r.id.equals(staff.single.id))).write(
+        const ReportStaffTableCompanion(hoursWorked: Value(5)),
+      );
+      tester.state<NavigatorState>(find.byType(Navigator).last).pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Apri il rapportino collegato'), findsOneWidget);
+      await _typeAndSend(tester, 'Ho finito');
+
+      expect(ai.postedEdits.last, [
+        {'kind': 'worker', 'id': 'me-1', 'property': 'hours', 'value': 5.0, 'remove': false},
+      ]);
+      // The turn's draft (3 h again) never overwrites the hand edit.
+      final after = await db.select(db.reportStaffTable).get();
+      expect(after.single.hoursWorked, 5);
+      await _unmount(tester);
+    });
+
+    testWidgets('Held_removal_can_be_re_added_or_kept_removed (copilot actions)', (tester) async {
+      const held = AiCandidateFact(
+        field: 'removed.materials.id:m-1',
+        state: AiResolutionState.conflict,
+        conflictOperatorValue: 'Filtro olio',
+      );
+      final ai = _FakeAi(
+        detail: _detail(
+          draft: const AiCopilotDraftDto(
+            workers: [],
+            materials: [],
+            controlli: [],
+            activities: [],
+            openItems: [held],
+          ),
+        ),
+      );
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reinserisci'), findsOneWidget);
+      await tester.tap(find.text('Mantieni rimosso'));
+      await tester.pumpAndSettle();
+      expect(ai.posted.single.text, '');
+      expect(ai.postedEdits.single, [
+        {'kind': 'material', 'id': 'm-1', 'remove': true},
+      ]);
+      await _unmount(tester);
     });
   });
 }
