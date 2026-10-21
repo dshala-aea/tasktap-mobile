@@ -257,21 +257,40 @@ void main() {
       expect((await _cached(db)).single.isRead, isTrue);
     });
 
-    test('a 404 clears the marker — the notification is gone, nothing is left to mark', () async {
-      await _seed(db, 'a1', userId: _me);
-      _stubPage(dio, _page([_item('a1')]));
-      when(
-        () => dio.put<dynamic>('/api/notifications/a1/read'),
-      ).thenThrow(_notFound('/api/notifications/a1/read'));
+    test(
+      'a 404 is definitive: it clears the marker, and the server page is the authority after',
+      () async {
+        await _seed(db, 'a1', userId: _me);
+        _stubPage(dio, _page([_item('a1')]));
 
-      final notifier = await build(newContainer());
-      await notifier.segnaLetta('a1');
-      await notifier.refresh();
+        final notifier = await build(newContainer());
+        // Offline mark (the setUp stub's PUT is a network failure): only the marker protects the
+        // local read now.
+        await notifier.segnaLetta('a1');
+        var prefs = await SharedPreferences.getInstance();
+        expect(prefs.getStringList(_pendingKey(_me)), contains('a1'));
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getStringList(_pendingKey(_me)), isNull);
-      expect((await _cached(db)).single.isRead, isTrue);
-    });
+        // The retried PUT is answered definitively: there is no such notification server-side.
+        when(
+          () => dio.put<dynamic>('/api/notifications/a1/read'),
+        ).thenThrow(_notFound('/api/notifications/a1/read'));
+
+        // This refresh still shows it read: the marker was in force when the upsert ran, and a
+        // 404 is a definitive answer, not a non-answer.
+        await notifier.refresh();
+        expect(notifier.state.single.letta, isTrue);
+        prefs = await SharedPreferences.getInstance();
+        expect(prefs.getStringList(_pendingKey(_me)), isNull);
+
+        // With the marker settled, the page is authoritative. This (deliberately contradictory)
+        // server still lists the row as unread, so it comes back unread — the chosen rule is
+        // "404 settles the marker", not "keep retrying forever". Keeping the marker would pin the
+        // row read and block its pruning.
+        await notifier.refresh();
+        expect(notifier.state.single.letta, isFalse);
+        expect((await _cached(db)).single.isRead, isFalse);
+      },
+    );
   });
 
   group('G2c — pruning', () {

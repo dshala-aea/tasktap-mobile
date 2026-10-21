@@ -300,10 +300,18 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
     }
   }
 
-  /// Send [pending] ids one by one; drop the markers the server confirmed (2xx) or that are moot
-  /// because the notification no longer exists server-side (404). Every other failure keeps its
-  /// marker for the next refresh — a transient network error must not turn a read back into an
-  /// unread.
+  /// The one place the pending-read rule is defined: a marker is dropped when the server gives a
+  /// DEFINITIVE answer, and kept for anything less.
+  ///
+  /// - 2xx — applied; there is nothing left to send.
+  /// - 404 — there is no such notification server-side. That is definitive, not a transient
+  ///   failure: the local read has nothing left to protect, so the marker goes and the server's
+  ///   page is the authority from the next fetch on (if the page still lists the row, it shows as
+  ///   unread again — the server said two contradictory things, and the page wins once no marker
+  ///   is in force). Treating 404 as "keep retrying" would pin the row read forever and block
+  ///   pruning it.
+  /// - Anything else (timeout, no network, 5xx, auth) — a non-answer. The marker stays, so the
+  ///   locally applied read survives the next refresh's upsert and is retried.
   Future<void> _flushPendingReads(
     NotificationApiClient client,
     String userId,
@@ -317,9 +325,16 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
         await client.markAsRead(id);
         confirmed.add(id);
       } on DioException catch (e) {
-        if (e.response?.statusCode == 404) confirmed.add(id);
-      } catch (_) {
-        // Keep the marker.
+        if (e.response?.statusCode == 404) {
+          confirmed.add(id);
+        } else {
+          debugPrint(
+            'NotificheNotifier.markAsRead($id) failed: '
+            '${e.response?.statusCode ?? e.message}',
+          );
+        }
+      } catch (e) {
+        debugPrint('NotificheNotifier.markAsRead($id) failed: $e');
       }
     }
 
@@ -416,25 +431,15 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
       id,
     });
 
-    // Sync to backend (best-effort).
+    // Sync to backend (best-effort). Same rule as every other flush — see
+    // [_flushPendingReads]: 2xx or 404 settles this id, anything else keeps its marker.
     if (_apiBaseUrl.isEmpty) return;
     try {
-      final client = NotificationApiClient(_dio);
-      await client.markAsRead(id);
-      await _setPendingReadIds(userId, (await _pendingReadIds(userId))..remove(id));
-    } on DioException catch (e) {
-      // 404 = the notification is gone server-side; there is nothing left to mark, so the marker
-      // has nothing more to accomplish. Everything else keeps it for the next refresh.
-      if (e.response?.statusCode == 404) {
-        await _setPendingReadIds(
-          userId,
-          (await _pendingReadIds(userId))..remove(id),
-        );
-      } else {
-        debugPrint(
-          'NotificheNotifier.segnaLetta sync failed: ${e.response?.statusCode ?? e.message}',
-        );
-      }
+      await _flushPendingReads(
+        NotificationApiClient(_dio),
+        userId,
+        {id},
+      );
     } catch (e) {
       debugPrint('NotificheNotifier.segnaLetta sync failed: $e');
     }
