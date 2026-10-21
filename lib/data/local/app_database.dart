@@ -1746,6 +1746,14 @@ class AppDatabase extends _$AppDatabase {
     return row?.lastSync;
   }
 
+  /// [getLastSync], but live: emits again whenever [setLastSync] writes a new cursor, so a screen
+  /// can show "ultima sincronizzazione" without polling. Emits null until the first successful sync
+  /// (there is then no `sync_meta` row at all — the same "never synced" the getter reports).
+  Stream<DateTime?> watchLastSync() {
+    final query = select(syncMeta)..where((t) => t.id.equals(_cursorId));
+    return query.watchSingleOrNull().map((row) => row?.lastSync);
+  }
+
   Future<void> setLastSync(DateTime dt) async {
     await transaction(() async {
       // Drop cursors from older generations on the way past. They are never read again, and

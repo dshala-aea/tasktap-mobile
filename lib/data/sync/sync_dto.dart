@@ -76,6 +76,11 @@ class SyncResultDto {
   /// replace would wipe the picker.
   final bool carriesMaintenanceTemplates;
 
+  /// False when the payload came from a backend that predates the per-ticket fabbisogno mirror.
+  /// Without it an older backend would look like "every ticket's planned materials were cleared"
+  /// and the per-ticket replace would empty the Fabbisogno tab.
+  final bool carriesTicketMateriali;
+
   static const Set<String> checklistWireKeys = {
     'controlGroups',
     'ticketControls',
@@ -88,13 +93,15 @@ class SyncResultDto {
   };
 
   /// The reference members, kept apart from [checklistWireKeys]: they carry the mirror the create
-  /// wizard reads, not a ticket's checklist state.
+  /// wizard reads, not a ticket's checklist state. `ticketMateriali` rides here too — it is a
+  /// mirrored, replace-on-arrival list like the rest, just scoped per ticket rather than per tenant.
   static const Set<String> referenceWireKeys = {
     'contracts',
     'commesse',
     'prodottiAssistenza',
     'agents',
     'maintenanceTemplates',
+    'ticketMateriali',
   };
 
   const SyncResultDto({
@@ -133,6 +140,7 @@ class SyncResultDto {
     this.carriesProdottiAssistenza = false,
     this.carriesAgents = false,
     this.carriesMaintenanceTemplates = false,
+    this.carriesTicketMateriali = false,
   });
 
   factory SyncResultDto.fromJson(Map<String, dynamic> j) {
@@ -189,6 +197,7 @@ class SyncResultDto {
       carriesProdottiAssistenza: j.containsKey('prodottiAssistenza'),
       carriesAgents: j.containsKey('agents'),
       carriesMaintenanceTemplates: j.containsKey('maintenanceTemplates'),
+      carriesTicketMateriali: j.containsKey('ticketMateriali'),
     );
   }
 }

@@ -8,6 +8,7 @@ import '../../core/config/app_info_provider.dart';
 import '../../core/dictation/dictation_service.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/router/app_router.dart';
+import '../../core/time/last_sync_label.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/auth/session_recovery_providers.dart';
 import '../../presentation/providers/auth_providers.dart';
@@ -255,7 +256,7 @@ class ImpostazioniScreen extends ConsumerWidget {
             // ── Sistema ───────────────────────────────────────────────────
             const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Sistema')),
             SliverToBoxAdapter(
-              child: _SettingsGroup(children: [_LogoutSettingRow(ref: ref)]),
+              child: _SettingsGroup(children: [_LastSyncRow(), _LogoutSettingRow(ref: ref)]),
             ),
 
             // ── Version footer ─────────────────────────────────────────────
@@ -607,6 +608,39 @@ class _LinkRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Last sync row
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// When this phone last refreshed what it shows. Read-only, and deliberately so: a sync is a
+/// consequence of being online, not a preference, and nothing here lets the technician start one
+/// that the background poll would not start anyway.
+///
+/// It exists because "is this current?" was previously answerable only by remembering. A
+/// technician looking at a ticket list in a basement has no other way to tell whether they are
+/// seeing this morning's office edits or last week's.
+class _LastSyncRow extends ConsumerWidget {
+  const _LastSyncRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lastSync = ref.watch(lastSyncProvider);
+
+    return ListRow(
+      leading: RowIconTile(icon: LucideIcons.refreshCw, size: 34, iconSize: 17),
+      title: 'Ultima sincronizzazione',
+      subtitle: lastSync.when(
+        // No spinner: it resolves from one local row, so this is a frame or two, and a spinner
+        // that flashes on every open reads as work happening when none is.
+        loading: () => '…',
+        error: (_, _) => 'Non disponibile',
+        data: (value) => formatLastSyncLabel(value),
+      ),
+      showDivider: true,
     );
   }
 }
