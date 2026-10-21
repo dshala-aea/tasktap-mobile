@@ -853,10 +853,11 @@ void main() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Report / Controllo / Allegati / Fabbisogno — none of these have a local
-  // Drift mirror (unlike Pianificazioni), so each is fetched on demand and
-  // must distinguish three outcomes: real data, a genuine empty list, and
-  // "we couldn't check" (offline). See ticket_providers.dart.
+  // Report / Controllo / Allegati / Fabbisogno / Prodotti — each must
+  // distinguish three outcomes: real data, a genuine empty list, and "we
+  // couldn't check" (offline, nothing mirrored). Controllo and Prodotti answer
+  // from the sync mirror offline; their empty-mirror case is the third
+  // outcome, never an empty-list claim. See ticket_providers.dart.
   // ══════════════════════════════════════════════════════════════════════════
   group('TicketDetailScreen — Prodotti compartment', () {
     void stubTicketAndProdotti(MockDio dio, Map<String, dynamic> ticket, Map<String, Map<String, dynamic>> prodotti) {
@@ -920,6 +921,38 @@ void main() {
 
       expect(find.text('Asset non disponibili offline'), findsOneWidget);
       expect(find.text('Nessun asset'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('offline, lists the covered assets from the local mirror', (tester) async {
+      await seedBase(db);
+      // The sync mirrors the ticket's coverage (`ticket_assets`) and the asset identities
+      // (`assets`). The Prodotti compartment must read them rather than going blank on site — the
+      // same rows already drive the checklist card on the Controllo tab.
+      await applyChecklistBatch(
+        db,
+        ChecklistBatch(
+          authoritativeTicketIds: {'ticket-1'},
+          controlGroups: const [],
+          ticketControls: const [],
+          ticketAssets: const [
+            SyncTicketAssetDto(ticketId: 'ticket-1', prodottoAssistenzaId: 'a0'),
+          ],
+          assets: const [
+            SyncAssetDto(id: 'a0', name: 'Caldaia Murale', serialNumber: 'SN-9'),
+          ],
+        ),
+      );
+
+      await pump(tester, isOnline: false);
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Asset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Caldaia Murale'), findsOneWidget);
+      expect(find.text('S/N: SN-9'), findsOneWidget);
+      expect(find.text('Asset non disponibili offline'), findsNothing);
       await resetAndDispose(tester);
     });
   });
@@ -1197,16 +1230,19 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('offline with an empty mirror says no controls are planned', (tester) async {
+    testWidgets('offline with an empty mirror reports offline, not "no controls planned"', (
+      tester,
+    ) async {
       await seedBase(db);
 
       await pump(tester, isOnline: false);
       await tapTab(tester, 'Controllo');
 
-      // The mirror is the answer offline: an empty one is an honest "nothing planned", not an
-      // unreachable server.
-      expect(find.text('Nessun controllo previsto'), findsOneWidget);
-      expect(find.text('Controlli non disponibili offline'), findsNothing);
+      // An empty mirror cannot tell "this ticket has no template" from "its rows have not synced
+      // yet". Stating the former is how a technician signs a rapportino believing the safety
+      // checklist was complete, so the tab must say it does not know.
+      expect(find.text('Controlli non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun controllo previsto'), findsNothing);
       await resetAndDispose(tester);
     });
 

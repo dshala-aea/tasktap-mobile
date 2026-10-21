@@ -128,10 +128,10 @@ final cachedTicketControlsProvider = FutureProvider.autoDispose
     .family<List<TicketControlGroupDto>, String>((ref, ticketId) async {
       final cacheRepo = ref.watch(ticketControlsCacheRepositoryProvider);
       // Offline, `ticketControlsProvider` answers from the sync mirror — which cannot tell "this
-      // ticket has no controls" from "its rows have not synced yet". The rapportino must not
-      // report the former on that ambiguity, so offline it keeps its own rule: the checklist a
-      // previous online fetch cached, or the honest offline state. (The ticket-detail Controllo tab
-      // reads `ticketControlsProvider` directly and does show the mirror offline.)
+      // ticket has no controls" from "its rows have not synced yet" (it reports the ambiguity as
+      // the offline state rather than as an empty checklist). The rapportino must not report either
+      // on that ambiguity, so offline it keeps its own rule: the checklist a previous online fetch
+      // cached, or the honest offline state.
       if (!ref.watch(isOnlineProvider)) {
         final cached = await cacheRepo.getCachedControls(ticketId);
         if (cached != null) return cached;
