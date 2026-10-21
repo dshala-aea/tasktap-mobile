@@ -1125,7 +1125,9 @@ void main() {
       await tapTab(tester, 'Controllo');
 
       expect(find.text('Pressione OK'), findsOneWidget);
-      expect(find.text('Sicurezza'), findsOneWidget);
+      // Twice by design: the accordion's group header and the group path above the control row
+      // both read "Sicurezza" for a top-level group — the same string at two sizes.
+      expect(find.text('Sicurezza'), findsNWidgets(2));
       expect(find.text('Controlli non disponibili offline'), findsNothing);
       await resetAndDispose(tester);
     });
