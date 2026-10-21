@@ -186,6 +186,7 @@ class TicketChecklist {
     this.librettos = const [],
     this.standalone = const [],
     this.omitted = false,
+    this.ticketLevel = const [],
   });
 
   final String ticketId;
@@ -194,6 +195,12 @@ class TicketChecklist {
 
   /// The server left this ticket's checklist out of the last sync (5000-row cap).
   final bool omitted;
+
+  /// Rows that belong to the ticket itself rather than to one asset
+  /// (`ticket_controls.prodottoAssistenzaId` is null), in display order. They hang off no
+  /// [AssetChecklist] — the Controllo tab renders them through its own group tree — but the mirror
+  /// holds them, so they still mean "this ticket has a checklist".
+  final List<ChecklistControl> ticketLevel;
 
   /// Every asset once, even when a child sits under two librettos.
   Iterable<AssetChecklist> get distinctAssets sync* {
@@ -209,7 +216,13 @@ class TicketChecklist {
     }
   }
 
-  bool get hasAnything => omitted || distinctAssets.isNotEmpty;
+  /// Whether this ticket has a checklist at all — asset rows, ticket-level rows, or a checklist
+  /// the sync left out.
+  bool get hasAnything => hasAssetChecklists || ticketLevel.isNotEmpty;
+
+  /// The asset half of [hasAnything], kept separate so the asset-only entry points ("Controlli per
+  /// asset") do not appear for a ticket whose only rows are ticket-level.
+  bool get hasAssetChecklists => omitted || distinctAssets.isNotEmpty;
 }
 
 /// "Caldaia 2" before "Caldaia 10", case-insensitive.

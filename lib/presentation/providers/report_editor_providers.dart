@@ -516,6 +516,18 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// silently reverted by it.
   late final Future<void> ready;
 
+  /// Set when this editor was opened on a report it must never write to: a SERVER-known row
+  /// (`isLocalOnly == false`) that is no longer a Bozza. Every autosave becomes a no-op.
+  ///
+  /// This is the write-side half of owner decision D8 (offline slice O-3). The list routes
+  /// Inviato/Respinto/Controllato/Fatturato to the read-only view, but the editor route is still
+  /// reachable (a deep link, a stale navigation), and `_buildHeaderCompanion` hardcodes
+  /// `stato:'Bozza'` + `isLocalOnly:true` — the exact pair that corrupts a synced report (audit
+  /// F15): the device then shows a false Bozza, SyncService._upsertDraftReports skips the row
+  /// forever (so Controllato/Fatturato never arrive again), and any submit is a permanent 400.
+  /// Guarding the write here means that corruption cannot happen whatever opened the screen.
+  bool _readOnly = false;
+
   // ── Hydration ─────────────────────────────────────────────────────────────
   //
   // `initialState` is a placeholder, not the draft's actual saved data — the family provider has
@@ -551,6 +563,15 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     if (draft == null) {
       // No matching row: either a test-constructed state with nothing seeded (leave it exactly
       // as given), or — defensively — a reportId nothing ever created. Either way, stop spinning.
+      if (state.isLoading) state = state.copyWith(isLoading: false);
+      return;
+    }
+
+    // A server-known report past Bozza is read-only on mobile (owner decision D8): it is never
+    // hydrated into an editable state and never written back. See [_readOnly]. Reached only if
+    // something opened the editor route directly — the list sends these rows to the view.
+    if (!draft.isLocalOnly && draft.stato != 'Bozza') {
+      _readOnly = true;
       if (state.isLoading) state = state.copyWith(isLoading: false);
       return;
     }
@@ -1102,6 +1123,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// Persist the full draft header to Drift.  Child rows are saved
   /// individually in their respective methods.
   Future<void> _autosave() async {
+    // A read-only editor (see [_readOnly]) must never touch the row: the companion below writes
+    // `stato:'Bozza'` + `isLocalOnly:true`, which is the F15 corruption.
+    if (_readOnly) return;
     state = state.copyWith(isSaving: true, clearSaveError: true);
     try {
       await _repo.saveDraft(_buildHeaderCompanion());
@@ -1113,6 +1137,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
 
   /// Autosave header only (not full state rebuild — used after child mutations).
   Future<void> _autosaveHeader() async {
+    if (_readOnly) return;
     try {
       await _repo.saveDraft(_buildHeaderCompanion());
     } catch (_) {

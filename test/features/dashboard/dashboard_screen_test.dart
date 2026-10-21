@@ -9,11 +9,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/features/dashboard/id_plate_hero_comp.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart'
+    show internalUserIdPrefsKey;
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
@@ -110,6 +113,10 @@ void main() {
     authStream = StreamController<AuthUser?>.broadcast();
     when(() => repo.authStateChanges).thenAnswer((_) => authStream.stream);
     when(() => repo.currentUser).thenReturn(fakeUser);
+    // The notification cache is scoped to the signed-in INTERNAL user id (see
+    // NotificheNotifier._currentUserId), so the bell only counts rows whose userId matches this
+    // key. Without it the cache reads as empty and the bell never gets a dot.
+    SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'u1'});
   });
 
   /// Pumps the dashboard and emits the authenticated user once the
@@ -376,6 +383,35 @@ void main() {
         find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Notifiche'),
       );
       expect(bell.showDot, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('bell ignores an unread notification cached for another user', (tester) async {
+      // Same row as above, but owned by a different internal user id. `SessionEnder.endForced`
+      // keeps the Drift cache across a sign-out, so this is exactly the retained row a second
+      // technician on the same tablet would find — it must neither show a dot nor reach the list.
+      await db
+          .into(db.appNotifications)
+          .insert(
+            AppNotificationsCompanion.insert(
+              id: 'notif-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.now().toUtc(),
+              userId: 'u2',
+              title: 'Nuovo ticket assegnato',
+              message: 'Ticket #43 assegnato a un altro',
+              type: 'ticket',
+              deliveryType: 'push',
+            ),
+          );
+
+      await pumpDashboard(tester);
+
+      final bell = tester.widget<HeaderIconBtn>(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Notifiche'),
+      );
+      expect(bell.showDot, isFalse);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

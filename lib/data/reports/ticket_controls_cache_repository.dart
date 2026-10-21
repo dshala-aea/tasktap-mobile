@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/ticket/ticket_detail_api_client.dart';
 import '../../features/ticket/ticket_providers.dart' show ticketControlsProvider;
 import '../local/app_database.dart';
+import '../sync/connectivity_provider.dart' show isOnlineProvider;
 import '../sync/sync_service.dart' show appDatabaseProvider;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -126,6 +127,16 @@ final ticketControlsCacheRepositoryProvider = Provider<TicketControlsCacheReposi
 final cachedTicketControlsProvider = FutureProvider.autoDispose
     .family<List<TicketControlGroupDto>, String>((ref, ticketId) async {
       final cacheRepo = ref.watch(ticketControlsCacheRepositoryProvider);
+      // Offline, `ticketControlsProvider` answers from the sync mirror — which cannot tell "this
+      // ticket has no controls" from "its rows have not synced yet". The rapportino must not
+      // report the former on that ambiguity, so offline it keeps its own rule: the checklist a
+      // previous online fetch cached, or the honest offline state. (The ticket-detail Controllo tab
+      // reads `ticketControlsProvider` directly and does show the mirror offline.)
+      if (!ref.watch(isOnlineProvider)) {
+        final cached = await cacheRepo.getCachedControls(ticketId);
+        if (cached != null) return cached;
+        throw const TicketDetailOfflineException();
+      }
       try {
         final groups = await ref.watch(ticketControlsProvider(ticketId).future);
         // Fire-and-forget from the caller's perspective, but awaited here so a test (or a

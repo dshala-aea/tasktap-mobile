@@ -223,19 +223,36 @@ bool rapportinoIsInFlight(DraftReport draft) {
 /// (create_draft.dart) and RapportinoViewScreen's rejection banner.
 bool rapportinoIsRejected(DraftReport draft) => draft.stato == 'Respinto';
 
-/// Mirrors the backend's own guard — `ReportStateMachine.CanEditOrDelete`
-/// (TaskTapAPI.Application/Services/Reports/ReportStateMachine.cs) — which now allows edit/delete
-/// through Bozza, Inviato and Respinto, and blocks from Controllato onward (and for Annullato/
-/// NonFatturabile): "before the office review/approval step", not "still a draft". Previously
-/// mobile gated the list's edit/delete actions to `stato == 'Bozza'` only, which under-matched
-/// what the server actually allows once a report has been sent but not yet reviewed.
-bool rapportinoCanEditOrDelete(DraftReport draft) {
-  switch (draft.stato) {
-    case 'Bozza':
-    case 'Inviato':
-    case 'Respinto':
-      return true;
-    default:
-      return false;
-  }
-}
+/// Whether tapping this row opens the EDITOR (Bozza only), or the read-only view.
+///
+/// Owner decision D8 (offline slice O-3 / audit F15): mobile's edit surface is the Bozza — the
+/// only state its submit path can actually produce (`POST /api/reports/submit` moves Bozza →
+/// Inviato; the backend state machine offers no "edit an Inviato" command at all). Routing an
+/// Inviato/Respinto/Controllato/Fatturato row into the editor was corruption, not convenience:
+/// the editor's very first autosave rewrites `stato:'Bozza'` + `isLocalOnly:true` on the row, so
+/// the device showed a false Bozza, sync (which skips `isLocalOnly` rows) never delivered the
+/// office's Controllato/Fatturato again, and any submit was a permanent 400.
+///
+/// The backend's own `ReportStateMachine.CanEditOrDelete` is wider (Bozza/Inviato/Respinto) —
+/// that is the SERVER's edit window, used by the office web app. Mobile deliberately does not
+/// mirror it: it cannot import the children it would need to edit a sent report, and the one
+/// mobile action an Inviato/Respinto does need — rework after a rejection — has its own path
+/// (`createReworkDraft`, offered by RapportinoViewScreen's rejection banner).
+///
+/// A Bozza this device already submitted is excluded too: `submissionState` reaches `submitted`
+/// before the next sync flips `stato` to Inviato, and opening that row as an editable draft would
+/// re-open a report the server already holds.
+bool rapportinoOpensEditor(DraftReport draft) =>
+    draft.stato == 'Bozza' && !rapportinoIsSubmitted(draft);
+
+/// Whether the list may offer delete for this row.
+///
+/// Bozza only, and never mid-send: a `submitting` row's local delete races `markSubmitted`, and
+/// offline the server copy survives and the next sync re-inserts it — a silent resurrection
+/// (06-writes-outbox §6 #2). Reports past Bozza leave through the office Annulla workflow, which
+/// the backend's own delete rejects anyway (ReportStateMachine.CanEditOrDelete blocks Controllato
+/// onward).
+///
+/// "Delete" for a server-known report is online-only — see `_confirmDeleteDraft`.
+bool rapportinoCanDelete(DraftReport draft) =>
+    draft.stato == 'Bozza' && !rapportinoIsSubmitted(draft) && !rapportinoIsInFlight(draft);

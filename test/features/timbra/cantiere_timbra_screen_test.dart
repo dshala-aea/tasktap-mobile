@@ -23,6 +23,7 @@ import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
@@ -57,6 +58,10 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   final List<CantiereCrewAssignmentDto> assegnazioni;
   final bool assegnazioniShouldThrow;
 
+  /// How many times the crew endpoint was hit. The offline test asserts 0: the provider answers
+  /// from the Drift mirror there.
+  int getAssegnazioniCalls = 0;
+
   /// Captures the [StartCantiereRequest] passed to startCantiere.
   final List<StartCantiereRequest> startedRequests = [];
 
@@ -76,6 +81,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   Future<List<CantiereCrewAssignmentDto>> getAssegnazioni(
     String cantiereId,
   ) async {
+    getAssegnazioniCalls++;
     if (assegnazioniShouldThrow) {
       throw DioException(
         requestOptions: RequestOptions(
@@ -191,11 +197,16 @@ Widget _buildScreen({
   String? customerId,
   String? cantiereId,
   AuthUser? currentUser,
+  // `cantiereCrewAssignmentsProvider` reads the Drift crew mirror when offline instead of calling
+  // the client, so the pre-existing lead-branching tests (which all run through the fake client)
+  // have to say they are online. The offline tests pass false and seed the mirror themselves.
+  bool online = true,
 }) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       cantiereWorklogApiClientProvider.overrideWithValue(apiClient),
+      isOnlineProvider.overrideWithValue(online),
       locationServiceProvider.overrideWithValue(
         locationService ?? _FakeLocationService(),
       ),
@@ -712,6 +723,39 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
     }
+
+    testWidgets('offline: the mirrored crew still makes the technician lead', (tester) async {
+      await seedCantiere(db);
+      await db
+          .into(db.cantiereCrewAssignments)
+          .insert(
+            CantiereCrewAssignmentsCompanion.insert(
+              id: 'a1',
+              cantiereId: 'cant-1',
+              userId: 'me',
+              isLead: const Value(true),
+            ),
+          );
+      // Would throw if the offline path ever called it — the mirror answer must not depend on it.
+      final api = _FakeApiClient(assegnazioniShouldThrow: true);
+
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          apiClient: api,
+          cantiereId: 'cant-1',
+          customerId: 'cust-1',
+          currentUser: _testUser,
+          online: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text("Per chi registri l'ingresso?"), findsOneWidget);
+      expect(api.getAssegnazioniCalls, 0, reason: 'offline is answered from the Drift mirror');
+
+      await _teardown(tester);
+    });
 
     testWidgets(
       '"Tutta la squadra" calls batchStart with every assigned userId',
