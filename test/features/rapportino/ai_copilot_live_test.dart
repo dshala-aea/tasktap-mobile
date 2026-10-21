@@ -205,10 +205,24 @@ class _FakeVoice extends VoiceCaptureController {
   @override
   bool get isRecording => _rec;
 
+  /// Results for the next [start] calls, in order (falls back to [startResult]).
+  final Queue<RecordingStartResult> startScript = Queue();
+
+  /// When set, a [start] that starts recording only returns once this completes (a first-run
+  /// permission prompt or a slow recorder): the microphone is already on while the caller waits.
+  Completer<void>? startGate;
+  int startCalls = 0;
+
   @override
   Future<RecordingStartResult> start({String? ticketId}) async {
-    if (startResult == RecordingStartResult.started) _rec = true;
-    return startResult;
+    startCalls++;
+    final result = startScript.isEmpty ? startResult : startScript.removeFirst();
+    if (result == RecordingStartResult.started) {
+      _rec = true;
+      final gate = startGate;
+      if (gate != null) await gate.future;
+    }
+    return result;
   }
 
   @override
@@ -1249,6 +1263,67 @@ void main() {
       await tester.pumpAndSettle();
 
       await _unmount(tester);
+      expect(voice.stopCalls, 1);
+      expect(voice.cancelCalls, 0);
+    });
+
+    // A start still in flight when the screen goes away (first-run permission or consent dialog,
+    // slow recorder): the controller ends up recording with no screen to release it.
+    Future<_FakeVoice> leaveDuringStart(
+      WidgetTester tester, {
+      String? ticketId,
+      bool consent = false,
+    }) async {
+      final voice = _FakeVoice()..startGate = Completer<void>();
+      if (consent) voice.startScript.add(RecordingStartResult.consentRequired);
+      await tester.pumpWidget(_wrap(_FakeAi(), voice, ticketId: ticketId));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.pump();
+      if (consent) {
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Accetto'));
+        await tester.pump();
+        await tester.pump();
+      }
+      expect(voice.startCalls, consent ? 2 : 1);
+      expect(voice.isRecording, isTrue, reason: 'the microphone is on, start() has not returned');
+
+      await _unmount(tester);
+      voice.startGate!.complete();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      return voice;
+    }
+
+    testWidgets('Leaving_during_start_releases_the_microphone_ticketless', (tester) async {
+      final voice = await leaveDuringStart(tester, ticketId: null);
+      expect(voice.isRecording, isFalse, reason: 'no screen is left to stop it');
+      expect(voice.cancelCalls, 1, reason: 'a ticketless recording can never be offered again');
+      expect(voice.stopCalls, 0, reason: 'nothing is saved: no file is left behind');
+    });
+
+    testWidgets('Leaving_during_start_keeps_a_ticket_bound_recording', (tester) async {
+      final voice = await leaveDuringStart(tester, ticketId: 'tkt-1');
+      expect(voice.isRecording, isFalse);
+      expect(voice.stopCalls, 1, reason: 'stopped and kept: offered on the next entry');
+      expect(voice.cancelCalls, 0);
+    });
+
+    testWidgets('Leaving_during_the_consent_restart_releases_the_microphone_ticketless', (
+      tester,
+    ) async {
+      final voice = await leaveDuringStart(tester, ticketId: null, consent: true);
+      expect(voice.isRecording, isFalse);
+      expect(voice.cancelCalls, 1);
+      expect(voice.stopCalls, 0);
+    });
+
+    testWidgets('Leaving_during_the_consent_restart_keeps_a_ticket_bound_recording', (
+      tester,
+    ) async {
+      final voice = await leaveDuringStart(tester, ticketId: 'tkt-1', consent: true);
+      expect(voice.isRecording, isFalse);
       expect(voice.stopCalls, 1);
       expect(voice.cancelCalls, 0);
     });

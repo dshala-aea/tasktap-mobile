@@ -28,8 +28,13 @@ class _FakeRecorder implements AudioRecorderService {
   @override
   Future<void> start() async => started = true;
 
+  /// When set, [stop] waits for it: the recording is "ending" (saved but not yet stored).
+  Completer<void>? stopGate;
+
   @override
   Future<File> stop() async {
+    final gate = stopGate;
+    if (gate != null) await gate.future;
     stops++;
     started = false;
     final f = File('${dir.path}/rec_$stops.m4a');
@@ -231,13 +236,60 @@ void main() {
     expect(recorder.stops, 0);
   });
 
-  test('Start_over_a_stale_recording_cancels_it_first', () async {
+  test('Start_over_a_stale_ticketless_recording_cancels_and_deletes_it', () async {
+    final c = controller();
+    expect(await c.start(ticketId: null), RecordingStartResult.started);
+    expect(await c.start(ticketId: 'T2'), RecordingStartResult.started);
+    expect(recorder.stops, 1, reason: 'the stale recording was stopped, not adopted');
+    expect(File('${tmp.path}/rec_1.m4a').existsSync(), isFalse, reason: 'its file is deleted');
+    expect(await store.list(userId: 'userA'), isEmpty);
+    final pending = await c.stop();
+    expect(pending.ticketId, 'T2');
+    expect((await store.list(userId: 'userA')).map((r) => r.ticketId), ['T2']);
+  });
+
+  test('Start_over_a_stale_ticket_bound_recording_stops_and_keeps_it', () async {
     final c = controller();
     expect(await c.start(ticketId: 'T1'), RecordingStartResult.started);
     expect(await c.start(ticketId: 'T2'), RecordingStartResult.started);
     expect(recorder.stops, 1, reason: 'the stale recording was stopped, not adopted');
+    final kept = (await store.list(userId: 'userA')).single;
+    expect(kept.ticketId, 'T1', reason: 'kept under its OWN ticket, offered there next time');
+    expect(kept.file.existsSync(), isTrue);
     final pending = await c.stop();
     expect(pending.ticketId, 'T2');
+    expect((await store.list(userId: 'userA')).map((r) => r.ticketId).toSet(), {'T1', 'T2'});
+  });
+
+  test('Cancel_while_the_9_30_stop_is_saving_deletes_it_and_emits_nothing', () async {
+    final c = controller();
+    await c.start(ticketId: null);
+    var completedEvents = 0;
+    final sub = c.completed.listen((_) => completedEvents++, onError: (_) => completedEvents++);
+    recorder.stopGate = Completer<void>();
+
+    recorder.tick(maxRecordingLength);
+    await Future<void>.delayed(Duration.zero);
+    expect(c.isRecording, isFalse, reason: 'the auto-finish has begun');
+
+    final cancelling = c.cancel();
+    recorder.stopGate!.complete();
+    await cancelling;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(recorder.stops, 1);
+    expect(File('${tmp.path}/rec_1.m4a').existsSync(), isFalse, reason: 'no ticketless file left');
+    expect(await store.list(userId: 'userA'), isEmpty);
+    expect(completedEvents, 0);
+    await sub.cancel();
+  });
+
+  test('Cancel_after_a_recording_was_saved_never_deletes_it', () async {
+    final c = controller();
+    await c.start(ticketId: null);
+    final saved = await c.stop();
+    await c.cancel();
+    expect(saved.file.existsSync(), isTrue);
     expect(await store.list(userId: 'userA'), hasLength(1));
   });
 

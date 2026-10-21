@@ -48,10 +48,28 @@ class VoiceCaptureController {
   bool _recording = false;
   Future<PendingRecording>? _finishing;
 
+  /// The [_finishing] a [cancel] abandoned: its result is deleted, never emitted on [completed].
+  Future<PendingRecording>? _discarded;
+
   Future<RecordingStartResult> start({String? ticketId}) async {
     // A recording still running here belongs to a screen that is gone (a screen only calls start
-    // when it is not recording itself): never adopt it, it carries the old ticket id.
-    if (_recording) await cancel();
+    // when it is not recording itself): never adopt it, it carries the old ticket id. Release it by
+    // the screens' own rule: a ticket-bound one is stopped and KEPT (offered again on that ticket),
+    // a ticketless one could never be offered again, so it is cancelled and deleted.
+    if (_recording) {
+      if (_ticketId != null) {
+        try {
+          await _finish();
+        } catch (_) {
+          // The recorder may already have ended; whatever it saved stays in the store.
+        }
+      } else {
+        await cancel();
+      }
+    }
+    // A recording still being saved (9:30 stop, interruption) finishes before the recorder restarts.
+    final ending = _finishing;
+    if (ending != null) await ending.then((_) {}, onError: (_) {});
     if (currentUserId() == null) return RecordingStartResult.notSignedIn;
     if (!await consentAccepted()) return RecordingStartResult.consentRequired;
     switch (await permissions.request()) {
@@ -78,9 +96,21 @@ class VoiceCaptureController {
 
   /// Abandons the recording in progress: stops the recorder, closes its subscription, resets the
   /// recording state and deletes the file it produced. Nothing is saved and nothing is emitted on
-  /// [completed]. A no-op when not recording.
+  /// [completed]. A recording that is already ENDING (the 9:30 stop or an interruption fired, or a
+  /// [stop] is in flight) is still abandoned: once it is saved it is deleted again and not emitted.
+  /// A no-op when idle or once a recording has been fully saved.
   Future<void> cancel() async {
-    if (!_recording) return;
+    if (!_recording) {
+      final ending = _finishing;
+      if (ending == null) return;
+      _discarded = ending;
+      try {
+        await store.delete(await ending);
+      } catch (_) {
+        // The recorder failed while ending: nothing was saved, so there is nothing to delete.
+      }
+      return;
+    }
     _recording = false;
     final sub = _sub;
     _sub = null;
@@ -100,20 +130,37 @@ class VoiceCaptureController {
 
   void _finishAndNotify() {
     if (!_recording) return;
-    _finish().then(_completed.add, onError: _completed.addError);
+    final ending = _finish();
+    // A [cancel] that arrived while this was being saved has deleted it again: not emitted.
+    ending.then(
+      (r) {
+        if (!identical(_discarded, ending)) _completed.add(r);
+      },
+      onError: (Object e, StackTrace st) {
+        if (!identical(_discarded, ending)) _completed.addError(e, st);
+      },
+    );
   }
 
   Future<PendingRecording> _finish() {
     final inflight = _finishing;
     if (inflight != null) return inflight;
     if (!_recording) return Future.error(StateError('Nessuna registrazione in corso.'));
-    return _finishing = () async {
-      _recording = false;
-      await _sub?.cancel();
-      _sub = null;
-      final file = await recorder.stop();
-      return store.add(file, userId: _userId!, ticketId: _ticketId);
+    late final Future<PendingRecording> ending;
+    ending = () async {
+      try {
+        _recording = false;
+        await _sub?.cancel();
+        _sub = null;
+        final file = await recorder.stop();
+        return await store.add(file, userId: _userId!, ticketId: _ticketId);
+      } finally {
+        // Only while it is in flight: a later [cancel] must never delete a recording that was
+        // already saved and handed to its caller.
+        if (identical(_finishing, ending)) _finishing = null;
+      }
     }();
+    return _finishing = ending;
   }
 
   /// Pending recordings of the current user only.

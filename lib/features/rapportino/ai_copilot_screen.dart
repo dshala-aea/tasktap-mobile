@@ -643,7 +643,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     }
 
     var result = await voice.start(ticketId: widget.ticketId);
-    if (!mounted) return;
+    if (!mounted) return _releaseOrphanedStart(voice, result);
     if (result == RecordingStartResult.consentRequired) {
       final accepted = await showDialog<bool>(
         context: context,
@@ -659,7 +659,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (accepted != true || !mounted) return;
       await acceptVoiceConsent();
       result = await voice.start(ticketId: widget.ticketId);
-      if (!mounted) return;
+      if (!mounted) return _releaseOrphanedStart(voice, result);
     }
     switch (result) {
       case RecordingStartResult.started:
@@ -812,12 +812,23 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     if (!_recording) return;
     _recording = false;
     final voice = _voiceCtl;
-    if (voice == null) return;
+    if (voice != null) _releaseVoice(voice);
+  }
+
+  void _releaseVoice(VoiceCaptureController voice) {
     if (widget.ticketId != null) {
       unawaited(voice.stop().then((_) {}, onError: (_) {}));
     } else {
       unawaited(voice.cancel());
     }
+  }
+
+  /// The screen went away while [VoiceCaptureController.start] was in flight (a first-run
+  /// permission or consent dialog, a slow recorder). [dispose] ran before `_recording` was set, so
+  /// [_releaseMicrophone] had nothing to release: if the start succeeded the microphone is on with
+  /// no screen. Release it by the same rule as [_releaseMicrophone].
+  void _releaseOrphanedStart(VoiceCaptureController voice, RecordingStartResult result) {
+    if (result == RecordingStartResult.started) _releaseVoice(voice);
   }
 
   void _releaseContextFree() {
