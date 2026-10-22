@@ -21,6 +21,7 @@ import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/extension_fields/extension_fields_api_client.dart';
 // Hides the Drift row class of the same name: `Entitlement` below is the entitlement repository's.
 import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
@@ -28,40 +29,6 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_detail_screen.dart';
 
 class MockDio extends Mock implements Dio {}
-
-/// Answers the extension-fields reads/writes the "Altri campi" section makes, and records what it
-/// was asked for — the entity-type key is the part worth pinning: an asset is
-/// `prodottoassistenza` to the backend, not `asset`.
-class _FakeExtensionFieldsApiClient implements ExtensionFieldsApiClient {
-  _FakeExtensionFieldsApiClient({required this.defs, required this.values});
-
-  final List<ExtensionFieldDefinitionDto> defs;
-  final Map<String, String> values;
-
-  String? definitionsEntityType;
-  (String, String)? valuesKey;
-  (String, String, Map<String, String>)? saved;
-
-  @override
-  Future<List<ExtensionFieldDefinitionDto>> fetchDefinitions(String entityType) async {
-    definitionsEntityType = entityType;
-    return defs;
-  }
-
-  @override
-  Future<Map<String, String>> fetchValues(String entityType, String entityId) async {
-    valuesKey = (entityType, entityId);
-    return values;
-  }
-
-  @override
-  Future<void> saveValues(String entityType, String entityId, Map<String, String> values) async {
-    saved = (entityType, entityId, values);
-    this.values
-      ..clear()
-      ..addAll(values);
-  }
-}
 
 /// Answers the extension-fields reads/writes the "Altri campi" section makes, and records what it
 /// was asked for — the entity-type key is the part worth pinning: an asset is
