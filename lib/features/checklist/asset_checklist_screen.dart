@@ -423,22 +423,38 @@ class _AssetHeader extends ConsumerWidget {
                         a.legacyControllato ? 'Senza checklist · controllato' : 'Senza checklist',
                         style: TextStyle(fontSize: 12, color: c.inkMuted),
                       ),
+                    if (a.templated)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        // Progress and its exception badges sit under the name, not beside the
+                        // button: three trailing labels plus "Spunta tutti" is wider than a phone
+                        // header. `Wrap` lets a long badge list fold instead of overflowing.
+                        child: Wrap(
+                          spacing: AppSpacing.sm,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              '${p.answered}/${p.total}',
+                              style: TextStyle(fontSize: 13, color: c.inkMuted),
+                            ),
+                            if (p.requiredMissing > 0)
+                              AppBadge(
+                                label: '${p.requiredMissing} obbl.',
+                                small: true,
+                                fgColor: c.amber,
+                              ),
+                            if (p.exceptions > 0)
+                              AppBadge(
+                                label: '${p.exceptions} ecc.',
+                                small: true,
+                                fgColor: c.red,
+                              ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
-              if (a.templated) ...[
-                if (p.requiredMissing > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: AppSpacing.sm),
-                    child: AppBadge(label: '${p.requiredMissing} obbl.', small: true, fgColor: c.amber),
-                  ),
-                if (p.exceptions > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: AppSpacing.sm),
-                    child: AppBadge(label: '${p.exceptions} ecc.', small: true, fgColor: c.red),
-                  ),
-                Text('${p.answered}/${p.total}', style: TextStyle(fontSize: 13, color: c.inkMuted)),
-              ],
               if (tickable > 0)
                 Padding(
                   padding: const EdgeInsets.only(left: AppSpacing.sm),
