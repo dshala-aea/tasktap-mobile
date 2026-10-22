@@ -6,7 +6,8 @@
 // State machine transitions:
 //   pendingSync ──(request never sent: picked while offline)──► submitting
 //   submitting  ──(POST /api/tickets/{id}/attachments 200)────► submitted
-//   submitting  ──(error — server outcome now unknown)────────► failed
+//   submitting  ──(connection refused: request never left)────► pendingSync
+//   submitting  ──(any other error — server outcome unknown)──► failed
 //
 // `failed` is a dead end for automatic retry — see PendingTicketAttachments' own doc comment
 // (no client-supplied idempotency key on the upload endpoint, unlike ticket creation's

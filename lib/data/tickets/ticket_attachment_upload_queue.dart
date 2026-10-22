@@ -20,7 +20,8 @@ import 'pending_ticket_attachment_state.dart';
 //
 //   pendingSync ──(never sent — device was offline when picked)──► submitting
 //   submitting  ──(200 OK)─────────────────────────────────────────► submitted
-//   submitting  ──(error — outcome on the server is now unknown)───► failed
+//   submitting  ──(connection refused before the request left)────► pendingSync
+//   submitting  ──(any other error — outcome now unknown)─────────► failed
 //
 // Only `pendingSync` rows are auto-retried by [processAll]. `failed` rows sit
 // until an explicit, user-initiated [retry] — never auto-retried. Invariant,
@@ -117,6 +118,19 @@ class TicketAttachmentUploadQueue {
       _onUploaded?.call(a.ticketId);
       return TicketAttachmentUploadOutcome.submitted(id, a.ticketId, result.allegatoId);
     } catch (e) {
+      // A connection that could not be opened means the file never left the phone: put it back in
+      // `pendingSync` so the reconnect sweep ([processAll]) sends it, and say so honestly instead
+      // of reporting a server rejection that never happened. Narrower than "no response" on
+      // purpose — a send/receive timeout may be an upload the server already stored, and with no
+      // idempotency key on this endpoint that row has to stay a manual retry.
+      if (neverReachedServer(e)) {
+        await _repo.updateState(
+          id: id,
+          state: PendingTicketAttachmentState.pendingSync,
+          clearError: true,
+        );
+        return TicketAttachmentUploadOutcome.queuedOffline(id, a.ticketId);
+      }
       // NEVER delete on failure — keep the attachment for a manual retry. The stored string is
       // rendered verbatim under "Caricamento non riuscito", so it has to be a sentence.
       final reason = humanErrorMessage(e, azione: 'caricare l\'allegato');

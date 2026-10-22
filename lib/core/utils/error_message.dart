@@ -40,6 +40,26 @@ String humanErrorMessage(Object error, {String? azione, bool workIsSafe = true})
   return core;
 }
 
+/// True when the request never reached the server: no HTTP status came back at all, or it died in
+/// transit. This is the distinction a retry queue has to make — a request the server never saw has
+/// not been decided, so it must stay queued, while a refusal that carries a status is an answer and
+/// must be surfaced instead of retried. `humanErrorMessage` already branches on the same rule (it
+/// says "Nessuna connessione" exactly here); this exposes it so queues do not re-implement it.
+bool isTransportFailure(Object error) =>
+    error is DioException && (error.response?.statusCode == null || _isTransport(error.type));
+
+/// True only when the request certainly never reached the server: the connection could not be
+/// opened at all.
+///
+/// Deliberately narrower than [isTransportFailure], which also covers the send/receive timeouts.
+/// For a non-idempotent write those two cases differ in consequence: a timeout may be a request the
+/// server received and acted on, so re-sending it could duplicate the work, while a refused
+/// connection means nothing left the device and the row is safe to queue again.
+bool neverReachedServer(Object error) =>
+    error is DioException &&
+    (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout);
+
 String _core(Object error, String? azione) {
   if (error is! DioException) return 'Errore imprevisto. Riprova.';
 
