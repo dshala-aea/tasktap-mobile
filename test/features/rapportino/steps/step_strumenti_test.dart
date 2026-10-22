@@ -236,6 +236,37 @@ void main() {
       expect(item.outcome, '');
     });
 
+    test('the note reaches the state too, so a reopened sheet shows it', () async {
+      // The form screen watches this provider (its "Strumenti" row counts items), so the notifier
+      // outlives the compartment sheet. Reopening the sheet reuses this same state — it does not
+      // hydrate again. If the note only reached the database, the reopened text fields would seed
+      // from an empty item and the text would vanish even though the value was saved.
+      await _seedDraft(db);
+      await _seedCatalogue(db);
+      final c = _container(db);
+      final n = c.read(strumentiSelectionProvider(_rid).notifier);
+      await n.ready;
+
+      await n.setUsageDescription('mine-expired', 'Ispezione quadro');
+      await n.setOutcome('mine-expired', 'Punto caldo');
+
+      final item = c
+          .read(strumentiSelectionProvider(_rid))
+          .items
+          .firstWhere((i) => i.strumentoId == 'mine-expired');
+      expect(item.usageDescription, 'Ispezione quadro');
+      expect(item.outcome, 'Punto caldo');
+
+      // Cleared text is mirrored as '' — never back as the old note.
+      await n.setOutcome('mine-expired', '   ');
+      final afterClear = c
+          .read(strumentiSelectionProvider(_rid))
+          .items
+          .firstWhere((i) => i.strumentoId == 'mine-expired');
+      expect(afterClear.outcome, '');
+      expect(afterClear.usageDescription, 'Ispezione quadro');
+    });
+
     test('add pulls from the catalogue and remove drops it; the picker excludes selected', () async {
       await _seedDraft(db, prefilled: true);
       await _seedCatalogue(db);

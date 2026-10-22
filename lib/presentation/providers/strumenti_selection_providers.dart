@@ -57,6 +57,20 @@ class StrumentoSelectionItem {
   /// Free-text notes, '' when none. Optional: never blocks a submit.
   final String usageDescription;
   final String outcome;
+
+  StrumentoSelectionItem copyWith({String? usageDescription, String? outcome}) {
+    return StrumentoSelectionItem(
+      strumentoId: strumentoId,
+      name: name,
+      matricola: matricola,
+      calibrationExpiry: calibrationExpiry,
+      expiredAcknowledged: expiredAcknowledged,
+      expired: expired,
+      inCatalogue: inCatalogue,
+      usageDescription: usageDescription ?? this.usageDescription,
+      outcome: outcome ?? this.outcome,
+    );
+  }
 }
 
 class StrumentiSelectionState {
@@ -236,20 +250,55 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
   }
 
   /// Persists the "how it was used" note at once (the sheet can be closed or the app killed any
-  /// moment). Writes ONLY that column, so acknowledgement/snapshot are untouched. The state is not
-  /// reloaded: the text field owns what is on screen while typing.
+  /// moment). Writes ONLY that column, so acknowledgement/snapshot are untouched.
   Future<void> setUsageDescription(String strumentoId, String value) =>
-      _writeNote(strumentoId, ReportStrumentiCompanion(usageDescription: Value(_nullIfBlank(value))));
+      _writeNote(strumentoId, usageDescription: value);
 
   /// Same as [setUsageDescription], for the esito.
   Future<void> setOutcome(String strumentoId, String value) =>
-      _writeNote(strumentoId, ReportStrumentiCompanion(outcome: Value(_nullIfBlank(value))));
+      _writeNote(strumentoId, outcome: value);
 
   static String? _nullIfBlank(String v) => v.trim().isEmpty ? null : v;
 
-  Future<void> _writeNote(String strumentoId, ReportStrumentiCompanion change) async {
-    if (!state.items.any((i) => i.strumentoId == strumentoId)) return;
-    await _repo.updateLocalStrumentoNotes(reportId, strumentoId, change);
+  /// Writes the note and mirrors it into [state].
+  ///
+  /// The mirror is not cosmetic. `StrumentiRow` on the form screen watches this provider, so it
+  /// outlives the compartment sheet: closing and reopening Strumenti reuses THIS notifier and THIS
+  /// state rather than hydrating again. Leaving the state stale meant the reopened sheet built its
+  /// text fields from items whose note was still '' — the text vanished while the value sat safely
+  /// in `report_strumenti`, which is exactly the reported bug. Refreshing from the DB on reopen
+  /// would also work, but writing the note here keeps the two in step at the only moment they can
+  /// diverge, and avoids a query per sheet open. The card's own TextEditingController still owns
+  /// what is on screen, so this cannot fight the cursor.
+  Future<void> _writeNote(
+    String strumentoId, {
+    String? usageDescription,
+    String? outcome,
+  }) async {
+    final index = state.items.indexWhere((i) => i.strumentoId == strumentoId);
+    if (index < 0) return;
+    await _repo.updateLocalStrumentoNotes(
+      reportId,
+      strumentoId,
+      ReportStrumentiCompanion(
+        usageDescription: usageDescription == null
+            ? const Value.absent()
+            : Value(_nullIfBlank(usageDescription)),
+        outcome: outcome == null ? const Value.absent() : Value(_nullIfBlank(outcome)),
+      ),
+    );
+    if (!mounted) return;
+    final items = [...state.items];
+    items[index] = items[index].copyWith(
+      usageDescription: usageDescription == null ? null : _nullIfBlank(usageDescription) ?? '',
+      outcome: outcome == null ? null : _nullIfBlank(outcome) ?? '',
+    );
+    state = StrumentiSelectionState(
+      isLoading: state.isLoading,
+      items: items,
+      available: state.available,
+      workDate: state.workDate,
+    );
   }
 }
 
