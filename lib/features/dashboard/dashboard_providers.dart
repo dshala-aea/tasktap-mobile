@@ -120,7 +120,8 @@ class WorkQueueBuckets {
   const WorkQueueBuckets({
     required this.live,
     required this.daFare,
-    required this.programmato,
+    required this.restOfToday,
+    required this.upcoming,
     required this.inAttesa,
     required this.fatto,
   });
@@ -133,15 +134,28 @@ class WorkQueueBuckets {
   /// neither live, waiting, nor done. Null on a day with nothing left to start.
   final Schedule? daFare;
 
-  /// Everything not-yet-actionable: the rest of today's queue behind [daFare], plus the next
-  /// seven days. One tier, not two — "later today" and "next week" are both just "not now."
-  final List<Schedule> programmato;
+  /// Today's actionable queue behind [daFare] — still today, but not the next thing to start.
+  ///
+  /// Split from [upcoming] deliberately. They used to share one `programmato` tier, and on a day
+  /// with no schedules at all the dashboard then showed the "Oggi" heading over rows dated
+  /// tomorrow and later, with nothing saying today itself was empty — the today-vs-planned
+  /// ambiguity this split removes.
+  final List<Schedule> restOfToday;
+
+  /// Tomorrow through today+7, cancelled excluded: work that is genuinely another day.
+  final List<Schedule> upcoming;
 
   /// statusId == 4 (In attesa) today — blocked on something outside the technician's control.
   final List<Schedule> inAttesa;
 
   /// statusId == 5 or 6 (Completato/Chiuso) today.
   final List<Schedule> fatto;
+
+  /// Whether today itself has anything in it, in any state. False means the day is genuinely
+  /// empty, whatever [upcoming] holds — the dashboard states that rather than letting future
+  /// rows stand in for today's work.
+  bool get hasTodayWork =>
+      live.isNotEmpty || daFare != null || inAttesa.isNotEmpty || fatto.isNotEmpty;
 }
 
 final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
@@ -168,16 +182,13 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
   final daFare = actionableToday.isEmpty ? null : actionableToday.first;
   final restOfToday = actionableToday.isEmpty
       ? const <Schedule>[]
-      : actionableToday.skip(1);
-  final programmato = [
-    ...restOfToday,
-    ...upcoming.where((s) => s.statusId != _kStatusCancelled),
-  ];
+      : actionableToday.skip(1).toList();
 
   return WorkQueueBuckets(
     live: live,
     daFare: daFare,
-    programmato: programmato,
+    restOfToday: restOfToday,
+    upcoming: upcoming.where((s) => s.statusId != _kStatusCancelled).toList(),
     inAttesa: inAttesa,
     fatto: fatto,
   );

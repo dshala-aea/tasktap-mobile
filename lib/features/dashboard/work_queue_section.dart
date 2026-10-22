@@ -22,6 +22,11 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// calendar the app already has a real one of (Calendario). Live and Da fare carry a visible next
 /// step; Programmato/In attesa/Fatto are compact rows, because the day's answer to "what matters
 /// now" only has one or two entries in it on an ordinary day.
+///
+/// Two blocks, not one: today's tiers under the screen's "Oggi" heading, and the next seven days
+/// under their own "PROSSIMI 7 GIORNI" heading. They shared a single Programmato tier until a
+/// day with no schedules rendered future rows directly beneath the word "Oggi" — see
+/// [WorkQueueBuckets.restOfToday] for that history.
 class WorkQueueSection extends ConsumerWidget {
   const WorkQueueSection({super.key});
 
@@ -29,30 +34,11 @@ class WorkQueueSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final q = ref.watch(workQueueProvider);
 
-    final sections = <Widget>[];
-
-    for (final schedule in q.live) {
-      sections.add(_FocusCard(schedule: schedule, tier: _Tier.live));
-    }
-    if (q.daFare != null) {
-      sections.add(_FocusCard(schedule: q.daFare!, tier: _Tier.daFare));
-    }
-    if (q.inAttesa.isNotEmpty) {
-      sections.add(_CompactTier(title: 'IN ATTESA', schedules: q.inAttesa, tier: _Tier.inAttesa));
-    }
-    if (q.programmato.isNotEmpty) {
-      sections.add(
-        _CompactTier(title: 'PROGRAMMATO', schedules: q.programmato, tier: _Tier.programmato),
-      );
-    }
-    if (q.fatto.isNotEmpty) {
-      sections.add(_CompactTier(title: 'FATTO', schedules: q.fatto, tier: _Tier.fatto));
-    }
-
-    if (sections.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-        child: const EmptyState(
+    // Nothing anywhere: one empty state for the whole queue.
+    if (!q.hasTodayWork && q.upcoming.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        child: EmptyState(
           icon: LucideIcons.calendarOff,
           title: 'Nessun intervento oggi',
           body: 'Buona giornata. I lavori assegnati appariranno qui.',
@@ -60,9 +46,59 @@ class WorkQueueSection extends ConsumerWidget {
       );
     }
 
+    final todaySections = <Widget>[];
+
+    for (final schedule in q.live) {
+      todaySections.add(_FocusCard(schedule: schedule, tier: _Tier.live));
+    }
+    if (q.daFare != null) {
+      todaySections.add(_FocusCard(schedule: q.daFare!, tier: _Tier.daFare));
+    }
+    if (q.inAttesa.isNotEmpty) {
+      todaySections.add(
+        _CompactTier(title: 'IN ATTESA', schedules: q.inAttesa, tier: _Tier.inAttesa),
+      );
+    }
+    if (q.restOfToday.isNotEmpty) {
+      todaySections.add(
+        _CompactTier(title: 'PROGRAMMATO', schedules: q.restOfToday, tier: _Tier.programmato),
+      );
+    }
+    if (q.fatto.isNotEmpty) {
+      todaySections.add(_CompactTier(title: 'FATTO', schedules: q.fatto, tier: _Tier.fatto));
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: sections),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Today's own answer, always stated. Without this the dashboard's "Oggi" heading sat
+          // directly above rows dated tomorrow and later whenever the day itself was empty, and
+          // a technician reading it could not tell "nothing today, but Thursday is booked" from
+          // "nothing today" — the two look identical and mean different things.
+          if (q.hasTodayWork)
+            ...todaySections
+          else
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.lg),
+              child: CompactEmptyState(
+                icon: LucideIcons.calendarOff,
+                label: 'Nessun intervento oggi',
+                reason: 'Nessun lavoro assegnato per la giornata di oggi.',
+              ),
+            ),
+
+          // Work that is genuinely another day, under its own heading so it can never stand in
+          // for today's queue.
+          if (q.upcoming.isNotEmpty)
+            _CompactTier(
+              title: 'PROSSIMI 7 GIORNI',
+              schedules: q.upcoming,
+              tier: _Tier.programmato,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -105,8 +141,8 @@ class _RowContent {
 
 final _weekdayFmt = DateFormat('EEE d', 'it');
 
-/// "14:30" for today; "Dom 21, 14:30" for anything else — Programmato can hold items up to 7
-/// days out, and a bare HH:MM told the technician nothing about which day it was for. No shared
+/// "14:30" for today; "Dom 21, 14:30" for anything else — the next-seven-days block holds items
+/// up to a week out, and a bare HH:MM told the technician nothing about which day it was for. No shared
 /// "today vs. other day" helper exists elsewhere yet (calendario's own views each inline their
 /// own `isToday` check against a full day view, not a compact single-line label), so this is a
 /// small local one rather than a half-fit reuse.
