@@ -11,6 +11,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/clienti/cliente_overview_api_client.dart';
 import '../../../data/clienti/customer_contact_api_client.dart';
+import '../../../data/local/app_database.dart' show Customer;
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../clienti/clienti_providers.dart';
@@ -166,6 +167,9 @@ class _CustomerDetailBody extends ConsumerWidget {
                           KeyVal(label: 'Referente', value: customer.contactPerson!),
                         if (customer.phone != null && customer.phone!.isNotEmpty)
                           KeyVal(label: 'Telefono', value: customer.phone!),
+                        // Distinct from the landline above — a technician rings the mobile.
+                        if (customer.cellulare != null && customer.cellulare!.isNotEmpty)
+                          KeyVal(label: 'Cellulare', value: customer.cellulare!),
                         if (customer.email != null && customer.email!.isNotEmpty)
                           KeyVal(label: 'Email', value: customer.email!),
                         if (customer.address != null && customer.address!.isNotEmpty)
@@ -243,11 +247,11 @@ class _CustomerDetailBody extends ConsumerWidget {
               // ── Dati fiscali ─────────────────────────────────────────────────
               //
               // Demoted to its own labelled, last-in-scroll section — see the Contatti card's own
-              // comment. Only taxId (P.IVA) is captured locally today; SDI/PEC/Codice Fiscale appear in
-              // the mockup's copy but have no column in the Customers Drift table (backend `Customer.cs`
-              // may hold more than what mobile's mirror ever synced) — a real gap, out of scope for a
-              // layout-only pass, not silently invented here.
-              if (customer.taxId != null && customer.taxId!.isNotEmpty) ...[
+              // comment. Every field here is read from the local mirror, so a technician standing
+              // in front of the customer can read the CF or the SDI code with no signal; schema 48
+              // added the last four, which used to be network-only (the backend entity already
+              // carried them, the mirror just never stored them).
+              if (_hasAnyFiscalData(customer)) ...[
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
                 SliverToBoxAdapter(
                   child: Padding(
@@ -259,7 +263,10 @@ class _CustomerDetailBody extends ConsumerWidget {
                         children: [
                           const SectionTitle(title: 'Dati fiscali'),
                           const SizedBox(height: 4),
-                          KeyVal(label: 'P.IVA', value: customer.taxId!, showDivider: false),
+                          ..._fiscalRows(customer),
+                          // `showDivider` is decided inside `_fiscalRows`, which knows which row is
+                          // the last one present, so the card never ends on a rule with nothing
+                          // under it.
                         ],
                       ),
                     ),
@@ -281,6 +288,35 @@ class _CustomerDetailBody extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Whether any fiscal field is present. The card used to render on P.IVA alone, which is why a
+/// customer holding only a Codice Fiscale showed no fiscal section at all.
+bool _hasAnyFiscalData(Customer c) =>
+    _present(c.taxId) ||
+    _present(c.fiscalCode) ||
+    _present(c.sdiCode) ||
+    _present(c.pec) ||
+    _present(c.province);
+
+bool _present(String? value) => value != null && value.isNotEmpty;
+
+/// The label/value rows of the fiscal card, in the order a commercialista reads them.
+///
+/// `showDivider` is set on every row but the last one *present*: the row that closes the card is
+/// decided here, where the subset is already known, because the caller only spreads the list.
+List<Widget> _fiscalRows(Customer c) {
+  final rows = <(String, String)>[
+    if (_present(c.taxId)) ('P.IVA', c.taxId!),
+    if (_present(c.fiscalCode)) ('Codice fiscale', c.fiscalCode!),
+    if (_present(c.sdiCode)) ('Codice SDI', c.sdiCode!),
+    if (_present(c.pec)) ('PEC', c.pec!),
+    if (_present(c.province)) ('Provincia', c.province!),
+  ];
+  return [
+    for (var i = 0; i < rows.length; i++)
+      KeyVal(label: rows[i].$1, value: rows[i].$2, showDivider: i < rows.length - 1),
+  ];
 }
 
 /// The aggregated overview (sedi/contratti/interventi counts) from

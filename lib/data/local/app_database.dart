@@ -49,6 +49,35 @@ class Customers extends Table {
   /// travels in the sync's `agents`, and the picker reads `agents` by id, tolerating a miss).
   TextColumn get agentId => text().nullable()();
 
+  /// Mobile phone number — `cellulare` on the wire, distinct from the landline [phone]. A
+  /// technician on site calls the number on the customer card, so it has to be readable with no
+  /// signal; before this column only the landline ever arrived.
+  TextColumn get cellulare => text().nullable()();
+
+  // ── fiscal identity (schema 48) ──────────────────────────────────────────────
+  // The fields an Italian customer is identified by, all already on the wire inside the customer
+  // entity — the mirror simply never stored them, so the "Dati fiscali" card could show only
+  // P.IVA and the rest was network-only. Same field-parity gap as `numero`/`priority`/`dueDate` on
+  // tickets (schema 12/20) and `agentId` above (schema 42). See `syncCursorGeneration`'s own doc
+  // comment for why the delta cursor is bumped too.
+  //
+  // Wire names are NOT the C# property names: `fiscalCode` (CodiceFiscale), `sdiCode` (SDICode),
+  // `pec` (PECEmail), `province` (Provincia). A wrong name here fails silently — the value just
+  // never arrives and the card shows nothing.
+
+  /// Codice Fiscale. Independent of [taxId]: a private individual may have this and no P.IVA.
+  TextColumn get fiscalCode => text().nullable()();
+
+  /// Codice Destinatario SDI. `0000000` means PEC-routed and `XXXXXXX` a foreign recipient — both
+  /// are real values, so this is stored verbatim and never interpreted.
+  TextColumn get sdiCode => text().nullable()();
+
+  /// PEC (certified email) address.
+  TextColumn get pec => text().nullable()();
+
+  /// Province code (sigla), e.g. "RM".
+  TextColumn get province => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1412,7 +1441,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 47;
+  int get schemaVersion => 48;
 
   @override
   MigrationStrategy get migration {
@@ -1900,6 +1929,36 @@ class AppDatabase extends _$AppDatabase {
           // bump is needed for the same reason — unlike a new column on a delta-synced table.
           await m.createTable(magazzini);
         }
+        if (from < 48) {
+          // The customer's fiscal identity and mobile number, already on the wire inside the
+          // customer entity: the "Dati fiscali" card could show only P.IVA, and its own comment
+          // called SDI/PEC/Codice Fiscale out as a real gap. A technician opening a customer on
+          // site had no way to read the customer's CF or the mobile number.
+          //
+          // Needs the cursor bump to v13: the `fullScope` (office) branch delta-filters customers,
+          // so an unedited customer would keep these null forever. The technician branch sends its
+          // customers whole every sync and would have filled them anyway.
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `customers` from the current definition today, but the guard is what
+          // keeps an `alterTable` added later from turning this into a crash on `duplicate column
+          // name` before the app opens.
+          if (!await _columnExists(m.database, 'customers', 'cellulare')) {
+            await m.addColumn(customers, customers.cellulare);
+          }
+          if (!await _columnExists(m.database, 'customers', 'fiscal_code')) {
+            await m.addColumn(customers, customers.fiscalCode);
+          }
+          if (!await _columnExists(m.database, 'customers', 'sdi_code')) {
+            await m.addColumn(customers, customers.sdiCode);
+          }
+          if (!await _columnExists(m.database, 'customers', 'pec')) {
+            await m.addColumn(customers, customers.pec);
+          }
+          if (!await _columnExists(m.database, 'customers', 'province')) {
+            await m.addColumn(customers, customers.province);
+          }
+        }
       },
     );
   }
@@ -2005,7 +2064,12 @@ class AppDatabase extends _$AppDatabase {
   ///      delta sync only re-sends rows that changed, so an unedited entity would keep a null
   ///      forever. The definitions table added by the same step needs no bump — its member travels
   ///      whole on every sync.
-  static const String syncCursorGeneration = 'v12';
+  /// v13 — 2026-10-22, schema 48 added the customer's fiscal identity (`fiscalCode`, `sdiCode`,
+  ///      `pec`, `province`) and `cellulare`. Same reasoning as v10's `customers.agentId`: the
+  ///      values were already on the wire, and a delta sync only re-sends customers that changed,
+  ///      so an unedited customer would keep them null forever — on the office branch that reads
+  ///      the tenant's whole book delta-filtered.
+  static const String syncCursorGeneration = 'v13';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 
