@@ -58,7 +58,8 @@ void main() {
 
     await tester.tap(find.text('Caldaia 1'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sì').first);
+    // A Checkbox control is a tick-box now, so the row reads "Eseguito" rather than Sì/No.
+    await tester.tap(find.text('Eseguito').first);
     await tester.pumpAndSettle();
 
     final container = ProviderScope.containerOf(tester.element(find.byType(AssetChecklistScreen)));
@@ -75,7 +76,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(EditableControlTile), findsNWidgets(15));
 
-    await tester.tap(find.text('Sì').first);
+    await tester.tap(find.text('Eseguito').first);
     await tester.pumpAndSettle();
 
     expect(find.byType(EditableControlTile), findsNWidgets(15), reason: 'the row does not vanish under the thumb');
