@@ -112,8 +112,12 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
     final description = skipNotes ? null : _blankToNull(_descriptionCtrl.text);
     final safetyNotes = skipNotes ? null : _blankToNull(_safetyNotesCtrl.text);
 
+    // Fetched once, outside the try/catch: `LocationService` never throws (see its own doc
+    // comment), and both the online call and the offline fallback need the same position —
+    // cantiere_timbra_screen.dart's `_handleEndCantiere` does exactly this.
+    final location = await ref.read(locationServiceProvider).getCurrentPosition();
+
     try {
-      final location = await ref.read(locationServiceProvider).getCurrentPosition();
       final client = ref.read(cantiereWorklogApiClientProvider);
       await client.endCantiere(
         EndCantiereRequest(

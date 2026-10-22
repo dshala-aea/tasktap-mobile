@@ -51,6 +51,9 @@ abstract interface class ICantiereSessionRepository {
     String? description,
     double? latitude,
     double? longitude,
+    String? safetyNotes,
+    double? departureLatitude,
+    double? departureLongitude,
   });
 
   /// Stream of today's events in chronological order.
