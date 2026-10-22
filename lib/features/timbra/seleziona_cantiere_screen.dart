@@ -30,7 +30,6 @@ import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
-import '../../data/sync/sync_service.dart';
 import 'cantiere_timbra_screen.dart' show cantieriProvider;
 import '../../core/theme/app_text_styles.dart';
 
@@ -98,7 +97,7 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
               // the technician to "an[other] tab" to pull-to-refresh because this screen had none
               // of its own — it does now.
               child: RefreshIndicator(
-                onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                onRefresh: () => refreshWithFeedback(context, ref),
                 child: cantieriAsync.when(
                   loading: () => ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

@@ -10,7 +10,6 @@ import '../../core/theme/app_vetro_palette.dart';
 import '../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
-import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../data/tickets/ticket_deletion.dart';
@@ -153,7 +152,7 @@ class _TicketListBody extends ConsumerWidget {
     }).toList();
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      onRefresh: () => refreshWithFeedback(context, ref),
       child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(

@@ -117,7 +117,7 @@ class _RapportiniListRefresh extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return RefreshIndicator(
-      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      onRefresh: () => refreshWithFeedback(context, ref),
       child: _RapportiniListBody(
         filter: filter,
         query: query,

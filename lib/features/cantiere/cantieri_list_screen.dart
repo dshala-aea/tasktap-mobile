@@ -27,7 +27,6 @@ import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
-import '../../data/sync/sync_service.dart';
 import '../timbra/cantiere_timbra_screen.dart'
     show cantiereActiveSessionProvider, cantiereTodayHoursProvider, cantieriProvider;
 
@@ -69,7 +68,7 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
       backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+          onRefresh: () => refreshWithFeedback(context, ref),
           child: CustomScrollView(
             slivers: [
               const SliverToBoxAdapter(

@@ -62,6 +62,14 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     super.dispose();
   }
 
+  /// Pull-to-refresh for the body below.
+  ///
+  /// Everything the ticket body renders — the ticket itself, its customer, sede, contract,
+  /// commessa and cantiere — is read from the synced mirror, so a delta sync is the whole
+  /// refresh; there is no server read behind this screen to re-issue. The compartment sheets
+  /// (Report, Controllo, Ore, …) fetch when they are opened, so they are fresh already.
+  Future<void> _refresh() => refreshWithFeedback(context, ref);
+
   /// Ordered by who is holding the phone.
   ///
   /// This was a pinned horizontal strip (four tabs fit a phone, there are eight — four sat past
@@ -329,34 +337,55 @@ class _TicketDetailBody extends ConsumerWidget {
             ),
 
           Expanded(
-            child: CustomScrollView(
-              controller: scrollController,
-              slivers: [
-                // Timer: status and control together, at the top of the content.
-                //
-                // Deliberately not in the bottom action stack, which already carries four
-                // buttons. Adding a fifth control there cost 74dp of the scroll viewport on every
-                // ticket — enough that the tab strip below it stopped being laid out at all on a
-                // short screen, since slivers build lazily. It belongs with the content anyway:
-                // it reports state as much as it offers an action.
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      0,
-                      AppSpacing.pagePadding,
-                      AppSpacing.md,
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: CustomScrollView(
+                controller: scrollController,
+                slivers: [
+                  // Timer: status and control together, at the top of the content.
+                  //
+                  // Deliberately not in the bottom action stack, which already carries four
+                  // buttons. Adding a fifth control there cost 74dp of the scroll viewport on every
+                  // ticket — enough that the tab strip below it stopped being laid out at all on a
+                  // short screen, since slivers build lazily. It belongs with the content anyway:
+                  // it reports state as much as it offers an action.
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.md,
+                      ),
+                      child: _TicketTimerBar(ticketId: ticket.id),
                     ),
-                    child: _TicketTimerBar(ticketId: ticket.id),
                   ),
-                ),
 
-                // Map / Naviga — a real gap the Vetro mockup's own `.mapcard` called for: an
-                // address shown with no way to act on it. Lives in the scrollable body, not the
-                // fixed header/status-row/bottom-action-stack chrome this file's own comments
-                // warn is already squeezed — this sliver just adds to the elastic scroll area
-                // the same way every other card here already does.
-                if (locationAddress.isNotEmpty)
+                  // Map / Naviga — a real gap the Vetro mockup's own `.mapcard` called for: an
+                  // address shown with no way to act on it. Lives in the scrollable body, not the
+                  // fixed header/status-row/bottom-action-stack chrome this file's own comments
+                  // warn is already squeezed — this sliver just adds to the elastic scroll area
+                  // the same way every other card here already does.
+                  if (locationAddress.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.pagePadding,
+                          0,
+                          AppSpacing.pagePadding,
+                          AppSpacing.base,
+                        ),
+                        child: GeoMapCard(
+                          pointAsync: ref.watch(locationGeocodedLocationProvider(ticket.locationId)),
+                          address: locationAddress,
+                        ),
+                      ),
+                    ),
+
+                  // Now: just enough to know where you stand. Data, Chiusura, Descrizione and Note
+                  // tecnico moved into the Dettagli compartment below — they're read once, not on
+                  // every glance at this ticket, and belonged with the rest of the reference record
+                  // rather than pinned above it.
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(
@@ -365,109 +394,91 @@ class _TicketDetailBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: GeoMapCard(
-                        pointAsync: ref.watch(locationGeocodedLocationProvider(ticket.locationId)),
-                        address: locationAddress,
+                      child: AppCard(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            KeyVal(
+                              label: 'Cliente',
+                              value: customerName,
+                              onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
+                            ),
+                            KeyVal(label: 'Sede', value: locationName),
+                            KeyVal(
+                              label: 'Tecnico',
+                              value: tecnicoLabel,
+                              showDivider: contractLabel != null || commessaLabel != null,
+                            ),
+                            if (contractLabel != null)
+                              KeyVal(
+                                label: 'Contratto',
+                                value: contractLabel,
+                                showDivider: commessaLabel != null,
+                                onTap: () => _showContractSummarySheet(context, contractId!),
+                              ),
+                            if (commessaLabel != null)
+                              KeyVal(
+                                label: 'Commessa',
+                                value: commessaLabel,
+                                showDivider: false,
+                                onTap: commessaId == null
+                                    ? null
+                                    : () => context.push('/altro/commesse/$commessaId'),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
 
-                // Now: just enough to know where you stand. Data, Chiusura, Descrizione and Note
-                // tecnico moved into the Dettagli compartment below — they're read once, not on
-                // every glance at this ticket, and belonged with the rest of the reference record
-                // rather than pinned above it.
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      0,
-                      AppSpacing.pagePadding,
-                      AppSpacing.base,
-                    ),
-                    child: AppCard(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  // The record — a grid of compartments, not an accordion. Each opens a bottom
+                  // sheet over the ticket rather than growing the page in place: the ticket's own
+                  // shape stays constant no matter which section (or how much of it) is open. See
+                  // _sectionLabels' own doc comment for the fuller reasoning and what this replaced.
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: GridView(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 180,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 1.5,
+                        ),
                         children: [
-                          KeyVal(
-                            label: 'Cliente',
-                            value: customerName,
-                            onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
-                          ),
-                          KeyVal(label: 'Sede', value: locationName),
-                          KeyVal(
-                            label: 'Tecnico',
-                            value: tecnicoLabel,
-                            showDivider: contractLabel != null || commessaLabel != null,
-                          ),
-                          if (contractLabel != null)
-                            KeyVal(
-                              label: 'Contratto',
-                              value: contractLabel,
-                              showDivider: commessaLabel != null,
-                              onTap: () => _showContractSummarySheet(context, contractId!),
-                            ),
-                          if (commessaLabel != null)
-                            KeyVal(
-                              label: 'Commessa',
-                              value: commessaLabel,
-                              showDivider: false,
-                              onTap: commessaId == null
-                                  ? null
-                                  : () => context.push('/altro/commesse/$commessaId'),
+                          for (final label in sectionLabels)
+                            AppCompartmentTile(
+                              icon: _sectionIcon(label),
+                              label: label,
+                              onTap: () => openCompartmentSheet(
+                                context,
+                                label: label,
+                                content: label == 'Dettagli'
+                                    ? _DettagliSheet(
+                                        dateLabel: dateLabel,
+                                        closedLabel: closedLabel,
+                                        description: ticket.description,
+                                        technicianNotes: ticket.technicianNotes,
+                                      )
+                                    : _sectionContent(label, ticket.id),
+                              ),
                             ),
                         ],
                       ),
                     ),
                   ),
-                ),
 
-                // The record — a grid of compartments, not an accordion. Each opens a bottom
-                // sheet over the ticket rather than growing the page in place: the ticket's own
-                // shape stays constant no matter which section (or how much of it) is open. See
-                // _sectionLabels' own doc comment for the fuller reasoning and what this replaced.
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      0,
-                      AppSpacing.pagePadding,
-                      AppSpacing.base,
-                    ),
-                    child: GridView(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 180,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 1.5,
-                      ),
-                      children: [
-                        for (final label in sectionLabels)
-                          AppCompartmentTile(
-                            icon: _sectionIcon(label),
-                            label: label,
-                            onTap: () => openCompartmentSheet(
-                              context,
-                              label: label,
-                              content: label == 'Dettagli'
-                                  ? _DettagliSheet(
-                                      dateLabel: dateLabel,
-                                      closedLabel: closedLabel,
-                                      description: ticket.description,
-                                      technicianNotes: ticket.technicianNotes,
-                                    )
-                                  : _sectionContent(label, ticket.id),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
-              ],
+                  SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
+                ],
+              ),
             ),
           ),
 

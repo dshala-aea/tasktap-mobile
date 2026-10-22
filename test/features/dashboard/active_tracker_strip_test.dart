@@ -446,4 +446,43 @@ void main() {
 
     await drain(tester);
   });
+
+  testWidgets('Ferma on a ticket clock with no signal says so when the session is not on the device', (
+    tester,
+  ) async {
+    // The clock was started online and no sync mirrored it (the start endpoint answers 200 with no
+    // body, so the row can only arrive through the delta sync). There is nothing to close, and
+    // claiming "registrata" would be the worst answer available.
+    final mockDio = MockDio();
+
+    await tester.pumpWidget(
+      buildStrip(
+        repo: WorkSessionRepository(db),
+        trackers: ticketTrackers(),
+        online: false,
+        dio: mockDio,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    await tapFermaAndPump(tester);
+
+    expect(
+      find.text(
+        'Senza connessione posso fermare solo un timer avviato da questo telefono con i dati '
+        'disponibili. Riprova quando hai segnale.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Fermata registrata: verrà inviata al ritorno della connessione.'),
+      findsNothing,
+    );
+
+    final rows = await db.select(db.ticketTimers).get();
+    expect(rows, isEmpty);
+
+    await drain(tester);
+  });
 }
