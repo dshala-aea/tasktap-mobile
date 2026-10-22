@@ -137,6 +137,26 @@ void main() {
     expect(commessa['descrizione'], 'Rifacimento centrale');
   });
 
+  test('online, a server fault falls back to the mirror — a 503 is not "this commessa is gone"',
+      () async {
+    await repo.upsertCommesse([
+      CommessaSyncDto(
+        id: 'm1',
+        tenantId: 't',
+        createdAt: DateTime.utc(2026, 1, 1),
+        codice: 'COM-7',
+        descrizione: 'Rifacimento centrale',
+        customerId: 'cu1',
+      ),
+    ]);
+
+    final c = container(online: true, serverStatus: 503);
+    final commessa = await c.read(commessaByIdProvider('m1').future);
+
+    expect(commessa, isNotNull);
+    expect(commessa!['codice'], 'COM-7');
+  });
+
   test('online, a server 404 is the answer and the mirror is not consulted', () async {
     await repo.upsertCommesse([
       CommessaSyncDto(

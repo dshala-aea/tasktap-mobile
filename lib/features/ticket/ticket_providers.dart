@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../data/attachments/attachment_content_cache.dart' show AllegatoEntityType;
 import '../../data/local/app_database.dart';
 import '../../data/reference/reference_cache_repository.dart' show referenceCacheProvider;
@@ -237,42 +238,55 @@ final ticketReportsProvider = FutureProvider.autoDispose
 /// mirror keeps (`name`, `serialNumber`, `matricola`); `codice`/`marchio`/`modello` are not
 /// mirrored and simply render as absent. An empty mirror throws, exactly like its siblings: nothing
 /// on this phone is not the same fact as no asset on the ticket.
+///
+/// Online, a call that never arrived or a server fault degrades to those same mirror rows rather
+/// than blanking the compartment — the technician is standing in front of the machine either way.
+/// A 4xx still rethrows: it is the server answering about this ticket's coverage, not a failure to
+/// answer.
 final ticketProdottiProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, ticketId) async {
-      final online = ref.watch(isOnlineProvider);
-      if (!online) {
+      List<Map<String, dynamic>> byName(List<Map<String, dynamic>> rows) => rows
+        ..sort(
+          (a, b) => ((a['name'] as String?) ?? '').toLowerCase().compareTo(
+            ((b['name'] as String?) ?? '').toLowerCase(),
+          ),
+        );
+
+      Future<List<Map<String, dynamic>>> fromMirror() async {
         final db = ref.watch(appDatabaseProvider);
         final query = db.select(db.ticketAssets).join([
           innerJoin(db.assets, db.assets.id.equalsExp(db.ticketAssets.prodottoAssistenzaId)),
         ])..where(db.ticketAssets.ticketId.equals(ticketId));
         final rows = await query.get();
         if (rows.isEmpty) throw const TicketDetailOfflineException();
-        return rows
-            .map((row) {
-              final asset = row.readTable(db.assets);
-              return <String, dynamic>{
-                'id': asset.id,
-                'name': asset.name,
-                'serialNumber': asset.serialNumber,
-                'matricola': asset.matricola,
-              };
-            })
-            .toList()
-          ..sort(
-            (a, b) => ((a['name'] as String?) ?? '').toLowerCase().compareTo(
-              ((b['name'] as String?) ?? '').toLowerCase(),
-            ),
-          );
-      }
-      final ids = await ref.watch(ticketDetailApiClientProvider).fetchCoveredProdottoIds(ticketId);
-      final admin = ref.watch(adminApiClientProvider);
-      final rows = await Future.wait(ids.map(admin.fetchProdottoAssistenzaById));
-      return rows.whereType<Map<String, dynamic>>().toList()
-        ..sort(
-          (a, b) => ((a['name'] as String?) ?? '').toLowerCase().compareTo(
-            ((b['name'] as String?) ?? '').toLowerCase(),
-          ),
+        return byName(
+          rows
+              .map((row) {
+                final asset = row.readTable(db.assets);
+                return <String, dynamic>{
+                  'id': asset.id,
+                  'name': asset.name,
+                  'serialNumber': asset.serialNumber,
+                  'matricola': asset.matricola,
+                };
+              })
+              .toList(),
         );
+      }
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          final ids = await ref
+              .watch(ticketDetailApiClientProvider)
+              .fetchCoveredProdottoIds(ticketId);
+          final admin = ref.watch(adminApiClientProvider);
+          final rows = await Future.wait(ids.map(admin.fetchProdottoAssistenzaById));
+          return byName(rows.whereType<Map<String, dynamic>>().toList());
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
     });
 
 /// Files uploaded directly to a ticket (Allegati tab).
@@ -282,37 +296,48 @@ final ticketProdottiProvider = FutureProvider.autoDispose
 /// An empty mirror throws rather than answering with nothing: the table is pruned to the ticket
 /// scope on every sync, but it is also empty on a device that has not run one yet, and the tab
 /// must not state "nessun allegato" when it simply does not know.
+///
+/// As with [ticketProdottiProvider], an online call that never arrived or hit a server fault
+/// answers from the mirror instead — the files this phone already knows about are strictly better
+/// than an error page on the tab the technician opened to check a photo got attached.
 final ticketAttachmentsProvider = FutureProvider.autoDispose
     .family<List<TicketAttachmentDto>, String>((ref, ticketId) async {
-      if (ref.watch(isOnlineProvider)) {
-        final api = ref.watch(ticketDetailApiClientProvider);
-        return api.fetchAttachments(ticketId);
+      Future<List<TicketAttachmentDto>> fromMirror() async {
+        final db = ref.watch(appDatabaseProvider);
+        final rows =
+            await (db.select(db.reportAllegati)
+                  ..where(
+                    (a) =>
+                        a.entityType.equals(AllegatoEntityType.ticket) &
+                        a.entityId.equals(ticketId) &
+                        a.isActive.equals(true) &
+                        a.isPendingUpload.equals(false),
+                  )
+                  ..orderBy([(a) => OrderingTerm.desc(a.createdAt)]))
+                .get();
+        if (rows.isEmpty) throw const TicketDetailOfflineException();
+        return rows
+            .map(
+              (a) => TicketAttachmentDto(
+                id: a.id,
+                fileName: a.fileName,
+                contentType: a.contentType,
+                sizeBytes: a.sizeBytes,
+                contentUrl: a.url,
+                createdAt: a.createdAt,
+              ),
+            )
+            .toList();
       }
-      final db = ref.watch(appDatabaseProvider);
-      final rows =
-          await (db.select(db.reportAllegati)
-                ..where(
-                  (a) =>
-                      a.entityType.equals(AllegatoEntityType.ticket) &
-                      a.entityId.equals(ticketId) &
-                      a.isActive.equals(true) &
-                      a.isPendingUpload.equals(false),
-                )
-                ..orderBy([(a) => OrderingTerm.desc(a.createdAt)]))
-              .get();
-      if (rows.isEmpty) throw const TicketDetailOfflineException();
-      return rows
-          .map(
-            (a) => TicketAttachmentDto(
-              id: a.id,
-              fileName: a.fileName,
-              contentType: a.contentType,
-              sizeBytes: a.sizeBytes,
-              contentUrl: a.url,
-              createdAt: a.createdAt,
-            ),
-          )
-          .toList();
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref.watch(ticketDetailApiClientProvider).fetchAttachments(ticketId);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
     });
 
 /// Attachments picked from this ticket's Allegati tab that have not yet reached the server —
@@ -547,9 +572,9 @@ final ticketHistoryProvider = FutureProvider.autoDispose
 ///
 /// Online the server answers, because it is the only place that knows about an edit made in the
 /// office a minute ago. When the request never arrived — the radio says online but there is no
-/// response — the synced mirror answers instead, and offline it is the mirror from the start. A
-/// *response* is never second-guessed: a 404 from the server means the contract is gone, and
-/// showing a stale mirrored row would state otherwise.
+/// response — or the server answered with its own fault, the synced mirror answers instead, and
+/// offline it is the mirror from the start. A 4xx is never second-guessed: a 404 from the server
+/// means the contract is gone, and showing a stale mirrored row would state otherwise.
 ///
 /// The mirror has no `condizioni` (it is not part of the sync contract), so that field reads as
 /// absent offline. It is shown as '—', not invented.
@@ -559,7 +584,7 @@ final contractByIdProvider = FutureProvider.autoDispose
         try {
           return await ref.watch(adminApiClientProvider).fetchContractById(contractId);
         } catch (e) {
-          if (e is DioException && e.response != null) rethrow;
+          if (!isTransportOrServerFault(e)) rethrow;
         }
       }
       final row = await ref.watch(referenceCacheProvider).contractById(contractId);
@@ -594,7 +619,7 @@ final commessaByIdProvider = FutureProvider.autoDispose
         try {
           return await ref.watch(adminApiClientProvider).fetchCommessaById(commessaId);
         } catch (e) {
-          if (e is DioException && e.response != null) rethrow;
+          if (!isTransportOrServerFault(e)) rethrow;
         }
       }
       final row = await ref.watch(referenceCacheProvider).commessaById(commessaId);
@@ -623,7 +648,7 @@ final prodottoAssistenzaByIdProvider = FutureProvider.autoDispose
               .watch(adminApiClientProvider)
               .fetchProdottoAssistenzaById(prodottoId);
         } catch (e) {
-          if (e is DioException && e.response != null) rethrow;
+          if (!isTransportOrServerFault(e)) rethrow;
         }
       }
       final row = await ref

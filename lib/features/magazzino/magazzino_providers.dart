@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
 import '../../data/sync/connectivity_provider.dart';
@@ -78,24 +79,35 @@ final movimentiProvider = FutureProvider.autoDispose<PagedResult<MovimentoDto>>(
 /// back to an explicit picker in that case.
 ///
 /// Online it reads through, so an office reassignment reaches the phone on the next visit rather
-/// than after the next sync. Offline it answers from the `magazzini` mirror, where
-/// `assegnatoUserId` travels on the warehouse row itself — the assignment is a device-local
-/// lookup, never a live call. Null there means either "no van assigned" or "no mirror yet"; both
-/// leave the line's source unset instead of blocking the add, and the picker below says why when
-/// it cannot offer the alternatives.
+/// than after the next sync. Offline — or online with a request that never arrived / a server fault
+/// — it answers from the `magazzini` mirror, where `assegnatoUserId` travels on the warehouse row
+/// itself: the assignment is a device-local lookup, never a live call. Null there means either "no
+/// van assigned" or "no mirror yet"; both leave the line's source unset instead of blocking the
+/// add, and the picker below says why when it cannot offer the alternatives.
+///
+/// The fallback matters more here than the null it produces: without it a technician with a weak
+/// signal got *no* default source and had to pick a warehouse by hand on every material line, for
+/// an assignment the phone was already holding.
 final furgoneDiUserProvider = FutureProvider.autoDispose
     .family<MagazzinoDto?, String>((ref, userId) async {
-      if (ref.watch(isOnlineProvider)) {
-        return ref.watch(magazzinoApiClientProvider).getFurgoneByUser(userId);
+      Future<MagazzinoDto?> fromMirror() async {
+        final db = ref.watch(appDatabaseProvider);
+        final row =
+            await (db.select(db.magazzini)..where(
+                  (w) => w.tipo.equals('Furgone') & w.assegnatoUserId.equals(userId),
+                )..limit(1))
+                .getSingleOrNull();
+        return row == null ? null : _fromMirror(row);
       }
-      final db = ref.watch(appDatabaseProvider);
-      final row =
-          await (db.select(db.magazzini)..where(
-                (w) =>
-                    w.tipo.equals('Furgone') & w.assegnatoUserId.equals(userId),
-              )..limit(1))
-              .getSingleOrNull();
-      return row == null ? null : _fromMirror(row);
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref.watch(magazzinoApiClientProvider).getFurgoneByUser(userId);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
     });
 
 /// All warehouses (for admin CRUD and the "cambia magazzino" override picker).

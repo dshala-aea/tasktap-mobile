@@ -60,6 +60,25 @@ bool neverReachedServer(Object error) =>
     (error.type == DioExceptionType.connectionError ||
         error.type == DioExceptionType.connectionTimeout);
 
+/// True when the server never gave an answer *about the thing that was asked for*: the request
+/// never arrived, or it answered with its own fault (5xx, 408, 429).
+///
+/// This is the read-side counterpart of [isTransportFailure], and the split every "online, but the
+/// call failed" fallback has to make. A server fault says nothing about whether the record exists —
+/// a 503 from a restarting container is not "this contract is gone" — so a screen that already
+/// holds a synced copy should render it instead of blanking out. A 4xx *is* an answer (404: the
+/// record is gone; 403: this user may not see it), and papering it over with a stale mirror row
+/// would state something the server just denied.
+///
+/// Kept in step with `SubmissionQueue._isTransient` on purpose: the same shapes are worth retrying
+/// there, and for the same reason.
+bool isTransportOrServerFault(Object error) {
+  if (error is! DioException) return false;
+  final status = error.response?.statusCode;
+  if (status == null) return error.type != DioExceptionType.badResponse;
+  return status >= 500 || status == 408 || status == 429;
+}
+
 String _core(Object error, String? azione) {
   if (error is! DioException) return 'Errore imprevisto. Riprova.';
 

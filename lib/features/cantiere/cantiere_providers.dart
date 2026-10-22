@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/location/geocoding_service.dart';
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
+import '../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
@@ -109,13 +110,13 @@ final cantiereGeocodedLocationProvider = FutureProvider.autoDispose.family<Geoco
 /// nobody else's punches); a request for a teammate's hours still resolves to nothing while
 /// offline, which is the honest answer rather than borrowing this technician's hours.
 ///
-/// A network failure is still swallowed into an empty list rather than thrown: every call site
-/// here only ever reads `.valueOrNull` and treats "nothing" and "couldn't ask" identically (no
-/// suggestion is not an error state), so there is nothing for a thrown exception to communicate
-/// that an empty list doesn't already.
+/// A request that never arrived, or a server fault, answers from that same punch log rather than
+/// from nothing: the phone's own clocks are still the best evidence of the hours worked, and a 503
+/// is not a statement that the technician punched no time. A 4xx still throws, which every call
+/// site already renders as "no suggestion".
 final cantiereWorklogsProvider = FutureProvider.autoDispose
     .family<List<CantiereWorkLogDto>, ({String userId, String cantiereId})>((ref, key) async {
-      if (!ref.watch(isOnlineProvider)) {
+      Future<List<CantiereWorkLogDto>> fromPunchLog() async {
         final me = await ref.watch(internalUserIdProvider.future);
         if (me == null || me != key.userId) return const [];
         final businessTime = ref.watch(businessTimeProvider);
@@ -143,6 +144,15 @@ final cantiereWorklogsProvider = FutureProvider.autoDispose
             ),
         ];
       }
-      final api = ref.watch(cantiereWorklogApiClientProvider);
-      return api.fetchForCantiere(userId: key.userId, cantiereId: key.cantiereId);
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref
+              .watch(cantiereWorklogApiClientProvider)
+              .fetchForCantiere(userId: key.userId, cantiereId: key.cantiereId);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromPunchLog();
     });
