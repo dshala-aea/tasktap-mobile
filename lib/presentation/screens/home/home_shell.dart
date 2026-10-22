@@ -155,13 +155,13 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
   /// Starts (or restarts) the 60s foreground reconciliation poll.
   ///
-  /// Gated on [backgroundSyncPreferenceProvider] — Impostazioni → "Modalità offline" ("Sincronizza
-  /// dati in background") turning this off means exactly this poll does not run. The queued-write
-  /// watchers wired in [initState] (timbra, tickets, rapportini, …) and the reconnect-triggered
-  /// sync are unaffected — see that provider's own doc comment for why.
+  /// Runs unconditionally. Impostazioni → "Modalità offline" deliberately does NOT gate it (owner
+  /// decision D7): freshness is the app's promise, not a background convenience the technician can
+  /// switch off — a user who turns offline mode on is asking the app to stop working around the
+  /// network, and the poll is exactly what makes it work when the network is there. The setting
+  /// gates speculative downloads only; see [offlineModeProvider].
   void _startReconcilePoll() {
     _reconcilePoll?.cancel();
-    if (!ref.read(backgroundSyncPreferenceProvider)) return;
     _reconcilePoll = Timer.periodic(const Duration(seconds: 60), (_) {
       ref.read(workLogRefreshCoordinatorProvider).refreshNow();
       ref.read(cantiereWorkLogReconcilerProvider).reconcile();
@@ -173,13 +173,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Same "Modalità offline" gate as the poll above — resume-sync is the other half of
-      // "Sincronizza dati in background".
-      if (ref.read(backgroundSyncPreferenceProvider)) {
-        ref.read(syncProvider.notifier).performSync();
-        ref.read(workLogRefreshCoordinatorProvider).refreshNow();
-        ref.read(cantiereWorkLogReconcilerProvider).reconcile();
-      }
+      // Unconditional, like the poll above and for the same reason (D7): coming back to the app is
+      // the moment the technician expects current data, so the "Modalità offline" setting must not
+      // be the thing that shows them a stale board.
+      ref.read(syncProvider.notifier).performSync();
+      ref.read(workLogRefreshCoordinatorProvider).refreshNow();
+      ref.read(cantiereWorkLogReconcilerProvider).reconcile();
       // A rapportino whose send failed for a transient reason (or was queued offline) is
       // retried on resume too — reconnect alone misses a device that never lost its interface.
       // Deliberately outside the background-sync gate: this is the technician's own record.

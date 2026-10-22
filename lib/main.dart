@@ -171,11 +171,11 @@ Future<void> runTaskTapApp() async {
           (ref) =>
               ref.watch(impostazioniProvider.select((s) => s.geoLocazione)),
         ),
-        // Impostazioni → "Modalità offline" ("Sincronizza dati in background"). Same defect as
-        // the dark-theme toggle used to be: persisted, read nowhere. Binds to HomeShell's
-        // automatic background sync (60s foreground poll + resume sync) — see
-        // backgroundSyncPreferenceProvider's own doc comment for what stays on regardless.
-        backgroundSyncPreferenceProvider.overrideWith(
+        // Impostazioni → "Modalità offline" ("Sincronizza dati in background"). Gates speculative
+        // downloads only, never freshness — see offlineModeProvider's own doc comment (D7). Note
+        // the polarity: `syncOffline == true` IS offline mode, so this is not a "sync allowed"
+        // flag and must never be negated at the override.
+        offlineModeProvider.overrideWith(
           (ref) => ref.watch(impostazioniProvider.select((s) => s.syncOffline)),
         ),
       ],
@@ -254,9 +254,16 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // A push arriving in the foreground is the moment we know there is something new; pull it
     // into the local mirror so the badge and the list update without waiting for the technician
     // to open the Notifiche screen. Nothing polled before this, despite a comment claiming it did.
+    //
+    // It also triggers a data sync, not just a notification refresh: the push is sent because
+    // something changed on the server (a ticket assigned, a cantiere opened), so refreshing only
+    // the notification list left the ticket board showing the state from before the change until
+    // the next 60s tick. A push is the cheapest freshness signal the app gets — use it.
     if (NotificationService.isAvailable) {
-      NotificationService.instance.onForegroundMessage = () =>
-          ref.read(notificheProvider.notifier).refresh();
+      NotificationService.instance.onForegroundMessage = () {
+        ref.read(notificheProvider.notifier).refresh();
+        ref.read(syncProvider.notifier).performSync();
+      };
       NotificationService.instance.onForegroundBanner = (title, body) {
         final context = rootNavigatorKey.currentContext;
         final text = [title, body].whereType<String>().where((s) => s.trim().isNotEmpty).join(' — ');

@@ -1367,25 +1367,41 @@ class _UnsentPins {
 // Riverpod provider
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Whether automatic background sync (the 60s foreground poll and the app-resume sync in
-/// [HomeShell]) should run at all.
+/// Whether the technician asked the app to behave as if it were offline — Impostazioni →
+/// "Modalità offline" ("Sincronizza dati in background"). Defaults to false and is bound once in
+/// `main.dart`, the same pattern as `gpsPreferenceProvider` in core/location: a core default here
+/// (the data layer must not import a feature), overridden at the root so no call site has to
+/// remember the setting exists.
 ///
-/// Defaults to true and is overridden in `main.dart` with the Impostazioni → "Modalità offline"
-/// setting — same pattern as `gpsPreferenceProvider` in core/location: a core default here (data
-/// layer must not import a feature), bound once in main.dart so no call site has to remember the
-/// setting exists.
+/// What it may gate, and what it may not (owner decision D7, offline audit 2026-10-21):
 ///
-/// Deliberately does NOT gate the initial post-login sync or the reconnect-triggered flush of
-/// queued offline writes (timbra, tickets, rapportini, …) — those exist to avoid losing or
-/// silently staling data, not to keep it fresh in the background, so they stay on even with this
-/// preference off.
-final backgroundSyncPreferenceProvider = Provider<bool>((ref) => true);
+///  - It DOES gate speculative downloads — the attachment prefetcher's sweep, which fills the
+///    cache with report photos nobody has opened yet. That is spend the technician did not ask
+///    for.
+///  - It does NOT gate freshness. The 60s foreground poll, the app-resume sync, the worklog live
+///    refresh and the reconnect flush of queued writes all run regardless: turning "offline mode"
+///    on asks the app to stop working around the network, not to be shown yesterday's ticket list
+///    while standing in signal.
+final offlineModeProvider = Provider<bool>((ref) => false);
 
 /// Provides the [AppDatabase] singleton.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
   ref.onDispose(db.close);
   return db;
+});
+
+/// When this device last brought its mirror up to date — the cursor `sync_meta` holds.
+///
+/// A stream rather than a one-shot read: Impostazioni and the offline banner can stay on screen
+/// across a background sync, and a value that only refreshed on rebuild would keep claiming the
+/// data is older than it is. Null means no successful sync has happened on this device yet.
+///
+/// Lives in the data layer, not next to the Impostazioni screen that first needed it: the offline
+/// banner (core/widgets) shows the same answer where the question is actually asked — "is the list
+/// I am looking at current?" — and core must not import a feature.
+final lastSyncProvider = StreamProvider.autoDispose<DateTime?>((ref) {
+  return ref.watch(appDatabaseProvider).watchLastSync();
 });
 
 /// Provides the [SyncService].

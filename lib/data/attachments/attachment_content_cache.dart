@@ -10,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../api/dio_client.dart';
 import '../local/app_database.dart';
 import '../sync/connectivity_provider.dart' show isOnlineProvider, onUnmeteredWifi;
-import '../sync/sync_service.dart' show appDatabaseProvider;
+import '../sync/sync_service.dart' show appDatabaseProvider, offlineModeProvider;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AttachmentContentCache
@@ -264,11 +264,17 @@ final attachmentContentCacheProvider = Provider<AttachmentContentCache>((ref) {
 });
 
 /// Filled after every successful sync — see [AttachmentPrefetcher] for why it is Wi-Fi-only.
+///
+/// Two independent reasons to stay put, and both must hold: the link must be unmetered, and the
+/// technician must not have switched "Modalità offline" on. This sweep is the one thing that
+/// setting DOES gate (owner decision D7) — it spends bandwidth on files nobody has opened yet,
+/// while everything that keeps data fresh runs regardless.
 final attachmentPrefetcherProvider = Provider<AttachmentPrefetcher>((ref) {
   return AttachmentPrefetcher(
     db: ref.watch(appDatabaseProvider),
     cache: ref.watch(attachmentContentCacheProvider),
-    canPrefetch: onUnmeteredWifi,
+    canPrefetch: () async =>
+        !ref.read(offlineModeProvider) && await onUnmeteredWifi(),
   );
 });
 
