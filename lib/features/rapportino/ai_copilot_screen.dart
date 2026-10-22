@@ -26,6 +26,7 @@ import '../../presentation/providers/report_editor_providers.dart'
 import 'ai_draft_feed.dart';
 import 'apply_confirmed_draft.dart';
 import 'create_draft.dart';
+import 'draft_for_ticket.dart';
 import 'draft_provenance_badge.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1271,6 +1272,28 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   /// "Continua senza AI": the ordinary manual editor, prefilled from the ticket exactly like the
   /// ticket screen's own "Crea rapportino". The AI draft (if any) stays on the server untouched.
   Future<void> _continueWithoutAi() async {
+    // Same guard as the ticket screen: leaving the copilot for the manual editor must not mint a
+    // second Bozza for a ticket that already has one.
+    final ticketId = widget.ticketId;
+    if (ticketId != null) {
+      final existing = await editableDraftsForTicket(ref.read(appDatabaseProvider), ticketId);
+      if (!mounted) return;
+      if (existing.isNotEmpty) {
+        // Built here rather than inline in the switch: this is the only use of `context`, and it now
+        // happens strictly before the await, so the mounted check above covers it.
+        final asking = askAboutExistingDraft(context, drafts: existing);
+        switch (await asking) {
+          case ExistingDraftChoice.openExisting:
+            if (!mounted) return;
+            await openEditableDraft(context, ref, existing.first);
+            return;
+          case ExistingDraftChoice.createNew:
+            break;
+          case ExistingDraftChoice.cancelled:
+            return;
+        }
+      }
+    }
     final id = await _createManualDraft();
     if (!mounted) return;
     if (id == null) {

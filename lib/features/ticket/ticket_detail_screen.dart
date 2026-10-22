@@ -30,6 +30,7 @@ import '../checklist/checklist_providers.dart';
 import '../checklist/ticket_asset_checklists_card.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider, formatElapsed;
 import '../rapportino/create_draft.dart';
+import '../rapportino/draft_for_ticket.dart';
 import 'control_group_accordion.dart';
 import 'edit_ticket_screen.dart';
 import 'ticket_detail_api_client.dart';
@@ -526,6 +527,26 @@ class _TicketDetailBody extends ConsumerWidget {
     Ticket ticket,
     String locationAddress,
   ) async {
+    // A ticket can already have a Bozza — this button used to mint a second one silently on every
+    // press, leaving rows indistinguishable to the office and to the technician. Ask before
+    // creating; a dismissed dialog creates nothing.
+    final existing = await editableDraftsForTicket(ref.read(appDatabaseProvider), ticket.id);
+    if (!context.mounted) return;
+    if (existing.isNotEmpty) {
+      // Built here rather than inline in the switch: this is the only use of `context`, and it now
+      // happens strictly before the await, so the mounted check above covers it.
+      final asking = askAboutExistingDraft(context, drafts: existing);
+      switch (await asking) {
+        case ExistingDraftChoice.openExisting:
+          if (!context.mounted) return;
+          await openEditableDraft(context, ref, existing.first);
+          return;
+        case ExistingDraftChoice.createNew:
+          break;
+        case ExistingDraftChoice.cancelled:
+          return;
+      }
+    }
     final id = await createLocalDraft(
       ref,
       title: 'Rapportino — ${ticket.title}',
