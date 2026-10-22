@@ -105,6 +105,49 @@ void main() {
     await disposeScreen(tester);
   });
 
+  testWidgets('"Spunta tutti" ticks one asset\'s booleans and leaves the other assets alone', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(400, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await seedBigTicket(db, assets: 2);
+    await tester.pumpWidget(host(db));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Spunta tutti'), findsNWidgets(2), reason: 'one per asset that has booleans');
+
+    await tester.tap(find.text('Spunta tutti').first); // Caldaia 1
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(tester.element(find.byType(AssetChecklistScreen)));
+    final rows = container.read(reportEditorProvider('r1')).controlloRows;
+    expect(rows, hasLength(10), reason: 'the 10 Checkbox controls of Caldaia 1, never the Number/Text/Options ones');
+    expect(rows.map((r) => r.controlId).toSet(), {for (var k = 0; k < 10; k++) 'ctrl-r1-c-0-$k'});
+    expect(rows.every((r) => r.boolValue == true), isTrue);
+
+    expect(find.text('10/15'), findsOneWidget, reason: 'Caldaia 1 is ten fifteenths answered');
+    expect(find.text('0/15'), findsOneWidget, reason: 'Caldaia 2 is untouched');
+    expect(find.textContaining('Spuntati 10 controlli'), findsOneWidget);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('"Spunta tutti" is not offered in the read-only ticket view', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(400, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await seedBigTicket(db, assets: 2);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          isOnlineProvider.overrideWithValue(true),
+        ],
+        child: const MaterialApp(home: AssetChecklistScreen(ticketId: 't1')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Spunta tutti'), findsNothing, reason: 'there is no rapportino to record an answer on');
+    await disposeScreen(tester);
+  });
+
   testWidgets('a rapportino without a ticket explains instead of showing an empty list', (tester) async {
     await tester.pumpWidget(
       ProviderScope(

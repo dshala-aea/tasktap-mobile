@@ -7,11 +7,14 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 import '../../core/widgets/widgets.dart';
 import '../../data/sync/connectivity_provider.dart';
+import '../../domain/checklist/bulk_actions.dart';
 import '../../domain/checklist/checklist_items.dart';
 import '../../domain/checklist/checklist_models.dart';
 import '../../domain/checklist/control_answer_rules.dart';
+import '../../domain/checklist/control_type.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'bulk_action_sheet.dart';
+import 'bulk_executor.dart';
 import 'checklist_providers.dart';
 import 'editable_control_tile.dart';
 
@@ -89,6 +92,48 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
     final reportId = widget.reportId;
     if (tree == null || reportId == null || _lastShown.isEmpty) return;
     showBulkActionSheet(context, reportId: reportId, tree: tree, scopeAssetIds: _lastShown);
+  }
+
+  /// "Spunta tutti" on one asset: ticks every boolean control of THAT asset, nothing else.
+  ///
+  /// Runs through the same `planBulk` + `BulkExecutor` path as the bulk sheet rather than writing
+  /// rows itself, so a retained control, a control this asset's template version no longer has,
+  /// and the undo button all behave exactly as they already do — one implementation of "what a
+  /// bulk check means". Goes through the sheet's own rule that only `Checkbox`/`TrueFalse` are
+  /// touched (`bulkLineageOptions` already filters to it here).
+  Future<void> _checkAllAsset(TicketChecklist tree, String assetId) async {
+    final reportId = widget.reportId;
+    if (reportId == null) return;
+    final lineages = {
+      for (final o in bulkLineageOptions(tree, {assetId}))
+        if (o.isBoolean) o.lineageId,
+    };
+    if (lineages.isEmpty) return;
+    final plan = planBulk(
+      request: BulkRequest(assetIds: {assetId}, lineageIds: lineages, boolValue: true),
+      tree: tree,
+      existing: ref.read(controlAnswersProvider(reportId)),
+    );
+    final executor = BulkExecutor(
+      ref.read(reportEditorProvider(reportId).notifier),
+      reportId,
+    );
+    await executor.apply(plan);
+    if (!mounted) return;
+    final skipped = plan.skippedNonBoolean + plan.notApplicable + plan.problems.length;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          plan.affected == 0
+              ? 'Nessun controllo da spuntare.'
+              : 'Spuntati ${plan.affected} controlli'
+                    '${skipped > 0 ? ' ($skipped saltati)' : ''}.',
+        ),
+        action: plan.affected == 0
+            ? null
+            : SnackBarAction(label: 'Annulla', onPressed: () => executor.undo(plan)),
+      ),
+    );
   }
 
   @override
@@ -177,6 +222,11 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
                             live: live,
                             onToggle: _toggle,
                             showAssetName: _query.layout == ChecklistLayout.byControl,
+                            // Read-only (ticket) views never offer it: there is no rapportino to
+                            // record an answer on.
+                            onCheckAll: widget.reportId == null
+                                ? null
+                                : (assetId) => _checkAllAsset(tree, assetId),
                           ),
                         );
                       },
@@ -304,6 +354,7 @@ class _ItemView extends StatelessWidget {
     required this.live,
     required this.onToggle,
     required this.showAssetName,
+    this.onCheckAll,
   });
 
   final ChecklistListItem item;
@@ -311,6 +362,9 @@ class _ItemView extends StatelessWidget {
   final Map<String, ChecklistAnswer> live;
   final ValueChanged<String> onToggle;
   final bool showAssetName;
+
+  /// Ticks every boolean control of one asset; null in the read-only ticket view.
+  final ValueChanged<String>? onCheckAll;
 
   @override
   Widget build(BuildContext context) {
@@ -336,7 +390,11 @@ class _ItemView extends StatelessWidget {
           ],
         ),
       ),
-      AssetHeaderItem i => _AssetHeader(item: i, onToggle: onToggle),
+      AssetHeaderItem i => _AssetHeader(
+        item: i,
+        onToggle: onToggle,
+        onCheckAll: onCheckAll == null ? null : () => onCheckAll!(i.asset.assetId),
+      ),
       ControlGroupItem i => Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding + 8, AppSpacing.sm, AppSpacing.pagePadding, 2),
         child: Text(i.path, style: TextStyle(fontSize: 11, color: context.colors.inkMuted)),
@@ -369,17 +427,25 @@ class _ItemView extends StatelessWidget {
 }
 
 class _AssetHeader extends StatelessWidget {
-  const _AssetHeader({required this.item, required this.onToggle});
+  const _AssetHeader({required this.item, required this.onToggle, this.onCheckAll});
 
   final AssetHeaderItem item;
   final ValueChanged<String> onToggle;
+
+  /// Null when "Spunta tutti" must not be offered (read-only view).
+  final VoidCallback? onCheckAll;
 
   @override
   Widget build(BuildContext context) {
     final a = item.asset;
     final p = item.progress;
     final c = context.colors;
-    return InkWell(
+    // Only where a tick can actually record something: the asset must still be part of the
+    // ticket's checklist, and it must have at least one control that holds a boolean.
+    final checkable = a.templated &&
+        a.coveredNow &&
+        a.controls.any((ctl) => !ctl.isRetained && isBooleanControl(ctl.type));
+    final header = InkWell(
       onTap: a.templated ? () => onToggle(a.assetId) : null,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 56),
@@ -428,6 +494,71 @@ class _AssetHeader extends StatelessWidget {
                   ),
                 Text('${p.answered}/${p.total}', style: TextStyle(fontSize: 13, color: c.inkMuted)),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final button = onCheckAll != null && checkable ? _CheckAllButton(onTap: onCheckAll!, assetName: a.name) : null;
+    if (button == null) return header;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        header,
+        // Its own row rather than squeezed into the header: the header already carries the name,
+        // the matricola, two badges and the progress count, and a labelled button there would
+        // either wrap or shrink the tap targets beside it.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding + 26,
+            0,
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+          ),
+          child: Align(alignment: Alignment.centerLeft, child: button),
+        ),
+      ],
+    );
+  }
+}
+
+/// Compact "Spunta tutti" affordance for one asset's header.
+///
+/// Reads as secondary on purpose: ticking everything is a shortcut for a checklist that is
+/// genuinely all-clear, not the way the technician is meant to answer. 48dp tall so it is still a
+/// comfortable target with gloves, and it says which asset it acts on to a screen reader.
+class _CheckAllButton extends StatelessWidget {
+  const _CheckAllButton({required this.onTap, required this.assetName});
+
+  final VoidCallback onTap;
+  final String assetName;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Semantics(
+      button: true,
+      label: 'Spunta tutti i controlli di $assetName',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          decoration: BoxDecoration(
+            border: Border.all(color: c.borderMedium),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.check, size: 16, color: c.ink),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                'Spunta tutti',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink),
+              ),
             ],
           ),
         ),
