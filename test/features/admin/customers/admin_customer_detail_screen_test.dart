@@ -1,9 +1,9 @@
 // test/features/admin/customers/admin_customer_detail_screen_test.dart
 //
 // Gaps 3/7/8 of the feature audit: the customer detail screen had no Sedi, Contratti, or
-// Prodotti assistenza sections at all. Sedi reads the local Drift mirror (locations are synced,
-// unlike cantiere contacts/assignments); Contratti/Prodotti have no local mirror and are fetched
-// live, server-filtered by customerId.
+// Prodotti assistenza sections at all. Sedi and Referenti read the local Drift mirror (locations
+// and the customer's contacts are both synced now); Contratti/Prodotti have no local mirror and
+// are fetched live, server-filtered by customerId.
 //
 // CRITICAL: every test that pumps this screen (it watches several Drift streams) MUST end with
 // the `teardown` helper below — mirrors the same documented convention in
@@ -91,6 +91,24 @@ void main() {
             createdAt: DateTime.utc(2026, 1, 1),
             customerId: customerId,
             name: name,
+          ),
+        );
+  }
+
+  Future<void> seedContact(
+    String id, {
+    required String customerId,
+    required String name,
+  }) async {
+    await db
+        .into(db.customerContacts)
+        .insert(
+          CustomerContactsCompanion.insert(
+            id: id,
+            customerId: customerId,
+            name: name,
+            role: const Value('Titolare'),
+            phone: const Value('3331234567'),
           ),
         );
   }
@@ -219,46 +237,30 @@ void main() {
   group('Referenti section', () {
     // Technician reachable: the ticket detail's "Cliente" tap pushes this same screen
     // (`ticket_detail_screen.dart`, `AppRoutes.clientiDetail`), so what it does with no signal is
-    // a field question, not an office-only one.
-    testWidgets('offline names the reason, with no dead retry and no add button', (tester) async {
+    // a field question, not an office-only one. The section reads the Drift mirror the sync fills,
+    // which is the whole point: the number to phone has to be there in a plant room.
+    testWidgets('offline renders the contacts this device already holds', (tester) async {
       await seedCustomer('cust-1');
+      await seedContact('ct-1', customerId: 'cust-1', name: 'Mario Rossi');
 
       await pumpScreen(tester, online: false);
 
-      expect(find.text('Referenti disponibili con la connessione.'), findsOneWidget);
-      // The red section error is for a failure a retry can fix; offline is neither.
-      expect(find.text('Impossibile caricare. Riprova.'), findsNothing);
-      expect(find.text('Riprova'), findsNothing);
+      expect(find.text('Mario Rossi'), findsOneWidget);
+      expect(find.text('Titolare · 3331234567'), findsOneWidget);
+      // Nothing was fetched: the cache is the answer, not a fallback.
+      verifyNever(() => mockDio.get<List<dynamic>>(any(that: contains('/contacts'))));
       // An unqueued POST: hide the affordance rather than let the tap fail.
       expect(find.byTooltip('Aggiungi referente'), findsNothing);
-      // The point of the offline branch is that no request was attempted at all.
-      verifyNever(
-        () => mockDio.get<List<dynamic>>(any(that: contains('/contacts'))),
-      );
 
       await teardown(tester);
     });
 
-    testWidgets('a genuine failure keeps the section error and its retry', (tester) async {
+    testWidgets('a customer with no contacts on the device shows the empty state', (tester) async {
       await seedCustomer('cust-1');
-      when(
-        () => mockDio.get<List<dynamic>>('/api/customers/cust-1/contacts'),
-      ).thenThrow(
-        DioException(
-          requestOptions: RequestOptions(path: '/api/customers/cust-1/contacts'),
-          type: DioExceptionType.badResponse,
-          response: Response<dynamic>(
-            statusCode: 500,
-            requestOptions: RequestOptions(path: '/api/customers/cust-1/contacts'),
-          ),
-        ),
-      );
 
       await pumpScreen(tester);
 
-      expect(find.text('Impossibile caricare. Riprova.'), findsOneWidget);
-      expect(find.text('Riprova'), findsOneWidget);
-      expect(find.text('Referenti disponibili con la connessione.'), findsNothing);
+      expect(find.text('Nessun referente'), findsOneWidget);
       // Online the add affordance stays.
       expect(find.byTooltip('Aggiungi referente'), findsOneWidget);
 

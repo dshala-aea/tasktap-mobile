@@ -39,6 +39,12 @@ class SyncResultDto {
   final List<TicketTypeDto> ticketTypes;
   final List<ColleagueDto> colleagues;
 
+  /// Every contact of every customer [customers] carries — the people a technician phones from the
+  /// site. The complete list per customer, never delta-filtered: a contact has no tombstone, so the
+  /// device replaces each customer's list from this payload instead of merging into it (see
+  /// `SyncService`), and [carriesContacts] keeps an older backend from looking like a mass deletion.
+  final List<CustomerContactDto> contacts;
+
   /// The reference entities a ticket is made of, mirrored so the create wizard can be filled from
   /// the local cache while offline (spec 6.2, 7.4). Scoped, never tenant-wide: contracts, commesse
   /// and products cover the customers this payload already carries, and agents cover the agents
@@ -150,6 +156,11 @@ class SyncResultDto {
   /// [carriesMaintenanceTemplates] closes for the template catalogue.
   final bool carriesExtensionFieldDefinitions;
 
+  /// False when the payload came from a backend that predates the customer-contacts member. Without
+  /// it an older backend would look like "every customer lost their contacts" and the scoped replace
+  /// would empty the Contatti section.
+  final bool carriesContacts;
+
   /// The server's authoritative in-scope id sets, one nullable list per collection (sync v2).
   /// Null when the backend predates it — and null means NO PRUNE, never "everything left scope".
   /// See [SyncScopeDto] and [SyncService]'s prune.
@@ -183,6 +194,7 @@ class SyncResultDto {
     'commesse',
     'prodottiAssistenza',
     'agents',
+    'contacts',
     'maintenanceTemplates',
     'ticketMateriali',
     'cantiereCrewAssignments',
@@ -229,6 +241,7 @@ class SyncResultDto {
     required this.ticketStatuses,
     required this.ticketTypes,
     required this.colleagues,
+    this.contacts = const [],
     this.contracts = const [],
     this.commesse = const [],
     this.prodottiAssistenza = const [],
@@ -262,6 +275,7 @@ class SyncResultDto {
     this.carriesCantiereCrewAssignments = false,
     this.carriesMagazzini = false,
     this.carriesExtensionFieldDefinitions = false,
+    this.carriesContacts = false,
     this.scope,
   });
 
@@ -293,6 +307,7 @@ class SyncResultDto {
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
       colleagues: _list(j['colleagues'], ColleagueDto.fromJson),
+      contacts: _list(j['contacts'], CustomerContactDto.fromJson),
       contracts: _list(j['contracts'], ContractSyncDto.fromJson),
       commesse: _list(j['commesse'], CommessaSyncDto.fromJson),
       prodottiAssistenza: _list(
@@ -352,6 +367,7 @@ class SyncResultDto {
       carriesCantiereCrewAssignments: j.containsKey('cantiereCrewAssignments'),
       carriesMagazzini: j.containsKey('magazzini'),
       carriesExtensionFieldDefinitions: j.containsKey('extensionFieldDefinitions'),
+      carriesContacts: j.containsKey('contacts'),
       scope: j['scope'] == null
           ? null
           : SyncScopeDto.fromJson(j['scope'] as Map<String, dynamic>),
@@ -457,6 +473,56 @@ class ColleagueDto {
     id: j['id'] as String,
     displayName: j['displayName'] as String? ?? '',
   );
+}
+
+// ── Customer contacts ─────────────────────────────────────────────────────────
+
+/// One person at a customer site, as the office recorded them.
+///
+/// Mirrored so the customer screen's *Contatti* section renders from the local cache: it used to
+/// call `GET /api/customers/{id}/contacts` on every open and show an error card offline, which is
+/// exactly where a technician needs a phone number. See the backend's
+/// `MobileUserSyncResult.Contacts` for the scoping and why it is never delta-filtered.
+class CustomerContactDto {
+  final String id;
+  final String customerId;
+  final String name;
+  final String? role;
+  final String? phone;
+  final String? email;
+  final String? notes;
+
+  const CustomerContactDto({
+    required this.id,
+    required this.customerId,
+    required this.name,
+    this.role,
+    this.phone,
+    this.email,
+    this.notes,
+  });
+
+  factory CustomerContactDto.fromJson(Map<String, dynamic> j) => CustomerContactDto(
+    id: j['id'] as String,
+    customerId: j['customerId'] as String,
+    name: j['name'] as String? ?? '',
+    role: j['role'] as String?,
+    phone: j['phone'] as String?,
+    email: j['email'] as String?,
+    notes: j['notes'] as String?,
+  );
+
+  /// The exact keys [fromJson] reads, for the inbound contract gate — see
+  /// `test/contract/sync_inbound_contract_test.dart`.
+  static const Set<String> wireKeys = {
+    'id',
+    'customerId',
+    'name',
+    'role',
+    'phone',
+    'email',
+    'notes',
+  };
 }
 
 // ── Customer ───────────────────────────────────────────────────────────────────

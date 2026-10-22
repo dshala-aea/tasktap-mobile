@@ -76,8 +76,15 @@ void main() {
     expect((await db.select(db.strumenti).get()).single.isMine, isTrue);
   });
 
-  test('the cursor generation is v13, so every device does one full sync after this upgrade', () {
-    expect(AppDatabase.syncCursorGeneration, 'v13');
+  /// The release that added the checklist members set the generation to v13, and every later
+  /// release can only move it forward — a device parked on the v12 cursor must still be dragged
+  /// through one full sync by whichever version it lands on. The exact current value is pinned once,
+  /// in `migration_v37_test.dart`.
+  test('the cursor generation has not gone back past v13', () {
+    expect(
+      int.parse(AppDatabase.syncCursorGeneration.substring(1)),
+      greaterThanOrEqualTo(13),
+    );
   });
 
   /// An older backend omits the new members entirely. That must NOT read as "every checklist is
