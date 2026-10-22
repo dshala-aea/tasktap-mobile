@@ -11,7 +11,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/clienti/cliente_overview_api_client.dart';
 import '../../../data/clienti/customer_contact_api_client.dart';
-import '../../../data/local/app_database.dart' show Customer;
+import '../../../data/local/app_database.dart' show Customer, CustomerContactRow;
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../clienti/clienti_providers.dart';
@@ -98,16 +98,15 @@ class _CustomerDetailBody extends ConsumerWidget {
 
   /// Pull-to-refresh: sync first, then re-request the sections that are fetched live.
   ///
-  /// The customer, its sedi and its ticket history come from the synced mirror, which
-  /// [refreshWithFeedback] already covers. The overview, contracts, prodotti and contacts have no
-  /// Drift copy — they are autoDispose providers that call the API once and then sit on that
-  /// answer — so a sync alone leaves them exactly as stale as they were, and invalidating them is
-  /// the only thing that makes the pull mean something for those four sections.
+  /// The customer, its sedi, its ticket history and its contacts come from the synced mirror, which
+  /// [refreshWithFeedback] already covers. The overview, contracts and prodotti have no Drift copy —
+  /// they are autoDispose providers that call the API once and then sit on that answer — so a sync
+  /// alone leaves them exactly as stale as they were, and invalidating them is the only thing that
+  /// makes the pull mean something for those three sections.
   Future<void> _refresh(BuildContext context, WidgetRef ref) async {
     await refreshWithFeedback(context, ref);
     if (!context.mounted) return;
     ref.invalidate(clienteOverviewProvider(customerId));
-    ref.invalidate(customerContactsProvider(customerId));
     ref.invalidate(adminCustomerContractsProvider(customerId));
     ref.invalidate(adminCustomerProdottiProvider(customerId));
   }
@@ -703,9 +702,10 @@ class _TicketHistoryCard extends ConsumerWidget {
 // Referenti (CustomerContact — a customer can now have several labeled contacts) — distinct from
 // the single flat `contactPerson` string on the customer record itself
 // (admin_customer_form_screen.dart's own `_contactPersonCtrl`, deliberately left untouched: this
-// is a new, separate concept added alongside it, not a replacement). No Drift mirror, live-fetched
-// via `customerContactsProvider` / `CustomerContactApiClient`. Add/edit/delete all happen inline
-// through a bottom sheet, mirroring the cantiere's own contacts section
+// is a new, separate concept added alongside it, not a replacement). Read from the Drift mirror via
+// `customerContactsProvider`; writes still go to `CustomerContactApiClient` because the office owns
+// these rows, and a successful write is followed by a sync so the mirror catches up. Add/edit/delete
+// all happen inline through a bottom sheet, mirroring the cantiere's own contacts section
 // (`_ContactsSection`/`_ContactFormSheet` in admin_cantiere_detail_screen.dart) — the closest
 // existing pattern in this app for a labeled sub-entity list with the same
 // name/role/phone/email/notes shape.
@@ -743,23 +743,11 @@ class _ContactsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          // Contacts have no mirror in the sync payload, so offline there is nothing to show and
-          // nothing a retry could fix. A quiet line beats the red section error: this section is
-          // on the customer page a technician opens straight from a ticket.
-          error: (e, _) => e is CustomerContactsOfflineException
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.pagePadding,
-                    vertical: AppSpacing.md,
-                  ),
-                  child: Text(
-                    'Referenti disponibili con la connessione.',
-                    style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
-                  ),
-                )
-              : AppSectionError(
-                  onRetry: () => ref.invalidate(customerContactsProvider(customerId)),
-                ),
+          // A Drift read has nothing to fail with short of a corrupt database, so this is a plain
+          // section error rather than the offline/none split the network read used to need.
+          error: (e, _) => AppSectionError(
+            onRetry: () => ref.invalidate(customerContactsProvider(customerId)),
+          ),
           data: (contacts) {
             if (contacts.isEmpty) {
               return const EmptyState(
@@ -781,28 +769,37 @@ class _ContactsSection extends ConsumerWidget {
                     leading: const RowIconTile(icon: LucideIcons.user),
                     title: c.name.isNotEmpty ? c.name : 'Referente',
                     subtitle: subtitleParts.isNotEmpty ? subtitleParts.join(' · ') : null,
-                    meta: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(LucideIcons.pencil, size: 18),
-                          tooltip: 'Modifica referente',
-                          onPressed: () =>
-                              _openContactSheet(context, ref, customerId: customerId, contact: c),
-                        ),
-                        IconButton(
-                          icon: const Icon(LucideIcons.trash2, size: 18),
-                          tooltip: 'Elimina referente',
-                          onPressed: () => _deleteContact(
-                            context,
-                            ref,
-                            customerId: customerId,
-                            contactId: c.id,
-                            name: c.name,
+                    // Edit and delete are POST/PUT/DELETE with no queue behind them, so they follow
+                    // the same rule as the "+": offline the affordance is hidden rather than left
+                    // to fail. The rows themselves stay — reading them is the point of the mirror.
+                    meta: !online
+                        ? null
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(LucideIcons.pencil, size: 18),
+                                tooltip: 'Modifica referente',
+                                onPressed: () => _openContactSheet(
+                                  context,
+                                  ref,
+                                  customerId: customerId,
+                                  contact: c,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(LucideIcons.trash2, size: 18),
+                                tooltip: 'Elimina referente',
+                                onPressed: () => _deleteContact(
+                                  context,
+                                  ref,
+                                  customerId: customerId,
+                                  contactId: c.id,
+                                  name: c.name,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
                     showDivider: entry.key < contacts.length - 1,
                   );
                 }).toList(),
@@ -830,7 +827,7 @@ class _ContactsSection extends ConsumerWidget {
 
     try {
       await ref.read(customerContactApiClientProvider).delete(customerId, contactId);
-      ref.invalidate(customerContactsProvider(customerId));
+      await _pullAfterWrite(ref);
       if (context.mounted) {
         showAppToast(context, message: 'Referente eliminato', tone: ToastTone.success);
       }
@@ -845,7 +842,7 @@ class _ContactsSection extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref, {
     required String customerId,
-    required CustomerContact? contact,
+    required CustomerContactRow? contact,
   }) {
     showModalBottomSheet<void>(
       context: context,
@@ -857,10 +854,17 @@ class _ContactsSection extends ConsumerWidget {
         customerId: customerId,
         contact: contact,
         api: ref.read(customerContactApiClientProvider),
-        onSaved: () => ref.invalidate(customerContactsProvider(customerId)),
+        onSaved: () => _pullAfterWrite(ref),
       ),
     );
   }
+
+  /// A contact write landed on the server. The list reads the Drift mirror, so the sync is what
+  /// puts the change on screen — the sheet has already closed and toasted by then, and
+  /// `performSync` never throws (it parks the outcome in `SyncState`), so a refresh that fails
+  /// leaves the previous list rather than contradicting the success the user was shown.
+  Future<void> _pullAfterWrite(WidgetRef ref) =>
+      ref.read(syncProvider.notifier).performSync();
 }
 
 /// Bottom sheet to add or edit a customer contact — mirrors `UpsertCustomerContactRequest` (name
@@ -876,8 +880,8 @@ class _ContactFormSheet extends StatefulWidget {
 
   final String customerId;
 
-  /// Null when adding; the existing contact when editing.
-  final CustomerContact? contact;
+  /// Null when adding; the existing mirror row when editing.
+  final CustomerContactRow? contact;
   final CustomerContactApiClient api;
   final VoidCallback onSaved;
 

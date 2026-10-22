@@ -2,8 +2,8 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/clienti/cliente_overview_api_client.dart';
-import '../../data/clienti/customer_contact_api_client.dart';
 import '../../data/local/app_database.dart';
+import '../../data/reference/reference_cache_repository.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 
@@ -80,19 +80,15 @@ final clienteOverviewProvider = FutureProvider.autoDispose
           .getOverview(customerId);
     });
 
-/// A customer's labeled contacts (`CustomerContact`) — no Drift mirror, live-fetched like
-/// [ticketsForCustomerProvider]'s cantiere-detail counterparts (contacts/assignments there also
-/// have no local mirror).
+/// A customer's labeled contacts (`CustomerContact`), read from the Drift mirror.
 ///
-/// Offline it throws [CustomerContactsOfflineException] before touching the network. Not cosmetic:
-/// this section sits on the customer detail a technician reaches straight from a ticket
-/// ("Cliente"), so without the distinction a technician on site got a red "Impossibile caricare.
-/// Riprova." whose retry could not work until the radio came back. A genuine failure still
-/// surfaces as itself and keeps its retry.
-final customerContactsProvider = FutureProvider.autoDispose
-    .family<List<CustomerContact>, String>((ref, customerId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const CustomerContactsOfflineException();
-      }
-      return ref.watch(customerContactApiClientProvider).list(customerId);
-    });
+/// It used to be a live `GET /api/customers/{id}/contacts` that raised an offline exception when the
+/// radio was gone. Wrong shape for this section: it sits
+/// on the customer detail a technician reaches straight from a ticket ("Cliente") while standing in
+/// front of the machine, and the number to phone is exactly what they need with no signal. The sync
+/// now carries the rows, so this reads the cache the way every other list on that screen does.
+final customerContactsProvider = StreamProvider.autoDispose
+    .family<List<CustomerContactRow>, String>(
+      (ref, customerId) =>
+          ref.watch(referenceCacheProvider).watchContactsForCustomer(customerId),
+    );

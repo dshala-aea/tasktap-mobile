@@ -173,6 +173,16 @@ class SyncService {
       // No prune: see ReferenceCacheRepository.
       await cache.upsertAgents(payload.agents);
     }
+    if (payload.carriesContacts) {
+      // The member is never delta-filtered, so a carried customer's list is COMPLETE and the prune
+      // is what makes a removed contact leave the device (a contact has no tombstone). The empty
+      // keep-set is the ordinary "these customers have no contacts" case, handled by the prune.
+      await cache.upsertContacts(payload.contacts);
+      await cache.pruneContacts(
+        presentCustomerIds: payload.customers.map((c) => c.id).toSet(),
+        keepContactIds: payload.contacts.map((c) => c.id).toSet(),
+      );
+    }
   }
 
   /// The maintenance-template catalogue the create wizard's "Modello checklist" picker reads.

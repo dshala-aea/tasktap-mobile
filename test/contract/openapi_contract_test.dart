@@ -22,15 +22,15 @@ import 'package:tasktap_mobile/data/reports/submit_report_request.dart';
 /// reported rather than failed — but it is reported, because "the app silently never sends this"
 /// is how a field quietly stays unimplemented. Types are not checked; this catches names.
 ///
-/// **Refreshing:** the copy in the root repo's WORKING TREE is not the source of truth — on
-/// `feat/i2-confirm-resolves` it is a 298-schema generation that does not contain
-/// `AiConversationConfirmResponse` at all, and copying it would DELETE 40 schemas this file's gate
-/// asserts while ADDING 2 (`CatalogueFieldDto`, `FieldRefDto`). Copy from the pushed branch instead:
-///     cd ../ && git show origin/master:docs/api/openapi.snapshot.json > /tmp/openapi.master.json
-/// and MERGE it, never overwrite: this file is ahead of `origin/master` on the four `Sync*Dto`
-/// reference schemas (backend `1950b3d7`, on no origin ref yet) and on four `MobileUserSyncResult`
-/// properties. The inbound half below fails by name in either direction, which is the point:
-/// run `timeout 900 flutter test test/contract/` and let it tell you whether the merge held.
+/// **Refreshing:** the copy in the root repo's WORKING TREE is not the source of truth — it is an
+/// owner checkout that can be several merges behind. Copy the pushed branch:
+///     curl -sSL "$(gh api 'repos/dshala-aea/tasktap-api/contents/docs/api/openapi.snapshot.json?ref=master' --jq '.download_url')" \
+///       -o test/contract/openapi.snapshot.json
+/// A plain copy is right as long as `master` is a superset of what this file pins, and it is: every
+/// schema and property the gate names has landed there. When it is not — a local branch carrying a
+/// contract ahead of `master` — the copy would delete schemas this gate asserts, so merge instead
+/// and let the inbound half fail by name if the merge held badly. Either way, run
+/// `timeout 900 flutter test test/contract/` and read what it says.
 /// A diff here after an API change is the point — it means a rename reached the client.
 void main() {
   late Map<String, dynamic> schemas;

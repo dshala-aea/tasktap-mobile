@@ -2,17 +2,20 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // CustomerContactApiClient
 //
-// Thin Dio wrapper for a customer's labeled contacts —
-//   GET    /api/customers/{customerId}/contacts
+// Thin Dio wrapper for the WRITE half of a customer's labeled contacts —
 //   POST   /api/customers/{customerId}/contacts
 //   PUT    /api/customers/{customerId}/contacts/{contactId}
 //   DELETE /api/customers/{customerId}/contacts/{contactId}
 //
+// Not the read half: `GET /api/customers/{customerId}/contacts` used to live here, but the list now
+// renders from the Drift mirror the sync fills (`customerContactsProvider`), so a device-side read
+// would be a second, diverging answer to the same question. The office owns these rows; the device
+// only writes.
+//
 // Mirrors `CustomersController`'s Contacts endpoints (backend `CustomerContact` entity,
 // `UpsertCustomerContactRequest`) and follows the style of `ClienteOverviewApiClient` /
-// `CantiereWorklogApiClient` — a small hand-written client and a plain Dart model with
-// `fromJson`, no codegen. `name` is the only required field; `role`/`phone`/`email`/`notes` are
-// all optional.
+// `CantiereWorklogApiClient` — a small hand-written client, no codegen. `name` is the only required
+// field; `role`/`phone`/`email`/`notes` are all optional.
 //
 // Distinct from the single flat `contactPerson` string already on `Customer`
 // (admin_customer_form_screen.dart's `_contactPersonCtrl`) — this is a list of labeled contacts,
@@ -24,59 +27,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
 
-/// One labeled contact for a customer (`CustomerContact`, backend entity).
-class CustomerContact {
-  const CustomerContact({
-    required this.id,
-    required this.customerId,
-    required this.name,
-    this.role,
-    this.phone,
-    this.email,
-    this.notes,
-  });
-
-  final String id;
-  final String customerId;
-  final String name;
-  final String? role;
-  final String? phone;
-  final String? email;
-  final String? notes;
-
-  factory CustomerContact.fromJson(Map<String, dynamic> json) => CustomerContact(
-    id: json['id'] as String? ?? '',
-    customerId: json['customerId'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    role: json['role'] as String?,
-    phone: json['phone'] as String?,
-    email: json['email'] as String?,
-    notes: json['notes'] as String?,
-  );
-}
-
-/// Thrown before a request is attempted, so the Referenti section can say "con la connessione"
-/// instead of painting the red "Impossibile caricare. Riprova." — a retry that cannot succeed.
-/// Same idiom as [ClienteOverviewOfflineException] on the customer's overview block.
-class CustomerContactsOfflineException implements Exception {
-  const CustomerContactsOfflineException();
-
-  @override
-  String toString() => 'Offline: referenti del cliente non disponibili.';
-}
-
 class CustomerContactApiClient {
   CustomerContactApiClient(this._dio);
 
   final Dio _dio;
-
-  /// `GET /api/customers/{customerId}/contacts` — a bare array, no pagination envelope
-  /// (`CustomersController.GetContacts` returns `Ok(contacts)` directly).
-  Future<List<CustomerContact>> list(String customerId) async {
-    final response = await _dio.get<List<dynamic>>('/api/customers/$customerId/contacts');
-    final data = response.data ?? [];
-    return data.cast<Map<String, dynamic>>().map(CustomerContact.fromJson).toList();
-  }
 
   /// `POST /api/customers/{customerId}/contacts` — returns the new contact's id
   /// (`BasicPkResponse`).

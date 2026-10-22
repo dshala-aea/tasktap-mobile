@@ -79,18 +79,13 @@ void main() {
   Map<String, dynamic> instance(String name) =>
       sample({r'$ref': '#/components/schemas/$name'}) as Map<String, dynamic>;
 
-  // The four reference `Sync*Dto` schemas below (`SyncContractDto`, `SyncCommessaDto`,
-  // `SyncProdottoAssistenzaDto`, `SyncAgentDto`) are ahead of `origin/master` in the snapshot.
-  // They were produced by backend commit `1950b3d7` on branch `feat/offline-reference-sync`,
-  // which is on no origin ref — `origin/master`'s `MobileUserSyncResult` does not declare the
-  // `agents`/`commesse`/`contracts`/`prodottiAssistenza` properties these back. When that branch
-  // lands, this file's copy becomes a plain fast-forward and the merge procedure in
-  // `openapi_contract_test.dart`'s header can go back to a copy. Until then, a refresh must merge
-  // (that gate fails by name on either a dropped or a stale side), and this comment is the only
-  // record that the contract in the snapshot exists on one unpushed branch.
-  // `SyncMaintenanceTemplateDto` and `MaintenanceTemplateOrigin` used to be in the same position,
-  // carrying the maintenance-template catalogue behind `MobileUserSyncResult.maintenanceTemplates`;
-  // they landed on `origin/master` and the 2026-10-14 re-sync took them from there.
+  // Every schema this file pins is on `origin/master` now: the four reference `Sync*Dto`s and the
+  // `agents`/`commesse`/`contracts`/`prodottiAssistenza` properties they back landed with the
+  // offline-reference-sync work, and `CustomerContact` — the customer screen's *Contatti* mirror —
+  // with the 2026-10-22 re-sync. `SyncMaintenanceTemplateDto` and `MaintenanceTemplateOrigin` got
+  // there the same way a week earlier. A schema listed here that the snapshot does not declare
+  // fails by name, so this map is the record of what the app reads, not a second copy of the
+  // contract.
   final readKeys = <String, Set<String>>{
     'SyncControlGroupDto': SyncControlGroupDto.wireKeys,
     'SyncTicketControlDto': SyncTicketControlDto.wireKeys,
@@ -102,6 +97,7 @@ void main() {
     'SyncCommessaDto': CommessaSyncDto.wireKeys,
     'SyncProdottoAssistenzaDto': ProdottoAssistenzaSyncDto.wireKeys,
     'SyncAgentDto': AgentSyncDto.wireKeys,
+    'CustomerContact': CustomerContactDto.wireKeys,
     'SyncMaintenanceTemplateDto': SyncMaintenanceTemplateDto.wireKeys,
     // The sync-v2 additions: the authoritative scope object and the barcode collection the
     // offline scan resolves through.

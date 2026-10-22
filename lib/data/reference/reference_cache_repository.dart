@@ -6,7 +6,7 @@ import '../local/app_database.dart';
 import '../sync/sync_dto.dart';
 import '../sync/sync_service.dart' show appDatabaseProvider;
 
-/// The four reference tables, read and written in one place.
+/// The reference tables, read and written in one place.
 ///
 /// The sync writes them from the payload; [ReferenceSearchClient] writes them again when a
 /// technician picks a row an online search found (spec 7.4). Both go through these same upserts, so
@@ -108,6 +108,45 @@ class ReferenceCacheRepository {
     }
   }
 
+  /// The people to phone at a customer site. Not part of the "reference pick" flow — the office owns
+  /// these rows and the device never writes one — but stored the same way so [contactsForCustomer]
+  /// answers offline.
+  Future<void> upsertContacts(Iterable<CustomerContactDto> rows) async {
+    for (final c in rows) {
+      await _db
+          .into(_db.customerContacts)
+          .insertOnConflictUpdate(
+            CustomerContactsCompanion(
+              id: Value(c.id),
+              customerId: Value(c.customerId),
+              name: Value(c.name),
+              role: Value(c.role),
+              phone: Value(c.phone),
+              email: Value(c.email),
+              notes: Value(c.notes),
+            ),
+          );
+    }
+  }
+
+  /// Deletes the contacts of the customers this payload carries that it no longer lists for them.
+  ///
+  /// This is the only thing that makes a removed contact disappear from the device: a contact has no
+  /// tombstone, and the member is never delta-filtered, so a carried customer's contact list is
+  /// complete and an absence is real evidence of a deletion. A customer the payload does not carry
+  /// is left alone for the same reason as the prunes below.
+  Future<void> pruneContacts({
+    required Set<String> presentCustomerIds,
+    required Set<String> keepContactIds,
+  }) async {
+    if (presentCustomerIds.isEmpty) return;
+    await (_db.delete(_db.customerContacts)..where((t) {
+          final inScope = t.customerId.isIn(presentCustomerIds);
+          return keepContactIds.isEmpty ? inScope : inScope & t.id.isNotIn(keepContactIds);
+        }))
+        .go();
+  }
+
   /// Deletes the rows of the customers this payload carries that the payload no longer lists for
   /// them — the only case where an absence is evidence of a deletion. A customer the payload does
   /// not carry is left alone: this sync has nothing to say about them, and the device accumulates
@@ -177,6 +216,14 @@ class ReferenceCacheRepository {
             ..where((a) => a.isActive.equals(true))
             ..orderBy([(a) => OrderingTerm.asc(a.nome)]))
           .get();
+
+  /// Whoever the office recorded at this customer — the customer screen's *Contatti* section, which
+  /// used to be a live call that errored offline.
+  Stream<List<CustomerContactRow>> watchContactsForCustomer(String customerId) =>
+      (_db.select(_db.customerContacts)
+            ..where((c) => c.customerId.equals(customerId))
+            ..orderBy([(c) => OrderingTerm.asc(c.name)]))
+          .watch();
 
   // ── By id ────────────────────────────────────────────────────────────────────
   //

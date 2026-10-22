@@ -505,6 +505,30 @@ class Colleagues extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// The people to phone at a customer site, mirrored so the customer screen's *Contatti* section
+/// renders from the local cache.
+///
+/// It used to call `GET /api/customers/{id}/contacts` on every open and show an error card when the
+/// network was gone — standing in front of the machine is exactly where a technician needs the
+/// number. Read-only mirror: the office owns these rows, and the sync REPLACES each customer's list
+/// (a removed contact has no tombstone to carry its removal, so merging would keep it forever).
+///
+/// `CustomerContactRow`, not the default `CustomerContact`: `CustomerContactApiClient` already owns
+/// that name for the wire model, and a screen holding both would hit an ambiguous import.
+@DataClassName('CustomerContactRow')
+class CustomerContacts extends Table {
+  TextColumn get id => text()();
+  TextColumn get customerId => text()();
+  TextColumn get name => text()();
+  TextColumn get role => text().nullable()();
+  TextColumn get phone => text().nullable()();
+  TextColumn get email => text().nullable()();
+  TextColumn get notes => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// The tenant's entitlements, mirrored so the app can gate features without a network round trip.
 ///
 /// One row, id `current`. Replaced whole on every successful `/api/Auth/me`; **never cleared on
@@ -1417,6 +1441,7 @@ class ChecklistOmittedTickets extends Table {
     TicketTimers,
     PendingTickets,
     Colleagues,
+    CustomerContacts,
     Entitlements,
     PendingTicketAttachments,
     CachedTicketControls,
@@ -1441,7 +1466,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 48;
+  int get schemaVersion => 49;
 
   @override
   MigrationStrategy get migration {
@@ -1451,6 +1476,7 @@ class AppDatabase extends _$AppDatabase {
         await _createChecklistIndexes();
         await _createReferenceIndexes();
         await _createCantiereCrewIndexes();
+        await _createCustomerContactIndexes();
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -1959,6 +1985,17 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(customers, customers.province);
           }
         }
+        if (from < 49) {
+          // Customer contacts, the last live-only read on the customer screen: its Contatti
+          // section called `GET /api/customers/{id}/contacts` on every open and rendered an error
+          // card offline, which is exactly where a technician needs a phone number.
+          //
+          // A brand-new table, so nothing to backfill. The cursor moves to v14 alongside it: on the
+          // office branch customers are delta-filtered, so a device whose cursor is already past a
+          // customer would never receive its contacts until something else edited that customer.
+          await m.createTable(customerContacts);
+          await _createCustomerContactIndexes();
+        }
       },
     );
   }
@@ -2069,7 +2106,12 @@ class AppDatabase extends _$AppDatabase {
   ///      values were already on the wire, and a delta sync only re-sends customers that changed,
   ///      so an unedited customer would keep them null forever — on the office branch that reads
   ///      the tenant's whole book delta-filtered.
-  static const String syncCursorGeneration = 'v13';
+  /// v14 — 2026-10-22, schema 49 added `customer_contacts`. A new table, but the same blind spot
+  ///      as v10: on the office branch customers are delta-filtered, so a device whose cursor is
+  ///      already past a customer would never receive its contacts until something else touched
+  ///      that customer — and the Contatti section would stay empty on a device that had just been
+  ///      upgraded to show it.
+  static const String syncCursorGeneration = 'v14';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 
@@ -2121,6 +2163,18 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS cantiere_crew_assignments_cantiere '
       'ON cantiere_crew_assignments (cantiere_id)',
+    );
+  }
+
+  /// The contact mirror is only ever read as "the contacts of this customer".
+  ///
+  /// Separate from the other index helpers for the same reason they are separate from each other:
+  /// the table does not exist on devices older than schema 49, and a `CREATE INDEX ... ON
+  /// customer_contacts` emitted from an earlier branch would fail their upgrade.
+  Future<void> _createCustomerContactIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS customer_contacts_customer '
+      'ON customer_contacts (customer_id)',
     );
   }
 

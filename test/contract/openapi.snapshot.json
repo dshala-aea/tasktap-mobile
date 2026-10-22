@@ -13331,6 +13331,55 @@
         }
       }
     },
+    "/api/report-templates/{key}/acroform-collections": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "The collections a table binding can name, each with the item properties it\n    offers. Fixed by the build like the fields catalogue above, so the table builder in the\n    editor reads its options from the same registry the save-time validator uses.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormCollectionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormCollectionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormCollectionDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/report-templates/variants/{id}/acroform-config": {
       "get": {
         "tags": [
@@ -13850,6 +13899,96 @@
           }
         ],
         "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/acroform-collections": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "The collections a table binding can name, for a variant. The list is fixed by the\n    build \u2014 identical to the shipped-key route \u2014 but the variant is checked, so a foreign id is\n    still a 404 and a Classic-based variant a 400.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormCollectionDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormCollectionDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormCollectionDto"
+                  }
+                }
+              }
+            }
+          },
           "400": {
             "description": "Bad Request",
             "content": {
@@ -21738,6 +21877,29 @@
         },
         "description": "Result of uploading the AcroForm PDF asset."
       },
+      "AcroFormCollectionDto": {
+        "required": [
+          "name",
+          "source",
+          "properties"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "properties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "One of the collections a table binding can name, with the item properties it\n    offers."
+      },
       "AcroFormConfigDto": {
         "required": [
           "assetAllegatoId",
@@ -21757,9 +21919,27 @@
             "items": {
               "$ref": "#/components/schemas/FieldBindingDto"
             }
+          },
+          "tableBindings": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/TableBindingDto"
+            }
+          },
+          "compositeBindings": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CompositeBindingDto"
+            }
           }
         },
-        "description": "The AcroForm template\u0027s config, as exposed over the wire (GET response / PUT body)."
+        "description": "The AcroForm template\u0027s config, as exposed over the wire (GET response / PUT body).\n    TableBindings and CompositeBindings are null on a config written before they existed, and a\n    client that omits them on a PUT is saying \u0022no tables, no composites\u0022 \u2014 the lists are stored\n    exactly as received, so an editor unaware of a shape drops it. Every editor must round-trip\n    all three."
       },
       "AcroFormControlDto": {
         "required": [
@@ -21784,11 +21964,16 @@
           },
           "group": {
             "type": "string",
-            "description": "The section the control sits in, nested sections joined with \u0022 / \u0022 (empty when the section is unknown).\n    Two controls can share a label across sections; this is what tells them apart in the binding picker.",
+            "description": "The section the control sits in, nested sections joined with \u0022 / \u0022 (empty when the section is unknown).",
+            "default": ""
+          },
+          "source": {
+            "type": "string",
+            "description": "The template version the control comes from, as \u0022Template name \u00B7 v{version}\u0022,\n    or just \u0022v{version}\u0022 when the template row cannot be read; empty when the version cannot be\n    resolved at all.",
             "default": ""
           }
         },
-        "description": "One of the tenant\u0027s actual configured controls, for the binding dropdown\u0027s second\n    section. Options is the control\u0027s real discrete choice list (Options-type controls only \u2014\n    see AcroFormFieldCatalogue.ParseOptions), empty for every other control type; the admin UI\n    uses it to offer a real ExpectedValue picker for ValueEqualsToChecked instead of free text."
+        "description": "One of the tenant\u0027s actual configured controls, for the binding dropdown\u0027s second\n    section. Options is the control\u0027s real discrete choice list (Options-type controls only \u2014\n    see AcroFormFieldCatalogue.ParseOptions), empty for every other control type; the admin UI\n    uses it to offer a real ExpectedValue picker for ValueEqualsToChecked instead of free text.\n    Group and Source are BOTH needed: the same question\ncopied into several template versions produces several distinct controls that share a label\nand a group path, and a composite binding deliberately names one of each. A picker that showed\nonly the group and the label offered ten indistinguishable entries."
       },
       "AcroFormFieldDto": {
         "required": [
@@ -24286,6 +24471,53 @@
           }
         }
       },
+      "CompositeBindingDto": {
+        "required": [
+          "targetField",
+          "sources"
+        ],
+        "type": "object",
+        "properties": {
+          "targetField": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "combine": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "transform": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expectedValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "format": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ValueFormatDto"
+              }
+            ]
+          }
+        },
+        "description": "One composite binding, as exposed over the wire: several controls answering one PDF\n    field, each from a different maintenance template. Combine defaults to \u0022AnyTrue\u0022."
+      },
       "ConfirmedEditDto": {
         "type": "object",
         "properties": {
@@ -26386,6 +26618,73 @@
         },
         "description": "Represents a customer/client (Cliente) in the system."
       },
+      "CustomerContact": {
+        "type": "object",
+        "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Tenant identifier for schema-per-tenant isolation.",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the entity.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Date and time when the entity was created.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last updated.",
+            "format": "date-time"
+          }
+        }
+      },
       "CustomerPortalCreateTicketRequest": {
         "required": [
           "locationId",
@@ -26639,6 +26938,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "format": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ValueFormatDto"
+              }
             ]
           }
         },
@@ -28779,6 +29088,13 @@
               "$ref": "#/components/schemas/Customer"
             },
             "description": "Customers referenced by the schedules or draft reports."
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerContact"
+            },
+            "description": "Every contact of every customer in IReadOnlyList\u0026lt;Customer\u0026gt; MobileUserSyncResult.Customers \u2014 the people a technician phones\nfrom the site. Not delta-filtered, and the phone REPLACES a customer\u0027s contacts from this\nlist: a contact carries no tombstone and the payload has no \u0022these ids went away\u0022 channel, so\na delta-only mirror would keep a deleted contact on the device forever. The set is bounded by\nthe customers already travelling and is a handful of rows each."
           },
           "agents": {
             "type": "array",
@@ -36390,6 +36706,50 @@
         },
         "description": "One ticket timer session the authenticated technician owns, as the device mirrors it."
       },
+      "TableBindingDto": {
+        "required": [
+          "source",
+          "slotProperties",
+          "cells"
+        ],
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "slotProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "overflow": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "slotFormats": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ValueFormatDto"
+            }
+          }
+        },
+        "description": "One table binding, as exposed over the wire. \u0060Cells\u0060 is the grid written out\n    row by row: each row lists the PDF field names of its slots, left to right, and\n    \u0060SlotProperties\u0060 says what one item contributes to each slot. Overflow defaults to\n    \u0022FixedRows\u0022 (the only value this build implements). \u0060SlotFormats\u0060 is keyed by slot property\n    and accepts prefix and suffix only."
+      },
       "TableOptionsDto": {
         "required": [
           "columns"
@@ -40274,6 +40634,30 @@
           }
         },
         "description": "The caller\u0027s saved signature, as returned by the upload endpoint."
+      },
+      "ValueFormatDto": {
+        "type": "object",
+        "properties": {
+          "override": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prefix": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "suffix": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The admin\u0027s own finishing over a resolved value. \u0060Override\u0060 replaces the value\n    outright (it is not a fallback); \u0060Prefix\u0060/\u0060Suffix\u0060 wrap it. Every member is optional and\n    a format that sets none of them is stored as no format at all."
       },
       "WorkLogAction": {
         "enum": [

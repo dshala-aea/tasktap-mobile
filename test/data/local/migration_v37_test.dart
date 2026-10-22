@@ -123,9 +123,12 @@ void main() {
   /// (the customer's `fiscalCode`/`sdiCode`/`pec`/`province`/`cellulare`) is the fourth, for the same
   /// reason as the third: the office branch of `MobileUserSyncService` delta-filters customers, so a
   /// delta would never re-send a customer nobody had edited and every device would hold five null
-  /// columns for most of its book. This test is the record that no release moved the generation
-  /// silently.
+  /// columns for most of its book. Schema 49 (`customer_contacts`) is the fifth: the member is only
+  /// sent on a full-scope payload, and even there a customer whose contact list changed is pulled
+  /// back in only when its contacts moved after the cutoff — a device on a delta cursor would keep
+  /// the old numbers, and a deleted contact has no tombstone to correct them. This test is the
+  /// record that no release moved the generation silently.
   test('the sync cursor generation is the one the current release set', () {
-    expect(AppDatabase.syncCursorGeneration, 'v13');
+    expect(AppDatabase.syncCursorGeneration, 'v14');
   });
 }

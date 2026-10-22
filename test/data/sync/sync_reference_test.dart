@@ -87,6 +87,20 @@ Map<String, dynamic> agentJson(String id) => {
   'isActive': true,
 };
 
+Map<String, dynamic> contactJson(
+  String id, {
+  String customerId = 'cu1',
+  String? phone,
+}) => {
+  'id': id,
+  'customerId': customerId,
+  'name': 'Referente $id',
+  'role': 'Titolare',
+  'phone': phone ?? '3331234567',
+  'email': null,
+  'notes': null,
+};
+
 Map<String, dynamic> reference() => {
   'contracts': [contractJson('c1')],
   'commesse': [commessaJson('m1')],
@@ -210,5 +224,89 @@ void main() {
     await SyncService(db: db, dio: dio).sync();
 
     expect(await db.select(db.contracts).get(), hasLength(1));
+  });
+
+  // ── Customer contacts ─────────────────────────────────────────────────────
+  //
+  // The one reference the device never picks from: the people to phone at a customer site, shown on
+  // the customer screen a technician reaches from a ticket. It is carried the same way and pruned
+  // the same way, and the prune is the whole point — a contact has no tombstone, so without it a
+  // number the office deleted stays on the device forever.
+
+  /// The member is never delta-filtered (see the server's `MobileUserSyncResult.Contacts`), so for
+  /// every customer the payload carries, the list is COMPLETE.
+  test('customer contacts land in the mirror', () async {
+    respondWith({
+      ...base(),
+      'contacts': [contactJson('k1'), contactJson('k2', phone: '021234567')],
+    });
+    await SyncService(db: db, dio: dio).sync();
+
+    final rows = await db.select(db.customerContacts).get();
+    expect(rows, hasLength(2));
+    expect(rows.map((r) => r.customerId).toSet(), {'cu1'});
+    expect(rows.firstWhere((r) => r.id == 'k1').name, 'Referente k1');
+    expect(rows.firstWhere((r) => r.id == 'k2').phone, '021234567');
+  });
+
+  test("a contact a carried customer no longer lists is removed", () async {
+    respondWith({
+      ...base(),
+      'contacts': [contactJson('k1'), contactJson('k2')],
+    });
+    await SyncService(db: db, dio: dio).sync();
+
+    respondWith({...base(), 'contacts': [contactJson('k1')]});
+    await SyncService(db: db, dio: dio).sync();
+
+    expect((await db.select(db.customerContacts).get()).map((r) => r.id), ['k1']);
+  });
+
+  test('a carried customer whose last contact went away loses its list', () async {
+    // The empty keep-set — the shape where a generated NOT IN list would be empty and the delete
+    // would silently match nothing.
+    respondWith({...base(), 'contacts': [contactJson('k1')]});
+    await SyncService(db: db, dio: dio).sync();
+
+    respondWith({...base(), 'contacts': <Object>[]});
+    await SyncService(db: db, dio: dio).sync();
+
+    expect(await db.select(db.customerContacts).get(), isEmpty);
+  });
+
+  test("a contact of a customer absent from the payload survives", () async {
+    respondWith({...base(), 'contacts': [contactJson('k1')]});
+    await SyncService(db: db, dio: dio).sync();
+
+    // A payload about a different customer says nothing about cu1 — absence is not deletion.
+    respondWith({...base(customerIds: ['cu2']), 'contacts': <Object>[]});
+    await SyncService(db: db, dio: dio).sync();
+
+    expect(await db.select(db.customerContacts).get(), hasLength(1));
+  });
+
+  test('a payload from an older backend leaves the cached contacts alone', () async {
+    respondWith({...base(), 'contacts': [contactJson('k1')]});
+    await SyncService(db: db, dio: dio).sync();
+
+    respondWith(base()); // no `contacts` key at all
+    await SyncService(db: db, dio: dio).sync();
+
+    expect(await db.select(db.customerContacts).get(), hasLength(1));
+  });
+
+  test('a re-sent contact updates in place rather than duplicating', () async {
+    respondWith({...base(), 'contacts': [contactJson('k1')]});
+    await SyncService(db: db, dio: dio).sync();
+
+    respondWith({
+      ...base(),
+      'contacts': [contactJson('k1', phone: '3490000000')],
+    });
+    await SyncService(db: db, dio: dio).sync();
+
+    final rows = await db.select(db.customerContacts).get();
+    expect(rows, hasLength(1));
+    expect(rows.single.phone, '3490000000');
   });
 }
