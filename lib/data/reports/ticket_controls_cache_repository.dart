@@ -3,9 +3,11 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/ticket/ticket_controls_mirror.dart' show ticketControlGroupsFromMirror;
 import '../../features/ticket/ticket_detail_api_client.dart';
 import '../../features/ticket/ticket_providers.dart' show ticketControlsProvider;
 import '../local/app_database.dart';
+import '../local/checklist_read_repository.dart';
 import '../sync/connectivity_provider.dart' show isOnlineProvider;
 import '../sync/sync_service.dart' show appDatabaseProvider;
 
@@ -24,6 +26,12 @@ import '../sync/sync_service.dart' show appDatabaseProvider;
 // files stay online-only, exactly as they already are for the ticket-detail Controllo tab) — it
 // wraps the existing provider from the rapportino feature instead. See
 // `cachedTicketControlsProvider` below for the wrapping.
+//
+// The cache is the *second* offline source, not the first: the sync mirror is read whenever it can
+// answer for the ticket (see `getMirroredControlsIfAuthoritative`), because a report is drafted
+// mostly on site, and a ticket that synced has its checklist on the device whether or not this
+// technician ever opened that ticket's controls online before. The cache covers exactly the gap
+// the mirror cannot: a ticket whose checklist the payload omitted, or one never synced at all.
 //
 // `TicketControlGroupDto`/`TicketControlDto` only ever came from the server before this, so
 // neither has a `toJson` — the (de)serialization here is this repository's own, round-tripping
@@ -60,6 +68,29 @@ class TicketControlsCacheRepository {
     final decoded = jsonDecode(row.controlsJson);
     if (decoded is! List) return null;
     return decoded.cast<Map<String, dynamic>>().map(TicketControlGroupDto.fromJson).toList();
+  }
+
+  /// The checklist as the **sync mirror** holds it for [ticketId], when the mirror can actually
+  /// answer for that ticket — `null` means "cannot tell", never "no controls".
+  ///
+  /// The mirror is authoritative once the ticket itself has synced and its checklist was not left
+  /// out of the payload (`ticket_controls` is replaced wholesale per ticket, so its rows are the
+  /// server's list — an empty one is a real "this ticket has no controls"). Until then — a ticket
+  /// this device has never seen synced, or one recorded in `checklist_omitted_tickets` while the
+  /// batched re-request is still pending — reading it would report a missing answer as a definite
+  /// one, so this returns `null` and the caller falls back.
+  ///
+  /// Preferred over [getCachedControls] wherever it applies: both describe the same server list,
+  /// but the mirror is refreshed by every sync and also keeps the observations a local draft
+  /// already recorded, while the cache is frozen at the last online fetch this device made.
+  Future<List<TicketControlGroupDto>?> getMirroredControlsIfAuthoritative(String ticketId) async {
+    final read = ChecklistReadRepository(_db);
+    if (!await read.hasSyncedTicket(ticketId)) return null;
+    if (await read.isChecklistOmitted(ticketId)) return null;
+    return ticketControlGroupsFromMirror(
+      controls: await read.getTicketControlRows(ticketId),
+      groups: await read.getControlGroups(),
+    );
   }
 
   // ── Serialization ─────────────────────────────────────────────────────────
@@ -127,14 +158,26 @@ final ticketControlsCacheRepositoryProvider = Provider<TicketControlsCacheReposi
 final cachedTicketControlsProvider = FutureProvider.autoDispose
     .family<List<TicketControlGroupDto>, String>((ref, ticketId) async {
       final cacheRepo = ref.watch(ticketControlsCacheRepositoryProvider);
+      // Two offline-capable sources, tried in order, never merged:
+      //  1. the sync mirror, but only when it can answer for this ticket — a ticket the device
+      //     knows and whose checklist was not omitted. Its rows are the server's list, refreshed by
+      //     every sync, so an empty result there is the real "no controls";
+      //  2. the checklist a previous online fetch cached, for the ticket this device has not synced
+      //     yet or whose checklist the payload left out. That cache cannot distinguish "none" from
+      //     "not fetched", so it is only trusted as a fallback, never as a claim of emptiness.
+      // Neither applies: the honest offline state.
+      Future<List<TicketControlGroupDto>?> bestKnown() async =>
+          await cacheRepo.getMirroredControlsIfAuthoritative(ticketId) ??
+          await cacheRepo.getCachedControls(ticketId);
+
       // Offline, `ticketControlsProvider` answers from the sync mirror — which cannot tell "this
       // ticket has no controls" from "its rows have not synced yet" (it reports the ambiguity as
       // the offline state rather than as an empty checklist). The rapportino must not report either
       // on that ambiguity, so offline it keeps its own rule: the checklist a previous online fetch
       // cached, or the honest offline state.
       if (!ref.watch(isOnlineProvider)) {
-        final cached = await cacheRepo.getCachedControls(ticketId);
-        if (cached != null) return cached;
+        final known = await bestKnown();
+        if (known != null) return known;
         throw const TicketDetailOfflineException();
       }
       try {
@@ -145,8 +188,8 @@ final cachedTicketControlsProvider = FutureProvider.autoDispose
         await cacheRepo.cacheControls(ticketId, groups);
         return groups;
       } catch (_) {
-        final cached = await cacheRepo.getCachedControls(ticketId);
-        if (cached != null) return cached;
+        final known = await bestKnown();
+        if (known != null) return known;
         rethrow;
       }
     });
