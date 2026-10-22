@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/widgets/app_checkbox.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/domain/checklist/checklist_models.dart';
@@ -48,8 +49,26 @@ void main() {
 
   List<ControlloRow> rows(ProviderContainer c) => c.read(reportEditorProvider('r1')).controlloRows;
 
-  testWidgets('Sì / No write only boolValue under the TicketControl id; tapping the active one clears', (tester) async {
+  testWidgets('a checkbox is ticked, not answered Sì/No, and unticking writes false', (tester) async {
     final c = await pump(tester, control(ControlType.checkbox));
+
+    // The whole point of the split: a checkbox control has no Sì/No pair to tap.
+    expect(find.text('Sì'), findsNothing);
+    expect(find.text('No'), findsNothing);
+
+    await tester.tap(find.byType(AppCheckbox));
+    await tester.pumpAndSettle();
+    expect(rows(c).single.id, 'ctrl-r1-c1');
+    expect((rows(c).single.boolValue, rows(c).single.stringValue, rows(c).single.numberValue), (true, null, null));
+
+    await tester.tap(find.byType(AppCheckbox));
+    await tester.pumpAndSettle();
+    expect(rows(c).single.boolValue, false,
+        reason: 'unticking writes false, as the web editor does — false is an answer, not an unanswered row');
+  });
+
+  testWidgets('Sì / No write only boolValue under the TicketControl id; tapping the active one clears', (tester) async {
+    final c = await pump(tester, control(ControlType.trueFalse));
 
     await tester.tap(find.text('Sì'));
     await tester.pumpAndSettle();

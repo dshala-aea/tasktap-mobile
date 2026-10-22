@@ -1219,7 +1219,18 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
 
   Widget _buildInput(TicketControlDto c, ControlloRow? existing) {
     switch (c.type) {
+      // Ticked, not "Sì". These two control types were collapsed here the same way they were in
+      // the per-asset checklist: a checkbox is an assertion, a true/false is a choice. The web
+      // editor splits them too.
       case ControlType.checkbox:
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: AppCheckbox(
+            value: existing?.boolValue ?? c.boolValue ?? false,
+            label: c.label,
+            onChanged: (v) => _save(boolValue: v),
+          ),
+        );
       case ControlType.trueFalse:
         final value = existing?.boolValue ?? c.boolValue ?? false;
         return Row(

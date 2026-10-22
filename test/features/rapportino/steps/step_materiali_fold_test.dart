@@ -18,7 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
-import 'package:tasktap_mobile/core/widgets/app_toggle.dart';
+import 'package:tasktap_mobile/core/widgets/app_checkbox.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
@@ -174,10 +174,10 @@ void main() {
       // The old dialog is gone.
       expect(find.text('Aggiungi controllo'), findsNothing);
       expect(find.text('Nome controllo / ID'), findsNothing);
-      // A checkbox-type item renders a toggle, not a text box. StepControlli renders standalone
+      // A checkbox-type item renders a tick box, not a text box and not a Sì/No pair. StepControlli renders standalone
       // now (Controlli moved out of StepMaterialiFold, see that class's own doc comment) — no
       // sibling "Nessun materiale utilizzato" toggle to count alongside this checklist item's own.
-      expect(find.byType(AppToggle), findsOneWidget);
+      expect(find.byType(AppCheckbox), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
 
       // StepControlli watches the Drift-backed checklist stream: cancel it inside the test body
@@ -230,9 +230,9 @@ void main() {
       await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
-      // .last: the checklist item's toggle, not the pre-existing "Nessun
-      // materiale utilizzato" one above it.
-      await tester.tap(find.byType(AppToggle).last);
+      // The checklist item's tick box — a Checkbox control, so not the pre-existing
+      // "Nessun materiale utilizzato" toggle above it, which stays an AppToggle.
+      await tester.tap(find.byType(AppCheckbox).last);
       await tester.pumpAndSettle();
 
       final rows = container.read(reportEditorProvider(_reportId)).controlloRows;
@@ -504,7 +504,7 @@ void main() {
       expect(find.text('Pressione OK'), findsOneWidget);
 
       // Still answerable: ticking it writes an ordinary ControlloRow, same as when online.
-      await tester.tap(find.byType(AppToggle).last);
+      await tester.tap(find.byType(AppCheckbox).last);
       await tester.pumpAndSettle();
 
       final rows = container.read(reportEditorProvider(_reportId)).controlloRows;
@@ -528,7 +528,7 @@ void main() {
       await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(AppToggle).last);
+      await tester.tap(find.byType(AppCheckbox).last);
       await tester.pumpAndSettle();
 
       // What SubmissionQueue._buildRequest actually reads at submit time.
