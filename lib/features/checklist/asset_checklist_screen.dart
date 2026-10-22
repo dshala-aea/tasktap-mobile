@@ -10,8 +10,10 @@ import '../../data/sync/connectivity_provider.dart';
 import '../../domain/checklist/checklist_items.dart';
 import '../../domain/checklist/checklist_models.dart';
 import '../../domain/checklist/control_answer_rules.dart';
+import '../../domain/checklist/control_type.dart' show isBooleanControl;
 import '../../presentation/providers/report_editor_providers.dart';
 import 'bulk_action_sheet.dart';
+import 'check_all_booleans.dart';
 import 'checklist_providers.dart';
 import 'editable_control_tile.dart';
 
@@ -336,7 +338,7 @@ class _ItemView extends StatelessWidget {
           ],
         ),
       ),
-      AssetHeaderItem i => _AssetHeader(item: i, onToggle: onToggle),
+      AssetHeaderItem i => _AssetHeader(item: i, onToggle: onToggle, reportId: reportId),
       ControlGroupItem i => Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding + 8, AppSpacing.sm, AppSpacing.pagePadding, 2),
         child: Text(i.path, style: TextStyle(fontSize: 11, color: context.colors.inkMuted)),
@@ -368,17 +370,26 @@ class _ItemView extends StatelessWidget {
   }
 }
 
-class _AssetHeader extends StatelessWidget {
-  const _AssetHeader({required this.item, required this.onToggle});
+class _AssetHeader extends ConsumerWidget {
+  const _AssetHeader({required this.item, required this.onToggle, this.reportId});
 
   final AssetHeaderItem item;
   final ValueChanged<String> onToggle;
 
+  /// Null when this checklist is being read without a rapportino open (the ticket detail card):
+  /// there is no draft to tick rows into, so the button is not offered.
+  final String? reportId;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final a = item.asset;
     final p = item.progress;
     final c = context.colors;
+    final editable = reportId != null;
+    // What "Spunta tutti" would actually act on: the same rows the tap-to-tick input renders.
+    final tickable = editable
+        ? a.controls.where((x) => !x.isRetained && isBooleanControl(x.type)).length
+        : 0;
     return InkWell(
       onTap: a.templated ? () => onToggle(a.assetId) : null,
       child: ConstrainedBox(
@@ -428,10 +439,48 @@ class _AssetHeader extends StatelessWidget {
                   ),
                 Text('${p.answered}/${p.total}', style: TextStyle(fontSize: 13, color: c.inkMuted)),
               ],
+              if (tickable > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: AppSpacing.sm),
+                  // Its own tap target inside the expanding header row, which is what a technician
+                  // wants half the time — expanding a 15-row asset just to tick it is the friction
+                  // the web button already removed.
+                  child: Semantics(
+                    button: true,
+                    label: 'Spunta tutti i controlli di ${a.name}',
+                    child: ExcludeSemantics(
+                      child: TextButton(
+                        onPressed: () => _checkAll(context, ref, a),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          // Default padded hit target: a 36 dp label still gets the 48 dp
+                          // minimum, which the header's own 56 dp height already accommodates.
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                          foregroundColor: c.blue,
+                        ),
+                        child: const Text('Spunta tutti', style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// Ticks every boolean control of this asset in one write. Zero changed means they were all
+  /// ticked already — said out loud, so the button never looks broken.
+  Future<void> _checkAll(BuildContext context, WidgetRef ref, AssetChecklist asset) async {
+    final changed = await checkAllBooleans(ref, reportId!, asset);
+    if (!context.mounted) return;
+    showAppToast(
+      context,
+      message: changed == 0
+          ? 'Tutti i controlli erano già spuntati.'
+          : 'Spuntati $changed controlli.',
+      tone: changed == 0 ? ToastTone.info : ToastTone.success,
     );
   }
 }
