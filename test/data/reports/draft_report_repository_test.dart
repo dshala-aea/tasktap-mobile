@@ -30,6 +30,10 @@ DraftReportsCompanion _draftCompanion({
   String title = 'Rapportino Test',
   bool isLocalOnly = true,
   String? expectedVersion,
+  String? ticketId,
+  String stato = 'Bozza',
+  String submissionState = 'draft',
+  DateTime? updatedAt,
 }) => DraftReportsCompanion.insert(
   id: id,
   tenantId: 'tenant-1',
@@ -38,8 +42,11 @@ DraftReportsCompanion _draftCompanion({
   insertedUserId: 'user-1',
   locationId: 'loc-1',
   isLocalOnly: Value(isLocalOnly),
-  stato: const Value('Bozza'),
+  stato: Value(stato),
   expectedVersion: Value(expectedVersion),
+  ticketId: Value(ticketId),
+  submissionState: Value(submissionState),
+  updatedAt: Value(updatedAt),
 );
 
 ReportStaffTableCompanion _staffCompanion({
@@ -269,6 +276,61 @@ void main() {
 
     test('empty list when nothing cached', () async {
       expect(await repo.watchAllReports().first, isEmpty);
+    });
+  });
+
+  group('findResumableDraftForTicket', () {
+    test('returns the newest Bozza for the ticket', () async {
+      await repo.createDraft(
+        _draftCompanion(id: 'r-old', ticketId: 't-1', updatedAt: DateTime.utc(2026, 6, 21, 8)),
+      );
+      await repo.createDraft(
+        _draftCompanion(id: 'r-new', ticketId: 't-1', updatedAt: DateTime.utc(2026, 6, 22, 9)),
+      );
+
+      final found = await repo.findResumableDraftForTicket('t-1');
+
+      expect(found?.id, 'r-new');
+    });
+
+    test('ignores another ticket\'s drafts', () async {
+      await repo.createDraft(_draftCompanion(id: 'r-other', ticketId: 't-2'));
+
+      expect(await repo.findResumableDraftForTicket('t-1'), isNull);
+    });
+
+    test('ignores a draft this device already submitted', () async {
+      // `submissionState` reaches submitted before the next sync flips `stato` to Inviato — the
+      // window in which the row still reads Bozza but is not the technician's to resume.
+      await repo.createDraft(
+        _draftCompanion(id: 'r-sent', ticketId: 't-1', submissionState: 'submitted'),
+      );
+
+      expect(await repo.findResumableDraftForTicket('t-1'), isNull);
+    });
+
+    test('ignores a report past Bozza', () async {
+      // Respinto/Controllato/Fatturato rows are the office's: opening one in the editor would
+      // rewrite it back into a local Bozza (audit F15).
+      await repo.createDraft(_draftCompanion(id: 'r-checked', ticketId: 't-1', stato: 'Controllato'));
+
+      expect(await repo.findResumableDraftForTicket('t-1'), isNull);
+    });
+
+    test('skips a submitted row and returns the still-open one', () async {
+      await repo.createDraft(
+        _draftCompanion(
+          id: 'r-sent',
+          ticketId: 't-1',
+          submissionState: 'submitted',
+          updatedAt: DateTime.utc(2026, 6, 23, 9),
+        ),
+      );
+      await repo.createDraft(
+        _draftCompanion(id: 'r-open', ticketId: 't-1', updatedAt: DateTime.utc(2026, 6, 22, 9)),
+      );
+
+      expect((await repo.findResumableDraftForTicket('t-1'))?.id, 'r-open');
     });
   });
 

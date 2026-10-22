@@ -23,6 +23,8 @@ import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_attachment_state.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_deletion.dart';
+import '../../presentation/providers/report_editor_providers.dart'
+    show draftReportRepositoryProvider;
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import '../cantiere/cantiere_providers.dart';
@@ -30,6 +32,7 @@ import '../checklist/checklist_providers.dart';
 import '../checklist/ticket_asset_checklists_card.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider, formatElapsed;
 import '../rapportino/create_draft.dart';
+import '../rapportino/existing_draft_prompt.dart';
 import 'control_group_accordion.dart';
 import 'edit_ticket_screen.dart';
 import 'ticket_detail_api_client.dart';
@@ -526,6 +529,32 @@ class _TicketDetailBody extends ConsumerWidget {
     Ticket ticket,
     String locationAddress,
   ) async {
+    // A ticket that already has a draft gets a warning, not a silent second one. See
+    // `promptExistingDraft` for why the pair is the problem: the office ends up choosing which of
+    // two half-filled rapportini to bill, and the ticket shows both.
+    final existing = await ref
+        .read(draftReportRepositoryProvider)
+        .findResumableDraftForTicket(ticket.id);
+    if (!context.mounted) return;
+    if (existing != null) {
+      final choice = await promptExistingDraft(
+        context,
+        draftTitle: existing.title,
+        lastTouchedAt: existing.updatedAt ?? existing.createdAt,
+      );
+      switch (choice) {
+        case ExistingDraftChoice.resume:
+          if (!context.mounted) return;
+          context.push(AppRoutes.rapportiniEditor(existing.id));
+          return;
+        case ExistingDraftChoice.createNew:
+          break;
+        case null:
+          // Dismissed: create nothing, open nothing.
+          return;
+      }
+    }
+
     final id = await createLocalDraft(
       ref,
       title: 'Rapportino — ${ticket.title}',

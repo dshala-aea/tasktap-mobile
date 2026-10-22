@@ -46,6 +46,29 @@ class DraftReportRepository {
         .watch();
   }
 
+  /// The draft this device can still resume for [ticketId], newest first, or null.
+  ///
+  /// "Can still resume" is the Rapportini list's own rule (`rapportinoOpensEditor`, audit F15): a
+  /// Bozza that has not already been handed to the server. A report past Bozza is the office's row
+  /// now, and opening it in the editor would rewrite it back into a local Bozza, so it is not
+  /// offered as a draft to continue.
+  ///
+  /// Scoped to this device's mirror: a draft the technician started on another phone is not here
+  /// to resume. Returning null therefore means "nothing to warn about", not "nothing exists" — the
+  /// caller must still let them start one.
+  Future<DraftReport?> findResumableDraftForTicket(String ticketId) {
+    return (_db.select(_db.draftReports)
+          ..where(
+            (r) =>
+                r.ticketId.equals(ticketId) &
+                r.stato.equals('Bozza') &
+                r.submissionState.equals('submitted').not(),
+          )
+          ..orderBy([(r) => OrderingTerm.desc(r.updatedAt)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
   /// Stream every report this device knows about — local-only drafts plus reports synced down
   /// after leaving the draft state (Inviato/Controllato/Fatturato/Respinto/Annullato — see
   /// SyncService's `submittedReports` upsert) — newest first.
