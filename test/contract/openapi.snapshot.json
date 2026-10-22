@@ -16215,11 +16215,23 @@
               "type": "string",
               "format": "date-time"
             }
+          },
+          {
+            "name": "checklistTicketIds",
+            "in": "query",
+            "description": "When provided (1 to 50 distinct ids), asks again for the checklists of exactly those\ntickets \u2014 the ones a previous sync had to omit because the per-sync cap sends whole tickets\nonly. The answer is checklist-only: every other collection is empty, and since\nis ignored. Ids the caller cannot act on are silently ignored, so the parameter cannot be used\nto probe for tickets outside its scope.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "User-scoped (or, for office/admin, tenant-scoped) sync payload.",
+            "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
@@ -16234,6 +16246,26 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MobileUserSyncResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -29312,7 +29344,7 @@
             "description": "Tickets whose checklist, assets and groups were NOT sent this time (whole tickets only). The phone keeps whatever it\nalready holds for them; nothing here implies a deletion."
           }
         },
-        "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false, bool includeStrumenti = true, bool includeMaintenanceTemplates = true, Func\u0026lt;string, Task\u0026lt;bool\u0026gt;\u0026gt;? canReadExtensionEntityType = null).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
+        "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false, bool includeStrumenti = true, bool includeMaintenanceTemplates = true, Func\u0026lt;string, Task\u0026lt;bool\u0026gt;\u0026gt;? canReadExtensionEntityType = null, IReadOnlyCollection\u0026lt;Guid\u0026gt;? checklistTicketIds = null).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
       },
       "ModelRole": {
         "type": "integer",
