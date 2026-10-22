@@ -39,10 +39,14 @@ class TicketTimerRepository {
 
   /// Records the start of a timer for [ticketId]. A session the server has not confirmed, so the
   /// caller must trigger a sync; the row is visible (and stoppable) immediately either way.
+  /// [clientId] is the caller's own key when it has one. An online start that lost its reply is
+  /// then queued under the SAME key the server already stored, so the batch upsert lands on that
+  /// row instead of opening a second timer with the same hours.
   Future<TicketTimer> start({
     required String ticketId,
     required String userId,
     String? description,
+    String? clientId,
   }) async {
     final now = _clock().toUtc();
     final id = const Uuid().v4();
@@ -52,7 +56,7 @@ class TicketTimerRepository {
         .insert(
           TicketTimersCompanion.insert(
             id: id,
-            clientId: Value(id),
+            clientId: Value(clientId ?? id),
             ticketId: ticketId,
             userId: Value(userId),
             workDate: Value(DateTime.utc(rome.year, rome.month, rome.day)),
@@ -67,6 +71,41 @@ class TicketTimerRepository {
         _db.ticketTimers,
       )..where((t) => t.id.equals(id))).getSingle(),
     );
+  }
+
+  /// Records a session the server confirmed for an ONLINE start, without waiting for the delta
+  /// sync.
+  ///
+  /// The reply to `POST /worklogs/start` carries the server's id, so the running clock can be
+  /// mirrored the instant it exists. Waiting for the sync instead — the old behaviour — left a
+  /// technician who started the clock at the office and lost signal on the way to the site with a
+  /// running timer they could not stop: the mirror was empty, and an offline "Ferma" has nothing
+  /// to close.
+  ///
+  /// Written as already-synced (the server has the row), with [clientId] kept so a later close
+  /// queued for this session still matches it under the same key the upsert uses.
+  Future<void> adoptServerStart({
+    required String serverId,
+    required String clientId,
+    required String ticketId,
+    required String userId,
+  }) async {
+    final now = _clock().toUtc();
+    final rome = _inLegacyFrame(now);
+    await _db
+        .into(_db.ticketTimers)
+        .insertOnConflictUpdate(
+          TicketTimersCompanion.insert(
+            id: serverId,
+            clientId: Value(clientId),
+            ticketId: ticketId,
+            userId: Value(userId),
+            workDate: Value(DateTime.utc(rome.year, rome.month, rome.day)),
+            startSeconds: Value(_secondsOfDay(rome)),
+            startUtc: Value(now),
+            isPendingSync: const Value(false),
+          ),
+        );
   }
 
   /// Closes the timer this device is running for [ticketId], if any.

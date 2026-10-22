@@ -48,6 +48,13 @@ void main() {
     expect(row.endUtc, isNull);
   });
 
+  test('start keeps the caller\'s key, so a retry lands on the session the server already has', () async {
+    final row = await repo.start(ticketId: 't1', userId: 'u1', clientId: 'key-1');
+
+    expect(row.clientId, 'key-1');
+    expect(row.id, isNot('key-1'), reason: 'the local id stays this device\'s own handle');
+  });
+
   test('stop closes the open row and marks it for upload', () async {
     final started = await repo.start(ticketId: 't1', userId: 'u1');
 
@@ -149,6 +156,61 @@ void main() {
     final rows = await repo.forTicket('t1');
     expect(rows.single.id, started.id);
     expect(rows.single.isPendingSync, isFalse);
+  });
+
+  // An ONLINE start used to leave the mirror empty until the next delta sync, so a technician who
+  // began the clock at the office and lost signal on the way to site held a running timer this
+  // device could not stop — an offline "Ferma" has nothing to close.
+  group('adoptServerStart', () {
+    test('mirrors the running session the server just created', () async {
+      await repo.adoptServerStart(
+        serverId: 'server-1',
+        clientId: 'key-1',
+        ticketId: 't1',
+        userId: 'u1',
+      );
+
+      final row = (await repo.forTicket('t1')).single;
+      expect(row.id, 'server-1');
+      expect(row.clientId, 'key-1', reason: 'the queued close matches the server row by this key');
+      expect(row.isPendingSync, isFalse, reason: 'the server already has the start');
+      expect(row.startUtc, summerStart);
+      expect(row.workDate, DateTime.utc(2026, 8, 16));
+      expect(row.startSeconds, 10 * 3600 + 30 * 60);
+      expect(row.endSeconds, isNull);
+      expect(await repo.pending(), isEmpty);
+    });
+
+    test('the adopted session is what an offline stop closes and queues', () async {
+      await repo.adoptServerStart(
+        serverId: 'server-1',
+        clientId: 'key-1',
+        ticketId: 't1',
+        userId: 'u1',
+      );
+
+      final closed = await repo.stop('t1', now: summerStart.add(const Duration(hours: 2)));
+
+      expect(closed, isNotNull);
+      expect(closed!.id, 'server-1');
+      expect(closed.endSeconds, 12 * 3600 + 30 * 60);
+      expect(closed.isPendingSync, isTrue, reason: 'only the close still has to reach the server');
+      expect((await repo.pending()).single.id, 'server-1');
+    });
+
+    test('adopting the same server row twice leaves one row', () async {
+      Future<void> adopt() => repo.adoptServerStart(
+        serverId: 'server-1',
+        clientId: 'key-1',
+        ticketId: 't1',
+        userId: 'u1',
+      );
+      await adopt();
+      await adopt();
+
+      expect(await repo.forTicket('t1'), hasLength(1));
+      expect(await repo.running(), isNotNull);
+    });
   });
 
   test('markSyncError holds a row without discarding it', () async {
