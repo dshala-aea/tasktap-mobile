@@ -21,8 +21,8 @@ class AppCheckbox extends StatelessWidget {
   final bool value;
   final ValueChanged<bool>? onChanged;
 
-  /// Accessible name and, when given, visible text beside the box. The checklist's own row already
-  /// prints the control's label, so callers there pass it for semantics only.
+  /// Accessible name for the box, never drawn. The checklist row already prints the control's
+  /// label next to it; drawing it here too put the same sentence on screen twice.
   final String? label;
 
   static const double _box = 24;
@@ -36,39 +36,25 @@ class AppCheckbox extends StatelessWidget {
       checked: value,
       enabled: enabled,
       label: label,
-      // The tick is drawn, not text, so nothing below would contribute a name of its own; without
-      // this the row is announced twice (once here, once by the visible label).
+      // The tick is drawn, not text, so nothing below would contribute a name of its own; this
+      // keeps the announced node to the one the caller names.
       excludeSemantics: true,
       child: InkWell(
         onTap: enabled ? () => onChanged!(!value) : null,
         borderRadius: BorderRadius.circular(8),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 48),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: _box,
-                height: _box,
-                decoration: BoxDecoration(
-                  color: value ? c.blue.withAlpha(30) : Colors.transparent,
-                  border: Border.all(color: value ? c.blue : c.borderMedium, width: 1.5),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: value
-                    ? Icon(LucideIcons.check, size: 16, color: c.blue)
-                    : const SizedBox.shrink(),
-              ),
-              if (label != null) ...[
-                const SizedBox(width: 10),
-                Flexible(
-                  child: Text(
-                    label!,
-                    style: TextStyle(fontSize: 13, color: c.inkMuted),
-                  ),
-                ),
-              ],
-            ],
+          child: Container(
+            width: _box,
+            height: _box,
+            decoration: BoxDecoration(
+              color: value ? c.blue.withAlpha(30) : Colors.transparent,
+              border: Border.all(color: value ? c.blue : c.borderMedium, width: 1.5),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: value
+                ? Icon(LucideIcons.check, size: 16, color: c.blue)
+                : const SizedBox.shrink(),
           ),
         ),
       ),
