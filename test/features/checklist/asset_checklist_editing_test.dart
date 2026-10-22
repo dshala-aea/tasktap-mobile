@@ -120,7 +120,9 @@ void main() {
     final container = ProviderScope.containerOf(tester.element(find.byType(AssetChecklistScreen)));
     final rows = container.read(reportEditorProvider('r1')).controlloRows;
     expect(rows, hasLength(10), reason: 'the 10 Checkbox controls of Caldaia 1, never the Number/Text/Options ones');
-    expect(rows.map((r) => r.controlId).toSet(), {for (var k = 0; k < 10; k++) 'ctrl-r1-c-0-$k'});
+    // `controlId` is the ticket control's own id — `ctrl-<report>-<control>` is the checklist ROW id
+    // (`ControlRow.id`), which the screen keys its widgets by but the editor does not store under.
+    expect(rows.map((r) => r.controlId).toSet(), {for (var k = 0; k < 10; k++) 'c-0-$k'});
     expect(rows.every((r) => r.boolValue == true), isTrue);
 
     expect(find.text('10/15'), findsOneWidget, reason: 'Caldaia 1 is ten fifteenths answered');
