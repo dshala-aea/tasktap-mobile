@@ -444,6 +444,9 @@ void main() {
     expect(row.endUtc, isNotNull);
     expect(row.isPendingSync, isTrue);
 
+    await drain(tester);
+  });
+
   testWidgets('Ferma on a ticket clock with no signal says so when the session is not on the device', (
     tester,
   ) async {
