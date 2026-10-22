@@ -106,7 +106,8 @@ void main() {
     test('names the same day as the long form', () {
       // The compact form must never disagree with the settings row about the answer, only about
       // how much room it takes to say it.
-      const cases = {
+      // DateTime has no const constructor, so this map cannot be const.
+      final cases = {
         'oggi': DateTime(2026, 10, 21, 14, 32),
         'ieri': DateTime(2026, 10, 20, 9, 10),
         '3 gg fa': DateTime(2026, 10, 18, 9, 10),

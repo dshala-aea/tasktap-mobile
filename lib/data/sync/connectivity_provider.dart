@@ -88,8 +88,10 @@ class ConnectivityNotifier extends AsyncNotifier<bool> {
     if (reachable) {
       _retry?.cancel();
       _retry = null;
-    } else if (_retry == null) {
-      _retry = Timer.periodic(retryInterval, (_) => unawaited(_evaluate()));
+    } else {
+      // Retry until the backend answers again. `??=` rather than a null check: re-entering while a
+      // timer is already armed must not stack a second one.
+      _retry ??= Timer.periodic(retryInterval, (_) => unawaited(_evaluate()));
     }
     return reachable;
   }
