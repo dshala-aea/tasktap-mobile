@@ -175,6 +175,15 @@ void main() {
     givenUnsent(2);
     await pumpAuthed(tester, const AltroHubScreen());
 
+    // The hub is a lazy `CustomScrollView` and its logout row sits below the fold at the test
+    // surface's 800x600: tapping it where it is built but off-screen silently misses.
+    await tester.dragUntilVisible(
+      find.text('Esci dall\'account'),
+      find.byType(CustomScrollView),
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Esci dall\'account'));
     await tester.pumpAndSettle();
 
