@@ -915,7 +915,8 @@ class _ProdottiTab extends ConsumerWidget {
         offline: e is TicketDetailOfflineException,
         offlineTitle: 'Asset non disponibili offline',
         offlineBody:
-            'Gli asset di questo ticket richiedono una connessione: riprova quando torni online.',
+            'Gli asset di questo ticket non sono ancora stati scaricati su questo dispositivo: '
+            'riprova quando torni online.',
         errorTitle: 'Impossibile caricare gli asset',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),
@@ -1015,7 +1016,8 @@ class _ControlloTab extends ConsumerWidget {
           offline: e is TicketDetailOfflineException,
           offlineTitle: 'Controlli non disponibili offline',
           offlineBody:
-              'Il checklist di questo ticket richiede una connessione: riprova quando torni online.',
+              'Il checklist di questo ticket non è ancora stato scaricato su questo dispositivo: '
+              'riprova quando torni online.',
           errorTitle: 'Impossibile caricare i controlli',
           errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
         ).paddedForTab(),

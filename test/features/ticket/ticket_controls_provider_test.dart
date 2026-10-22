@@ -134,13 +134,17 @@ void main() {
     expect(groups.single.controls.single.label, 'Dal mirror');
   });
 
-  test('a throwing live fetch with an empty mirror yields an empty list, not an error', () async {
+  test('a throwing live fetch with an empty mirror reports offline, never an empty checklist', () async {
+    // The mirror cannot tell "no template" from "not synced yet", so answering `[]` here would let
+    // the Controllo tab state that no controls are planned for a ticket whose checklist simply
+    // never reached this phone.
     final api = _FakeApiClient(error: StateError('radio off mid-request'));
     final container = buildContainer(online: true, api: api);
     addTearDown(container.dispose);
 
-    final groups = await container.read(ticketControlsProvider('ticket-1').future);
-
-    expect(groups, isEmpty);
+    await expectLater(
+      container.read(ticketControlsProvider('ticket-1').future),
+      throwsA(isA<TicketDetailOfflineException>()),
+    );
   });
 }
