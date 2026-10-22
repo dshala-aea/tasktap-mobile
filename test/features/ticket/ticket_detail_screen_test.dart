@@ -1950,6 +1950,66 @@ void main() {
       await resetAndDispose(tester);
     });
 
+    testWidgets('offline names the total as this technician\'s own hours, not the ticket\'s', (
+      tester,
+    ) async {
+      await seedBase(db);
+      // The mirror only ever holds the caller's sessions (sync filters `UserId == userId`), so a
+      // colleague's hours on this same ticket are absent and cannot be fetched while offline.
+      // Two closed sessions, so the total (3:00) is a sum no single row also shows.
+      for (final (id, startHour, endHour) in [('t1', 8, 10), ('t2', 11, 12)]) {
+        await db
+            .into(db.ticketTimers)
+            .insert(
+              TicketTimersCompanion.insert(
+                id: id,
+                ticketId: 'ticket-1',
+                userId: const Value('u1'),
+                workDate: Value(DateTime.utc(2026, 7, 1)),
+                startSeconds: Value(startHour * 3600),
+                endSeconds: Value(endHour * 3600),
+                startUtc: Value(DateTime.utc(2026, 7, 1, startHour)),
+                endUtc: Value(DateTime.utc(2026, 7, 1, endHour)),
+              ),
+            );
+      }
+
+      await pump(tester, isOnline: false);
+      await tapWideTab(tester, 'Ore');
+
+      expect(find.text('Totale delle tue ore'), findsOneWidget);
+      expect(
+        find.text('Totale registrato'),
+        findsNothing,
+        reason: 'unqualified, the mirror total reads as the whole ticket',
+      );
+      expect(find.textContaining('Solo le tue ore'), findsOneWidget);
+      expect(find.text('3:00'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('online the total is the ticket\'s, with no own-hours caveat', (tester) async {
+      await seedBase(db);
+      final dio = dioWithWorklogs([
+        {
+          'id': 'w1',
+          'ticketId': 'ticket-1',
+          'userId': 'u2',
+          'workDate': '2026-07-01T00:00:00Z',
+          'startTime': '08:00:00',
+          'endTime': '10:00:00',
+          'isManualEntry': false,
+        },
+      ]);
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapWideTab(tester, 'Ore');
+
+      expect(find.text('Totale registrato'), findsOneWidget);
+      expect(find.textContaining('Solo le tue ore'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
     testWidgets('a worklog with an unparseable workDate shows the error state, not a thrown error', (
       tester,
     ) async {

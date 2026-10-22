@@ -2267,6 +2267,12 @@ class _OreTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(ticketWorklogsProvider(ticketId));
+    // The offline list is the mirror, and the sync ships only the CALLER's own worklogs
+    // (`MobileUserSyncService`: `w.UserId == userId`). So offline this tab can show this
+    // technician's hours but never the colleague's — and a total that silently leaves them out
+    // reads exactly like the ticket's real total. Both the label and the note below say whose
+    // hours they are while the radio is down.
+    final offline = !ref.watch(isOnlineProvider);
 
     return async.when(
       loading: () => const _TabLoading(),
@@ -2274,9 +2280,11 @@ class _OreTab extends ConsumerWidget {
         icon: LucideIcons.clock,
         offline: e is TicketDetailOfflineException,
         offlineTitle: 'Ore non disponibili offline',
+        // O-9 made the mirror readable offline, so "solo online" would now be false: an empty
+        // offline answer means this device holds none of the caller's sessions for the ticket.
         offlineBody:
-            'Le ore registrate su questo ticket si leggono solo online: '
-            'riprova quando torni in copertura.',
+            'Su questo dispositivo non risultano ancora ore sincronizzate per il ticket. '
+            'Le ore degli altri tecnici si leggono con la connessione.',
         errorTitle: 'Impossibile caricare le ore',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),
@@ -2311,7 +2319,7 @@ class _OreTab extends ConsumerWidget {
                     if (running > 0) ...[const LiveDot(), const SizedBox(width: 8)],
                     Expanded(
                       child: Text(
-                        'Totale registrato',
+                        offline ? 'Totale delle tue ore' : 'Totale registrato',
                         style: TextStyle(
                           fontFamily: 'Archivo',
                           fontSize: 12,
@@ -2340,6 +2348,20 @@ class _OreTab extends ConsumerWidget {
                     running == 1
                         ? 'Un timer è ancora in corso e non è incluso nel totale.'
                         : '$running timer sono ancora in corso e non sono inclusi nel totale.',
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 11,
+                      color: context.colors.inkMuted,
+                    ),
+                  ),
+                ),
+              if (offline)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, bottom: 2),
+                  child: Text(
+                    // The missing hours are the point: without this line a colleague's 2h on the
+                    // same ticket simply vanish from a number the technician reads as "the total".
+                    'Solo le tue ore: quelle degli altri tecnici si leggono con la connessione.',
                     style: TextStyle(
                       fontFamily: 'Archivo',
                       fontSize: 11,
