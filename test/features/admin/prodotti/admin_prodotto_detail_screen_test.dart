@@ -192,6 +192,16 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Pumps until [finder] matches. The extension-fields section fetches its definitions and then
+  /// its values, and `pumpAndSettle` can return between the two resolutions — which left the
+  /// section in its loading state and made the assertion look like the fields were missing.
+  Future<void> pumpUntilFound(WidgetTester tester, Finder finder, {int attempts = 20}) async {
+    for (var i = 0; i < attempts; i++) {
+      if (finder.evaluate().isNotEmpty) return;
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
   Future<void> teardown(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -213,7 +223,9 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextFormField).first, 'SN-002');
-      await tester.tap(find.text('Salva'));
+      // The page's own extension-fields card also has a "Salva"; the sheet is pushed last, so its
+      // button is the last match in the tree.
+      await tester.tap(find.text('Salva').last);
       await tester.pumpAndSettle();
 
       final captured = verify(
@@ -279,6 +291,9 @@ void main() {
       // The asset was the one entity a technician opens on every visit and could not fill in; the
       // key is what matters, because the API knows it as `prodottoassistenza`, not `asset`.
       await openDetail(tester, size: const Size(800, 2800));
+      // Wait for the value, not the label: values load after definitions, so the value is the
+      // signal that both providers have resolved and the section is fully built.
+      await pumpUntilFound(tester, find.text('IMP-9'));
 
       expect(extensionFields.definitionsEntityType, 'prodottoassistenza');
       expect(extensionFields.valuesKey, ('prodottoassistenza', 'prod-1'));
@@ -290,9 +305,11 @@ void main() {
     testWidgets('saves what the technician typed against that same key', (tester) async {
       await openDetail(tester, size: const Size(800, 2800));
 
+      await pumpUntilFound(tester, find.byType(TextFormField));
       await tester.enterText(find.byType(TextFormField), 'IMP-10');
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Salva'));
+      // Last, for the same reason as the matricole sheet above: this card is the page's own.
+      await tester.tap(find.text('Salva').last);
       await tester.pumpAndSettle();
 
       expect(extensionFields.saved, isNotNull);
