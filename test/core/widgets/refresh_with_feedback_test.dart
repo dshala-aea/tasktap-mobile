@@ -16,8 +16,7 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart';
 
 /// Stands in for the notifier's one observable effect: the state it leaves behind.
 class _StubSyncNotifier extends SyncNotifier {
-  _StubSyncNotifier(SyncService service, AppDatabase db, {required this.outcome})
-    : super(service, db);
+  _StubSyncNotifier(super.service, super.db, {required this.outcome});
 
   final SyncStatus outcome;
 
