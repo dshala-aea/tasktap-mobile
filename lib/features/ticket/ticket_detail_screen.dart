@@ -62,14 +62,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     super.dispose();
   }
 
-  /// Pull-to-refresh for the body below.
-  ///
-  /// Everything the ticket body renders — the ticket itself, its customer, sede, contract,
-  /// commessa and cantiere — is read from the synced mirror, so a delta sync is the whole
-  /// refresh; there is no server read behind this screen to re-issue. The compartment sheets
-  /// (Report, Controllo, Ore, …) fetch when they are opened, so they are fresh already.
-  Future<void> _refresh() => refreshWithFeedback(context, ref);
-
   /// Ordered by who is holding the phone.
   ///
   /// This was a pinned horizontal strip (four tabs fit a phone, there are eight — four sat past
@@ -338,7 +330,11 @@ class _TicketDetailBody extends ConsumerWidget {
 
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _refresh,
+              // Everything this body renders — the ticket, its customer, sede, contract, commessa
+              // and cantiere — is read from the synced mirror, so a delta sync is the whole
+              // refresh; there is no server read behind this screen to re-issue. The compartment
+              // sheets (Report, Controllo, Ore, …) fetch when they are opened, so they are fresh.
+              onRefresh: () => refreshWithFeedback(context, ref),
               child: CustomScrollView(
                 controller: scrollController,
                 slivers: [
