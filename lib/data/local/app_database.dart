@@ -536,6 +536,41 @@ class Materiali extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── magazzini ───────────────────────────────────────────────────────────────
+/// The tenant's active warehouses, mirrored so a rapportino material line can name its source
+/// with no signal.
+///
+/// Both reads behind that were live REST calls: `furgoneDiUserProvider` (the technician's own van,
+/// the default source for a line) and `magazziniProvider` (the "cambia magazzino" override). Offline
+/// they both failed, the dialog opened with no default, and the line was saved with a null
+/// `magazzinoId` — the report recorded the material but the warehouse provenance, which the stock
+/// movement is keyed on, was gone server-side and unrecoverable.
+///
+/// Read-only mirror: replaced wholesale on every sync (`MobileUserSyncResult.Magazzini` carries
+/// every active warehouse, no delta filter), never written by the device. Active only, so an admin
+/// deactivating a warehouse removes it from the phone with no separate delete.
+class Magazzini extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get nome => text()();
+
+  /// `"Sede"` or `"Furgone"` — `MagazzinoTipoEnum` serialises as its label, the same string the
+  /// REST endpoints and [MagazzinoDto] already carry.
+  TextColumn get tipo => text()();
+
+  /// For a Furgone: the technician it is assigned to. Null for a Sede, and the field that lets
+  /// "my van" resolve offline without a per-user lookup.
+  TextColumn get assegnatoUserId => text().nullable()();
+
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── ticket_materiali ─────────────────────────────────────────────────────────
 // Fabbisogno: a ticket's planned/required materials. Mirrors the backend `TicketMateriale`
 // entity 1:1 (raw field names, not the Italian-translated shape the per-ticket detail REST
@@ -1370,13 +1405,14 @@ class ChecklistOmittedTickets extends Table {
     MaintenanceTemplates,
     CantiereCrewAssignments,
     ExtensionFieldDefinitions,
+    Magazzini,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 46;
+  int get schemaVersion => 47;
 
   @override
   MigrationStrategy get migration {
@@ -1856,6 +1892,13 @@ class AppDatabase extends _$AppDatabase {
           if (!await _columnExists(m.database, 'draft_reports', 'extension_values')) {
             await m.addColumn(draftReports, draftReports.extensionValues);
           }
+        }
+        if (from < 47) {
+          // The warehouses a rapportino material line can be sourced from. A brand-new table, so
+          // it needs no backfill: the member travels whole on every sync (never delta-filtered),
+          // which fills the mirror on the very next one whatever its cursor. No cursor-generation
+          // bump is needed for the same reason — unlike a new column on a delta-synced table.
+          await m.createTable(magazzini);
         }
       },
     );

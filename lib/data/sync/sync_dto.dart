@@ -22,6 +22,11 @@ class SyncResultDto {
   final List<SyncTicketMaterialeDto> ticketMateriali;
   final List<MaterialeDto> materiali;
   final List<MaterialeBarcodeDto> materialiBarcodes;
+
+  /// The tenant's active warehouses — every one of them, re-sent whole on every sync. The
+  /// rapportino material line's source: without it, the furgone default and the "cambia magazzino"
+  /// picker both needed a live call, and an offline line was saved with no provenance at all.
+  final List<SyncMagazzinoDto> magazzini;
   final List<CantiereDto> cantieri;
 
   /// The crew of every cantiere [cantieri] carries this time — the complete set per cantiere, with
@@ -134,6 +139,11 @@ class SyncResultDto {
   /// the mirror — the same trap [carriesMaintenanceTemplates] closes for the template catalogue.
   final bool carriesCantiereCrewAssignments;
 
+  /// False when the payload came from a backend that predates the warehouse member. Without it an
+  /// older backend would look like "the tenant has no warehouses" and the wholesale replace would
+  /// empty the material picker's sources — the same trap [carriesMaintenanceTemplates] closes.
+  final bool carriesMagazzini;
+
   /// False when the payload came from a backend that predates the extension-field definitions.
   /// Without it an older backend would look like "every custom field was deleted" and the
   /// wholesale replace would empty the section — the same trap
@@ -177,6 +187,7 @@ class SyncResultDto {
     'ticketMateriali',
     'cantiereCrewAssignments',
     'extensionFieldDefinitions',
+    'magazzini',
   };
 
   /// The sync-v2 additions that travel beside the row lists: the authoritative scope and the
@@ -212,6 +223,7 @@ class SyncResultDto {
     this.ticketMateriali = const [],
     required this.materiali,
     this.materialiBarcodes = const [],
+    this.magazzini = const [],
     required this.cantieri,
     this.cantiereCrewAssignments = const [],
     required this.ticketStatuses,
@@ -248,6 +260,7 @@ class SyncResultDto {
     this.carriesMaintenanceTemplates = false,
     this.carriesTicketMateriali = false,
     this.carriesCantiereCrewAssignments = false,
+    this.carriesMagazzini = false,
     this.carriesExtensionFieldDefinitions = false,
     this.scope,
   });
@@ -271,6 +284,7 @@ class SyncResultDto {
         j['materialiBarcodes'],
         MaterialeBarcodeDto.fromJson,
       ),
+      magazzini: _list(j['magazzini'], SyncMagazzinoDto.fromJson),
       cantieri: _list(j['cantieri'], CantiereDto.fromJson),
       cantiereCrewAssignments: _list(
         j['cantiereCrewAssignments'],
@@ -336,6 +350,7 @@ class SyncResultDto {
       carriesAllegati: j.containsKey('allegati'),
       carriesTicketMateriali: j.containsKey('ticketMateriali'),
       carriesCantiereCrewAssignments: j.containsKey('cantiereCrewAssignments'),
+      carriesMagazzini: j.containsKey('magazzini'),
       carriesExtensionFieldDefinitions: j.containsKey('extensionFieldDefinitions'),
       scope: j['scope'] == null
           ? null
@@ -826,6 +841,62 @@ class MaterialeBarcodeDto {
         barcodeType: j['barcodeType'] as String?,
         isPrimary: j['isPrimary'] as bool? ?? false,
       );
+}
+
+// ── Magazzino ────────────────────────────────────────────────────────────────
+//
+// Mirrors the backend's SyncMagazzinoDto: the tenant's warehouse rows, so the rapportino material
+// picker can name a line's source with no signal. See Magazzini (local Drift table) for the bug
+// this closes.
+class SyncMagazzinoDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String nome;
+
+  /// `"Sede"` or `"Furgone"` — the enum's own `JsonStringEnumConverter` label, the same string
+  /// [MagazzinoDto.tipo] carries from the REST endpoints.
+  final String tipo;
+
+  /// For a Furgone: the technician it is assigned to. Null for a Sede.
+  final String? assegnatoUserId;
+  final bool isActive;
+
+  const SyncMagazzinoDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.nome,
+    required this.tipo,
+    this.assegnatoUserId,
+    this.isActive = true,
+  });
+
+  /// The exact keys `fromJson` reads — compared with the OpenAPI snapshot by the inbound
+  /// contract gate. The server carries all eight unconditionally, nullable ones included.
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'nome',
+    'tipo',
+    'assegnatoUserId',
+    'isActive',
+  };
+
+  factory SyncMagazzinoDto.fromJson(Map<String, dynamic> j) => SyncMagazzinoDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    nome: j['nome'] as String,
+    tipo: j['tipo'] as String? ?? 'Sede',
+    assegnatoUserId: j['assegnatoUserId'] as String?,
+    isActive: j['isActive'] as bool? ?? true,
+  );
 }
 
 // ── Cantiere ───────────────────────────────────────────────────────────────────

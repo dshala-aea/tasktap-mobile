@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
+import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 
 /// All active materiali, alphabetical by name.
@@ -75,17 +76,79 @@ final movimentiProvider = FutureProvider.autoDispose<PagedResult<MovimentoDto>>(
 /// `GET /api/magazzino/furgone/{userId}` — the default source for rapportino material lines
 /// (`step_materiali_fold.dart`). Null when this user has no furgone assigned; the caller falls
 /// back to an explicit picker in that case.
+///
+/// Online it reads through, so an office reassignment reaches the phone on the next visit rather
+/// than after the next sync. Offline it answers from the `magazzini` mirror, where
+/// `assegnatoUserId` travels on the warehouse row itself — the assignment is a device-local
+/// lookup, never a live call. Null there means either "no van assigned" or "no mirror yet"; both
+/// leave the line's source unset instead of blocking the add, and the picker below says why when
+/// it cannot offer the alternatives.
 final furgoneDiUserProvider = FutureProvider.autoDispose
-    .family<MagazzinoDto?, String>((ref, userId) {
-      final client = ref.watch(magazzinoApiClientProvider);
-      return client.getFurgoneByUser(userId);
+    .family<MagazzinoDto?, String>((ref, userId) async {
+      if (ref.watch(isOnlineProvider)) {
+        return ref.watch(magazzinoApiClientProvider).getFurgoneByUser(userId);
+      }
+      final db = ref.watch(appDatabaseProvider);
+      final row =
+          await (db.select(db.magazzini)..where(
+                (w) =>
+                    w.tipo.equals('Furgone') & w.assegnatoUserId.equals(userId),
+              )..limit(1))
+              .getSingleOrNull();
+      return row == null ? null : _fromMirror(row);
     });
 
 /// All warehouses (for admin CRUD and the "cambia magazzino" override picker).
-final magazziniProvider = FutureProvider.autoDispose<List<MagazzinoDto>>((ref) {
-  final client = ref.watch(magazzinoApiClientProvider);
-  return client.getMagazzini();
+///
+/// Online it reads through — the office may have just created a Sede, and a connected device
+/// shows the server's copy. Offline it answers from the `magazzini` mirror, so a material line
+/// picked up on site can still name the Sede it came from.
+///
+/// Nothing cached is not the same as nothing existing: an empty mirror throws
+/// [MagazziniOfflineException] rather than returning `[]`, because the picker renders an empty
+/// list as "Nessun magazzino disponibile." — a false statement about the tenant's stock that a
+/// technician would act on.
+final magazziniProvider = FutureProvider.autoDispose<List<MagazzinoDto>>((
+  ref,
+) async {
+  if (ref.watch(isOnlineProvider)) {
+    return ref.watch(magazzinoApiClientProvider).getMagazzini();
+  }
+  final db = ref.watch(appDatabaseProvider);
+  final rows =
+      await (db.select(
+        db.magazzini,
+      )..orderBy([(w) => OrderingTerm.asc(w.nome)])).get();
+  if (rows.isEmpty) throw const MagazziniOfflineException();
+  return rows.map(_fromMirror).toList(growable: false);
 });
+
+/// The warehouses live on the server but this device has never downloaded them.
+///
+/// `humanErrorMessage` folds anything that is not a `DioException` into "Errore imprevisto", which
+/// would be a lie about the cause here — the radio is off, not the app broken. The picker
+/// (`step_materiali_fold.dart`) renders this one's own message instead.
+class MagazziniOfflineException implements Exception {
+  const MagazziniOfflineException();
+
+  String get message =>
+      'Magazzini non ancora scaricati su questo dispositivo: riprova quando torni online.';
+
+  @override
+  String toString() => message;
+}
+
+/// A mirror row as the DTO the rest of the app already speaks.
+///
+/// `indirizzo`/`note` are not in the sync member — nothing offline reads them, and the admin
+/// screens that show them are live-only — so they are null here rather than guessed.
+MagazzinoDto _fromMirror(MagazziniData row) => MagazzinoDto(
+  id: row.id,
+  nome: row.nome,
+  tipo: row.tipo,
+  assegnatoUserId: row.assegnatoUserId,
+  isActive: row.isActive,
+);
 
 /// Distinct non-null category values from the materiali table.
 final materialiCategoriesProvider = StreamProvider.autoDispose<List<String>>((

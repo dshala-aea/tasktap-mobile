@@ -518,9 +518,16 @@ class StepMaterialiFold extends ConsumerWidget {
                 padding: EdgeInsets.all(AppSpacing.xxl),
                 child: Center(child: CircularProgressIndicator()),
               ),
+              // The offline-empty mirror has its own true message ("not downloaded yet"), which
+              // `humanErrorMessage` would fold into "Errore imprevisto" — wrong cause, and it
+              // would read as the app being broken rather than the radio being off.
               error: (e, _) => Padding(
                 padding: const EdgeInsets.all(AppSpacing.xl),
-                child: Text(humanErrorMessage(e, azione: 'caricare i magazzini')),
+                child: Text(
+                  e is MagazziniOfflineException
+                      ? e.message
+                      : humanErrorMessage(e, azione: 'caricare i magazzini'),
+                ),
               ),
               data: (list) => list.isEmpty
                   ? const Padding(
