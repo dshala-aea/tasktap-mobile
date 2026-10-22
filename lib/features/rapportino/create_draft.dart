@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../data/local/app_database.dart';
 import '../../data/reports/cantiere_report_api_client.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
@@ -349,7 +350,7 @@ Future<String?> createCantiereReportDraft(
     // Only a transport failure or a server fault degrades here. A 4xx is the server answering: a
     // 403 "non sei assegnato a questo cantiere" or a 400 must reach the technician as it does
     // today, not be papered over with a draft that will fail the same way later.
-    if (!_isTransportOrServerFault(e)) rethrow;
+    if (!isTransportOrServerFault(e)) rethrow;
     debugPrint(
       'createCantiereReportDraft: POST /api/reports/from-cantiere-worklogs failed ($e) — '
       'creating an offline draft instead, hours to be entered manually.',
@@ -440,15 +441,3 @@ Future<String?> createCantiereReportDraft(
   return reportId;
 }
 
-/// Whether [e] means "the server never answered, or answered with its own fault" — the class
-/// [createCantiereReportDraft] degrades to a local draft on. Mirrors
-/// `SubmissionQueue._isTransient` deliberately: the same shapes are retryable there, and for the
-/// same reason. Kept separate (not shared) because that one is private to the queue and this one
-/// answers a different question — "can this creation still happen offline?" rather than "will
-/// another attempt help?" — but they must agree: a failure this treats as fatal would surface a
-/// toast while the queue would have retried it.
-bool _isTransportOrServerFault(DioException e) {
-  final status = e.response?.statusCode;
-  if (status == null) return e.type != DioExceptionType.badResponse;
-  return status >= 500 || status == 408 || status == 429;
-}

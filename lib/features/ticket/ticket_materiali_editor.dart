@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/icons/app_lucide_icons.dart';
 import '../../core/scanner/barcode_scan_sheet.dart';
 import '../../core/theme/app_palette.dart';
+import '../../core/utils/error_message.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
@@ -189,6 +190,18 @@ class TicketMaterialiEditorState extends ConsumerState<TicketMaterialiEditor> {
     setState(() => _isSaving = true);
     try {
       await widget.onSave(_rows.map((r) => r.toWriteRow()).toList());
+    } catch (e) {
+      // This save is a server replace with no offline queue behind it, so a failure has to say so:
+      // without this catch the exception escaped into the framework and the tap simply did nothing
+      // — the editor stayed open on rows the technician had already typed, with no sentence
+      // anywhere. The rows are still in the editor, so nothing typed is lost.
+      if (mounted) {
+        showAppToast(
+          context,
+          message: humanErrorMessage(e, azione: 'salvare il fabbisogno'),
+          tone: ToastTone.error,
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

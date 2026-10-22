@@ -80,6 +80,11 @@ void main() {
       expect(rapportinoStatusLabel(_draft(submissionState: 'failed')), 'Invio fallito');
     });
 
+    test('readyToSubmit → In attesa di invio, not Bozza — the technician pressed Invia and the '
+        'row is waiting on the queue, not an untouched draft', () {
+      expect(rapportinoStatusLabel(_draft(submissionState: 'readyToSubmit')), 'In attesa di invio');
+    });
+
     test('a transient failed attempt is labelled the same — the list reports that the last '
         'send failed, not whether an unattended retry is still coming', () {
       expect(

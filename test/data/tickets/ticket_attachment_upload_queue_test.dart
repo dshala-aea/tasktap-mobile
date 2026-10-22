@@ -1,4 +1,5 @@
 // dart format width=100
+import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -212,6 +213,68 @@ void main() {
       expect(row.error, isNot(contains('Network error')));
       expect(row.error, isNot(contains('Exception')));
       expect(uploadedForTicket, isEmpty);
+    });
+
+    test('a connection that could not be opened leaves the row queued, not failed — the server '
+        'never saw the file, so the reconnect sweep must still send it', () async {
+      when(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/tickets/ticket-5/attachments'),
+          type: DioExceptionType.connectionError,
+        ),
+      );
+
+      final outcome = await queue.upload(
+        ticketId: 'ticket-5',
+        localPath: '/tmp/foto5.jpg',
+        fileName: 'foto5.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 1024,
+        isOnline: true,
+      );
+
+      expect(outcome.isQueuedOffline, isTrue);
+
+      final row = await repo.getById(outcome.localId);
+      expect(row!.state, 'pendingSync');
+      expect(row.error, isNull);
+      expect(uploadedForTicket, isEmpty);
+    });
+
+    test('a timeout keeps the row failed — the server may have stored the file, and there is no '
+        'idempotency key to make a blind resend safe', () async {
+      when(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/tickets/ticket-6/attachments'),
+          type: DioExceptionType.receiveTimeout,
+        ),
+      );
+
+      final outcome = await queue.upload(
+        ticketId: 'ticket-6',
+        localPath: '/tmp/foto6.jpg',
+        fileName: 'foto6.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 1024,
+        isOnline: true,
+      );
+
+      expect(outcome.isFailed, isTrue);
+      expect((await repo.getById(outcome.localId))!.state, 'failed');
     });
 
     test(

@@ -124,6 +124,42 @@ void main() {
     });
   });
 
+  // The split every "online, but the call failed" screen falls back on: a fault is not an answer,
+  // a refusal is. Getting this wrong is invisible in the happy path and wrong exactly where the
+  // technician has no alternative — a blanked compartment on site.
+  group('isTransportOrServerFault', () {
+    test('a request that never arrived is a fault', () {
+      for (final type in [
+        DioExceptionType.connectionError,
+        DioExceptionType.connectionTimeout,
+        DioExceptionType.sendTimeout,
+        DioExceptionType.receiveTimeout,
+      ]) {
+        expect(
+          isTransportOrServerFault(DioException(requestOptions: request, type: type)),
+          isTrue,
+          reason: type.name,
+        );
+      }
+    });
+
+    test('5xx, 408 and 429 are the server failing, not answering', () {
+      for (final status in [500, 502, 503, 504, 408, 429]) {
+        expect(isTransportOrServerFault(withStatus(status)), isTrue, reason: '$status');
+      }
+    });
+
+    test('a 4xx is an answer and must propagate', () {
+      for (final status in [400, 401, 403, 404, 409, 422]) {
+        expect(isTransportOrServerFault(withStatus(status)), isFalse, reason: '$status');
+      }
+    });
+
+    test('a non-Dio throwable is not something to paper over with a mirror row', () {
+      expect(isTransportOrServerFault(StateError('boom')), isFalse);
+    });
+  });
+
   group('everything else', () {
     test('a non-Dio throwable never surfaces its own text', () {
       final message = humanErrorMessage(StateError('Bad state: no element'));
