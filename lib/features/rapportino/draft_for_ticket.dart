@@ -1,5 +1,8 @@
 // dart format width=100
-import 'package:drift/drift.dart' show OrderingTerm;
+// `BooleanExpressionOperators` is what gives `Expression<bool>` its `&`. A `show` of only
+// `OrderingTerm` imports the query builder but not the operator that joins two conditions, and
+// the whole app fails to compile.
+import 'package:drift/drift.dart' show BooleanExpressionOperators, OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
