@@ -4,6 +4,8 @@
 // class doc comment) and its save gate (disabled until something changes, then a single PUT with
 // every current value).
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +15,9 @@ import 'package:tasktap_mobile/core/widgets/app_text_field.dart';
 import 'package:tasktap_mobile/core/widgets/app_toggle.dart';
 import 'package:tasktap_mobile/core/widgets/extension_fields_section.dart';
 import 'package:tasktap_mobile/data/extension_fields/extension_fields_api_client.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 
 class _FakeExtensionFieldsApiClient implements ExtensionFieldsApiClient {
   _FakeExtensionFieldsApiClient({required this.defs, required this.values});
@@ -70,6 +74,8 @@ Widget _wrap(ExtensionFieldsApiClient client) {
 }
 
 void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
   testWidgets('renders nothing when the tenant has no active definitions', (tester) async {
     final client = _FakeExtensionFieldsApiClient(defs: const [], values: const {});
     await tester.pumpWidget(_wrap(client));
@@ -144,5 +150,68 @@ void main() {
     await tester.pump();
 
     expect(client.savedValues, {'note': 'nuovo'});
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Offline rendering rule. The mirror carries values only for the entity types listed in
+  // `mirroredExtensionValueEntityTypes`; for every other type the section must render nothing
+  // rather than a card of blank read-only fields that claims the entity has no custom fields.
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  group('offline', () {
+    late AppDatabase db;
+
+    setUp(() => db = AppDatabase(NativeDatabase.memory()));
+    tearDown(() => db.close());
+
+    Future<void> seedDefinition(String entityType) => db
+        .into(db.extensionFieldDefinitions)
+        .insert(
+          ExtensionFieldDefinitionsCompanion.insert(
+            id: 'd1',
+            key: 'zona',
+            label: 'Zona',
+            entityType: entityType,
+            fieldType: 'text',
+          ),
+        );
+
+    Widget wrapOffline(String entityType) => ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        isOnlineProvider.overrideWithValue(false),
+        extensionFieldsApiClientProvider.overrideWithValue(
+          _FakeExtensionFieldsApiClient(defs: const [], values: const {}),
+        ),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: ExtensionFieldsSection(entityType: entityType, entityId: 'id-1'),
+        ),
+      ),
+    );
+
+    testWidgets('a mirrored type still renders, read-only', (tester) async {
+      await seedDefinition('ticket');
+
+      await tester.pumpWidget(wrapOffline('ticket'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Altri campi'), findsOneWidget);
+      expect(find.text('Sola lettura finché non torna la connessione.'), findsOneWidget);
+      expect(find.byType(AppButton), findsNothing);
+    });
+
+    testWidgets('a type the mirror does not carry renders nothing', (tester) async {
+      // A definition exists, so the section is not hidden by "this tenant configured no fields":
+      // it is hidden because a product's values never reach the device.
+      await seedDefinition('prodottoassistenza');
+
+      await tester.pumpWidget(wrapOffline('prodottoassistenza'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Altri campi'), findsNothing);
+      expect(find.byType(AppTextField), findsNothing);
+    });
   });
 }

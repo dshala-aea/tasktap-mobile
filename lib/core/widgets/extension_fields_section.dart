@@ -132,6 +132,15 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
 
   @override
   Widget build(BuildContext context) {
+    // Offline, a type whose values the mirror does not carry would render every field blank in
+    // read-only mode with a "sola lettura" note — which reads as "this asset has no custom fields"
+    // when the truth is that the values never reached this device. Rendering nothing is the honest
+    // answer; the fields come back with the connection, not with a stale empty copy.
+    if (!ref.watch(isOnlineProvider) &&
+        !mirroredExtensionValueEntityTypes.contains(widget.entityType)) {
+      return const SizedBox.shrink();
+    }
+
     final defsAsync = ref.watch(extensionFieldDefinitionsProvider(widget.entityType));
 
     return defsAsync.when(

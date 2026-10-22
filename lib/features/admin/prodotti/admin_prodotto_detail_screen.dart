@@ -193,6 +193,20 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
               SliverToBoxAdapter(child: _MatricoleSection(prodottoId: id)),
             ],
 
+            // ── Campi aggiuntivi (tenant-defined extension fields) ───────────
+            // Same placement as the web's ProdottoDetailPage: the tenant's own fields for an asset,
+            // saved by the section itself. Offline it renders nothing for this entity type — the
+            // mobile sync does not carry a product's values (see
+            // `mirroredExtensionValueEntityTypes`), and blank read-only fields would claim the
+            // asset simply has none.
+            if (id.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  child: ExtensionFieldsSection(entityType: 'prodottoassistenza', entityId: id),
+                ),
+              ),
+
             SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
           ],
         ),
