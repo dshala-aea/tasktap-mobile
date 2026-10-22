@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -25,9 +23,6 @@ import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_attachment_state.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_deletion.dart';
-import '../../data/timbratura/ticket_timer_sync_service.dart'
-    show ticketTimerRepositoryProvider, ticketTimerSyncServiceProvider;
-import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import '../cantiere/cantiere_providers.dart';
@@ -41,6 +36,7 @@ import 'ticket_detail_api_client.dart';
 import 'ticket_label.dart';
 import 'ticket_materiali_editor.dart';
 import 'ticket_providers.dart';
+import 'ticket_timer_actions.dart';
 import 'steps/step_assegnazione.dart' show techniciansProvider;
 import 'ticket_workflow_api_client.dart';
 import 'package:uuid/uuid.dart';
@@ -1890,54 +1886,23 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
     }
   }
 
-  /// Starts the clock online when the server can be reached, locally when it cannot.
-  ///
-  /// The online route is check-then-act and cannot be retried, which is why the offline path is a
-  /// different endpoint with a client-generated key (see `TicketTimerApiClient`). A failure that
-  /// carried a RESPONSE is a decision the server already made — "you already have an active
-  /// ticket work log" — and is surfaced; one with no response never reached it, so the session is
-  /// written to the device and queued.
-  Future<void> _startTimer() async {
-    final repo = ref.read(ticketTimerRepositoryProvider);
-    Future<void> locally() async {
-      final userId = await ref.read(internalUserIdProvider.future) ?? '';
-      await repo.start(ticketId: widget.ticketId, userId: userId);
-      unawaited(ref.read(ticketTimerSyncServiceProvider).syncNow());
-    }
+  // Both delegate to `ticket_timer_actions.dart`: the dashboard's running-clock strip drives the
+  // same clock and had its own copy that never learned the offline path. That file states the rule
+  // (a call that reached the server is a decision; everything else is written to the mirror and
+  // queued).
+  Future<void> _startTimer() => startTicketTimer(ref, widget.ticketId);
 
-    if (!ref.read(isOnlineProvider)) return locally();
-    try {
-      await ref.read(ticketWorkflowApiClientProvider).startTimer(widget.ticketId);
-    } on TicketWorkflowFailure catch (e) {
-      if (e.cause?.response != null) rethrow;
-      await locally();
-    }
-  }
-
+  /// Says so when the close exists only on this device, rather than leaving the technician to guess
+  /// whether the hours reached the office.
   Future<void> _stopTimer() async {
-    final repo = ref.read(ticketTimerRepositoryProvider);
-    // Closing in the mirror happens on BOTH paths: a session this device started lives nowhere
-    // else, and a server session that gets closed here is re-sent as a close, which the batch
-    // upsert accepts and applies idempotently.
-    Future<void> closeLocally() async {
-      final closed = await repo.stop(widget.ticketId);
-      if (closed != null) {
-        unawaited(ref.read(ticketTimerSyncServiceProvider).syncNow());
-      }
+    final queued = await stopTicketTimer(ref, widget.ticketId);
+    if (queued && mounted) {
+      showAppToast(
+        context,
+        message: 'Fermata registrata: verrà inviata al ritorno della connessione.',
+        tone: ToastTone.warning,
+      );
     }
-
-    if (!ref.read(isOnlineProvider)) return closeLocally();
-    try {
-      await ref.read(ticketWorkflowApiClientProvider).stopTimer(widget.ticketId);
-    } on TicketWorkflowFailure catch (e) {
-      // The mirror is closed either way: a technician who tapped "Ferma" ends the clock they see,
-      // and the queued close re-sends it through the idempotent upsert. A refused close still has
-      // to be told, so the failure is not swallowed.
-      await closeLocally();
-      if (e.cause?.response != null) rethrow;
-      return;
-    }
-    await closeLocally();
   }
 
   @override

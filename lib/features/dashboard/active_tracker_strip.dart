@@ -13,6 +13,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../data/worklogs/active_tracker_api_client.dart';
+import '../../features/ticket/ticket_timer_actions.dart';
 import '../../features/ticket/ticket_workflow_api_client.dart';
 import '../../data/timbratura/remote_shift.dart' show OfflineRemoteShiftException;
 import '../timbra/timbra_providers.dart';
@@ -141,7 +142,18 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
         case ActiveTrackerKind.ticket:
           final id = t.entityId;
           if (id == null) throw const TicketWorkflowFailure('Intervento non identificato.');
-          await ref.read(ticketWorkflowApiClientProvider).stopTimer(id);
+          // The same clock as the ticket detail's timer bar, through the same function: this
+          // branch used to call the API directly, so "Ferma" with no signal showed "Operazione non
+          // riuscita" and left the clock running. `stopTicketTimer` writes the close to the mirror
+          // and queues it, and says so when the close exists only on this device.
+          final queued = await stopTicketTimer(ref, id);
+          if (queued && mounted) {
+            showAppToast(
+              context,
+              message: 'Fermata registrata: verrà inviata al ritorno della connessione.',
+              tone: ToastTone.warning,
+            );
+          }
       }
     });
   }
