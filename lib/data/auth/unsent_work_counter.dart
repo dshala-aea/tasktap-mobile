@@ -16,7 +16,7 @@ import '../timbratura/work_session_repository.dart' show reconciledOrphanMarker;
 // end a session, because ending it wipes Drift and that work with it.
 //
 // Before this existed there was no such number anywhere. `pendingSyncCountProvider`
-// counts three of the six queues and feeds a badge; timbra and cantiere pending
+// counts three of the queues and feeds a badge; timbra, cantiere and ticket-timer pending
 // punches (the payroll data) were not in any count, and neither were voice
 // recordings. So the logout dialog could only say "Sei sicuro?" — and the audit's
 // F1 finding is what that costs: a technician who spent a day offline taps Esci
@@ -24,7 +24,7 @@ import '../timbratura/work_session_repository.dart' show reconciledOrphanMarker;
 //
 // Deliberately reads the tables directly rather than going through each queue's
 // repository:
-//   - no single repository spans all six queues, and adding a counting method to
+//   - no single repository spans all seven queues, and adding a counting method to
 //     each one would put this read model inside every write path's file;
 //   - the timbra/cantiere repositories expose only *today's* rows (a display
 //     concern), while this must count ANY day — a punch left pending over the
@@ -44,7 +44,7 @@ import '../timbratura/work_session_repository.dart' show reconciledOrphanMarker;
 //     them without a second clause.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// How much unsent work sits in each queue. A record rather than six getters so a
+/// How much unsent work sits in each queue. A record rather than seven getters so a
 /// caller (and a test) can assert the whole thing at once — a queue silently
 /// dropping out of the total is the regression this type exists to catch.
 class UnsentWorkBreakdown {
@@ -54,6 +54,7 @@ class UnsentWorkBreakdown {
     this.pendingAttachments = 0,
     this.workSessions = 0,
     this.cantierePunches = 0,
+    this.ticketTimers = 0,
     this.voiceRecordings = 0,
   });
 
@@ -72,6 +73,10 @@ class UnsentWorkBreakdown {
   /// Cantiere timbra events still `isPendingSync`, on ANY day.
   final int cantierePunches;
 
+  /// Ticket timer sessions still `isPendingSync`, on ANY day — hours the customer is billed from,
+  /// whether the row is a start that never left the phone or a close queued after a stop.
+  final int ticketTimers;
+
   /// Voice recordings sitting in the pending_voice directory (any owner — a
   /// shared device's wipe takes all of them).
   final int voiceRecordings;
@@ -82,6 +87,7 @@ class UnsentWorkBreakdown {
       pendingAttachments +
       workSessions +
       cantierePunches +
+      ticketTimers +
       voiceRecordings;
 
   bool get isEmpty => total == 0;
@@ -93,7 +99,8 @@ class UnsentWorkBreakdown {
   String toString() =>
       'UnsentWorkBreakdown(draftReports: $draftReports, pendingTickets: $pendingTickets, '
       'pendingAttachments: $pendingAttachments, workSessions: $workSessions, '
-      'cantierePunches: $cantierePunches, voiceRecordings: $voiceRecordings)';
+      'cantierePunches: $cantierePunches, ticketTimers: $ticketTimers, '
+      'voiceRecordings: $voiceRecordings)';
 }
 
 /// Counts every unsent queue on this device. See the file comment for what is and is not
@@ -157,12 +164,22 @@ class UnsentWorkCounter {
             ))
             .get();
 
+    // The ticket clock's queue: hours on a ticket are what the customer is billed from, and a row
+    // here is unsent whether it is a start that never left the phone or a close queued after a stop
+    // (see `TicketTimerRepository.stop`). `syncError` rows count too — a permanent refusal leaves
+    // them on the device, so a wipe still takes them.
+    final timers =
+        await (_db.select(_db.ticketTimers)
+              ..where((t) => t.isPendingSync.equals(true)))
+            .get();
+
     return UnsentWorkBreakdown(
       draftReports: drafts.length,
       pendingTickets: tickets.length,
       pendingAttachments: attachments.length,
       workSessions: sessions.length,
       cantierePunches: punches.length,
+      ticketTimers: timers.length,
       voiceRecordings: await _countVoiceRecordings(),
     );
   }
