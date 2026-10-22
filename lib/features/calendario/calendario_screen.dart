@@ -99,8 +99,8 @@ class CalendarioScreen extends ConsumerWidget {
                 // sync fills — same relationship cantieri_list_screen.dart has to its own
                 // provider. Giorno/Settimana/Lista each already wrap their content in a real
                 // Scrollable (SingleChildScrollView/ListView) that the pull gesture needs; Mese
-                // is a fixed month grid with none, so the gesture is a no-op there today, same as
-                // any other RefreshIndicator over non-scrolling content.
+                // is a fixed month grid with none of its own, so `_CalendarioBody` now gives it a
+                // one-entry always-scrollable wrapper — see that branch's comment.
                 child: RefreshIndicator(
                   onRefresh: () => refreshWithFeedback(context, ref),
                   child: _CalendarioBody(
@@ -435,12 +435,25 @@ class _CalendarioBody extends ConsumerWidget {
           }
         },
       ),
-      CalendarioView.mese => _MeseBody(
-        selectedDate: selectedDate,
-        onDayTap: (d) {
-          onSelectDate(d);
-          onSwitchView(CalendarioView.giorno);
-        },
+      // Mese is a fixed flex grid with no Scrollable of its own, which left the RefreshIndicator
+      // above with nothing to attach the pull gesture to — the one view where "trascina per
+      // aggiornare" silently did nothing at all. A one-entry scroll view (no scroll extent, but
+      // `AlwaysScrollableScrollPhysics`) gives the gesture a Scrollable while the `SizedBox` keeps
+      // the bounded height the month grid's own `Expanded` rows require.
+      CalendarioView.mese => LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: constraints.maxHeight,
+            child: _MeseBody(
+              selectedDate: selectedDate,
+              onDayTap: (d) {
+                onSelectDate(d);
+                onSwitchView(CalendarioView.giorno);
+              },
+            ),
+          ),
+        ),
       ),
       CalendarioView.lista => _ListaBody(
         onTapTicket: (id) => context.push(AppRoutes.ticketDetailPath(id)),

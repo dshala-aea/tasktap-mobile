@@ -83,51 +83,59 @@ class _ClientiListBody extends ConsumerWidget {
           (c.city?.toLowerCase().contains(q) ?? false);
     }).toList();
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Clienti',
-            subtitle: '${allCustomers.length} totali',
-            showBack: true,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: searchCtrl,
-            hint: 'Cerca per ragione sociale o città…',
-            onChanged: onQueryChanged,
-          ),
-        ),
-        if (customersAsync.isLoading)
-          const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(AppSpacing.xxxl),
-                child: CircularProgressIndicator(),
-              ),
-            ),
-          )
-        else if (filtered.isEmpty)
+    // Pull-to-refresh: this list *is* the synced mirror (`customersProvider`), so a sync is the
+    // whole refresh — there is no separate server read backing the screen. Added because the
+    // Cliente screens were the one list in the app with no way to ask for newer data at all: a
+    // technician whose customer had just been created in the office had to wait for the next
+    // background sync, with nothing on screen saying so.
+    return RefreshIndicator(
+      onRefresh: () => refreshWithFeedback(context, ref),
+      child: CustomScrollView(
+        slivers: [
           SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.users,
-              title: 'Nessun cliente',
-              body: 'I clienti sincronizzati appariranno qui.',
+            child: ScreenHeader(
+              title: 'Clienti',
+              subtitle: '${allCustomers.length} totali',
+              showBack: true,
             ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate((context, i) {
-              final customer = filtered[i];
-              return _ClienteRow(
-                customer: customer,
-                isLast: i == filtered.length - 1,
-              );
-            }, childCount: filtered.length),
           ),
-        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
-      ],
+          SliverToBoxAdapter(
+            child: AppSearchBar(
+              controller: searchCtrl,
+              hint: 'Cerca per ragione sociale o città…',
+              onChanged: onQueryChanged,
+            ),
+          ),
+          if (customersAsync.isLoading)
+            const SliverToBoxAdapter(
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.xxxl),
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            )
+          else if (filtered.isEmpty)
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.users,
+                title: 'Nessun cliente',
+                body: 'I clienti sincronizzati appariranno qui.',
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
+                final customer = filtered[i];
+                return _ClienteRow(
+                  customer: customer,
+                  isLast: i == filtered.length - 1,
+                );
+              }, childCount: filtered.length),
+            ),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        ],
+      ),
     );
   }
 }
