@@ -163,6 +163,37 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
   Widget _input(ChecklistAnswer shown) {
     switch (_c.type) {
       case ControlType.checkbox:
+        // A tick-box, not a Sì/No pair. The two control types store the same `boolValue`, but they
+        // mean different things and the office web renders them differently: Checkbox is a box you
+        // tick (an item verified, a task done), TrueFalse is a question answered yes or no. Mobile
+        // drew both as Sì/No, so a checklist authored as "tick when verified" asked the technician
+        // a question that had no question in it (ClickUp 12493t4r8yq).
+        //
+        // Unticking clears the answer — same rule as the Sì/No pair: pressing the state you are
+        // already in removes it rather than recording a "no" the technician never said.
+        final checked = shown.boolValue == true;
+        return Semantics(
+          checked: checked,
+          child: InkWell(
+            onTap: () => _commit(_answer(boolValue: checked ? null : true)),
+            borderRadius: BorderRadius.circular(8),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Row(
+                children: [
+                  _TickBox(checked: checked),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Eseguito',
+                      style: TextStyle(fontSize: 14, color: context.colors.ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
       case ControlType.trueFalse:
         return Row(
           children: [
@@ -234,6 +265,32 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
     controller: _text,
     onChanged: (v) => _commit(_answer(stringValue: v)),
   );
+}
+
+/// The box itself — 24dp, filled with a check when ticked. The whole row around it is the tap
+/// target (56dp), so this never has to be hit precisely with gloves on.
+class _TickBox extends StatelessWidget {
+  const _TickBox({required this.checked});
+
+  final bool checked;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        color: checked ? c.blue : Colors.transparent,
+        border: Border.all(color: checked ? c.blue : c.borderMedium, width: 2),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: checked
+          ? const Icon(LucideIcons.check, size: 16, color: Colors.white)
+          : const SizedBox.shrink(),
+    );
+  }
 }
 
 class _ChoiceButton extends StatelessWidget {

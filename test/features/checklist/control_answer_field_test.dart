@@ -48,8 +48,8 @@ void main() {
 
   List<ControlloRow> rows(ProviderContainer c) => c.read(reportEditorProvider('r1')).controlloRows;
 
-  testWidgets('Sì / No write only boolValue under the TicketControl id; tapping the active one clears', (tester) async {
-    final c = await pump(tester, control(ControlType.checkbox));
+  testWidgets('TrueFalse is a Sì / No pair; tapping the active one clears', (tester) async {
+    final c = await pump(tester, control(ControlType.trueFalse));
 
     await tester.tap(find.text('Sì'));
     await tester.pumpAndSettle();
@@ -64,6 +64,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(rows(c), isEmpty);
     expect(await db.select(db.reportControlli).get(), isEmpty);
+  });
+
+  testWidgets('a Checkbox is a tick box, not a Sì / No question (ClickUp 12493t4r8yq)', (tester) async {
+    final c = await pump(tester, control(ControlType.checkbox));
+
+    expect(find.text('Sì'), findsNothing, reason: 'Checkbox is ticked, not answered yes/no');
+    expect(find.text('No'), findsNothing);
+    expect(find.text('Eseguito'), findsOneWidget);
+
+    await tester.tap(find.text('Eseguito'));
+    await tester.pumpAndSettle();
+    expect(rows(c).single.id, 'ctrl-r1-c1');
+    expect((rows(c).single.boolValue, rows(c).single.stringValue), (true, null));
+
+    await tester.tap(find.text('Eseguito'));
+    await tester.pumpAndSettle();
+    expect(rows(c), isEmpty, reason: 'unticking removes the answer, it is not a recorded "no"');
   });
 
   testWidgets('number takes a decimal comma and keeps 0; clearing the field removes the row', (tester) async {
