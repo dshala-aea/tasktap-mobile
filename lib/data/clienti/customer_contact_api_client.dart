@@ -55,6 +55,16 @@ class CustomerContact {
   );
 }
 
+/// Thrown before a request is attempted, so the Referenti section can say "con la connessione"
+/// instead of painting the red "Impossibile caricare. Riprova." — a retry that cannot succeed.
+/// Same idiom as [ClienteOverviewOfflineException] on the customer's overview block.
+class CustomerContactsOfflineException implements Exception {
+  const CustomerContactsOfflineException();
+
+  @override
+  String toString() => 'Offline: referenti del cliente non disponibili.';
+}
+
 class CustomerContactApiClient {
   CustomerContactApiClient(this._dio);
 

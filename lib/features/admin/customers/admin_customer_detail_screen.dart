@@ -11,6 +11,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/clienti/cliente_overview_api_client.dart';
 import '../../../data/clienti/customer_contact_api_client.dart';
+import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../clienti/clienti_providers.dart';
 import '../admin_api_client.dart';
@@ -663,25 +664,47 @@ class _ContactsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final contactsAsync = ref.watch(customerContactsProvider(customerId));
+    // Adding a referente is a POST with no queue behind it, so the "+" only exists where it can
+    // work. Same rule the rest of the app follows for unqueued writes: hide the affordance rather
+    // than let the tap fail.
+    final online = ref.watch(isOnlineProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionTitle(
           title: 'Referenti',
-          action: IconButton(
-            icon: const Icon(LucideIcons.plus),
-            tooltip: 'Aggiungi referente',
-            onPressed: () => _openContactSheet(context, ref, customerId: customerId, contact: null),
-          ),
+          action: online
+              ? IconButton(
+                  icon: const Icon(LucideIcons.plus),
+                  tooltip: 'Aggiungi referente',
+                  onPressed: () =>
+                      _openContactSheet(context, ref, customerId: customerId, contact: null),
+                )
+              : null,
         ),
         contactsAsync.when(
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) =>
-              AppSectionError(onRetry: () => ref.invalidate(customerContactsProvider(customerId))),
+          // Contacts have no mirror in the sync payload, so offline there is nothing to show and
+          // nothing a retry could fix. A quiet line beats the red section error: this section is
+          // on the customer page a technician opens straight from a ticket.
+          error: (e, _) => e is CustomerContactsOfflineException
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                    vertical: AppSpacing.md,
+                  ),
+                  child: Text(
+                    'Referenti disponibili con la connessione.',
+                    style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+                  ),
+                )
+              : AppSectionError(
+                  onRetry: () => ref.invalidate(customerContactsProvider(customerId)),
+                ),
           data: (contacts) {
             if (contacts.isEmpty) {
               return const EmptyState(

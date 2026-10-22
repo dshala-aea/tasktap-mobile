@@ -95,18 +95,22 @@ void main() {
         );
   }
 
-  Widget buildScreen(String customerId) => ProviderScope(
+  Widget buildScreen(String customerId, {bool online = true}) => ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(mockDio),
-      isOnlineProvider.overrideWithValue(true),
+      isOnlineProvider.overrideWithValue(online),
     ],
     child: MaterialApp(home: AdminCustomerDetailScreen(customerId: customerId)),
   );
 
-  Future<void> pumpScreen(WidgetTester tester, {String customerId = 'cust-1'}) async {
+  Future<void> pumpScreen(
+    WidgetTester tester, {
+    String customerId = 'cust-1',
+    bool online = true,
+  }) async {
     await tester.binding.setSurfaceSize(const Size(800, 2600));
-    await tester.pumpWidget(buildScreen(customerId));
+    await tester.pumpWidget(buildScreen(customerId, online: online));
     await tester.pumpAndSettle();
   }
 
@@ -207,6 +211,56 @@ void main() {
       await pumpScreen(tester);
 
       expect(find.text('Nessun contratto'), findsOneWidget);
+
+      await teardown(tester);
+    });
+  });
+
+  group('Referenti section', () {
+    // Technician reachable: the ticket detail's "Cliente" tap pushes this same screen
+    // (`ticket_detail_screen.dart`, `AppRoutes.clientiDetail`), so what it does with no signal is
+    // a field question, not an office-only one.
+    testWidgets('offline names the reason, with no dead retry and no add button', (tester) async {
+      await seedCustomer('cust-1');
+
+      await pumpScreen(tester, online: false);
+
+      expect(find.text('Referenti disponibili con la connessione.'), findsOneWidget);
+      // The red section error is for a failure a retry can fix; offline is neither.
+      expect(find.text('Impossibile caricare. Riprova.'), findsNothing);
+      expect(find.text('Riprova'), findsNothing);
+      // An unqueued POST: hide the affordance rather than let the tap fail.
+      expect(find.byTooltip('Aggiungi referente'), findsNothing);
+      // The point of the offline branch is that no request was attempted at all.
+      verifyNever(
+        () => mockDio.get<List<dynamic>>(any(that: contains('/contacts'))),
+      );
+
+      await teardown(tester);
+    });
+
+    testWidgets('a genuine failure keeps the section error and its retry', (tester) async {
+      await seedCustomer('cust-1');
+      when(
+        () => mockDio.get<List<dynamic>>('/api/customers/cust-1/contacts'),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/customers/cust-1/contacts'),
+          type: DioExceptionType.badResponse,
+          response: Response<dynamic>(
+            statusCode: 500,
+            requestOptions: RequestOptions(path: '/api/customers/cust-1/contacts'),
+          ),
+        ),
+      );
+
+      await pumpScreen(tester);
+
+      expect(find.text('Impossibile caricare. Riprova.'), findsOneWidget);
+      expect(find.text('Riprova'), findsOneWidget);
+      expect(find.text('Referenti disponibili con la connessione.'), findsNothing);
+      // Online the add affordance stays.
+      expect(find.byTooltip('Aggiungi referente'), findsOneWidget);
 
       await teardown(tester);
     });

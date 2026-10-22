@@ -10,6 +10,7 @@ import '../../core/theme/app_rack.dart';
 import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ferie/absence_request_api_client.dart';
+import '../../data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -29,7 +30,24 @@ class FeriePermessiListScreen extends ConsumerWidget {
       body: SafeArea(
         child: requestsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ErrorState(onRetry: () => ref.invalidate(myAbsenceRequestsProvider)),
+          // Offline is not a failure: nothing was attempted and retrying cannot help until the
+          // radio is back. Naming it as online-only (like Giacenze) beats the red "Impossibile
+          // caricare i dati" card, which reads as "your requests may be gone".
+          error: (e, _) => e is AbsenceRequestsOfflineException
+              ? UnavailableState(
+                  icon: LucideIcons.wifiOff,
+                  titolo: 'Ferie e permessi non disponibili offline',
+                  motivo:
+                      'Le tue richieste si leggono con la connessione. Una richiesta già '
+                      'inviata resta registrata sul server.',
+                  action: AppButton(
+                    label: 'Riprova',
+                    size: AppButtonSize.sm,
+                    fullWidth: false,
+                    onPressed: () => ref.invalidate(myAbsenceRequestsProvider),
+                  ),
+                )
+              : ErrorState(onRetry: () => ref.invalidate(myAbsenceRequestsProvider)),
           data: (items) => _FeriePermessiListBody(items: items),
         ),
       ),

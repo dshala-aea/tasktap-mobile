@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
+import '../sync/connectivity_provider.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AbsenceRequestApiClient — self-service ferie/permessi against
@@ -156,7 +157,24 @@ final absenceRequestApiClientProvider = Provider<AbsenceRequestApiClient>((ref) 
   return AbsenceRequestApiClient(ref.watch(dioProvider));
 });
 
+/// Thrown before a request is attempted, so the list can say "online only" rather than render the
+/// same red failure it shows for a 403 or a 500. Same idiom as [ClienteOverviewOfflineException].
+class AbsenceRequestsOfflineException implements Exception {
+  const AbsenceRequestsOfflineException();
+
+  @override
+  String toString() => 'Offline: ferie e permessi non disponibili.';
+}
+
 /// The current user's own requests, most relevant first (server sorts newest-created-first).
+///
+/// Online-only by design (see this file's header), so with no connection it throws
+/// [AbsenceRequestsOfflineException] before touching the network. That distinction is the whole
+/// point: the list renders a neutral "si leggono con la connessione" card for it, and keeps the
+/// red retry card for failures that a retry can actually fix.
 final myAbsenceRequestsProvider = FutureProvider.autoDispose<List<AbsenceRequestDto>>((ref) {
+  if (!ref.watch(isOnlineProvider)) {
+    throw const AbsenceRequestsOfflineException();
+  }
   return ref.watch(absenceRequestApiClientProvider).fetchMine();
 });
