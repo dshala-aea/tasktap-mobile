@@ -994,6 +994,16 @@ class CantierePunches extends Table {
   /// app ever asks for it.
   TextColumn get safetyNotes => text().nullable()();
 
+  /// The clock-in screen's rich fields. 'ingresso' only: they describe what was true on arrival,
+  /// and the server writes them when the punch is created, never on a later close. Before schema
+  /// 51 they travelled only through the online `start` call, so a technician who clocked in with no
+  /// signal lost the work order, the equipment, the crew size and the weather the office prices
+  /// the job from.
+  TextColumn get workOrderNumber => text().nullable()();
+  TextColumn get equipmentUsed => text().nullable()();
+  IntColumn get teamSize => integer().nullable()();
+  TextColumn get weatherConditions => text().nullable()();
+
   /// GPS the phone recorded at clock-out. 'uscita' only; [latitude]/[longitude] stay the arrival
   /// fix on 'ingresso'.
   RealColumn get departureLatitude => real().nullable()();
@@ -1482,7 +1492,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 50;
+  int get schemaVersion => 51;
 
   @override
   MigrationStrategy get migration {
@@ -2051,6 +2061,28 @@ class AppDatabase extends _$AppDatabase {
           }
           if (!await _columnExists(m.database, 'cantiere_punches', 'departure_longitude')) {
             await m.addColumn(cantierePunches, cantierePunches.departureLongitude);
+          }
+        }
+        if (from < 51) {
+          // The cantiere clock-in screen's rich fields, the counterpart of schema 50's clock-out
+          // set: the work order, the equipment used, the crew size and the weather. They reached
+          // the server only through the online `start` call, so an offline clock-in arrived with
+          // none of them — silently, since nothing on the device asked again.
+          //
+          // Same `PRAGMA table_info` guard as 50, for the same reason: a device that already
+          // carries one of these columns must not die on `duplicate column name` before the app
+          // opens.
+          if (!await _columnExists(m.database, 'cantiere_punches', 'work_order_number')) {
+            await m.addColumn(cantierePunches, cantierePunches.workOrderNumber);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'equipment_used')) {
+            await m.addColumn(cantierePunches, cantierePunches.equipmentUsed);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'team_size')) {
+            await m.addColumn(cantierePunches, cantierePunches.teamSize);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'weather_conditions')) {
+            await m.addColumn(cantierePunches, cantierePunches.weatherConditions);
           }
         }
       },

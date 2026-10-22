@@ -14,13 +14,12 @@
 //     secondary "Altri dettagli" affordance for the occasional rich fields.
 //   - If an active session exists: shows session info + a "Timbra uscita
 //     cantiere" button.
-//   - OFFLINE-FIRST: the online start/end endpoints are tried first (they are
-//     the only path that carries the full rich-field set — see
-//     cantiere_worklog_api_client.dart's own doc comment on why the offline
-//     batch endpoint is narrower); a network-unreachable failure falls back
-//     to a local Drift queue (`cantiere_punches`, via
-//     CantiereSessionRepository) that CantiereTimbraSyncService pushes once
-//     connectivity returns. "Am I on site" is derived primarily from that
+//   - OFFLINE-FIRST: the online start/end endpoints are tried first; either
+//     way the same rich fields travel (the batch endpoint carries both sets
+//     since schema 51 — see cantiere_worklog_api_client.dart's own doc
+//     comment). A network-unreachable failure falls back to a local Drift
+//     queue (`cantiere_punches`, via CantiereSessionRepository) that
+//     CantiereTimbraSyncService pushes once connectivity returns. "Am I on site" is derived primarily from that
 //     local queue — see cantiereActiveSessionProvider below — so the screen
 //     stays usable with no signal at all, matching the personal Timbra
 //     screen's own offline model.
@@ -740,8 +739,8 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 
     try {
       final client = ref.read(cantiereWorklogApiClientProvider);
-      // Online-first: the only path that carries the full rich-field set (see this file's own
-      // header comment).
+      // Online-first: the ordinary route, and the one that answers synchronously. The offline
+      // fallback below carries the same rich fields (see this file's own header comment).
       await client.startCantiere(
         StartCantiereRequest(
           cantiereId: cantiere.id,
@@ -778,9 +777,10 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       }
     } on DioException catch (e) {
       if (isOfflineFailure(e)) {
-        // Not reachable — queue locally instead of failing the punch outright. The batch upsert
-        // this syncs through only carries description among the rich fields (see
-        // cantiere_worklog_api_client.dart); the rest are captured for the online path only.
+        // Not reachable — queue locally instead of failing the punch outright. Since schema 51 the
+        // batch upsert this syncs through carries the clock-in rich fields too (see
+        // cantiere_worklog_api_client.dart), so the offline path no longer submits a poorer record
+        // than the online one.
         await ref
             .read(cantiereSessionRepositoryProvider)
             .addEvent(
@@ -793,6 +793,10 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
               description: _description,
               latitude: location?.lat,
               longitude: location?.lng,
+              workOrderNumber: _workOrderNumber,
+              equipmentUsed: _equipmentUsed,
+              teamSize: _teamSize,
+              weatherConditions: _weatherConditions,
             );
         unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
         if (mounted) {

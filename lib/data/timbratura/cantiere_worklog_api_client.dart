@@ -36,12 +36,10 @@ import '../api/dio_client.dart';
 // module's own idempotent batch endpoint (CantiereWorkLogController.MobileSessions). Field names
 // match CantiereMobileSessionDto (backend) verbatim — see test/contract/openapi.snapshot.json's
 // CantiereMobileSessionDto schema, which is what request_body_contract_test.dart checks this
-// against. Deliberately narrower than [StartCantiereRequest]: the backend's batch DTO does not
-// carry workOrderNumber/equipmentUsed/teamSize/weatherConditions, so those rich fields only reach
-// the server via the online start/end path; see cantiere_timbra_screen.dart's
-// online-first-with-local-fallback comment for how the two paths are reconciled. The clock-out
-// screen's own fields (safety note, departure GPS) ARE carried, like the description — a
-// technician who clocked out with no signal used to lose what they wrote about site safety.
+// against. It carries both screens' rich fields: the clock-out set (safety note, departure GPS)
+// and the clock-in set (work order, equipment, crew size, weather). The clock-in four are arrival
+// data the server writes only when the punch is created, so a queued close that arrives late never
+// puts back a value the office has since corrected.
 
 /// One cantiere punch as the device recorded it, ready for the batch upsert.
 class CantiereMobileSessionDto {
@@ -59,6 +57,10 @@ class CantiereMobileSessionDto {
     this.departureLatitude,
     this.departureLongitude,
     this.safetyNotes,
+    this.workOrderNumber,
+    this.equipmentUsed,
+    this.teamSize,
+    this.weatherConditions,
   });
 
   final String clientId;
@@ -77,6 +79,13 @@ class CantiereMobileSessionDto {
   final double? departureLongitude;
   final String? safetyNotes;
 
+  /// Clock-in fields — the same ones [StartCantiereRequest] sends: what the technician recorded on
+  /// arrival. The server writes them when the punch is created and never on a later close.
+  final String? workOrderNumber;
+  final String? equipmentUsed;
+  final int? teamSize;
+  final String? weatherConditions;
+
   /// CantiereWorkLogTypeEnum: Site=0, Travel=1, Setup=2.
   final int workLogType;
 
@@ -94,6 +103,10 @@ class CantiereMobileSessionDto {
     if (departureLatitude != null) 'departureLatitude': departureLatitude,
     if (departureLongitude != null) 'departureLongitude': departureLongitude,
     if (safetyNotes != null) 'safetyNotes': safetyNotes,
+    if (workOrderNumber != null) 'workOrderNumber': workOrderNumber,
+    if (equipmentUsed != null) 'equipmentUsed': equipmentUsed,
+    if (teamSize != null) 'teamSize': teamSize,
+    if (weatherConditions != null) 'weatherConditions': weatherConditions,
   };
 }
 

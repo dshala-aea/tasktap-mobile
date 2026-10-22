@@ -188,6 +188,10 @@ class CantiereTimbraSyncService {
             departureLatitude: i.departureLatitude,
             departureLongitude: i.departureLongitude,
             safetyNotes: i.safetyNotes,
+            workOrderNumber: i.workOrderNumber,
+            equipmentUsed: i.equipmentUsed,
+            teamSize: i.teamSize,
+            weatherConditions: i.weatherConditions,
           ),
         )
         .toList();

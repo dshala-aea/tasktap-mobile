@@ -41,6 +41,10 @@ abstract interface class ICantiereSessionRepository {
   /// fields, meaningful only on 'uscita'. [description] carries the clock-out screen's own note
   /// on an 'uscita' row, and wins over the opener's when the interval is assembled — the online
   /// `end` route overwrites the row's Description the same way.
+  ///
+  /// [workOrderNumber]/[equipmentUsed]/[teamSize]/[weatherConditions] are the clock-in screen's
+  /// rich fields, meaningful only on 'ingresso'. The server writes them when the punch is created
+  /// and never on a later close, so they are arrival data by definition.
   Future<void> addEvent({
     required String id,
     required DateTime eventTime,
@@ -54,6 +58,10 @@ abstract interface class ICantiereSessionRepository {
     String? safetyNotes,
     double? departureLatitude,
     double? departureLongitude,
+    String? workOrderNumber,
+    String? equipmentUsed,
+    int? teamSize,
+    String? weatherConditions,
   });
 
   /// Stream of today's events in chronological order.
@@ -142,6 +150,10 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
     String? safetyNotes,
     double? departureLatitude,
     double? departureLongitude,
+    String? workOrderNumber,
+    String? equipmentUsed,
+    int? teamSize,
+    String? weatherConditions,
   }) async {
     await _db
         .into(_db.cantierePunches)
@@ -159,6 +171,10 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
             safetyNotes: Value(safetyNotes),
             departureLatitude: Value(departureLatitude),
             departureLongitude: Value(departureLongitude),
+            workOrderNumber: Value(workOrderNumber),
+            equipmentUsed: Value(equipmentUsed),
+            teamSize: Value(teamSize),
+            weatherConditions: Value(weatherConditions),
           ),
         );
   }
@@ -251,6 +267,10 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
             endTime: i.endTime?.toUtc(),
             latitude: i.latitude,
             longitude: i.longitude,
+            workOrderNumber: i.workOrderNumber,
+            equipmentUsed: i.equipmentUsed,
+            teamSize: i.teamSize,
+            weatherConditions: i.weatherConditions,
           ),
     ];
   }

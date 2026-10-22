@@ -23906,6 +23906,37 @@
               "string"
             ],
             "description": "The safety note typed on the clock-out screen. Also mirrored from\nEndCantiereWorkLogRequest: without it a technician who clocked out with no\nnetwork lost what they wrote about site safety, on the one screen whose whole point is\nrecording it."
+          },
+          "workOrderNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The clock-in screen's rich fields, mirrored from <see cref=\"!:StartCantiereRequest\" />. They are\narrival data — written when the punch is created and never rewritten afterwards — so a\ntechnician who clocked in without signal no longer loses the work order, the equipment, the\ncrew size and the weather the office prices the job from."
+          },
+          "equipmentUsed": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "See WorkOrderNumber."
+          },
+          "teamSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "See WorkOrderNumber.",
+            "format": "int32"
+          },
+          "weatherConditions": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "See WorkOrderNumber."
           }
         },
         "description": "Request model for starting cantiere work."

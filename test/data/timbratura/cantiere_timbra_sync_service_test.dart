@@ -37,6 +37,10 @@ class _FakeRepo implements ICantiereSessionRepository {
     String? safetyNotes,
     double? departureLatitude,
     double? departureLongitude,
+    String? workOrderNumber,
+    String? equipmentUsed,
+    int? teamSize,
+    String? weatherConditions,
   }) async {}
 
   @override
@@ -155,6 +159,10 @@ CantierePunche _cp(
   String? safetyNotes,
   double? departureLatitude,
   double? departureLongitude,
+  String? workOrderNumber,
+  String? equipmentUsed,
+  int? teamSize,
+  String? weatherConditions,
 }) => CantierePunche(
   id: id,
   eventType: type,
@@ -167,6 +175,10 @@ CantierePunche _cp(
   safetyNotes: safetyNotes,
   departureLatitude: departureLatitude,
   departureLongitude: departureLongitude,
+  workOrderNumber: workOrderNumber,
+  equipmentUsed: equipmentUsed,
+  teamSize: teamSize,
+  weatherConditions: weatherConditions,
 );
 
 void main() {
@@ -249,6 +261,43 @@ void main() {
       expect(dto.safetyNotes, 'area recintata');
       expect(dto.departureLatitude, 45.4660);
       expect(dto.departureLongitude, 9.1880);
+    });
+
+    /// The clock-in half of the same rule: a technician who clocked in with no signal used to
+    /// arrive at the office with no work order, no equipment, no crew size and no weather — the
+    /// fields the job is priced from.
+    test('the clock-in fields ride on the opening DTO', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+      final events = [
+        _cp(
+          'id-1',
+          'ingresso',
+          t1,
+          cantiereId: 'cant-1',
+          customerId: 'cust-1',
+          workOrderNumber: 'OL-2026-118',
+          equipmentUsed: 'piattaforma aerea',
+          teamSize: 3,
+          weatherConditions: 'pioggia leggera',
+        ),
+        _cp('id-2', 'uscita', t2),
+      ];
+      final repo = _FakeRepo(events);
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      final dto = api.calls[0][0];
+      expect(dto.workOrderNumber, 'OL-2026-118');
+      expect(dto.equipmentUsed, 'piattaforma aerea');
+      expect(dto.teamSize, 3);
+      expect(dto.weatherConditions, 'pioggia leggera');
+      // ...and on the wire, where the server reads them.
+      final json = dto.toJson();
+      expect(json['workOrderNumber'], 'OL-2026-118');
+      expect(json['teamSize'], 3);
     });
 
     test('active interval has null endTime in DTO', () async {

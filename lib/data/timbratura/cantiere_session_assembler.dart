@@ -32,6 +32,10 @@ class CantiereWorkInterval {
     this.safetyNotes,
     this.departureLatitude,
     this.departureLongitude,
+    this.workOrderNumber,
+    this.equipmentUsed,
+    this.teamSize,
+    this.weatherConditions,
   });
 
   /// Stable identifier derived from the opening event's id.
@@ -62,12 +66,21 @@ class CantiereWorkInterval {
   final double? departureLatitude;
   final double? departureLongitude;
 
+  /// The clock-in screen's fields, carried from the opening ('ingresso') event — arrival data, the
+  /// server writes them only when the punch is created. Null when the technician filled none in.
+  final String? workOrderNumber;
+  final String? equipmentUsed;
+  final int? teamSize;
+  final String? weatherConditions;
+
   @override
   String toString() =>
       'CantiereWorkInterval(clientId: $clientId, cantiereId: $cantiereId, '
       'customerId: $customerId, ticketId: $ticketId, start: $startTime, end: $endTime, '
       'lat: $latitude, lng: $longitude, safetyNotes: $safetyNotes, '
-      'departureLat: $departureLatitude, departureLng: $departureLongitude)';
+      'departureLat: $departureLatitude, departureLng: $departureLongitude, '
+      'workOrder: $workOrderNumber, equipment: $equipmentUsed, teamSize: $teamSize, '
+      'weather: $weatherConditions)';
 }
 
 // ── Assembler ─────────────────────────────────────────────────────────────────
@@ -101,6 +114,10 @@ List<CantiereWorkInterval> assembleCantiereIntervals(
   DateTime? openStart;
   double? openLatitude;
   double? openLongitude;
+  String? openWorkOrderNumber;
+  String? openEquipmentUsed;
+  int? openTeamSize;
+  String? openWeatherConditions;
 
   /// [endTime] is null when the interval must stay open (see [businessDateOf] above).
   ///
@@ -135,6 +152,11 @@ List<CantiereWorkInterval> assembleCantiereIntervals(
         safetyNotes: endTime == null ? null : closing?.safetyNotes,
         departureLatitude: endTime == null ? null : closing?.departureLatitude,
         departureLongitude: endTime == null ? null : closing?.departureLongitude,
+        // Arrival data: unchanged by the close, whichever way the interval ends.
+        workOrderNumber: openWorkOrderNumber,
+        equipmentUsed: openEquipmentUsed,
+        teamSize: openTeamSize,
+        weatherConditions: openWeatherConditions,
       ),
     );
     openClientId = null;
@@ -145,6 +167,10 @@ List<CantiereWorkInterval> assembleCantiereIntervals(
     openStart = null;
     openLatitude = null;
     openLongitude = null;
+    openWorkOrderNumber = null;
+    openEquipmentUsed = null;
+    openTeamSize = null;
+    openWeatherConditions = null;
   }
 
   for (final e in events) {
@@ -168,6 +194,10 @@ List<CantiereWorkInterval> assembleCantiereIntervals(
         openStart = t;
         openLatitude = e.latitude;
         openLongitude = e.longitude;
+        openWorkOrderNumber = e.workOrderNumber;
+        openEquipmentUsed = e.equipmentUsed;
+        openTeamSize = e.teamSize;
+        openWeatherConditions = e.weatherConditions;
 
       case 'uscita':
         closeOpen(t, closing: e);
@@ -199,6 +229,10 @@ List<CantiereWorkInterval> assembleCantiereIntervals(
         endTime: null,
         latitude: openLatitude,
         longitude: openLongitude,
+        workOrderNumber: openWorkOrderNumber,
+        equipmentUsed: openEquipmentUsed,
+        teamSize: openTeamSize,
+        weatherConditions: openWeatherConditions,
       ),
     );
   }
