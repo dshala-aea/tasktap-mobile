@@ -1248,18 +1248,34 @@ class SyncService {
   ///
   /// Upsert only; the prune runs in `_pruneToScope` against `scope.ticketWorkLogs`, which is the
   /// server's authoritative set. A server row that carries a `clientId` is the confirmed copy of a
-  /// session this device may still be holding as pending — matching on that id is what stops the
-  /// Ore tab from showing the same session twice once the batch upload lands.
+  /// session this device may still be holding as pending.
+  ///
+  /// A row with an unsent change is left strictly alone — see the guard in the loop.
   Future<void> _applyTicketTimers(SyncResultDto payload) async {
     for (final w in payload.ticketWorkLogs) {
       final clientId = w.clientId;
-      if (clientId != null) {
-        // The queued copy has been accepted: drop it before inserting the server's row, so the
-        // display keeps one entry and stops counting the session as unsent.
-        await (db.delete(db.ticketTimers)..where(
-          (t) => t.clientId.equals(clientId) & t.isPendingSync.equals(true),
-        )).go();
-      }
+
+      // An unsent change outranks the server's copy of the same session.
+      //
+      // The stop path is why: `TicketTimerRepository.stop` marks the row pending and leaves the
+      // server's session open until the push lands. A sync arriving first used to overwrite that
+      // row with `endUtc: null` — or, when the session was born on this phone, delete it outright
+      // before inserting the server's still-running copy. `isPendingSync: false` also took it out
+      // of the push sweep, so the stop was gone for good and the clock came back on screen with
+      // nothing said. The push is retried on every reconnect, and on success
+      // `TicketTimerRepository.markSynced` adopts the server's id and clears the flag, so the
+      // server's copy wins on the next sync once there is nothing unsent.
+      final pendingLocal =
+          await (db.select(db.ticketTimers)..where(
+                (t) =>
+                    (clientId == null
+                        ? t.id.equals(w.id)
+                        : (t.id.equals(w.id) | t.clientId.equals(clientId))) &
+                    t.isPendingSync.equals(true),
+              ))
+              .get();
+      if (pendingLocal.isNotEmpty) continue;
+
       await db
           .into(db.ticketTimers)
           .insertOnConflictUpdate(
