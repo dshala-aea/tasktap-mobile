@@ -19,6 +19,7 @@ import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
+import 'package:tasktap_mobile/data/attachments/attachment_content_cache.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -86,6 +87,10 @@ Widget _buildDetail({
   // platform implementation in a widget test. Only the three upload tests need it (they tap
   // Galleria/Fotocamera); every other test leaves it unresolved and never reads it.
   CaptureStore? captureStore,
+  // The attachment cache resolves its root through `getApplicationDocumentsDirectory()` — another
+  // channel with no platform implementation in a widget test. Only the two tap-to-open tests need
+  // it; every other test never opens an attachment.
+  AttachmentContentCache? attachmentCache,
 }) {
   return ProviderScope(
     overrides: [
@@ -96,6 +101,8 @@ Widget _buildDetail({
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
       if (captureStore != null)
         captureStoreProvider.overrideWith((ref) async => captureStore),
+      if (attachmentCache != null)
+        attachmentContentCacheProvider.overrideWithValue(attachmentCache),
     ],
     child: MaterialApp(home: TicketDetailScreen(ticketId: ticketId)),
   );
@@ -237,6 +244,7 @@ void main() {
     // async provider chain the same room to resolve without waiting for an animation that, by
     // design, never stops.
     bool settle = true,
+    AttachmentContentCache? attachmentCache,
   }) async {
     await tester.pumpWidget(
       _buildDetail(
@@ -246,6 +254,7 @@ void main() {
         dio: dio,
         isOnline: isOnline,
         captureStore: captureStore,
+        attachmentCache: attachmentCache,
       ),
     );
     await tester.pump();
@@ -1074,7 +1083,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Sostituzione valvola'), findsOneWidget);
-      expect(find.text('Inviato'), findsOneWidget, reason: 'the mirror stato, by name');
+      // The row renders `StatusPill`, which is a `StatusStamp` — the stamp device upper-cases its
+      // label (same as the Rapportini list's 'BOZZA'/'INVIATA' assertions).
+      expect(find.text('INVIATO'), findsOneWidget, reason: 'the mirror stato, by name');
       expect(find.text('Rapportini non ancora sul telefono'), findsNothing);
       expect(find.text('Nessun rapportino'), findsNothing);
       await resetAndDispose(tester);
@@ -1269,6 +1280,12 @@ void main() {
   });
 
   group('TicketDetailScreen — Allegati tab (index 3)', () {
+    // Somewhere real for `AttachmentContentCache` to write, so a tap-to-open test exercises the
+    // download path instead of dying on the path_provider channel.
+    late Directory scratchDir;
+    setUp(() => scratchDir = Directory.systemTemp.createTempSync('tt-attachments-'));
+    tearDown(() => scratchDir.deleteSync(recursive: true));
+
     final attachmentsJson = [
       {
         'id': 'att-1',
@@ -1317,9 +1334,29 @@ void main() {
         ),
       );
 
-      await pump(tester, dio: dio, isOnline: true);
+      // A cache rooted in a temp directory: the app's own root loader is
+      // `getApplicationDocumentsDirectory()`, which has no platform implementation here, so the
+      // viewer's FutureBuilder would never complete and the spinner would animate forever.
+      final cache = AttachmentContentCache(
+        dio: dio,
+        rootLoader: () async => scratchDir,
+      );
+
+      await pump(tester, dio: dio, isOnline: true, attachmentCache: cache);
       await tapTab(tester, 'Allegati');
-      await tester.tap(find.text('foto1.jpg'));
+      // The cache's hit/miss path touches dart:io (`Directory.exists`, the write-then-rename),
+      // and real I/O never resolves inside `testWidgets`' fake-async zone — the viewer's
+      // FutureBuilder would sit on `CircularProgressIndicator` until `pumpAndSettle` timed out.
+      // So the tap, the frame that BUILDS the pushed viewer (that frame is what starts the
+      // future), and the wait all happen inside `runAsync` — the shape already used in
+      // step_riepilogo_signature_test.dart. A bare `Future.delayed` outside runAsync cannot
+      // help: at that point the future does not exist yet.
+      await tester.runAsync(() async {
+        await tester.tap(find.text('foto1.jpg'));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+      });
       await tester.pumpAndSettle();
 
       // The pushed screen's AppBar repeats the filename as its title. Its own copy is the only
@@ -1361,9 +1398,23 @@ void main() {
         ),
       ).thenThrow(Exception('boom'));
 
-      await pump(tester, dio: dio, isOnline: true);
+      final cache = AttachmentContentCache(
+        dio: dio,
+        rootLoader: () async => scratchDir,
+      );
+
+      await pump(tester, dio: dio, isOnline: true, attachmentCache: cache);
       await tapTab(tester, 'Allegati');
-      await tester.tap(find.text('certificato.pdf'));
+      // Same fake-async/real-I/O rule as the image test above: `cache.lookup` calls
+      // `Directory.exists` before the (stubbed) request, so that await never resolves under the
+      // fake clock and the toast never appears. Tap, pump and wait inside `runAsync`, then let
+      // the frame that mounts the toast be pumped there as well.
+      await tester.runAsync(() async {
+        await tester.tap(find.text('certificato.pdf'));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+      });
       await tester.pumpAndSettle();
 
       expect(find.byType(InteractiveViewer), findsNothing);

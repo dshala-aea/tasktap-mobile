@@ -22,6 +22,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart' show isOnlineProvider;
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/data/reports/server_report_api_client.dart';
@@ -51,7 +52,16 @@ class _NoopSync extends SyncNotifier {
   Future<void> performSync() async {}
 }
 
-Widget _buildRouted({required AppDatabase db, required ServerReportApiClient api}) {
+/// [online] is the connectivity answer the screen reads. It defaults to true here because
+/// `isOnlineProvider` is false whenever `connectivity_plus` has no plugin answer, and the offline
+/// branch of `importServerReportForEditing` then promotes the mirrored row instead of fetching —
+/// a different flow, with its own refusal (`ServerReportNotMirroredException`) for a header-only
+/// row. These tests are about the fetch-and-mirror flow, so they must say they are online.
+Widget _buildRouted({
+  required AppDatabase db,
+  required ServerReportApiClient api,
+  bool online = true,
+}) {
   final router = GoRouter(
     routes: [
       GoRoute(path: '/', builder: (_, _) => const RapportiniListScreen()),
@@ -70,6 +80,7 @@ Widget _buildRouted({required AppDatabase db, required ServerReportApiClient api
       appDatabaseProvider.overrideWithValue(db),
       syncProvider.overrideWith((ref) => _NoopSync(db)),
       serverReportApiClientProvider.overrideWithValue(api),
+      isOnlineProvider.overrideWithValue(online),
     ],
     child: MaterialApp.router(routerConfig: router),
   );

@@ -138,7 +138,9 @@ final localTicketTimersProvider = StreamProvider.autoDispose<List<ActiveTracker>
           ActiveTracker(
             kind: ActiveTrackerKind.ticket,
             id: row.readTable(db.ticketTimers).id,
-            startedAtUtc: start,
+            // Re-stamped to UTC: the column documents UTC instants and Drift hands a
+            // `DateTimeColumn` back as a LOCAL-kind `DateTime` for the same moment.
+            startedAtUtc: start.toUtc(),
             label: row.readTableOrNull(db.tickets)?.title,
             entityId: row.readTable(db.ticketTimers).ticketId,
           ),

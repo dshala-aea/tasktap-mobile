@@ -392,10 +392,14 @@ final ticketWorklogsProvider = FutureProvider.autoDispose
         final List<TicketWorkLogDto> server;
         try {
           server = await api.fetchWorklogs(ticketId);
-        } catch (_) {
-          // The read failed although the radio says online: the mirror is what there is, below.
+        } on DioException {
+          // The request died although the radio says online: the mirror is what there is.
           return _ticketWorklogsFromMirror(rows);
         }
+        // Anything that is NOT a failed request (a payload this app cannot parse —
+        // `parseDateOnlyOrThrow`) propagates: the tab's error state must say the hours could not
+        // be loaded. Swallowing it would render "Nessuna ora registrata" over a server that does
+        // hold hours.
         final merged = [...pending.map(ticketWorkLogFromTimer), ...server];
         merged.sortNewestFirst();
         return merged;
@@ -513,8 +517,11 @@ final contractByIdProvider = FutureProvider.autoDispose
         'name': row.name,
         'customerId': row.customerId,
         'locationId': row.locationId,
-        'startDate': row.startDate.toIso8601String(),
-        'endDate': row.endDate?.toIso8601String(),
+        // Re-stamped to UTC: this map stands in for the server's own contract JSON, whose dates
+        // carry a `Z`. Drift hands a `DateTimeColumn` back as a LOCAL-kind instant, so without the
+        // conversion a mirrored row's date can read as a different day from the server's copy.
+        'startDate': row.startDate.toUtc().toIso8601String(),
+        'endDate': row.endDate?.toUtc().toIso8601String(),
         'isActive': row.isActive,
         'numero': row.numero,
         'codice': row.codice,

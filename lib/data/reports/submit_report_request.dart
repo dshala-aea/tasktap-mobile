@@ -15,6 +15,8 @@ class SubmitReportRequest {
     this.expectedVersion,
     this.scheduleId,
     this.ticketId,
+    this.cantiereId,
+    this.consumedCantiereWorkLogClientIds = const [],
     required this.locationId,
     required this.title,
     this.details,
@@ -58,6 +60,23 @@ class SubmitReportRequest {
 
   /// Optional ticket the report belongs to.
   final String? ticketId;
+
+  /// Optional cantiere (worksite) this rapportino belongs to — P2-6.
+  ///
+  /// The server has no other way to learn it on this path: `Report.CantiereId` used to be settable
+  /// only by `POST /api/reports/from-cantiere-worklogs`, so a rapportino drafted from a cantiere
+  /// while offline arrived with no cantiere at all. Omitted when null, which the server reads as
+  /// "this client does not own the field" and leaves whatever it has in place (an older build
+  /// submitting a server-created draft therefore cannot detach it).
+  final String? cantiereId;
+
+  /// The device's own cantiere punch ids (`CantiereWorkLog.ClientId` server-side) whose hours this
+  /// rapportino already carries — P2-6.
+  ///
+  /// The server stamps exactly these rows as consumed (`CantiereWorkLog.ReportStaffId`) so a later
+  /// cantiere-originated rapportino cannot count the same hours again. Ids the server cannot
+  /// resolve yet (punch still queued) are ignored, never an error; always sent, empty included.
+  final List<String> consumedCantiereWorkLogClientIds;
 
   /// Location of the intervention (required).
   final String locationId;
@@ -129,6 +148,8 @@ class SubmitReportRequest {
     if (expectedVersion != null) 'expectedVersion': expectedVersion,
     if (scheduleId != null) 'scheduleId': scheduleId,
     if (ticketId != null) 'ticketId': ticketId,
+    if (cantiereId != null) 'cantiereId': cantiereId,
+    'consumedCantiereWorkLogClientIds': consumedCantiereWorkLogClientIds,
     'locationId': locationId,
     'title': title,
     if (details != null) 'details': details,

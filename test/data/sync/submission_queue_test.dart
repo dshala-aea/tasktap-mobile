@@ -42,6 +42,7 @@ Future<void> _insertDraft(
   String? ticketId,
   bool richiedeSecondoIntervento = false,
   String? expectedVersion,
+  String? cantiereId,
   // unique suffix for child rows when inserting multiple drafts in same test
   String? suffix,
 }) async {
@@ -64,6 +65,7 @@ Future<void> _insertDraft(
           technicianSignatureAllegatoId: Value(technicianSigId),
           richiedeSecondoIntervento: Value(richiedeSecondoIntervento),
           expectedVersion: Value(expectedVersion),
+          cantiereId: Value(cantiereId),
         ),
       );
 
@@ -243,6 +245,134 @@ void main() {
       await queue.retry('report-1');
 
       expect(capturedKey, 'stable-key-abc');
+    });
+  });
+
+  group('SubmissionQueue._buildRequest — cantiere claims (P2-6)', () {
+    test('carries the draft\'s cantiereId and the phone punches it claims as consumed', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-1',
+        cantiereId: 'cant-1',
+      );
+
+      final asked = <String>[];
+      final q = SubmissionQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        claimedCantiereWorkLogClientIds: (cantiereId) async {
+          asked.add(cantiereId);
+          return ['punch-a', 'punch-b'];
+        },
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await q.processAll();
+
+      expect(asked, ['cant-1'], reason: 'the claim source is asked about this draft\'s cantiere');
+      expect(capturedRequest!.cantiereId, 'cant-1');
+      expect(capturedRequest!.consumedCantiereWorkLogClientIds, ['punch-a', 'punch-b']);
+      // The wire name matters as much as the field: `cantiereId` is what the server binds.
+      final json = capturedRequest!.toJson();
+      expect(json['cantiereId'], 'cant-1');
+      expect(json['consumedCantiereWorkLogClientIds'], ['punch-a', 'punch-b']);
+    });
+
+    test('a draft with no cantiere never asks the claim source', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+
+      var asked = 0;
+      final q = SubmissionQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        claimedCantiereWorkLogClientIds: (_) async {
+          asked++;
+          return ['punch-a'];
+        },
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await q.processAll();
+
+      expect(asked, 0);
+      expect(capturedRequest!.cantiereId, isNull);
+      expect(capturedRequest!.consumedCantiereWorkLogClientIds, isEmpty);
+      expect(
+        capturedRequest!.toJson().containsKey('cantiereId'),
+        isFalse,
+        reason: 'null cantiere means "this client does not own the field", so it is not sent',
+      );
+    });
+
+    test('a failing claim source never blocks the submit', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-1',
+        cantiereId: 'cant-1',
+      );
+
+      final q = SubmissionQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        claimedCantiereWorkLogClientIds: (_) async => throw StateError('local db closed'),
+      );
+
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async => const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        ),
+      );
+
+      await q.processAll();
+
+      final draft = await repo.getDraft('report-1');
+      expect(
+        draft!.submissionState,
+        'submitted',
+        reason:
+            'consumption bookkeeping is corrective, not a precondition: a local read failure '
+            'must not strand a finished rapportino',
+      );
     });
   });
 

@@ -48,9 +48,15 @@ class _FakeCantiereReportApiClient extends CantiereReportApiClient {
   /// zero-worklogs fallback also covers a network drop between the two calls.
   Object? throwsOnFetchStaff;
 
+  /// When set, [createFromCantiereWorklogs] throws it instead of returning an id — used to prove
+  /// the P2-6 offline fallback (transport/5xx) and that a 4xx still surfaces to the technician.
+  Object? throwsOnCreate;
+
   @override
   Future<String> createFromCantiereWorklogs(String cantiereId) async {
     calledWithCantiereId = cantiereId;
+    final failure = throwsOnCreate;
+    if (failure != null) throw failure;
     return reportIdToReturn;
   }
 
@@ -198,6 +204,47 @@ Future<String?> _callCreateCantiereReportDraft(
   await tester.tap(find.text('go'));
   await tester.pumpAndSettle();
   return result;
+}
+
+/// Same as [_callCreateCantiereReportDraft], but catches whatever the call throws instead of
+/// letting it escape the button callback (an uncaught async error would fail the test rather than
+/// let it assert on the failure, which is the point for the 4xx case).
+Future<(String?, Object?)> _callCantiereDraftCapturingError(
+  WidgetTester tester,
+  ProviderContainer container, {
+  required String cantiereId,
+  required String cantiereName,
+}) async {
+  String? result;
+  Object? error;
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Consumer(
+          builder: (context, ref, _) {
+            return ElevatedButton(
+              onPressed: () async {
+                try {
+                  result = await createCantiereReportDraft(
+                    ref,
+                    cantiereId: cantiereId,
+                    cantiereName: cantiereName,
+                  );
+                } catch (e) {
+                  error = e;
+                }
+              },
+              child: const Text('go'),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('go'));
+  await tester.pumpAndSettle();
+  return (result, error);
 }
 
 DraftReportsCompanion _rejectedReportCompanion({String id = 'report-1'}) =>
@@ -560,6 +607,105 @@ void main() {
   });
 
   group('createCantiereReportDraft', () {
+    testWidgets('degrades to a local draft when the create call cannot reach the server (P2-6)', (
+      tester,
+    ) async {
+      final api = _FakeCantiereReportApiClient()
+        ..throwsOnCreate = DioException.connectionError(
+          requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+          reason: 'offline',
+        );
+      final container = buildContainer(user: _testUser, cantiereReportApi: api);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateCantiereReportDraft(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
+
+      // The create POST was attempted, then the fallback minted its own draft.
+      expect(api.calledWithCantiereId, 'cant-1');
+      expect(id, isNotNull);
+      expect(
+        _guidPattern.hasMatch(id!),
+        isTrue,
+        reason: 'a submit needs a real GUID — the offline draft is what it will be sent under',
+      );
+
+      final draft = await repo.getDraft(id);
+      expect(draft, isNotNull);
+      expect(
+        draft!.cantiereId,
+        'cant-1',
+        reason:
+            'the cantiere link is what makes the submit claim this site\'s punches; losing it '
+            'offline would silently detach the rapportino from the worksite',
+      );
+      expect(draft.title, 'Rapportino — Cantiere Via Roma');
+      expect(draft.isLocalOnly, isTrue);
+      expect(draft.stato, 'Bozza');
+    });
+
+    testWidgets('a 5xx also degrades — the server faulting is not the technician\'s problem', (
+      tester,
+    ) async {
+      final api = _FakeCantiereReportApiClient()
+        ..throwsOnCreate = DioException(
+          requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+            statusCode: 503,
+          ),
+          type: DioExceptionType.badResponse,
+        );
+      final container = buildContainer(user: _testUser, cantiereReportApi: api);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateCantiereReportDraft(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
+
+      final draft = await repo.getDraft(id!);
+      expect(draft!.cantiereId, 'cant-1');
+    });
+
+    testWidgets('a 4xx still surfaces — the server answered, so a denial is not papered over', (
+      tester,
+    ) async {
+      final api = _FakeCantiereReportApiClient()
+        ..throwsOnCreate = DioException(
+          requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+            statusCode: 403,
+          ),
+          type: DioExceptionType.badResponse,
+        );
+      final container = buildContainer(user: _testUser, cantiereReportApi: api);
+      addTearDown(container.dispose);
+
+      final (id, error) = await _callCantiereDraftCapturingError(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
+
+      expect(
+        error,
+        isA<DioException>().having((e) => e.response?.statusCode, 'statusCode', 403),
+        reason:
+            '"non sei assegnato a questo cantiere" must reach the technician: a local draft '
+            'would only fail the same way later, with no explanation',
+      );
+      expect(id, isNull);
+    });
+
     testWidgets('reuses the backend-issued report id for the local draft', (tester) async {
       final api = _FakeCantiereReportApiClient(reportIdToReturn: 'server-report-1');
       final container = buildContainer(user: _testUser, cantiereReportApi: api);
