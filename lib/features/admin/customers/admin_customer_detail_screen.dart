@@ -769,28 +769,37 @@ class _ContactsSection extends ConsumerWidget {
                     leading: const RowIconTile(icon: LucideIcons.user),
                     title: c.name.isNotEmpty ? c.name : 'Referente',
                     subtitle: subtitleParts.isNotEmpty ? subtitleParts.join(' · ') : null,
-                    meta: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(LucideIcons.pencil, size: 18),
-                          tooltip: 'Modifica referente',
-                          onPressed: () =>
-                              _openContactSheet(context, ref, customerId: customerId, contact: c),
-                        ),
-                        IconButton(
-                          icon: const Icon(LucideIcons.trash2, size: 18),
-                          tooltip: 'Elimina referente',
-                          onPressed: () => _deleteContact(
-                            context,
-                            ref,
-                            customerId: customerId,
-                            contactId: c.id,
-                            name: c.name,
+                    // Edit and delete are POST/PUT/DELETE with no queue behind them, so they follow
+                    // the same rule as the "+": offline the affordance is hidden rather than left
+                    // to fail. The rows themselves stay — reading them is the point of the mirror.
+                    meta: !online
+                        ? null
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(LucideIcons.pencil, size: 18),
+                                tooltip: 'Modifica referente',
+                                onPressed: () => _openContactSheet(
+                                  context,
+                                  ref,
+                                  customerId: customerId,
+                                  contact: c,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(LucideIcons.trash2, size: 18),
+                                tooltip: 'Elimina referente',
+                                onPressed: () => _deleteContact(
+                                  context,
+                                  ref,
+                                  customerId: customerId,
+                                  contactId: c.id,
+                                  name: c.name,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
                     showDivider: entry.key < contacts.length - 1,
                   );
                 }).toList(),

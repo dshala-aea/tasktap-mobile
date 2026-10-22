@@ -249,8 +249,11 @@ void main() {
       expect(find.text('Titolare · 3331234567'), findsOneWidget);
       // Nothing was fetched: the cache is the answer, not a fallback.
       verifyNever(() => mockDio.get<List<dynamic>>(any(that: contains('/contacts'))));
-      // An unqueued POST: hide the affordance rather than let the tap fail.
+      // An unqueued POST: hide the affordance rather than let the tap fail — and the same rule for
+      // edit and delete, which would fail just as surely from a plant room.
       expect(find.byTooltip('Aggiungi referente'), findsNothing);
+      expect(find.byTooltip('Modifica referente'), findsNothing);
+      expect(find.byTooltip('Elimina referente'), findsNothing);
 
       await teardown(tester);
     });
