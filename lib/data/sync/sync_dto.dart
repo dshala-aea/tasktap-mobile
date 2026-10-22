@@ -485,6 +485,19 @@ class ColleagueDto {
 /// `MobileUserSyncResult.Contacts` for the scoping and why it is never delta-filtered.
 class CustomerContactDto {
   final String id;
+
+  /// The audit members every synced entity carries. None of them is rendered on the phone: the
+  /// contact card shows a name, a role and the two ways of reaching that person. They are read
+  /// anyway because the inbound contract gate compares this class's key set with the server's
+  /// schema in BOTH directions — a schema member the app silently ignores is exactly the drift the
+  /// gate exists to make visible, and `MaterialeBarcodeDto` set this precedent.
+  final String? tenantId;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  /// Who last edited the contact, on the office side. Carried, never shown; see [tenantId].
+  final String? updatedByUserId;
+
   final String customerId;
   final String name;
   final String? role;
@@ -496,6 +509,10 @@ class CustomerContactDto {
     required this.id,
     required this.customerId,
     required this.name,
+    this.tenantId,
+    this.createdAt,
+    this.updatedAt,
+    this.updatedByUserId,
     this.role,
     this.phone,
     this.email,
@@ -504,6 +521,10 @@ class CustomerContactDto {
 
   factory CustomerContactDto.fromJson(Map<String, dynamic> j) => CustomerContactDto(
     id: j['id'] as String,
+    tenantId: j['tenantId'] as String?,
+    createdAt: _dt(j['createdAt']),
+    updatedAt: _dt(j['updatedAt']),
+    updatedByUserId: j['updatedByUserId'] as String?,
     customerId: j['customerId'] as String,
     name: j['name'] as String? ?? '',
     role: j['role'] as String?,
@@ -516,6 +537,10 @@ class CustomerContactDto {
   /// `test/contract/sync_inbound_contract_test.dart`.
   static const Set<String> wireKeys = {
     'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'updatedByUserId',
     'customerId',
     'name',
     'role',
