@@ -350,6 +350,42 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('with nothing scheduled today, the heading names the week ahead, not Oggi', (
+      tester,
+    ) async {
+      // Programmato deliberately folds "later today" and "the next seven days" into one tier. On a
+      // clear day that left a list of next week's jobs sitting under a heading that read "Oggi",
+      // so a Thursday job looked like today's work (ClickUp 12493t4r40w).
+      final today = DateTime.now().toUtc();
+      final dayStart = DateTime.utc(today.year, today.month, today.day);
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-next-week',
+              tenantId: 'tenant-1',
+              createdAt: dayStart,
+              activityDate: dayStart.add(const Duration(days: 3)),
+              timeStartMinutes: 540,
+              timeEndMinutes: 660,
+              userId: 'u1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Manutenzione programmata',
+              description: '',
+            ),
+          );
+
+      await pumpDashboard(tester);
+
+      expect(find.text('Prossimi interventi'), findsOneWidget);
+      expect(find.text('Oggi'), findsNothing, reason: 'the list under it holds no work for today');
+      expect(find.text('Nessun intervento oggi.'), findsOneWidget);
+      expect(find.text('Manutenzione programmata'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('bell shows a dot when there are unread notifications', (tester) async {
       await pumpDashboard(tester);
 

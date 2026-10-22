@@ -119,4 +119,80 @@ void main() {
       await tester.pumpAndSettle();
     });
   });
+
+  group('WorkQueueSection today vs. the week ahead', () {
+    Future<void> insertSchedule(
+      AppDatabase db, {
+      required String id,
+      required DateTime activityDate,
+      required String title,
+      int statusId = 1,
+    }) {
+      final today = DateTime.now().toUtc();
+      final dayStart = DateTime.utc(today.year, today.month, today.day);
+      return db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: id,
+              tenantId: 'tenant-1',
+              createdAt: dayStart,
+              activityDate: activityDate,
+              timeStartMinutes: 540,
+              timeEndMinutes: 660,
+              userId: 'u1',
+              statusId: statusId,
+              locationId: 'loc-1',
+              title: title,
+              description: '',
+            ),
+          );
+    }
+
+    testWidgets('a clear day says so, above the work it does still list for the week ahead', (
+      tester,
+    ) async {
+      final today = DateTime.now().toUtc();
+      final dayStart = DateTime.utc(today.year, today.month, today.day);
+      // Nothing today, one job in three days. Programmato holds it either way; the point is that
+      // the technician can tell "no work today" from "these are today's jobs" without reading the
+      // dates on every row (ClickUp 12493t4r40w).
+      await insertSchedule(
+        db,
+        id: 'sched-later',
+        activityDate: dayStart.add(const Duration(days: 3)),
+        title: 'Manutenzione programmata',
+      );
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun intervento oggi.'), findsOneWidget);
+      expect(find.text('Manutenzione programmata'), findsOneWidget);
+      expect(find.text('PROGRAMMATO  1'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a day with work does not claim to be clear', (tester) async {
+      final today = DateTime.now().toUtc();
+      final dayStart = DateTime.utc(today.year, today.month, today.day);
+      await insertSchedule(
+        db,
+        id: 'sched-today',
+        activityDate: dayStart,
+        title: 'Intervento di oggi',
+      );
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Intervento di oggi'), findsOneWidget);
+      expect(find.text('Nessun intervento oggi.'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
 }

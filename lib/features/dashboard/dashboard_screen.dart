@@ -42,6 +42,8 @@ class _DashboardView extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final userName = user?.displayName ?? user?.email ?? 'Tecnico';
     final stats = ref.watch(dashboardStatsProvider);
+    // Only for the heading below: whether the queue under it is today's work or the week ahead.
+    final queue = ref.watch(workQueueProvider);
     final trackers = ref.watch(visibleTrackersProvider);
     final unreadNotifiche = ref.watch(notificheUnreadCountProvider);
 
@@ -126,7 +128,13 @@ class _DashboardView extends ConsumerWidget {
             // WorkQueueSection's own doc comment for the fuller reasoning and what this replaced.
             SliverToBoxAdapter(
               child: SectionTitle(
-                title: 'Oggi',
+                // "Oggi" over a list that only holds next week's jobs was the complaint: on a
+                // clear day the heading still said Oggi, so a PROGRAMMATO row dated Thursday read
+                // as if it were today's work (ClickUp 12493t4r40w). The heading now names the
+                // list it actually holds; the queue says why in one line of its own.
+                title: queue.nothingToday && queue.programmato.isNotEmpty
+                    ? 'Prossimi interventi'
+                    : 'Oggi',
                 trailing: stats.completedCount > 0
                     ? '${stats.completedCount} di ${stats.todayCount} completati'
                     : null,

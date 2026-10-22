@@ -62,7 +62,41 @@ class WorkQueueSection extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: sections),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // A clear day still fills this list, because PROGRAMMATO also carries the next seven
+          // days. Without this line the technician had to infer "nothing today" from the dates on
+          // the rows (ClickUp 12493t4r40w) — say it, then let the tier below be the week ahead.
+          if (q.nothingToday && q.programmato.isNotEmpty) const _NothingTodayNotice(),
+          ...sections,
+        ],
+      ),
+    );
+  }
+}
+
+/// One muted line saying today is clear, above a list that is therefore entirely future work.
+class _NothingTodayNotice extends StatelessWidget {
+  const _NothingTodayNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.xs, bottom: AppSpacing.sm),
+      child: Row(
+        children: [
+          Icon(LucideIcons.calendarOff, size: 16, color: c.inkMuted),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Nessun intervento oggi.',
+              style: TextStyle(fontFamily: 'Archivo', fontSize: 13, color: c.inkMuted),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

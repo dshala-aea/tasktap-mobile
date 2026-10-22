@@ -142,6 +142,15 @@ class WorkQueueBuckets {
 
   /// statusId == 5 or 6 (Completato/Chiuso) today.
   final List<Schedule> fatto;
+
+  /// Nothing at all is scheduled for today.
+  ///
+  /// Folding "later today" and "the next seven days" into one [programmato] tier is right for
+  /// triage, but it means a clear day still renders a list — of next week's jobs — under a
+  /// heading that used to read "Oggi". Both the dashboard's heading and the queue's own notice
+  /// ask this question, so it lives here rather than being re-derived from four lists in two
+  /// places. Cancelled jobs do not count as a day that has work in it.
+  bool get nothingToday => live.isEmpty && daFare == null && inAttesa.isEmpty && fatto.isEmpty;
 }
 
 final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
