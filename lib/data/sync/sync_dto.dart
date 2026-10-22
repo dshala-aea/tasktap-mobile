@@ -482,6 +482,23 @@ class CustomerDto {
   /// Absent from an older backend's payload, which reads as null: no pre-fill, never an error.
   final String? agentId;
 
+  /// Mobile number, distinct from the landline [phone] (`cellulare` on the wire).
+  final String? cellulare;
+
+  /// Codice Fiscale — `fiscalCode` on the wire, not `codiceFiscale`: the server entity overrides
+  /// its own name and the default camelCase policy would emit the wrong key. Null on an older
+  /// backend's payload, which is simply "unknown", never an error.
+  final String? fiscalCode;
+
+  /// Codice Destinatario SDI — `sdiCode` on the wire.
+  final String? sdiCode;
+
+  /// PEC address — `pec` on the wire (`PECEmail` on the entity).
+  final String? pec;
+
+  /// Province code (sigla) — `province` on the wire (`Provincia` on the entity).
+  final String? province;
+
   const CustomerDto({
     required this.id,
     required this.tenantId,
@@ -499,6 +516,11 @@ class CustomerDto {
     this.notes,
     this.isActive = true,
     this.agentId,
+    this.cellulare,
+    this.fiscalCode,
+    this.sdiCode,
+    this.pec,
+    this.province,
   });
 
   factory CustomerDto.fromJson(Map<String, dynamic> j) => CustomerDto(
@@ -518,6 +540,11 @@ class CustomerDto {
     notes: j['notes'] as String?,
     isActive: j['isActive'] as bool? ?? true,
     agentId: j['agentId'] as String?,
+    cellulare: j['cellulare'] as String?,
+    fiscalCode: j['fiscalCode'] as String?,
+    sdiCode: j['sdiCode'] as String?,
+    pec: j['pec'] as String?,
+    province: j['province'] as String?,
   );
 }
 

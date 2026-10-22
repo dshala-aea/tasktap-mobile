@@ -850,6 +850,13 @@ class SyncService {
               // Written even when null: the server's value is authoritative, so a customer whose
               // agent was removed must lose it here too.
               agentId: Value(c.agentId),
+              // Same rule for the fiscal identity and the mobile number: clearing PEC or SDI in the
+              // office must clear it on the phone, not leave the last value cached forever.
+              cellulare: Value(c.cellulare),
+              fiscalCode: Value(c.fiscalCode),
+              sdiCode: Value(c.sdiCode),
+              pec: Value(c.pec),
+              province: Value(c.province),
             ),
           );
     }
