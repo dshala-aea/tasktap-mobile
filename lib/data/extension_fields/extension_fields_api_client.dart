@@ -136,6 +136,15 @@ Future<List<ExtensionFieldDefinitionDto>> _mirroredDefinitions(
       .toList();
 }
 
+/// Entity types whose extension values ride inside the entity's own sync row — exactly the
+/// branches of [_mirroredValues] below.
+///
+/// Every other extensible type (products, customers, contracts, …) is mirrored as a reference row
+/// only, without its values, so offline its section would render every field empty. That reads as
+/// "the office recorded nothing" when it really means "these values never reached this device", so
+/// a host screen for one of those types must not render the section offline at all.
+const Set<String> mirroredExtensionValueEntityTypes = {'ticket', 'cantiere', 'report'};
+
 /// Values this device mirrored for one entity, or an empty map when it holds none.
 Future<Map<String, String>> _mirroredValues(
   AppDatabase db,
