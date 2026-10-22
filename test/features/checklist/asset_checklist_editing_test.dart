@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/widgets/app_checkbox.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
@@ -58,7 +59,8 @@ void main() {
 
     await tester.tap(find.text('Caldaia 1'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sì').first);
+    // The fixture's first ten controls are Checkbox — ticked, not answered Sì.
+    await tester.tap(find.byType(AppCheckbox).first);
     await tester.pumpAndSettle();
 
     final container = ProviderScope.containerOf(tester.element(find.byType(AssetChecklistScreen)));
@@ -75,7 +77,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(EditableControlTile), findsNWidgets(15));
 
-    await tester.tap(find.text('Sì').first);
+    await tester.tap(find.byType(AppCheckbox).first);
     await tester.pumpAndSettle();
 
     expect(find.byType(EditableControlTile), findsNWidgets(15), reason: 'the row does not vanish under the thumb');

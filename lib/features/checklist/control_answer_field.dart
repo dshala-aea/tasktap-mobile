@@ -162,7 +162,21 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
 
   Widget _input(ChecklistAnswer shown) {
     switch (_c.type) {
+      // A check, not a choice. `checkbox` used to share the Sì/No pair below, which made a tick
+      // read as one answer between two when it is really an assertion — and made the two control
+      // types indistinguishable on screen even though the catalogue and the web editor keep them
+      // apart.
       case ControlType.checkbox:
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: AppCheckbox(
+            value: shown.boolValue == true,
+            label: _c.label,
+            // Unticking writes `false`, matching the web editor: false is an answer (and the
+            // exception the checklist reports upstream), not "not yet answered".
+            onChanged: (v) => _commit(_answer(boolValue: v)),
+          ),
+        );
       case ControlType.trueFalse:
         return Row(
           children: [

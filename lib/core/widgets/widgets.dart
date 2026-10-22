@@ -1,5 +1,6 @@
 export 'app_button.dart';
 export 'app_card.dart';
+export 'app_checkbox.dart';
 export 'app_fab.dart';
 export 'attachment_viewer.dart';
 export 'app_search_bar.dart';
