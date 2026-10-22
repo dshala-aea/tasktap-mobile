@@ -1279,7 +1279,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       final existing = await editableDraftsForTicket(ref.read(appDatabaseProvider), ticketId);
       if (!mounted) return;
       if (existing.isNotEmpty) {
-        switch (await askAboutExistingDraft(context, drafts: existing)) {
+        // Built here rather than inline in the switch: this is the only use of `context`, and it now
+        // happens strictly before the await, so the mounted check above covers it.
+        final asking = askAboutExistingDraft(context, drafts: existing);
+        switch (await asking) {
           case ExistingDraftChoice.openExisting:
             if (!mounted) return;
             await openEditableDraft(context, ref, existing.first);

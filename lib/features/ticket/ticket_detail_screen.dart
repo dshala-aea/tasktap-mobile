@@ -533,7 +533,10 @@ class _TicketDetailBody extends ConsumerWidget {
     final existing = await editableDraftsForTicket(ref.read(appDatabaseProvider), ticket.id);
     if (!context.mounted) return;
     if (existing.isNotEmpty) {
-      switch (await askAboutExistingDraft(context, drafts: existing)) {
+      // Built here rather than inline in the switch: this is the only use of `context`, and it now
+      // happens strictly before the await, so the mounted check above covers it.
+      final asking = askAboutExistingDraft(context, drafts: existing);
+      switch (await asking) {
         case ExistingDraftChoice.openExisting:
           if (!context.mounted) return;
           await openEditableDraft(context, ref, existing.first);

@@ -99,7 +99,7 @@ void main() {
 
     testWidgets('names the existing draft rather than a bare count', (tester) async {
       final d = await one();
-      await host(tester, [d], (_) => null);
+      await host(tester, [d], (_) {});
       await tester.tap(find.text('go'));
       await tester.pumpAndSettle();
       expect(find.text('Bozza già presente'), findsOneWidget);
