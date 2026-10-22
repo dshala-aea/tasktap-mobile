@@ -187,6 +187,30 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
               ),
             ),
 
+            // ── Altri campi (extension fields) ───────────────────────────────
+            // The same tenant-configured section ticket, report and cantiere already carry — the
+            // asset was the one entity the technician opens on every visit and could not fill in.
+            // `prodottoassistenza` is the backend's entity-type key for an asset: it is in both
+            // ExtensionFieldsController's dispatch table and ExtensionEntityPermissions, whose
+            // write side is Contract.Write OR Ticket.Write, so a technician saving from the field
+            // is allowed by design rather than by accident.
+            //
+            // Needs a real asset: the values endpoint is PUT .../{id}/values, and this screen only
+            // ever shows one that exists. Renders nothing when the tenant configured no asset
+            // fields, which is most tenants most of the time.
+            if (id.isNotEmpty) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  child: ExtensionFieldsSection(
+                    entityType: 'prodottoassistenza',
+                    entityId: id,
+                  ),
+                ),
+              ),
+            ],
+
             // ── Matricole (Gap 3) ────────────────────────────────────────────
             if (id.isNotEmpty) ...[
               const SliverToBoxAdapter(child: SizedBox(height: 12)),

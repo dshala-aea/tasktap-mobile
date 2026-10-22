@@ -29,6 +29,74 @@ import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_detail_scr
 
 class MockDio extends Mock implements Dio {}
 
+/// Answers the extension-fields reads/writes the "Altri campi" section makes, and records what it
+/// was asked for — the entity-type key is the part worth pinning: an asset is
+/// `prodottoassistenza` to the backend, not `asset`.
+class _FakeExtensionFieldsApiClient implements ExtensionFieldsApiClient {
+  _FakeExtensionFieldsApiClient({required this.defs, required this.values});
+
+  final List<ExtensionFieldDefinitionDto> defs;
+  final Map<String, String> values;
+
+  String? definitionsEntityType;
+  (String, String)? valuesKey;
+  (String, String, Map<String, String>)? saved;
+
+  @override
+  Future<List<ExtensionFieldDefinitionDto>> fetchDefinitions(String entityType) async {
+    definitionsEntityType = entityType;
+    return defs;
+  }
+
+  @override
+  Future<Map<String, String>> fetchValues(String entityType, String entityId) async {
+    valuesKey = (entityType, entityId);
+    return values;
+  }
+
+  @override
+  Future<void> saveValues(String entityType, String entityId, Map<String, String> values) async {
+    saved = (entityType, entityId, values);
+    this.values
+      ..clear()
+      ..addAll(values);
+  }
+}
+
+/// Answers the extension-fields reads/writes the "Altri campi" section makes, and records what it
+/// was asked for — the entity-type key is the part worth pinning: an asset is
+/// `prodottoassistenza` to the backend, not `asset`.
+class _FakeExtensionFieldsApiClient implements ExtensionFieldsApiClient {
+  _FakeExtensionFieldsApiClient({required this.defs, required this.values});
+
+  final List<ExtensionFieldDefinitionDto> defs;
+  final Map<String, String> values;
+
+  String? definitionsEntityType;
+  (String, String)? valuesKey;
+  (String, String, Map<String, String>)? saved;
+
+  @override
+  Future<List<ExtensionFieldDefinitionDto>> fetchDefinitions(String entityType) async {
+    definitionsEntityType = entityType;
+    return defs;
+  }
+
+  @override
+  Future<Map<String, String>> fetchValues(String entityType, String entityId) async {
+    valuesKey = (entityType, entityId);
+    return values;
+  }
+
+  @override
+  Future<void> saveValues(String entityType, String entityId, Map<String, String> values) async {
+    saved = (entityType, entityId, values);
+    this.values
+      ..clear()
+      ..addAll(values);
+  }
+}
+
 Response<T> _ok<T>(T data, String path) =>
     Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
 
@@ -47,6 +115,7 @@ void main() {
 
   late AppDatabase db;
   late MockDio mockDio;
+  late _FakeExtensionFieldsApiClient extensionFields;
 
   const prodotto = {
     'id': 'prod-1',
@@ -59,6 +128,23 @@ void main() {
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
     mockDio = MockDio();
+    // One tenant-configured asset field, the ordinary case: an admin added a custom field and the
+    // technician has already filled it in once.
+    extensionFields = _FakeExtensionFieldsApiClient(
+      defs: [
+        const ExtensionFieldDefinitionDto(
+          id: 'def-1',
+          key: 'codice_impianto',
+          label: 'Codice impianto',
+          entityType: 'prodottoassistenza',
+          fieldType: 'text',
+          isRequired: false,
+          showInCard: false,
+          sortOrder: 0,
+        ),
+      ],
+      values: {'codice_impianto': 'IMP-9'},
+    );
 
     when(
       () => mockDio.get<List<dynamic>>('/api/prodottoassistenza/prod-1/matricole'),
@@ -121,14 +207,15 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),
         isOnlineProvider.overrideWithValue(true),
+        extensionFieldsApiClientProvider.overrideWithValue(extensionFields),
         cachedEntitlementProvider.overrideWith((ref) => Future.value(entitlement)),
       ],
       child: MaterialApp.router(routerConfig: router),
     );
   }
 
-  Future<void> openDetail(WidgetTester tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 1600));
+  Future<void> openDetail(WidgetTester tester, {Size size = const Size(800, 1600)}) async {
+    await tester.binding.setSurfaceSize(size);
     await tester.pumpWidget(buildHarness());
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apri dettaglio'));
@@ -211,6 +298,38 @@ void main() {
         findsNothing,
       );
       expect(find.byTooltip('Modifica'), findsNothing);
+      await teardown(tester);
+    });
+  });
+
+  group('altri campi (asset extension fields)', () {
+    testWidgets('reads the asset\'s fields under the backend\'s prodottoassistenza key', (
+      tester,
+    ) async {
+      // The asset was the one entity a technician opens on every visit and could not fill in; the
+      // key matters because the API knows it as `prodottoassistenza`, not `asset`
+      // (ClickUp 12493t4r8yg).
+      await openDetail(tester, size: const Size(800, 2800));
+
+      expect(extensionFields.definitionsEntityType, 'prodottoassistenza');
+      expect(extensionFields.valuesKey, ('prodottoassistenza', 'prod-1'));
+      expect(find.text('Altri campi'), findsOneWidget);
+      expect(find.text('Codice impianto'), findsOneWidget);
+      expect(find.text('IMP-9'), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('saves what the technician typed against that same key', (tester) async {
+      await openDetail(tester, size: const Size(800, 2800));
+
+      await tester.enterText(find.byType(TextFormField), 'IMP-10');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Salva'));
+      await tester.pumpAndSettle();
+
+      expect(extensionFields.saved, isNotNull);
+      expect((extensionFields.saved!.$1, extensionFields.saved!.$2), ('prodottoassistenza', 'prod-1'));
+      expect(extensionFields.saved!.$3, {'codice_impianto': 'IMP-10'});
       await teardown(tester);
     });
   });
