@@ -7,7 +7,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
-import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../altro/notifiche_provider.dart';
 import '../timbra/timbra_providers.dart';
@@ -54,20 +53,10 @@ class _DashboardView extends ConsumerWidget {
         // performSync() itself never throws — SyncNotifier catches internally and parks the
         // failure in SyncState.status/errorMessage (see sync_service.dart) — so a pull-to-refresh
         // that hit a real failure used to just stop spinning with zero feedback, the technician
-        // left to guess whether it actually synced. Same showAppToast/ToastTone.error convention
-        // this screen's own _ClockInPrompt already uses for a failed punch below, and
-        // ai_draft_action.dart's AI-generation errors use the same way.
-        onRefresh: () async {
-          await ref.read(syncProvider.notifier).performSync();
-          if (!context.mounted) return;
-          if (ref.read(syncProvider).status == SyncStatus.error) {
-            showAppToast(
-              context,
-              message: 'Aggiornamento non riuscito. Riprova.',
-              tone: ToastTone.error,
-            );
-          }
-        },
+        // left to guess whether it actually synced. That check now lives in
+        // `refreshWithFeedback`, shared with every other pull-to-refresh in the app so the
+        // feedback cannot drift back out of one screen at a time.
+        onRefresh: () => refreshWithFeedback(context, ref),
         child: CustomScrollView(
           slivers: [
             // ── Hero ──────────────────────────────────────────────────────────

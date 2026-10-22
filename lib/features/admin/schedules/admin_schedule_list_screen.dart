@@ -272,7 +272,7 @@ class _AdminScheduleListBody extends ConsumerWidget {
     final filtered = allSchedules.where(matchesFilters).toList();
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      onRefresh: () => refreshWithFeedback(context, ref),
       child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(

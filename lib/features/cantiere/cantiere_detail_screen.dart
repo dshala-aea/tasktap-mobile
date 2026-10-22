@@ -19,7 +19,6 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
-import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../rapportino/create_draft.dart';
 import '../ticket/ticket_providers.dart' show commessaByIdProvider;
@@ -80,7 +79,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
               // Scrollable (a RefreshIndicator only fires over one), same reasoning as that
               // screen's own doc comment.
               child: RefreshIndicator(
-                onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                onRefresh: () => refreshWithFeedback(context, ref),
                 child: cantiereAsync.when(
                   loading: () => ListView(
                     physics: const AlwaysScrollableScrollPhysics(),

@@ -9,7 +9,6 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
-import '../../data/sync/sync_service.dart';
 import 'calendario_providers.dart';
 import 'views/giorno_view.dart';
 import 'views/lista_view.dart';
@@ -103,7 +102,7 @@ class CalendarioScreen extends ConsumerWidget {
                 // is a fixed month grid with none, so the gesture is a no-op there today, same as
                 // any other RefreshIndicator over non-scrolling content.
                 child: RefreshIndicator(
-                  onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                  onRefresh: () => refreshWithFeedback(context, ref),
                   child: _CalendarioBody(
                     view: view,
                     selectedDate: selectedDate,

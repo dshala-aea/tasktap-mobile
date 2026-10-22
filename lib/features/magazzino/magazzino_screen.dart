@@ -13,7 +13,6 @@ import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
 import '../../data/materiali/materiale_barcode_lookup.dart';
-import '../../data/sync/sync_service.dart';
 import 'magazzino_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -110,8 +109,10 @@ class _MagazzinoBody extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () async {
         // Articoli is the offline mirror (synced); Giacenze/Movimenti are online-only reads —
-        // pull-to-refresh needs to cover both, same as the rest of the app's list screens.
-        await ref.read(syncProvider.notifier).performSync();
+        // pull-to-refresh needs to cover both, same as the rest of the app's list screens. The
+        // sync half goes through the shared helper so a failed pull says so instead of stopping
+        // the spinner in silence.
+        await refreshWithFeedback(context, ref);
         ref.invalidate(giacenzeProvider);
         ref.invalidate(movimentiProvider);
       },

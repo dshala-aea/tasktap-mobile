@@ -90,7 +90,7 @@ class _AdminCantiereListBody extends ConsumerWidget {
     }).toList();
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      onRefresh: () => refreshWithFeedback(context, ref),
       child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
