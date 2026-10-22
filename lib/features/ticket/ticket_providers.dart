@@ -187,19 +187,19 @@ final schedulesForTicketProvider = StreamProvider.autoDispose
 /// An empty mirror throws [TicketDetailOfflineException] rather than returning `[]`: the device
 /// cannot tell "this ticket has no reports" from "none have reached this phone yet", and an empty
 /// list would state the first as fact.
+/// Online the two sources are MERGED, not switched between. The server is the only place that
+/// knows about reports this phone has never seen, but it is the last place to know about the ones
+/// this phone just made: a report created offline (or still queued for sending) has no server row
+/// yet, so an online-only read made it disappear from its own ticket the moment the radio came
+/// back — the work was queued and correct, and the tab said the ticket had no reports.
 final ticketReportsProvider = FutureProvider.autoDispose
     .family<List<TicketReportSummary>, String>((ref, ticketId) async {
-      if (ref.watch(isOnlineProvider)) {
-        final api = ref.watch(ticketDetailApiClientProvider);
-        return api.fetchReportsForTicket(ticketId);
-      }
       final db = ref.watch(appDatabaseProvider);
       final rows = await (db.select(db.draftReports)
             ..where((r) => r.ticketId.equals(ticketId))
             ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
           .get();
-      if (rows.isEmpty) throw const TicketDetailOfflineException();
-      return rows
+      final local = rows
           .map(
             (r) => TicketReportSummary.fromMirror(
               id: r.id,
@@ -209,6 +209,19 @@ final ticketReportsProvider = FutureProvider.autoDispose
             ),
           )
           .toList();
+
+      if (!ref.watch(isOnlineProvider)) {
+        if (local.isEmpty) throw const TicketDetailOfflineException();
+        return local;
+      }
+
+      final api = ref.watch(ticketDetailApiClientProvider);
+      final server = await api.fetchReportsForTicket(ticketId);
+      // Mirrored server rows carry the server's own id, so they collide with the server list and
+      // drop out here; what survives is exactly the local-only work.
+      final serverIds = {for (final r in server) r.id};
+      return [...server, ...local.where((r) => !serverIds.contains(r.id))]
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     });
 
 /// Prodotti in assistenza the ticket covers (Prodotti compartment): the ticket's coverage ids from

@@ -199,6 +199,13 @@ String rapportinoStatusLabel(DraftReport draft) {
   if (sub == DraftSubmissionState.failed) {
     return kFailedSendStatusLabel;
   }
+  // A row the queue has not sent yet — finished, Invia pressed, waiting for signal or for the
+  // reconnect flush — is not an untouched draft, and "Bozza" said exactly that: the technician who
+  // had just submitted the morning's work saw it listed as unsent. Riepilogo already names this
+  // state; the list said nothing until the draft was reopened.
+  if (sub == DraftSubmissionState.readyToSubmit) {
+    return 'In attesa di invio';
+  }
   return 'Bozza';
 }
 
