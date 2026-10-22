@@ -34,3 +34,27 @@ String formatLastSyncLabel(DateTime? lastSync, {DateTime? now}) {
   // date was set wrong) is still a real date, and a negative "N giorni fa" would be nonsense.
   return DateFormat('dd/MM/yyyy').format(local);
 }
+
+/// The same fact for a one-line status strip, where the sentence form does not fit: "oggi 08:42",
+/// "ieri 08:42", "3 gg fa", "12/10/26", "mai".
+///
+/// Same rules and the same calendar-day arithmetic as [formatLastSyncLabel] — this is that answer
+/// said shorter, never a different answer. Read by the offline banner, which is where a technician
+/// looking at a list actually asks whether it is current.
+String formatLastSyncCompact(DateTime? lastSync, {DateTime? now}) {
+  if (lastSync == null) return 'mai';
+
+  final local = lastSync.toLocal();
+  final today = (now ?? DateTime.now()).toLocal();
+  final daysAgo = DateTime.utc(
+    today.year,
+    today.month,
+    today.day,
+  ).difference(DateTime.utc(local.year, local.month, local.day)).inDays;
+
+  final time = DateFormat('HH:mm').format(local);
+  if (daysAgo == 0) return 'oggi $time';
+  if (daysAgo == 1) return 'ieri $time';
+  if (daysAgo > 1 && daysAgo < 7) return '$daysAgo gg fa';
+  return DateFormat('dd/MM/yy').format(local);
+}

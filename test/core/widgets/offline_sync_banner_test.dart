@@ -7,11 +7,17 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/widgets/offline_sync_banner.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/pending_sync_count_provider.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart' show lastSyncProvider;
 
 Widget _wrap(List<Override> overrides) => ProviderScope(
   overrides: overrides,
   child: const MaterialApp(home: Scaffold(body: OfflineSyncBanner())),
 );
+
+/// The offline line ends with "aggiornato …", read from [lastSyncProvider]. Always overridden:
+/// leaving it out would have the banner reach `appDatabaseProvider` and open the real database
+/// inside a widget test.
+Override _lastSync(DateTime? at) => lastSyncProvider.overrideWith((ref) => Stream.value(at));
 
 void main() {
   testWidgets('renders nothing when online and fully synced', (tester) async {
@@ -19,6 +25,7 @@ void main() {
       _wrap([
         connectivityProvider.overrideWith(() => _FakeConnectivity(true)),
         pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+        _lastSync(DateTime(2026, 10, 23, 8, 42)),
       ]),
     );
     await tester.pump();
@@ -26,6 +33,8 @@ void main() {
     expect(find.byType(OfflineSyncBanner), findsOneWidget);
     expect(find.text('Offline'), findsNothing);
     expect(find.textContaining('in coda'), findsNothing);
+    // Online means refreshing: the freshness line belongs to the offline branch only.
+    expect(find.textContaining('aggiornato'), findsNothing);
   });
 
   testWidgets('shows an offline indicator when disconnected', (tester) async {
@@ -33,6 +42,7 @@ void main() {
       _wrap([
         connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
         pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+        _lastSync(DateTime(2026, 10, 23, 8, 42)),
       ]),
     );
     await tester.pump();
@@ -45,11 +55,12 @@ void main() {
       _wrap([
         connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
         pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 3, failed: 0))),
+        _lastSync(DateTime(2026, 10, 23, 8, 42)),
       ]),
     );
     await tester.pump();
 
-    expect(find.text('Offline · 3 in coda'), findsOneWidget);
+    expect(find.textContaining('3 in coda'), findsOneWidget);
   });
 
   testWidgets('shows the failed count alongside offline, taking precedence over pending', (
@@ -59,12 +70,45 @@ void main() {
       _wrap([
         connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
         pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 1, failed: 2))),
+        _lastSync(DateTime(2026, 10, 23, 8, 42)),
       ]),
     );
     await tester.pump();
 
-    expect(find.text('Offline · 2 da riprovare'), findsOneWidget);
+    expect(find.textContaining('2 da riprovare'), findsOneWidget);
     expect(find.textContaining('in coda'), findsNothing);
+  });
+
+  // The question the banner already answers — "is what I'm looking at current?" — answered
+  // where it is asked, instead of several taps away in Impostazioni → Sistema.
+  testWidgets('offline, also says when the data was last refreshed', (tester) async {
+    final now = DateTime.now();
+    final lastSync = DateTime(now.year, now.month, now.day, 8, 42);
+
+    await tester.pumpWidget(
+      _wrap([
+        connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
+        pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+        _lastSync(lastSync),
+      ]),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('Offline'), findsOneWidget);
+    expect(find.textContaining('aggiornato oggi 08:42'), findsOneWidget);
+  });
+
+  testWidgets('offline on a phone that has never synced says so', (tester) async {
+    await tester.pumpWidget(
+      _wrap([
+        connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
+        pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+        _lastSync(null),
+      ]),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('aggiornato mai'), findsOneWidget);
   });
 
   testWidgets('shows a pending count when online but items are queued', (tester) async {
