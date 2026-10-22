@@ -212,8 +212,17 @@ void main() {
       await tester.tap(find.byTooltip('Aggiungi matricola'));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextFormField).first, 'SN-002');
-      await tester.tap(find.text('Salva'));
+      // The sheet's own fields, not the page's: the page now also has a text field (the
+      // extension-fields card), so an unscoped `.first` types into the wrong one and the save
+      // silently returns early on an empty numero.
+      final sheetFields = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(TextFormField),
+      );
+      await tester.enterText(sheetFields.first, 'SN-002');
+      await tester.tap(
+        find.descendant(of: find.byType(BottomSheet), matching: find.text('Salva')),
+      );
       await tester.pumpAndSettle();
 
       final captured = verify(
@@ -279,10 +288,20 @@ void main() {
       // The asset was the one entity a technician opens on every visit and could not fill in; the
       // key is what matters, because the API knows it as `prodottoassistenza`, not `asset`.
       await openDetail(tester, size: const Size(800, 2800));
+      // The section sits at the bottom of a lazily-built `CustomScrollView`, so it only exists
+      // once it scrolls into view; dragging also pumps, which is what lets its own two async
+      // providers resolve.
+      await tester.dragUntilVisible(
+        find.text('IMP-9'),
+        find.byType(Scrollable).first,
+        const Offset(0, -300),
+      );
 
       expect(extensionFields.definitionsEntityType, 'prodottoassistenza');
       expect(extensionFields.valuesKey, ('prodottoassistenza', 'prod-1'));
-      expect(find.text('Codice impianto'), findsOneWidget);
+      // AppFieldLabel renders `Text.rich` with the label upper-cased, which `find.text` only
+      // matches when told to look inside rich text.
+      expect(find.text('CODICE IMPIANTO', findRichText: true), findsOneWidget);
       expect(find.text('IMP-9'), findsOneWidget);
       await teardown(tester);
     });
@@ -290,9 +309,16 @@ void main() {
     testWidgets('saves what the technician typed against that same key', (tester) async {
       await openDetail(tester, size: const Size(800, 2800));
 
+      // Scroll the section into view first — the same lazy-sliver reason as the test above.
+      await tester.dragUntilVisible(
+        find.byType(TextFormField),
+        find.byType(Scrollable).first,
+        const Offset(0, -300),
+      );
       await tester.enterText(find.byType(TextFormField), 'IMP-10');
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Salva'));
+      // Last, for the same reason as the matricole sheet above: this card is the page's own.
+      await tester.tap(find.text('Salva').last);
       await tester.pumpAndSettle();
 
       expect(extensionFields.saved, isNotNull);
