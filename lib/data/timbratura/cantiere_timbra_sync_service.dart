@@ -27,6 +27,12 @@
 // `cantiereReconciledOrphanMarker` is excluded before assembling intervals — see
 // cantiere_work_log_reconciler.dart and work_log_reconciler.dart (the personal-timbra
 // equivalent) for why.
+//
+// Orphan closes: an 'uscita' with no local 'ingresso' in front of it is a clock-out recorded
+// with no signal after a clock-in made through the online `start` route (which leaves no local
+// row). The batch cannot carry it — the server-created punch has no clientId to match — so it is
+// drained through the online `end` route instead, before the batch, while the session it belongs
+// to is still the one the server has open. See [_pushOrphanClose].
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'package:dio/dio.dart';
@@ -170,55 +176,146 @@ class CantiereTimbraSyncService {
     // Days already fully synced are common (today's events are always in the read).
     if (!day.any((e) => e.isPendingSync)) return true;
 
-    final intervals = assembleCantiereIntervals(day, businessDateOf: _businessTime.businessDateOf);
-    if (intervals.isEmpty) return true;
+    // Closes whose opening event this device never recorded — see [_orphanCloses]. They are
+    // drained by [_pushOrphanClose], not by the batch.
+    final orphanCloses = _orphanCloses(day);
+    final orphanIds = {for (final c in orphanCloses) c.id};
 
-    final dtos = intervals
-        .map(
-          (i) => CantiereMobileSessionDto(
-            clientId: i.clientId,
-            cantiereId: i.cantiereId,
-            customerId: i.customerId,
-            ticketId: i.ticketId,
-            description: i.description,
-            startTime: i.startTime,
-            endTime: i.endTime,
-            latitude: i.latitude,
-            longitude: i.longitude,
-            departureLatitude: i.departureLatitude,
-            departureLongitude: i.departureLongitude,
-            safetyNotes: i.safetyNotes,
-            workOrderNumber: i.workOrderNumber,
-            equipmentUsed: i.equipmentUsed,
-            teamSize: i.teamSize,
-            weatherConditions: i.weatherConditions,
-          ),
-        )
-        .toList();
-
-    try {
-      await _apiClient.upsertSessions(dtos);
-      _batchFailures = 0;
-      _batchRetryAt = null;
-    } catch (e) {
-      if (_isPermanent(e)) {
-        await _handleRefusedBatch(day, e);
-        return false;
-      }
-      _batchFailures++;
-      final backoff = Duration(seconds: 30 * (1 << (_batchFailures - 1).clamp(0, 6)));
-      _batchRetryAt = _clock().add(backoff);
-      debugPrint(
-        'CantiereTimbraSyncService: transient failure (${_describe(e)}); '
-        '${day.where((p) => p.isPendingSync).length} pending event(s) held, '
-        'attempt $_batchFailures/$_maxBatchAttempts',
-      );
-      return false;
+    // BEFORE the batch, deliberately. The end route closes "the current user's open session", and
+    // the batch below may open a newer one for a later visit: draining this first means the end
+    // lands on the shift it belongs to instead of the one just created.
+    for (final close in orphanCloses) {
+      if (!await _pushOrphanClose(close)) return false;
     }
 
-    // Mark every local event of this day as synced (by event id, which is the clientId of the
-    // interval it opened; the matching 'uscita' event shares the interval and is marked too).
-    await _repo.markSynced(day.where((e) => e.isPendingSync).map((e) => e.id).toList());
+    final intervals = assembleCantiereIntervals(day, businessDateOf: _businessTime.businessDateOf);
+    if (intervals.isNotEmpty) {
+      final dtos = intervals
+          .map(
+            (i) => CantiereMobileSessionDto(
+              clientId: i.clientId,
+              cantiereId: i.cantiereId,
+              customerId: i.customerId,
+              ticketId: i.ticketId,
+              description: i.description,
+              startTime: i.startTime,
+              endTime: i.endTime,
+              latitude: i.latitude,
+              longitude: i.longitude,
+              departureLatitude: i.departureLatitude,
+              departureLongitude: i.departureLongitude,
+              safetyNotes: i.safetyNotes,
+              workOrderNumber: i.workOrderNumber,
+              equipmentUsed: i.equipmentUsed,
+              teamSize: i.teamSize,
+              weatherConditions: i.weatherConditions,
+            ),
+          )
+          .toList();
+
+      try {
+        await _apiClient.upsertSessions(dtos);
+        _batchFailures = 0;
+        _batchRetryAt = null;
+      } catch (e) {
+        if (_isPermanent(e)) {
+          await _handleRefusedBatch(day, e);
+          return false;
+        }
+        _batchFailures++;
+        final backoff = Duration(seconds: 30 * (1 << (_batchFailures - 1).clamp(0, 6)));
+        _batchRetryAt = _clock().add(backoff);
+        debugPrint(
+          'CantiereTimbraSyncService: transient failure (${_describe(e)}); '
+          '${day.where((p) => p.isPendingSync).length} pending event(s) held, '
+          'attempt $_batchFailures/$_maxBatchAttempts',
+        );
+        return false;
+      }
+
+      // Mark every local event of this day as synced (by event id, which is the clientId of the
+      // interval it opened; the matching 'uscita' event shares the interval and is marked too).
+      // The orphan closes are excluded: they were marked by [_pushOrphanClose] when their own
+      // call landed, and the in-memory rows still read `isPendingSync`.
+      await _repo.markSynced(
+        day
+            .where((e) => e.isPendingSync && !orphanIds.contains(e.id))
+            .map((e) => e.id)
+            .toList(),
+      );
+    }
+
+    return true;
+  }
+
+  /// The 'uscita' rows in [day] that no local opening event closes in front of.
+  ///
+  /// The normal case is a clock-in this phone recorded: the pair folds into one interval and the
+  /// batch carries it. An 'uscita' with nothing open before it means the technician clocked IN
+  /// through the online `start` route — which leaves no local row — and then clocked out with no
+  /// signal. The assembler can only pair events it has, so such a row used to be invisible to the
+  /// upload: it stayed pending forever while the server kept the shift open, and the hours were
+  /// lost at payroll. It is also why the row cannot simply be batched: the batch matches on a
+  /// clientId the server-created punch was never given, so it would open a second, empty shift.
+  List<CantierePunche> _orphanCloses(List<CantierePunche> day) {
+    final orphans = <CantierePunche>[];
+    var open = false;
+    for (final e in day) {
+      switch (e.eventType) {
+        case 'ingresso':
+          open = true;
+        case 'uscita':
+          if (open) {
+            open = false;
+          } else if (e.isPendingSync) {
+            // Only the queued ones: a close already delivered must not be re-sent on every sweep.
+            orphans.add(e);
+          }
+        default:
+          break;
+      }
+    }
+    return orphans;
+  }
+
+  /// Drains one close through the online `end` route — exactly the call the clock-out screen would
+  /// have made with signal, which closes the current user's open session.
+  ///
+  /// A 404 is the desired end state, not a failure: the server has no open session left (the
+  /// office closed it, or an earlier attempt landed and only the reply was lost). It marks the row
+  /// synced like a success.
+  Future<bool> _pushOrphanClose(CantierePunche close) async {
+    try {
+      await _apiClient.endCantiere(
+        EndCantiereRequest(
+          description: close.description,
+          departureLatitude: close.departureLatitude,
+          departureLongitude: close.departureLongitude,
+          safetyNotes: close.safetyNotes,
+        ),
+      );
+    } catch (e) {
+      if (e is DioException && e.response?.statusCode == 404) {
+        // Nothing open on the server any more — the visit is closed either way.
+      } else if (_isPermanent(e)) {
+        await _repo.markSyncError(
+          close.id,
+          humanErrorMessage(e, azione: 'chiudere la timbratura cantiere'),
+        );
+        return false;
+      } else {
+        _batchFailures++;
+        final backoff = Duration(seconds: 30 * (1 << (_batchFailures - 1).clamp(0, 6)));
+        _batchRetryAt = _clock().add(backoff);
+        debugPrint(
+          'CantiereTimbraSyncService: transient failure closing an orphan punch '
+          '(${_describe(e)}); attempt $_batchFailures/$_maxBatchAttempts',
+        );
+        return false;
+      }
+    }
+
+    await _repo.markSynced([close.id]);
     return true;
   }
 
