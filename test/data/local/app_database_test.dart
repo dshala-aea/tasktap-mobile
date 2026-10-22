@@ -181,6 +181,11 @@ void main() {
         // current DDL already declares both columns, so the step's `PRAGMA table_info` guard skips
         // the add here, and migration_v44_test.dart covers the add path itself.
         'report_allegati',
+        // `cantiere_punches` too: schema 50 adds the clock-out screen's own three columns to it.
+        // It has existed since schema 7, so every v33 device carries it; without it here the step
+        // fails with `no such table` — a fixture gap, not a device failure. Today's DDL already
+        // declares all three columns, so the guard skips the adds.
+        'cantiere_punches',
       ]);
     });
 
