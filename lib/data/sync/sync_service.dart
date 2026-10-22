@@ -84,6 +84,7 @@ class SyncService {
       await _replaceColleagues(payload.colleagues);
       await _applyReferenceCache(payload);
       await _replaceMaintenanceTemplates(payload);
+      await _replaceExtensionFieldDefinitions(payload);
       // What unsent local work still points at, computed once and used twice: the instrument
       // catalogue's wholesale replace must keep a pinned instrument, and the prune below must
       // keep every pinned row. Both happen after every upsert, inside this transaction.
@@ -222,6 +223,50 @@ class SyncService {
         ),
       );
       await _clearStalePendingTemplateIds(list.map((t) => t.id).toSet());
+    });
+  }
+
+  /// The tenant's custom-field definitions ("campi aggiuntivi"), behind the rapportino Dettagli and
+  /// cantiere-form sections.
+  ///
+  /// Replaced wholesale rather than upserted, for the same reason [_replaceMaintenanceTemplates] is:
+  /// the server sends the complete ACTIVE set with no delta filter — a soft-deactivated field must
+  /// stop appearing, and it has no change marker of its own — so an upsert would leave it there
+  /// forever.
+  ///
+  /// Skipped when the payload carries no member (an older backend) and, like the template
+  /// catalogue, when it carries an empty list: `MobileUserSyncResult.ExtensionFieldDefinitions` is
+  /// assigned unconditionally, so an empty list means "this caller may not read any entity type's
+  /// definitions" (the per-type gate in `SyncController`), not "the tenant has none". Pruning on it
+  /// would blank a technician's section the moment their permissions changed.
+  Future<void> _replaceExtensionFieldDefinitions(SyncResultDto payload) async {
+    if (!payload.carriesExtensionFieldDefinitions) return;
+    final list = payload.extensionFieldDefinitions;
+    if (list.isEmpty) return;
+
+    await db.transaction(() async {
+      await db.delete(db.extensionFieldDefinitions).go();
+      await db.batch(
+        (b) => b.insertAll(
+          db.extensionFieldDefinitions,
+          list.map(
+            (d) => ExtensionFieldDefinitionsCompanion.insert(
+              id: d.id,
+              key: d.key,
+              label: d.label,
+              entityType: d.entityType,
+              fieldType: d.fieldType,
+              isRequired: Value(d.isRequired),
+              showInCard: Value(d.showInCard),
+              sortOrder: Value(d.sortOrder),
+              options: Value(d.options),
+              unit: Value(d.unit),
+              defaultValue: Value(d.defaultValue),
+              placeholder: Value(d.placeholder),
+            ),
+          ),
+        ),
+      );
     });
   }
 
@@ -693,6 +738,7 @@ class SyncService {
               status: Value(c.status),
               customerId: Value(c.customerId),
               commessaId: Value(c.commessaId),
+              extensionValues: Value(c.extensionValues),
             ),
           );
     }
@@ -827,6 +873,7 @@ class SyncService {
               priority: Value(t.priority),
               dueDate: Value(formatDateOnly(t.dueDate)),
               tagsJson: Value(jsonEncode(t.tags)),
+              extensionValues: Value(t.extensionValues),
             ),
           );
     }
@@ -940,6 +987,7 @@ class SyncService {
               materialiNotRequired: Value(r.materialiNotRequired),
               customerSignoffText: Value(r.customerSignoffText),
               customerSignoffAt: Value(r.customerSignoffAt),
+              extensionValues: Value(r.extensionValues),
               // Synced-down reports are never local-only
               isLocalOnly: const Value(false),
             ),
