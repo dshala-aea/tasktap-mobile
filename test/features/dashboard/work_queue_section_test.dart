@@ -119,4 +119,100 @@ void main() {
       await tester.pumpAndSettle();
     });
   });
+
+  group('WorkQueueSection today versus planned', () {
+    Future<void> insertSchedule(
+      AppDatabase db, {
+      required String id,
+      required DateTime activityDate,
+      required String title,
+    }) {
+      return db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: id,
+              tenantId: 'tenant-1',
+              createdAt: activityDate,
+              activityDate: activityDate,
+              timeStartMinutes: 480,
+              timeEndMinutes: 600,
+              userId: 'u1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: title,
+              description: '',
+            ),
+          );
+    }
+
+    testWidgets('an empty today says so instead of heading future rows with "Oggi"', (
+      tester,
+    ) async {
+      final today = DateTime.now().toUtc();
+      final dayStart = DateTime.utc(today.year, today.month, today.day);
+      await insertSchedule(
+        db,
+        id: 'sched-upcoming',
+        activityDate: dayStart.add(const Duration(days: 2)),
+        title: 'Intervento di giovedì',
+      );
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      // The day's own answer, stated rather than implied by the absence of rows.
+      expect(find.text('Nessun lavoro assegnato per la giornata di oggi.'), findsOneWidget);
+      // And the future work sits under its own heading, not under the screen's "Oggi".
+      expect(find.textContaining('PROSSIMI 7 GIORNI'), findsOneWidget);
+      expect(find.text('Intervento di giovedì'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a booked today shows its own rows and does not claim the day is empty', (
+      tester,
+    ) async {
+      final today = DateTime.now().toUtc();
+      final dayStart = DateTime.utc(today.year, today.month, today.day);
+      await insertSchedule(
+        db,
+        id: 'sched-today',
+        activityDate: dayStart,
+        title: 'Intervento di oggi',
+      );
+      await insertSchedule(
+        db,
+        id: 'sched-upcoming',
+        activityDate: dayStart.add(const Duration(days: 3)),
+        title: 'Intervento di venerdì',
+      );
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun lavoro assegnato per la giornata di oggi.'), findsNothing);
+      expect(find.text('Intervento di oggi'), findsOneWidget);
+      expect(find.textContaining('PROSSIMI 7 GIORNI'), findsOneWidget);
+      expect(find.text('Intervento di venerdì'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('nothing today and nothing in the next seven days keeps the single empty state', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun intervento oggi'), findsOneWidget);
+      expect(find.textContaining('PROSSIMI 7 GIORNI'), findsNothing);
+      expect(find.text('Nessun lavoro assegnato per la giornata di oggi.'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
 }
