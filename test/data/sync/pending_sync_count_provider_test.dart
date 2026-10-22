@@ -73,6 +73,38 @@ void main() {
               state: const Value('pendingSync'),
             ),
           );
+      // Ticket timer sessions: one queued close waiting for signal, one the server refused, and
+      // one the server already confirmed (must not count at all).
+      await db
+          .into(db.ticketTimers)
+          .insert(
+            TicketTimersCompanion.insert(
+              id: 'tt1',
+              ticketId: 'ticket-1',
+              startUtc: Value(DateTime.now()),
+              isPendingSync: const Value(true),
+            ),
+          );
+      await db
+          .into(db.ticketTimers)
+          .insert(
+            TicketTimersCompanion.insert(
+              id: 'tt2',
+              ticketId: 'ticket-1',
+              startUtc: Value(DateTime.now()),
+              isPendingSync: const Value(true),
+              syncError: const Value('Intervento non trovato.'),
+            ),
+          );
+      await db
+          .into(db.ticketTimers)
+          .insert(
+            TicketTimersCompanion.insert(
+              id: 'tt3',
+              ticketId: 'ticket-1',
+              startUtc: Value(DateTime.now()),
+            ),
+          );
 
       final container = ProviderContainer(
         overrides: [appDatabaseProvider.overrideWithValue(db)],
@@ -81,8 +113,8 @@ void main() {
 
       final result = await container.read(pendingSyncCountProvider.future);
 
-      expect(result.pending, 2); // r1 (readyToSubmit) + p1 (pendingSync)
-      expect(result.failed, 1); // r3
+      expect(result.pending, 3); // r1 (readyToSubmit) + p1 (pendingSync) + tt1
+      expect(result.failed, 2); // r3 + tt2
     },
   );
 }

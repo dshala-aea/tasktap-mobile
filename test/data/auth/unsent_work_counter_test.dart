@@ -108,6 +108,20 @@ Future<void> _cantiere(
       );
 }
 
+Future<void> _timer(AppDatabase db, String id, {bool pending = true, String? syncError}) async {
+  await db
+      .into(db.ticketTimers)
+      .insert(
+        TicketTimersCompanion.insert(
+          id: id,
+          ticketId: 'ticket-1',
+          startUtc: Value(DateTime.utc(2026, 10, 21, 8)),
+          isPendingSync: Value(pending),
+          syncError: Value(syncError),
+        ),
+      );
+}
+
 void main() {
   late AppDatabase db;
 
@@ -155,6 +169,12 @@ void main() {
       notes: cantiereReconciledOrphanMarker,
     );
 
+    // Ticket timers: a queued start, a queued close the server refused (still on the device, so
+    // still at risk), and a session the server has already confirmed.
+    await _timer(db, 'tt-pending');
+    await _timer(db, 'tt-refused', syncError: 'Intervento non trovato.');
+    await _timer(db, 'tt-synced', pending: false);
+
     final counter = UnsentWorkCounter(db: db, countVoiceRecordings: () async => 3);
     final breakdown = await counter.count();
 
@@ -163,8 +183,9 @@ void main() {
     expect(breakdown.pendingAttachments, 1);
     expect(breakdown.workSessions, 2, reason: 'both days must count; the orphan must not');
     expect(breakdown.cantierePunches, 1);
+    expect(breakdown.ticketTimers, 2, reason: 'hours are billable; a refused row is still unsent');
     expect(breakdown.voiceRecordings, 3);
-    expect(breakdown.total, 11);
+    expect(breakdown.total, 13);
     expect(breakdown.isEmpty, isFalse);
   });
 

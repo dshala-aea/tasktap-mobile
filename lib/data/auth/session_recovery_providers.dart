@@ -10,6 +10,7 @@ import '../tickets/ticket_attachment_upload_queue_watcher.dart'
 import '../tickets/ticket_creation_queue.dart';
 import '../tickets/ticket_creation_queue_watcher.dart' show ticketCreationQueueProvider;
 import '../timbratura/cantiere_timbra_sync_service.dart';
+import '../timbratura/ticket_timer_sync_service.dart';
 import '../timbratura/timbra_sync_service.dart';
 import '../../presentation/providers/auth_providers.dart' show sessionEnderProvider;
 import 'session_recovery.dart';
@@ -49,6 +50,7 @@ class UnsentWorkFlusher {
     required this.ticketAttachmentQueue,
     required this.timbraSync,
     required this.cantiereSync,
+    required this.ticketTimerSync,
   });
 
   final SubmissionQueue submissionQueue;
@@ -57,6 +59,11 @@ class UnsentWorkFlusher {
   final TimbraSyncService timbraSync;
   final CantiereTimbraSyncService cantiereSync;
 
+  /// Queued ticket clock sessions. The counter counts them, so the flush that exists to send what
+  /// the counter counted has to try them too — otherwise "Invia ora" leaves the number unchanged
+  /// with nothing the technician can do about it.
+  final TicketTimerSyncService ticketTimerSync;
+
   Future<void> flush() async {
     await Future.wait([
       _swallow(submissionQueue.processAll(force: true)),
@@ -64,6 +71,9 @@ class UnsentWorkFlusher {
       _swallow(ticketAttachmentQueue.processAll()),
       _swallow(timbraSync.syncNow(manual: true)),
       _swallow(cantiereSync.syncNow()),
+      // `manual` for the same reason timbra takes it: this is a user-initiated attempt, so it
+      // clears the in-memory backoff and releases rows a permanent refusal was holding back.
+      _swallow(ticketTimerSync.syncNow(manual: true)),
     ]);
   }
 
@@ -85,6 +95,7 @@ final unsentWorkFlusherProvider = Provider<UnsentWorkFlusher>((ref) {
     ticketAttachmentQueue: ref.watch(ticketAttachmentUploadQueueProvider),
     timbraSync: ref.watch(timbraSyncServiceProvider),
     cantiereSync: ref.watch(cantiereTimbraSyncServiceProvider),
+    ticketTimerSync: ref.watch(ticketTimerSyncServiceProvider),
   );
 });
 
