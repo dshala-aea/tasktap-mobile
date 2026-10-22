@@ -76,8 +76,8 @@ void main() {
     expect((await db.select(db.strumenti).get()).single.isMine, isTrue);
   });
 
-  test('the cursor generation is v11, so every device does one full sync after this upgrade', () {
-    expect(AppDatabase.syncCursorGeneration, 'v11');
+  test('the cursor generation is v12, so every device does one full sync after this upgrade', () {
+    expect(AppDatabase.syncCursorGeneration, 'v12');
   });
 
   /// An older backend omits the new members entirely. That must NOT read as "every checklist is

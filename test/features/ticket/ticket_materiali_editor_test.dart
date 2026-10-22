@@ -371,4 +371,128 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   });
+
+  group('catalogue search', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = AppDatabase(NativeDatabase.memory());
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              code: 'ART001',
+              name: 'Valvola idraulica',
+              unitOfMeasure: const Value('pz'),
+            ),
+          );
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              code: 'GUA002',
+              name: 'Guarnizione testata',
+            ),
+          );
+      // Retired by the office: it must not come back as a suggestion just because the row is
+      // still in the mirror.
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-3',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              code: 'OLD003',
+              name: 'Valvola dismessa',
+              isActive: const Value(false),
+            ),
+          );
+    });
+
+    tearDown(() => db.close());
+
+    /// Offline on purpose: the article field used to be a bare `GET /Materiali`, so on site it
+    /// threw out of the debounce timer and silently offered nothing. MockDio has no stub here, so
+    /// a live call would fail the test as well as the verifyNever below.
+    Widget wrapSearch({Future<void> Function(List<TicketMaterialeWriteRow>)? onSave}) =>
+        ProviderScope(
+          overrides: [
+            dioProvider.overrideWithValue(mockDio),
+            appDatabaseProvider.overrideWithValue(db),
+            isOnlineProvider.overrideWithValue(false),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: TicketMaterialiEditor(
+                  initialRows: const [],
+                  onSave: onSave ?? (_) async {},
+                  onCancel: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+    Future<void> typeArticle(WidgetTester tester, String text) async {
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+
+      // Articolo is the first field of the row — see _MaterialeRowEditorState.build.
+      await tester.enterText(find.byType(TextFormField).at(0), text);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('offline it searches the mirrored catalogue and never calls the API', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrapSearch());
+      await typeArticle(tester, 'valvola');
+
+      expect(find.text('Valvola idraulica'), findsWidgets);
+      expect(find.text('Valvola dismessa'), findsNothing);
+      verifyNever(
+        () => mockDio.get<dynamic>(
+          '/Materiali',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      );
+    });
+
+    testWidgets('offline the code matches too — a technician may know the code, not the name', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wrapSearch());
+      await typeArticle(tester, 'GUA002');
+
+      expect(find.text('Guarnizione testata'), findsWidgets);
+    });
+
+    testWidgets('picking a mirrored article keeps its id and its unit', (tester) async {
+      List<TicketMaterialeWriteRow>? saved;
+      await tester.pumpWidget(wrapSearch(onSave: (rows) async => saved = rows));
+      await typeArticle(tester, 'idraulica');
+
+      await tester.tap(find.text('Valvola idraulica').last);
+      await tester.pumpAndSettle();
+
+      // Quantity is required before Salva does anything.
+      await tester.enterText(find.byType(TextFormField).at(1), '2');
+      await tester.pump();
+      await tester.tap(find.text('Salva'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!.single.materialeId, 'mat-1');
+      expect(saved!.single.unitOfMeasure, 'pz');
+    });
+  });
 }

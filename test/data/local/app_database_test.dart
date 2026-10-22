@@ -170,6 +170,12 @@ void main() {
         'tickets',
         'pending_tickets',
         'customers',
+        // `cantieri` too: schema 46 adds `extension_values` to it, and every v33 device has carried
+        // that table since long before 33. A fixture without it fails the step with
+        // `no such table: cantieri` — a fixture gap, not a device failure; the PRAGMA guard checks
+        // the column, and the current DDL already declares it, so the add is skipped here, while
+        // migration_v46_test.dart covers the add path itself.
+        'cantieri',
         // `report_allegati` too: schema 44 adds `kind`/`content_hash` to it, and a real device has
         // carried that table since its first release. Same fixture gap as `customers` above — the
         // current DDL already declares both columns, so the step's `PRAGMA table_info` guard skips

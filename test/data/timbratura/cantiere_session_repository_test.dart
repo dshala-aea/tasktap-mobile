@@ -1,7 +1,8 @@
 // Unit tests for CantiereSessionRepository — the Drift-backed implementation of
 // ICantiereSessionRepository. Uses an in-memory NativeDatabase, no file system.
 
-import 'package:drift/drift.dart';
+// `isNull` is also Drift's SQL expression builder; the matcher is the one these assertions mean.
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
@@ -120,6 +121,101 @@ void main() {
     expect(await repo.getTodayEvents(), isEmpty);
   });
 
+  group('getClosedIntervalsFor (P2-6)', () {
+    test('returns only this cantiere\'s CLOSED intervals, keyed by the ingresso id', () async {
+      final in8 = _businessTodayAt(8);
+      final out10 = _businessTodayAt(10);
+      // cant-1: 08→10 closed.
+      await repo.addEvent(
+        id: 'punch-a',
+        eventTime: in8,
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+      );
+      await repo.addEvent(id: 'punch-a-out', eventTime: out10, eventType: 'uscita');
+      // cant-2: a different site, also closed — must not leak into cant-1's answer. Deliberately
+      // AFTER cant-1's uscita: the assembler pairs events sequentially (one worksite at a time), so
+      // an 'ingresso' while another interval is still open closes it — interleaving the two sites
+      // here would hand cant-1 a 30-minute interval and test nothing about filtering.
+      await repo.addEvent(
+        id: 'punch-b',
+        eventTime: out10.add(const Duration(minutes: 30)),
+        eventType: 'ingresso',
+        cantiereId: 'cant-2',
+        customerId: 'cust-2',
+      );
+      await repo.addEvent(
+        id: 'punch-b-out',
+        eventTime: out10.add(const Duration(minutes: 90)),
+        eventType: 'uscita',
+      );
+
+      final intervals = await repo.getClosedIntervalsFor('cant-1');
+
+      expect(intervals, hasLength(1));
+      expect(intervals.single.clientId, 'punch-a');
+      expect(intervals.single.cantiereId, 'cant-1');
+      expect(intervals.single.customerId, 'cust-1');
+      expect(intervals.single.startTime, in8);
+      expect(intervals.single.endTime, out10);
+      // Drift reads a `DateTimeColumn` back as LOCAL-kind; the repository re-stamps to UTC so the
+      // interval's documented "UTC timestamp" contract holds for a caller that writes an ISO string
+      // without `toUtc()`. Without this the two above still pass (same instant) on a machine whose
+      // zone is UTC — i.e. never on CI, only here.
+      expect(intervals.single.startTime.isUtc, isTrue);
+    });
+
+    test('excludes an interval that is still open — it has no hours yet', () async {
+      await repo.addEvent(
+        id: 'punch-open',
+        eventTime: _businessTodayAt(8),
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+      );
+
+      expect(await repo.getClosedIntervalsFor('cant-1'), isEmpty);
+    });
+
+    test('getClosedIntervalClientIds answers the ingresso ids only', () async {
+      final in8 = _businessTodayAt(8);
+      await repo.addEvent(
+        id: 'punch-a',
+        eventTime: in8,
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+      );
+      await repo.addEvent(
+        id: 'punch-a-out',
+        eventTime: in8.add(const Duration(hours: 2)),
+        eventType: 'uscita',
+      );
+
+      expect(await repo.getClosedIntervalClientIds('cant-1'), ['punch-a']);
+    });
+
+    test('answers from already-synced punches too — upload order is irrelevant', () async {
+      final in8 = _businessTodayAt(8);
+      await repo.addEvent(
+        id: 'punch-a',
+        eventTime: in8,
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+      );
+      await repo.addEvent(
+        id: 'punch-a-out',
+        eventTime: in8.add(const Duration(hours: 1)),
+        eventType: 'uscita',
+      );
+      await repo.markSynced(['punch-a', 'punch-a-out']);
+
+      expect(await repo.getClosedIntervalClientIds('cant-1'), ['punch-a']);
+    });
+  });
+
   test('events are returned in chronological order', () async {
     // getTodayEvents() buckets by the business (Rome) day, so a fixed literal date is wrong on
     // every day but that one and DateTime.now() + 2h can cross into tomorrow. Anchor to today's
@@ -136,5 +232,60 @@ void main() {
 
     final events = await repo.getTodayEvents();
     expect(events.map((e) => e.id).toList(), ['earlier', 'later']);
+  });
+
+  group('watchLatestPunch', () {
+    test('is null before anything is recorded', () async {
+      expect(await repo.watchLatestPunch().first, isNull);
+    });
+
+    test('returns an ingresso recorded before today — an overnight session stays open', () async {
+      final yesterday = _businessTodayAt(22).subtract(const Duration(days: 1));
+      await repo.addEvent(
+        id: 'yesterday-in',
+        eventTime: yesterday,
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+      );
+
+      // The day window is exactly what must not decide this: getTodayEvents() cannot see the row.
+      expect(await repo.getTodayEvents(), isEmpty);
+      final latest = await repo.watchLatestPunch().first;
+      expect(latest?.id, 'yesterday-in');
+      expect(latest?.eventType, 'ingresso');
+    });
+
+    test('returns the closing uscita once the interval is closed', () async {
+      await repo.addEvent(
+        id: 'in',
+        eventTime: _businessTodayAt(8),
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+      );
+      await repo.addEvent(id: 'out', eventTime: _businessTodayAt(10), eventType: 'uscita');
+
+      expect((await repo.watchLatestPunch().first)?.id, 'out');
+    });
+
+    test('skips the reconciler\'s own correction, which is not a punch', () async {
+      await repo.addEvent(
+        id: 'in',
+        eventTime: _businessTodayAt(8),
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+      );
+      await db
+          .into(db.cantierePunches)
+          .insert(
+            CantierePunchesCompanion.insert(
+              id: 'correction',
+              eventTime: _businessTodayAt(12),
+              eventType: 'uscita',
+              notes: const Value(cantiereReconciledOrphanMarker),
+            ),
+          );
+
+      expect((await repo.watchLatestPunch().first)?.id, 'in');
+    });
   });
 }

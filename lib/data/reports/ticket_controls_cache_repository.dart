@@ -170,6 +170,11 @@ final cachedTicketControlsProvider = FutureProvider.autoDispose
           await cacheRepo.getMirroredControlsIfAuthoritative(ticketId) ??
           await cacheRepo.getCachedControls(ticketId);
 
+      // Offline, `ticketControlsProvider` answers from the sync mirror — which cannot tell "this
+      // ticket has no controls" from "its rows have not synced yet" (it reports the ambiguity as
+      // the offline state rather than as an empty checklist). The rapportino must not report either
+      // on that ambiguity, so offline it keeps its own rule: the checklist a previous online fetch
+      // cached, or the honest offline state.
       if (!ref.watch(isOnlineProvider)) {
         final known = await bestKnown();
         if (known != null) return known;

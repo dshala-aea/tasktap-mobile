@@ -264,6 +264,58 @@ class Tickets extends Table {
   /// literal comma would silently split wrong).
   TextColumn get tagsJson => text().nullable()();
 
+  /// The tenant's custom-field values for this ticket ("campi aggiuntivi"), as the server's raw
+  /// JSON-object text — the same double-encoded shape the backend sends (`extensionValues` is a
+  /// `string?` over a Postgres `jsonb` column, so the API serializes it as a JSON *string* holding
+  /// JSON). Stored verbatim rather than unpacked: the keys are tenant-defined and change over time,
+  /// and the section renders whatever [ExtensionFieldDefinitions] says this tenant configured.
+  ///
+  /// Without this column the value of every custom field was invisible offline even though the
+  /// payload has always carried it inside the ticket entity — the same field-parity gap as `numero`
+  /// (schema 12) and `priority`/`dueDate` (schema 20). See `syncCursorGeneration`'s own doc
+  /// comment for why this needs a bump too.
+  TextColumn get extensionValues => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The tenant's custom-field definitions ("campi aggiuntivi"), mirrored from the sync payload so
+/// the section renders offline — and so a rapportino written on site can still be completed field
+/// by field when there is no signal.
+///
+/// Before this table the phone's only source was the live
+/// `GET /api/extension-fields/{entityType}/definitions`; offline that call has nothing to answer
+/// with, so the whole section silently disappeared on exactly the screens where the tenant's own
+/// fields are filled in (rapportino Dettagli, cantiere form).
+///
+/// Replaced WHOLESALE on every sync, and only when the payload carries a non-empty list: the server
+/// sends the complete active set each time (a soft-deactivated field has no change marker a delta
+/// could see), and an empty carried list means "this caller may not read any type's definitions" —
+/// not "the tenant has none". See `SyncService._replaceExtensionFieldDefinitions`.
+class ExtensionFieldDefinitions extends Table {
+  TextColumn get id => text()();
+
+  /// What the entity's `extensionValues` JSON object is keyed by.
+  TextColumn get key => text()();
+
+  TextColumn get label => text()();
+
+  /// Lowercase canonical type (`ticket`, `cantiere`, `report`, …) — the backend's own key, the same
+  /// one `ExtensionFieldsApiClient` sends.
+  TextColumn get entityType => text()();
+
+  /// Free string mapped by `ExtensionFieldRenderType.of`, never an enum on the wire.
+  TextColumn get fieldType => text()();
+
+  BoolColumn get isRequired => boolean().withDefault(const Constant(false))();
+  BoolColumn get showInCard => boolean().withDefault(const Constant(false))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  TextColumn get options => text().nullable()();
+  TextColumn get unit => text().nullable()();
+  TextColumn get defaultValue => text().nullable()();
+  TextColumn get placeholder => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -345,6 +397,10 @@ class Cantieri extends Table {
   /// or one Nominatim couldn't resolve. Both null or both set — never written independently.
   RealColumn get latitude => real().nullable()();
   RealColumn get longitude => real().nullable()();
+
+  /// The tenant's custom-field values for this cantiere, verbatim JSON-object text — see
+  /// [Tickets.extensionValues] for the wire shape and why it is stored unpacked.
+  TextColumn get extensionValues => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -480,6 +536,41 @@ class Materiali extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── magazzini ───────────────────────────────────────────────────────────────
+/// The tenant's active warehouses, mirrored so a rapportino material line can name its source
+/// with no signal.
+///
+/// Both reads behind that were live REST calls: `furgoneDiUserProvider` (the technician's own van,
+/// the default source for a line) and `magazziniProvider` (the "cambia magazzino" override). Offline
+/// they both failed, the dialog opened with no default, and the line was saved with a null
+/// `magazzinoId` — the report recorded the material but the warehouse provenance, which the stock
+/// movement is keyed on, was gone server-side and unrecoverable.
+///
+/// Read-only mirror: replaced wholesale on every sync (`MobileUserSyncResult.Magazzini` carries
+/// every active warehouse, no delta filter), never written by the device. Active only, so an admin
+/// deactivating a warehouse removes it from the phone with no separate delete.
+class Magazzini extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get nome => text()();
+
+  /// `"Sede"` or `"Furgone"` — `MagazzinoTipoEnum` serialises as its label, the same string the
+  /// REST endpoints and [MagazzinoDto] already carry.
+  TextColumn get tipo => text()();
+
+  /// For a Furgone: the technician it is assigned to. Null for a Sede, and the field that lets
+  /// "my van" resolve offline without a per-user lookup.
+  TextColumn get assegnatoUserId => text().nullable()();
+
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── ticket_materiali ─────────────────────────────────────────────────────────
 // Fabbisogno: a ticket's planned/required materials. Mirrors the backend `TicketMateriale`
 // entity 1:1 (raw field names, not the Italian-translated shape the per-ticket detail REST
@@ -589,6 +680,14 @@ class DraftReports extends Table {
   /// other text replaces it. Do not collapse empty into null anywhere on the write path.
   TextColumn get diagnosi => text().nullable()();
   TextColumn get soluzione => text().nullable()();
+
+  /// The tenant's custom-field values for this rapportino, verbatim JSON-object text — see
+  /// [Tickets.extensionValues] for the wire shape and why it is stored unpacked.
+  ///
+  /// Server-authored only: the values are written through
+  /// `PUT /api/extension-fields/report/{id}/values` by the Dettagli step, and read back here so a
+  /// rapportino opened offline still shows what was recorded for it.
+  TextColumn get extensionValues => text().nullable()();
 
   /// True for drafts that only exist locally (not yet submitted).
   BoolColumn get isLocalOnly => boolean().withDefault(const Constant(false))();
@@ -1305,13 +1404,15 @@ class ChecklistOmittedTickets extends Table {
     Agents,
     MaintenanceTemplates,
     CantiereCrewAssignments,
+    ExtensionFieldDefinitions,
+    Magazzini,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 45;
+  int get schemaVersion => 47;
 
   @override
   MigrationStrategy get migration {
@@ -1616,6 +1717,14 @@ class AppDatabase extends _$AppDatabase {
             // ignore: experimental_member_use
             TableMigration(
               tickets,
+              // `extensionValues` (schema 46) is declared above but absent from a 37-or-older
+              // `tickets`, and this re-creation copies with a statement built from the CURRENT
+              // definition — see the `pendingTickets` migration below for the mechanism and why an
+              // unnamed absent column comes out holding its own name. Here that would leave every
+              // such ticket with the literal string "extension_values", which `decodeExtensionValues`
+              // reads as "no values recorded", so nothing would ever surface it. It is the first
+              // `tickets` column to need this.
+              newColumns: [tickets.extensionValues],
               columnTransformer: {
                 tickets.dueDate: CustomExpression<String>(_civilDayOfDueDate('tickets')),
               },
@@ -1638,7 +1747,9 @@ class AppDatabase extends _$AppDatabase {
               // table's own default (NULL, "let the server resolve it from type/contract").
               //
               // Standing rule for this step: every column `tickets` or `pendingTickets` gains after
-              // schema 37 belongs in this list or in `columnTransformer`. This is the only one so far.
+              // schema 37 belongs in `newColumns` — here for `pendingTickets`, and in the `tickets`
+              // migration above for `tickets.extensionValues` (schema 46). Those two are the whole
+              // list so far.
               newColumns: [pendingTickets.maintenanceTemplateId],
               columnTransformer: {
                 pendingTickets.dueDate: CustomExpression<String>(
@@ -1756,6 +1867,39 @@ class AppDatabase extends _$AppDatabase {
           // a device that ran a build of that step must still get this table.
           await m.createTable(ticketTimers);
         }
+        if (from < 46) {
+          // Tenant extension fields ("campi aggiuntivi"), the last live-only read on the
+          // rapportino and cantiere forms: the *definitions* section vanished offline, and the
+          // *values* were already on the wire inside the entity JSON but had nowhere to land.
+          //
+          // The definitions table is filled by the very next sync whatever its cursor (that member
+          // travels whole, like the maintenance catalogue), so it needs no backfill here. The three
+          // `extension_values` columns are the opposite case — a delta sync only re-sends rows that
+          // changed, so an unedited ticket would keep a null forever — which is why
+          // `syncCursorGeneration` is bumped to v12 alongside this step.
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `tickets`/`cantieri`/`draft_reports` from the current definition today,
+          // but the guard is what keeps an `alterTable` added later from turning this into a crash
+          // on `duplicate column name` before the app opens.
+          await m.createTable(extensionFieldDefinitions);
+          if (!await _columnExists(m.database, 'tickets', 'extension_values')) {
+            await m.addColumn(tickets, tickets.extensionValues);
+          }
+          if (!await _columnExists(m.database, 'cantieri', 'extension_values')) {
+            await m.addColumn(cantieri, cantieri.extensionValues);
+          }
+          if (!await _columnExists(m.database, 'draft_reports', 'extension_values')) {
+            await m.addColumn(draftReports, draftReports.extensionValues);
+          }
+        }
+        if (from < 47) {
+          // The warehouses a rapportino material line can be sourced from. A brand-new table, so
+          // it needs no backfill: the member travels whole on every sync (never delta-filtered),
+          // which fills the mirror on the very next one whatever its cursor. No cursor-generation
+          // bump is needed for the same reason — unlike a new column on a delta-synced table.
+          await m.createTable(magazzini);
+        }
       },
     );
   }
@@ -1856,7 +2000,12 @@ class AppDatabase extends _$AppDatabase {
   ///      * the mirror now PRUNES to the payload's authoritative `scope`, and a prune is only
   ///        safe against a complete payload. Resuming from a stale delta cursor would treat rows
   ///        a delta merely did not mention as out of scope and delete them.
-  static const String syncCursorGeneration = 'v11';
+  /// v12 — 2026-10-21, schema 46 added `tickets`/`cantieri`/`draft_reports.extensionValues`. Same
+  ///      reasoning as v3/v4/v6/v8: the values were already on the wire inside the entity JSON, and a
+  ///      delta sync only re-sends rows that changed, so an unedited entity would keep a null
+  ///      forever. The definitions table added by the same step needs no bump — its member travels
+  ///      whole on every sync.
+  static const String syncCursorGeneration = 'v12';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

@@ -1,12 +1,16 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../data/worklogs/active_tracker_api_client.dart';
 import '../../features/ticket/ticket_workflow_api_client.dart';
@@ -34,7 +38,9 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 ///
 /// - **attendance** — the working day. Pauses and resumes (a break), and ends. Both go through the
 ///   local punch queue, so they work with no signal.
-/// - **cantiere** — a site session. Ends only; the backend has no pause for it.
+/// - **cantiere** — a site session. Ends only; the backend has no pause for it. A session this
+///   device checked into offline is closed in the local punch log and uploaded on reconnect, so
+///   the stop works with no signal too.
 /// - **ticket** — labour on one job. Ends only.
 ///
 /// A pause button that silently did nothing on two of three kinds would be worse than its absence,
@@ -105,7 +111,33 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
           await ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider));
           _throwIfPunchFailed();
         case ActiveTrackerKind.cantiere:
-          await ref.read(cantiereWorklogApiClientProvider).endCantiere();
+          // A site session this device is holding locally (checked in with no signal) has no
+          // server log to end: `endCantiere()` would come back a 4xx and the technician would stay
+          // clocked in on a screen that told them nothing useful. Closing the interval in the
+          // punch log is exactly what the Timbra screen's own clock-out does offline, and the sync
+          // service uploads the pair when the signal returns.
+          //
+          // Awaited rather than read: Drift answers on a microtask, so a synchronous read here
+          // would sample the provider before its first emission and decide "nothing local" — the
+          // one decision that must not be wrong.
+          final local = await ref.read(localCantiereTimersProvider.future);
+          if (local.any((l) => l.entityId == t.entityId)) {
+            await ref.read(cantiereSessionRepositoryProvider).addEvent(
+              id: const Uuid().v4(),
+              eventTime: DateTime.now().toUtc(),
+              eventType: 'uscita',
+            );
+            unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
+            if (mounted) {
+              showAppToast(
+                context,
+                message: 'Uscita cantiere registrata: verrà inviata al ritorno della connessione.',
+                tone: ToastTone.warning,
+              );
+            }
+          } else {
+            await ref.read(cantiereWorklogApiClientProvider).endCantiere();
+          }
         case ActiveTrackerKind.ticket:
           final id = t.entityId;
           if (id == null) throw const TicketWorkflowFailure('Intervento non identificato.');

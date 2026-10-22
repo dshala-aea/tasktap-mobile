@@ -5,6 +5,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/timbratura/cantiere_session_assembler.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
@@ -38,12 +39,30 @@ class _FakeRepo implements ICantiereSessionRepository {
   @override
   Stream<List<CantierePunche>> watchTodayEvents() => Stream.value(events);
 
+  /// The screen's "is a session open" read — the latest punch of the whole log. This fake holds
+  /// one day's events, so its last row is that punch.
+  @override
+  Stream<CantierePunche?> watchLatestPunch() =>
+      Stream.value(events.isEmpty ? null : events.last);
+
   @override
   Future<List<CantierePunche>> getTodayEvents() async => events;
 
   @override
   Future<List<CantierePunche>> getPendingEvents() async =>
       [...events.where((e) => e.isPendingSync), ...pendingBeyondToday];
+
+  // Not exercised by these tests (the sync never asks); implemented off the same assembler the
+  // real repository uses so the fake stays a faithful stand-in for the interface.
+  @override
+  Future<List<CantiereWorkInterval>> getClosedIntervalsFor(String cantiereId) async => [
+    for (final i in assembleCantiereIntervals(events))
+      if (i.cantiereId == cantiereId && i.endTime != null) i,
+  ];
+
+  @override
+  Future<List<String>> getClosedIntervalClientIds(String cantiereId) async =>
+      [for (final i in await getClosedIntervalsFor(cantiereId)) i.clientId];
 
   @override
   Future<int> getPendingCount() async => (await getPendingEvents())

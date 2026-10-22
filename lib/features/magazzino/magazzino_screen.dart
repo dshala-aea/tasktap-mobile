@@ -762,8 +762,14 @@ class _GiacenzaRow extends ConsumerWidget {
                                 padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                                 child: CircularProgressIndicator(),
                               ),
-                              error: (e, _) =>
-                                  Text(humanErrorMessage(e, azione: 'caricare i magazzini')),
+                              error: (e, _) => Text(
+                                e is MagazziniOfflineException
+                                    ? e.message
+                                    : humanErrorMessage(
+                                        e,
+                                        azione: 'caricare i magazzini',
+                                      ),
+                              ),
                               data: (list) {
                                 final options = list
                                     .where((m) => m.id != giacenza.magazzinoId)

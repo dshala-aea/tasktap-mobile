@@ -212,13 +212,44 @@ final ticketReportsProvider = FutureProvider.autoDispose
     });
 
 /// Prodotti in assistenza the ticket covers (Prodotti compartment): the ticket's coverage ids from
-/// the server, then each prodotto's card. Fetch-on-demand like its siblings — the local
+/// the server, then each prodotto's card.
+///
+/// Online the server's coverage ids are authoritative and each card is fetched live — the local
 /// `ticket_assets` rows are not an authoritative coverage list (see
-/// [TicketDetailApiClient.fetchCoveredProdottoIds]).
+/// [TicketDetailApiClient.fetchCoveredProdottoIds]), they are what the sync last wrote.
+///
+/// Offline those mirror rows are the only answer this phone has, and they are what the checklist
+/// card on the same tab already renders ([checklistReadRepositoryProvider]), so the compartment
+/// stays readable on site instead of going blank. The card-shaped map holds the identity fields the
+/// mirror keeps (`name`, `serialNumber`, `matricola`); `codice`/`marchio`/`modello` are not
+/// mirrored and simply render as absent. An empty mirror throws, exactly like its siblings: nothing
+/// on this phone is not the same fact as no asset on the ticket.
 final ticketProdottiProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, ticketId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      final online = ref.watch(isOnlineProvider);
+      if (!online) {
+        final db = ref.watch(appDatabaseProvider);
+        final query = db.select(db.ticketAssets).join([
+          innerJoin(db.assets, db.assets.id.equalsExp(db.ticketAssets.prodottoAssistenzaId)),
+        ])..where(db.ticketAssets.ticketId.equals(ticketId));
+        final rows = await query.get();
+        if (rows.isEmpty) throw const TicketDetailOfflineException();
+        return rows
+            .map((row) {
+              final asset = row.readTable(db.assets);
+              return <String, dynamic>{
+                'id': asset.id,
+                'name': asset.name,
+                'serialNumber': asset.serialNumber,
+                'matricola': asset.matricola,
+              };
+            })
+            .toList()
+          ..sort(
+            (a, b) => ((a['name'] as String?) ?? '').toLowerCase().compareTo(
+              ((b['name'] as String?) ?? '').toLowerCase(),
+            ),
+          );
       }
       final ids = await ref.watch(ticketDetailApiClientProvider).fetchCoveredProdottoIds(ticketId);
       final admin = ref.watch(adminApiClientProvider);
@@ -294,9 +325,15 @@ final pendingTicketAttachmentsProvider = StreamProvider.autoDispose
 ///   the radio off instead of throwing [TicketDetailOfflineException].
 ///
 /// A live fetch that throws degrades to the mirror rather than to an error
-/// screen: a flaky connection should show the last known checklist. An empty
-/// mirror then yields an empty list, which the Controllo tab renders as
-/// "Nessun controllo previsto" — the debugPrint keeps that trace visible.
+/// screen: a flaky connection should show the last known checklist.
+///
+/// An empty mirror throws [TicketDetailOfflineException] instead of answering
+/// `[]`. The mirror cannot tell "this ticket has no template" from "its rows
+/// have not reached this phone yet", and `[]` would state the first as fact —
+/// a signed rapportino with a silently missing safety checklist. The same rule
+/// its siblings already follow ([ticketReportsProvider],
+/// [ticketAttachmentsProvider]). A genuinely empty *live* answer still yields
+/// `[]`: online, the server did answer.
 final ticketControlsProvider = FutureProvider.autoDispose
     .family<List<TicketControlGroupDto>, String>((ref, ticketId) async {
       final repository = ref.watch(checklistReadRepositoryProvider);
@@ -306,7 +343,9 @@ final ticketControlsProvider = FutureProvider.autoDispose
         // stream subscription to deliver a second time. See the repository's own note.
         final controls = await repository.getTicketControlRows(ticketId);
         final groups = await repository.getControlGroups();
-        return ticketControlGroupsFromMirror(controls: controls, groups: groups);
+        final result = ticketControlGroupsFromMirror(controls: controls, groups: groups);
+        if (result.isEmpty) throw const TicketDetailOfflineException();
+        return result;
       }
 
       if (!ref.watch(isOnlineProvider)) {

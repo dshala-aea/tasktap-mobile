@@ -117,6 +117,9 @@ void main() {
     // manifest for the same rows, so both sides of the loop are pinned here.
     'SyncTicketWorkLogDto': SyncTicketWorkLogDto.wireKeys,
     'SyncCantiereCrewAssignmentDto': SyncCantiereCrewAssignmentDto.wireKeys,
+    // P2-7: the tenant's custom-field definitions ("campi aggiuntivi"), mirrored so the section
+    // renders offline instead of silently disappearing.
+    'SyncExtensionFieldDefinitionDto': SyncExtensionFieldDefinitionDto.wireKeys,
     // The I2 confirm response. The draft and resolved shapes are different DTOs, so these are
     // pinned here rather than inferred from the draft summary's classes.
     'AiConversationConfirmResponse': AiConversationConfirmResponse.wireKeys,
@@ -235,6 +238,14 @@ void main() {
     expect(mt.origin, 'System', reason: 'first enum value of MaintenanceTemplateOrigin');
     expect(mt.latestPublishedVersion, 1);
 
+    final xf = SyncExtensionFieldDefinitionDto.fromJson(
+      instance('SyncExtensionFieldDefinitionDto'),
+    );
+    expect(xf.key, isNotEmpty);
+    expect(xf.label, isNotEmpty);
+    expect(xf.entityType, isNotEmpty);
+    expect(xf.sortOrder, 1);
+
     final mb = MaterialeBarcodeDto.fromJson(
       instance('SyncMaterialeBarcodeDto'),
     );
@@ -270,6 +281,7 @@ void main() {
         'prodottiAssistenza': [instance('SyncProdottoAssistenzaDto')],
         'agents': [instance('SyncAgentDto')],
         'maintenanceTemplates': [instance('SyncMaintenanceTemplateDto')],
+        'extensionFieldDefinitions': [instance('SyncExtensionFieldDefinitionDto')],
         'scope': instance('SyncScopeDto'),
         'materialiBarcodes': [instance('SyncMaterialeBarcodeDto')],
         // Present-but-empty is enough for the flag: what the applier does with the rows is
@@ -283,6 +295,8 @@ void main() {
       expect(full.carriesProdottiAssistenza, isTrue);
       expect(full.carriesAgents, isTrue);
       expect(full.carriesMaintenanceTemplates, isTrue);
+      expect(full.carriesExtensionFieldDefinitions, isTrue);
+      expect(full.extensionFieldDefinitions.single.key, isNotEmpty);
       expect(full.carriesTicketMateriali, isTrue);
       expect(full.ticketControls, hasLength(1));
       expect(full.checklistTruncated, isTrue);
@@ -336,6 +350,12 @@ void main() {
         isFalse,
         reason:
             'an older backend must NOT look like "every fabbisogno was cleared"',
+      );
+      expect(
+        older.carriesExtensionFieldDefinitions,
+        isFalse,
+        reason:
+            'an older backend must NOT look like "the tenant deactivated every custom field"',
       );
     },
   );

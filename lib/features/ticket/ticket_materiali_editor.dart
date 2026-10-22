@@ -2,6 +2,11 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+// `&`, `|` and `like` are extension members (BooleanExpressionOperators /
+// StringExpressionOperators), not methods on the generated columns, so a `show` list that omits
+// them compiles to "undefined_operator"/"undefined_method".
+import 'package:drift/drift.dart'
+    show BooleanExpressionOperators, OrderingTerm, StringExpressionOperators;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,8 +15,11 @@ import '../../core/scanner/barcode_scan_sheet.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/local/app_database.dart';
 import '../../data/materiali/materiale_barcode_lookup.dart'
     show MaterialeMatch, lookupMaterialeByBarcode;
+import '../../data/sync/connectivity_provider.dart';
+import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import 'ticket_detail_api_client.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -304,14 +312,13 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
 
   void _onArticleQueryChanged(String query) {
     _debounce?.cancel();
-    if (query.trim().isEmpty) {
+    final q = query.trim();
+    if (q.isEmpty) {
       setState(() => _articleOptions = const []);
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 300), () async {
-      final results = await ref
-          .read(ticketDetailApiClientProvider)
-          .searchMateriali(query.trim());
+      final results = await _searchCatalogue(q);
       if (!mounted) return;
       for (final r in results) {
         _resultCache[r.id] = r;
@@ -322,6 +329,50 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
             .toList();
       });
     });
+  }
+
+  /// The catalogue search behind the article field: the server while online, the mirrored
+  /// catalogue otherwise.
+  ///
+  /// The field used to be a bare `GET /Materiali`, so on site the call threw out of the timer
+  /// callback — nothing caught it, `_articleOptions` was never updated, and the technician saw a
+  /// silent "no suggestions" with no way to tell "not found" from "no signal". The sync already
+  /// mirrors the catalogue (`materiali`), so the same question is answerable offline; and when the
+  /// radio says online and the call still fails, the mirror beats a field that silently stops
+  /// working.
+  Future<List<MaterialeSearchResult>> _searchCatalogue(String query) async {
+    if (!ref.read(isOnlineProvider)) return _searchMirror(query);
+    try {
+      return await ref.read(ticketDetailApiClientProvider).searchMateriali(query);
+    } on DioException {
+      return _searchMirror(query);
+    }
+  }
+
+  /// [_searchCatalogue]'s offline half: name or code contains the query, active articles only.
+  ///
+  /// Same 20-row cap and alphabetical order as the server's page, so the dropdown behaves the
+  /// same either way. `LIKE` rather than a Dart-side pass so a large catalogue never has to be
+  /// read off the device to answer one keystroke.
+  Future<List<MaterialeSearchResult>> _searchMirror(String query) async {
+    final AppDatabase db = ref.read(appDatabaseProvider);
+    final rows =
+        await (db.select(db.materiali)..where(
+              (m) =>
+                  m.isActive.equals(true) &
+                  (m.name.like('%$query%') | m.code.like('%$query%')),
+            )..orderBy([(m) => OrderingTerm.asc(m.name)])..limit(20))
+            .get();
+    return rows
+        .map(
+          (m) => MaterialeSearchResult(
+            id: m.id,
+            name: m.name,
+            code: m.code,
+            unitOfMeasure: m.unitOfMeasure,
+          ),
+        )
+        .toList();
   }
 
   void _onArticleSelected(String id) {
