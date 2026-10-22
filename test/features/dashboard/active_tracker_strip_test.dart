@@ -21,6 +21,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/worklogs/active_tracker_api_client.dart';
 import 'package:tasktap_mobile/features/dashboard/active_tracker_strip.dart';
@@ -108,23 +109,28 @@ void main() {
     return _FailingOnEventTypeRepo(real, failingType);
   }
 
-  Widget buildStrip({required IWorkSessionRepository repo}) {
+  Widget buildStrip({required IWorkSessionRepository repo, List<ActiveTracker>? trackers}) {
     return ProviderScope(
       overrides: [
         workSessionRepositoryProvider.overrideWithValue(repo),
         dioProvider.overrideWithValue(MockDio()),
         locationServiceProvider.overrideWithValue(const DisabledLocationService()),
+        // The cantiere stop reads the site punch log to decide whether it must close a local
+        // interval; without this override the container opens the real on-device database.
+        appDatabaseProvider.overrideWithValue(db),
       ],
       child: MaterialApp(
         home: Scaffold(
           body: ActiveTrackerStrip(
-            trackers: [
-              ActiveTracker(
-                kind: ActiveTrackerKind.attendance,
-                id: 'local-attendance',
-                startedAtUtc: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
-              ),
-            ],
+            trackers:
+                trackers ??
+                [
+                  ActiveTracker(
+                    kind: ActiveTrackerKind.attendance,
+                    id: 'local-attendance',
+                    startedAtUtc: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
+                  ),
+                ],
           ),
         ),
       ),
@@ -174,6 +180,59 @@ void main() {
       await tester.pump();
 
       expect(find.text('Operazione non riuscita.'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(Duration.zero);
+      }
+    },
+  );
+
+  testWidgets(
+    'Ferma on a site session checked in offline closes the local interval instead of calling the '
+    'server, which has no log to end',
+    (tester) async {
+      final start = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+      await db
+          .into(db.cantierePunches)
+          .insert(
+            CantierePunchesCompanion.insert(
+              id: 'p1',
+              eventTime: start,
+              eventType: 'ingresso',
+              cantiereId: const Value('c1'),
+            ),
+          );
+
+      await tester.pumpWidget(
+        buildStrip(
+          repo: WorkSessionRepository(db),
+          trackers: [
+            ActiveTracker(
+              kind: ActiveTrackerKind.cantiere,
+              id: 'p1',
+              startedAtUtc: start,
+              label: 'Cantiere Via Roma',
+              entityId: 'c1',
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.text('Ferma'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+
+      // The online branch would have hit the unstubbed Dio mock and toasted — that is the bug
+      // this path replaces.
+      expect(find.text('Operazione non riuscita.'), findsNothing);
+      final rows = await db.select(db.cantierePunches).get();
+      final uscite = rows.where((r) => r.eventType == 'uscita').toList();
+      expect(uscite, hasLength(1));
+      expect(uscite.single.isPendingSync, isTrue);
 
       await tester.pumpWidget(const SizedBox.shrink());
       for (var i = 0; i < 5; i++) {

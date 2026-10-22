@@ -55,6 +55,15 @@ abstract interface class ICantiereSessionRepository {
   /// Snapshot of today's events in chronological order (one-shot).
   Future<List<CantierePunche>> getTodayEvents();
 
+  /// The most recent event of the whole log, on ANY business day, or null when it is empty.
+  ///
+  /// This is what "am I currently on site" needs: pairing is sequential, so a local session is
+  /// open exactly when the last row is an 'ingresso'. Scoping that question to today drops a
+  /// check-in recorded yesterday evening and never closed — the screen would then offer "Ingresso"
+  /// again, and the second opener would orphan the first interval. Reconciler corrections are
+  /// skipped: they are not what the technician punched.
+  Stream<CantierePunche?> watchLatestPunch();
+
   /// Every event still waiting to reach the server, on ANY business day, in chronological order.
   ///
   /// Same day-agnostic queue as `IWorkSessionRepository.getPendingSessions`: a site check-in
@@ -166,6 +175,23 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
           ..orderBy([(t) => OrderingTerm.asc(t.eventTime)]))
         .watch();
   }
+
+  @override
+  Stream<CantierePunche?> watchLatestPunch() =>
+      (_db.select(_db.cantierePunches)
+            ..where(
+              (t) =>
+                  t.notes.isNull() | t.notes.equals(cantiereReconciledOrphanMarker).not(),
+            )
+            ..orderBy([
+              (t) => OrderingTerm.desc(t.eventTime),
+              // Two punches can share an instant (a rapid ingresso→uscita correction recorded in
+              // the same millisecond); the id tiebreak keeps "the last one" deterministic rather
+              // than whatever order the storage engine happens to return.
+              (t) => OrderingTerm.desc(t.id),
+            ])
+            ..limit(1))
+          .watchSingleOrNull();
 
   @override
   Future<List<CantierePunche>> getTodayEvents() {

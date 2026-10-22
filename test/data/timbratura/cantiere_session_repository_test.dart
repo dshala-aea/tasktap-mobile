@@ -1,7 +1,8 @@
 // Unit tests for CantiereSessionRepository — the Drift-backed implementation of
 // ICantiereSessionRepository. Uses an in-memory NativeDatabase, no file system.
 
-import 'package:drift/drift.dart';
+// `isNull` is also Drift's SQL expression builder; the matcher is the one these assertions mean.
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
@@ -231,5 +232,60 @@ void main() {
 
     final events = await repo.getTodayEvents();
     expect(events.map((e) => e.id).toList(), ['earlier', 'later']);
+  });
+
+  group('watchLatestPunch', () {
+    test('is null before anything is recorded', () async {
+      expect(await repo.watchLatestPunch().first, isNull);
+    });
+
+    test('returns an ingresso recorded before today — an overnight session stays open', () async {
+      final yesterday = _businessTodayAt(22).subtract(const Duration(days: 1));
+      await repo.addEvent(
+        id: 'yesterday-in',
+        eventTime: yesterday,
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+      );
+
+      // The day window is exactly what must not decide this: getTodayEvents() cannot see the row.
+      expect(await repo.getTodayEvents(), isEmpty);
+      final latest = await repo.watchLatestPunch().first;
+      expect(latest?.id, 'yesterday-in');
+      expect(latest?.eventType, 'ingresso');
+    });
+
+    test('returns the closing uscita once the interval is closed', () async {
+      await repo.addEvent(
+        id: 'in',
+        eventTime: _businessTodayAt(8),
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+      );
+      await repo.addEvent(id: 'out', eventTime: _businessTodayAt(10), eventType: 'uscita');
+
+      expect((await repo.watchLatestPunch().first)?.id, 'out');
+    });
+
+    test('skips the reconciler\'s own correction, which is not a punch', () async {
+      await repo.addEvent(
+        id: 'in',
+        eventTime: _businessTodayAt(8),
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+      );
+      await db
+          .into(db.cantierePunches)
+          .insert(
+            CantierePunchesCompanion.insert(
+              id: 'correction',
+              eventTime: _businessTodayAt(12),
+              eventType: 'uscita',
+              notes: const Value(cantiereReconciledOrphanMarker),
+            ),
+          );
+
+      expect((await repo.watchLatestPunch().first)?.id, 'in');
+    });
   });
 }
