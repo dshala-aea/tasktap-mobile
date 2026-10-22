@@ -60,14 +60,14 @@ AbsenceRequestDto _request({
   status: status,
 );
 
-Widget _buildScreen(_FakeAbsenceRequestApiClient fake) {
+Widget _buildScreen(_FakeAbsenceRequestApiClient fake, {bool online = true}) {
   return ProviderScope(
     overrides: [
       absenceRequestApiClientProvider.overrideWithValue(fake),
       // Cancel now goes through ensureOnlineOrWarn (same guard the sibling create flow already
       // used) — without these, the unoverridden real providers resolve as offline/unknown in the
       // test harness and every cancel silently no-ops before it reaches the fake client.
-      isOnlineProvider.overrideWithValue(true),
+      isOnlineProvider.overrideWithValue(online),
       cachedEntitlementProvider.overrideWith((ref) => null),
     ],
     child: const MaterialApp(home: FeriePermessiListScreen()),
@@ -96,6 +96,30 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nessuna richiesta'), findsOneWidget);
+  });
+
+  testWidgets('offline says the list is online-only, not that loading failed', (tester) async {
+    // No fetch is attempted offline, so the client would return rows if it were called — asserting
+    // the neutral card proves the guard ran before any request.
+    final fake = _FakeAbsenceRequestApiClient([_request(id: 'ar-1')]);
+
+    await tester.pumpWidget(_buildScreen(fake, online: false));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ferie e permessi non disponibili offline'), findsOneWidget);
+    expect(find.textContaining('si leggono con la connessione'), findsOneWidget);
+    // The red failure card belongs to failures a retry can fix.
+    expect(find.text('Impossibile caricare i dati'), findsNothing);
+  });
+
+  testWidgets('a real failure keeps the red error card', (tester) async {
+    final fake = _FakeAbsenceRequestApiClient([])..throwOnFetch = Exception('boom');
+
+    await tester.pumpWidget(_buildScreen(fake));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Impossibile caricare i dati'), findsOneWidget);
+    expect(find.text('Ferie e permessi non disponibili offline'), findsNothing);
   });
 
   testWidgets('a Rejected request has no cancel affordance', (tester) async {

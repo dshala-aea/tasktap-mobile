@@ -82,9 +82,17 @@ final clienteOverviewProvider = FutureProvider.autoDispose
 
 /// A customer's labeled contacts (`CustomerContact`) — no Drift mirror, live-fetched like
 /// [ticketsForCustomerProvider]'s cantiere-detail counterparts (contacts/assignments there also
-/// have no local mirror). Errors (including offline) surface through the AsyncValue and are
-/// handled by the section's own `AppSectionError` + retry, same treatment as those.
+/// have no local mirror).
+///
+/// Offline it throws [CustomerContactsOfflineException] before touching the network. Not cosmetic:
+/// this section sits on the customer detail a technician reaches straight from a ticket
+/// ("Cliente"), so without the distinction a technician on site got a red "Impossibile caricare.
+/// Riprova." whose retry could not work until the radio came back. A genuine failure still
+/// surfaces as itself and keeps its retry.
 final customerContactsProvider = FutureProvider.autoDispose
     .family<List<CustomerContact>, String>((ref, customerId) async {
+      if (!ref.watch(isOnlineProvider)) {
+        throw const CustomerContactsOfflineException();
+      }
       return ref.watch(customerContactApiClientProvider).list(customerId);
     });
