@@ -185,6 +185,9 @@ class CantiereTimbraSyncService {
             endTime: i.endTime,
             latitude: i.latitude,
             longitude: i.longitude,
+            departureLatitude: i.departureLatitude,
+            departureLongitude: i.departureLongitude,
+            safetyNotes: i.safetyNotes,
           ),
         )
         .toList();

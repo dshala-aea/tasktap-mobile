@@ -985,9 +985,19 @@ class CantierePunches extends Table {
   RealColumn get longitude => real().nullable()();
 
   /// Free-text work description, carried through to `CantiereMobileSessionDto.description` on
-  /// sync — the one rich field the offline batch endpoint accepts (see
-  /// `CantiereWorkLogController.MobileSessions`). Set on 'ingresso'; null on 'uscita'.
+  /// sync — see `CantiereWorkLogController.MobileSessions`. Set on 'ingresso'; on 'uscita' it is
+  /// the note typed on the clock-out screen, which the assembler lets win (the online `end` route
+  /// overwrites the row's Description the same way).
   TextColumn get description => text().nullable()();
+
+  /// Safety note typed on the clock-out screen. 'uscita' only — that screen is the only place the
+  /// app ever asks for it.
+  TextColumn get safetyNotes => text().nullable()();
+
+  /// GPS the phone recorded at clock-out. 'uscita' only; [latitude]/[longitude] stay the arrival
+  /// fix on 'ingresso'.
+  RealColumn get departureLatitude => real().nullable()();
+  RealColumn get departureLongitude => real().nullable()();
 
   /// True while not yet synced to the backend.
   BoolColumn get isPendingSync => boolean().withDefault(const Constant(true))();
@@ -2022,6 +2032,25 @@ class AppDatabase extends _$AppDatabase {
           }
           if (!await _columnExists(m.database, 'strumenti', 'holder_name')) {
             await m.addColumn(strumenti, strumenti.holderName);
+          }
+
+          // The cantiere clock-out screen's own fields: the description typed on leaving, the
+          // safety note, and the departure fix. They went to the server only through the online
+          // `end` call — a technician who clocked out with no signal lost all three, and the batch
+          // upsert the queue drains through had nowhere to put them.
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `cantiere_punches` from the current definition today, but the guard is
+          // what keeps an `alterTable` added later from turning this into a crash on `duplicate
+          // column name` before the app opens.
+          if (!await _columnExists(m.database, 'cantiere_punches', 'safety_notes')) {
+            await m.addColumn(cantierePunches, cantierePunches.safetyNotes);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'departure_latitude')) {
+            await m.addColumn(cantierePunches, cantierePunches.departureLatitude);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'departure_longitude')) {
+            await m.addColumn(cantierePunches, cantierePunches.departureLongitude);
           }
         }
       },

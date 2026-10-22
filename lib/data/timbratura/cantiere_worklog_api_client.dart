@@ -37,9 +37,11 @@ import '../api/dio_client.dart';
 // match CantiereMobileSessionDto (backend) verbatim — see test/contract/openapi.snapshot.json's
 // CantiereMobileSessionDto schema, which is what request_body_contract_test.dart checks this
 // against. Deliberately narrower than [StartCantiereRequest]: the backend's batch DTO does not
-// (yet) carry workOrderNumber/equipmentUsed/teamSize/weatherConditions/safetyNotes, so those rich
-// fields only reach the server via the online start/end path; see cantiere_timbra_screen.dart's
-// online-first-with-local-fallback comment for how the two paths are reconciled.
+// carry workOrderNumber/equipmentUsed/teamSize/weatherConditions, so those rich fields only reach
+// the server via the online start/end path; see cantiere_timbra_screen.dart's
+// online-first-with-local-fallback comment for how the two paths are reconciled. The clock-out
+// screen's own fields (safety note, departure GPS) ARE carried, like the description — a
+// technician who clocked out with no signal used to lose what they wrote about site safety.
 
 /// One cantiere punch as the device recorded it, ready for the batch upsert.
 class CantiereMobileSessionDto {
@@ -54,6 +56,9 @@ class CantiereMobileSessionDto {
     this.latitude,
     this.longitude,
     this.workLogType = 0, // 0 = Site (default)
+    this.departureLatitude,
+    this.departureLongitude,
+    this.safetyNotes,
   });
 
   final String clientId;
@@ -65,6 +70,12 @@ class CantiereMobileSessionDto {
   final DateTime? endTime; // UTC, null if active
   final double? latitude;
   final double? longitude;
+
+  /// Clock-out fields — the same ones [EndCantiereRequest] sends: where the phone was when the
+  /// technician left site, and what they wrote about safety. Null unless the punch is closed.
+  final double? departureLatitude;
+  final double? departureLongitude;
+  final String? safetyNotes;
 
   /// CantiereWorkLogTypeEnum: Site=0, Travel=1, Setup=2.
   final int workLogType;
@@ -80,6 +91,9 @@ class CantiereMobileSessionDto {
     if (latitude != null) 'latitude': latitude,
     if (longitude != null) 'longitude': longitude,
     'workLogType': workLogType,
+    if (departureLatitude != null) 'departureLatitude': departureLatitude,
+    if (departureLongitude != null) 'departureLongitude': departureLongitude,
+    if (safetyNotes != null) 'safetyNotes': safetyNotes,
   };
 }
 

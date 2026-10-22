@@ -133,6 +133,13 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
               eventTime: DateTime.now().toUtc(),
               eventType: 'uscita',
               description: description,
+              // The same three fields the online `end` call sends. Dropping them here made an
+              // offline clock-out a poorer record than the same visit closed with signal: no
+              // safety note, no departure fix. They queue on the 'uscita' row and the batch
+              // upsert carries them (CantiereMobileSessionDto.departureLatitude/…).
+              safetyNotes: safetyNotes,
+              departureLatitude: location?.lat,
+              departureLongitude: location?.lng,
             );
         unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
         _onEndedSuccessfully(offline: true);

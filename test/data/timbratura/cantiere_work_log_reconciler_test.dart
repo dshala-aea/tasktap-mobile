@@ -29,6 +29,9 @@ class _FakeRepo implements ICantiereSessionRepository {
     String? description,
     double? latitude,
     double? longitude,
+    String? safetyNotes,
+    double? departureLatitude,
+    double? departureLongitude,
   }) async {
     addedEventTypes.add(eventType);
     events.add(

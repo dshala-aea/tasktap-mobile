@@ -34,6 +34,9 @@ class _FakeRepo implements ICantiereSessionRepository {
     String? description,
     double? latitude,
     double? longitude,
+    String? safetyNotes,
+    double? departureLatitude,
+    double? departureLongitude,
   }) async {}
 
   @override
@@ -90,6 +93,9 @@ class _FakeRepo implements ICantiereSessionRepository {
       description: e.description,
       latitude: e.latitude,
       longitude: e.longitude,
+      safetyNotes: e.safetyNotes,
+      departureLatitude: e.departureLatitude,
+      departureLongitude: e.departureLongitude,
       notes: e.notes,
       isPendingSync: e.isPendingSync,
       syncError: message,
@@ -146,6 +152,9 @@ CantierePunche _cp(
   String? customerId,
   String? ticketId,
   String? notes,
+  String? safetyNotes,
+  double? departureLatitude,
+  double? departureLongitude,
 }) => CantierePunche(
   id: id,
   eventType: type,
@@ -155,6 +164,9 @@ CantierePunche _cp(
   customerId: customerId,
   ticketId: ticketId,
   notes: notes,
+  safetyNotes: safetyNotes,
+  departureLatitude: departureLatitude,
+  departureLongitude: departureLongitude,
 );
 
 void main() {
@@ -207,6 +219,36 @@ void main() {
       await svc.syncNow();
 
       expect(repo.markedSynced, containsAll(['id-1', 'id-2']));
+    });
+
+    /// The clock-out screen's fields must survive the queue. Sending the interval without them
+    /// makes an offline clock-out a poorer record than the same visit closed with signal, and the
+    /// safety note is the one field on that screen a compliance audit actually asks for.
+    test('the clock-out fields ride on the closing DTO', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+      final events = [
+        _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+        _cp(
+          'id-2',
+          'uscita',
+          t2,
+          safetyNotes: 'area recintata',
+          departureLatitude: 45.4660,
+          departureLongitude: 9.1880,
+        ),
+      ];
+      final repo = _FakeRepo(events);
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      final dto = api.calls[0][0];
+      expect(dto.endTime, t2);
+      expect(dto.safetyNotes, 'area recintata');
+      expect(dto.departureLatitude, 45.4660);
+      expect(dto.departureLongitude, 9.1880);
     });
 
     test('active interval has null endTime in DTO', () async {

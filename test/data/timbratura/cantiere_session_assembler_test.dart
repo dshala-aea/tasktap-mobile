@@ -18,6 +18,9 @@ CantierePunche _cp(
   String? description,
   double? latitude,
   double? longitude,
+  String? safetyNotes,
+  double? departureLatitude,
+  double? departureLongitude,
 }) => CantierePunche(
   id: id,
   eventType: type,
@@ -29,6 +32,9 @@ CantierePunche _cp(
   description: description,
   latitude: latitude,
   longitude: longitude,
+  safetyNotes: safetyNotes,
+  departureLatitude: departureLatitude,
+  departureLongitude: departureLongitude,
 );
 
 void main() {
@@ -130,6 +136,75 @@ void main() {
         _cp('stable-uuid-abc', 'ingresso', t, cantiereId: 'cant-1', customerId: 'cust-1'),
       ]);
       expect(intervals[0].clientId, 'stable-uuid-abc');
+    });
+
+    group('the clock-out screen\'s own fields', () {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+
+      test('safety note and departure GPS are carried from the uscita', () {
+        final intervals = assembleCantiereIntervals([
+          _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+          _cp(
+            'id-2',
+            'uscita',
+            t2,
+            safetyNotes: 'area recintata',
+            departureLatitude: 45.4660,
+            departureLongitude: 9.1880,
+          ),
+        ]);
+        expect(intervals[0].safetyNotes, 'area recintata');
+        expect(intervals[0].departureLatitude, 45.4660);
+        expect(intervals[0].departureLongitude, 9.1880);
+      });
+
+      test('a description typed on leaving wins over the arrival note — the online end route '
+          'overwrites the row with it, so an offline close must produce the same record', () {
+        final intervals = assembleCantiereIntervals([
+          _cp(
+            'id-1',
+            'ingresso',
+            t1,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            description: 'arrivo in cantiere',
+          ),
+          _cp('id-2', 'uscita', t2, description: 'sostituito il quadro'),
+        ]);
+        expect(intervals[0].description, 'sostituito il quadro');
+      });
+
+      test('an uscita with no note keeps the arrival description', () {
+        final intervals = assembleCantiereIntervals([
+          _cp(
+            'id-1',
+            'ingresso',
+            t1,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            description: 'arrivo in cantiere',
+          ),
+          _cp('id-2', 'uscita', t2),
+        ]);
+        expect(intervals[0].description, 'arrivo in cantiere');
+      });
+
+      test('a still-open interval carries no clock-out fields, even if its opener has the columns '
+          'set (they belong to the uscita only)', () {
+        final intervals = assembleCantiereIntervals([
+          _cp(
+            'id-1',
+            'ingresso',
+            t1,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            safetyNotes: 'nota impossibile',
+          ),
+        ]);
+        expect(intervals[0].endTime, isNull);
+        expect(intervals[0].safetyNotes, isNull);
+      });
     });
   });
 }

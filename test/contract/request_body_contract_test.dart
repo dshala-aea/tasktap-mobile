@@ -376,6 +376,11 @@ void main() {
             endTime: DateTime.utc(2026, 8, 16, 16),
             latitude: 45.4642,
             longitude: 9.19,
+            // The clock-out screen's own fields. Each must be a key the server declares, or an
+            // offline clock-out drops what was typed on leaving site.
+            departureLatitude: 45.4660,
+            departureLongitude: 9.1880,
+            safetyNotes: 'nessuna anomalia',
           ),
         ]),
       );
