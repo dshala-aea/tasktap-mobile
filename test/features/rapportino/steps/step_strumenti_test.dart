@@ -225,6 +225,17 @@ void main() {
       expect(r.outcome, isNull);
       expect(r.usageDescription, 'Ispezione quadro');
 
+      // The live snapshot follows the write. The instrument card seeds its text controllers from
+      // `state.items` once per mount, so while this provider stays alive (the rapportino screen
+      // watches it for its own count) a stale snapshot here means closing and reopening the
+      // Strumenti sheet shows blank fields even though the note was saved.
+      final live = c
+          .read(strumentiSelectionProvider(_rid))
+          .items
+          .firstWhere((i) => i.strumentoId == 'mine-expired');
+      expect(live.usageDescription, 'Ispezione quadro');
+      expect(live.outcome, '');
+
       // A fresh open reads them back.
       final c2 = _container(db);
       await c2.read(strumentiSelectionProvider(_rid).notifier).ready;

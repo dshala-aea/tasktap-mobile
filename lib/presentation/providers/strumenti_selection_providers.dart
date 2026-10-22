@@ -57,6 +57,19 @@ class StrumentoSelectionItem {
   /// Free-text notes, '' when none. Optional: never blocks a submit.
   final String usageDescription;
   final String outcome;
+
+  StrumentoSelectionItem copyWith({String? usageDescription, String? outcome}) =>
+      StrumentoSelectionItem(
+        strumentoId: strumentoId,
+        name: name,
+        matricola: matricola,
+        calibrationExpiry: calibrationExpiry,
+        expiredAcknowledged: expiredAcknowledged,
+        expired: expired,
+        inCatalogue: inCatalogue,
+        usageDescription: usageDescription ?? this.usageDescription,
+        outcome: outcome ?? this.outcome,
+      );
 }
 
 class StrumentiSelectionState {
@@ -236,8 +249,9 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
   }
 
   /// Persists the "how it was used" note at once (the sheet can be closed or the app killed any
-  /// moment). Writes ONLY that column, so acknowledgement/snapshot are untouched. The state is not
-  /// reloaded: the text field owns what is on screen while typing.
+  /// moment). Writes ONLY that column, so acknowledgement/snapshot are untouched, and the in-memory
+  /// snapshot is patched rather than reloaded: the text field owns what is on screen while typing,
+  /// and a reload would fight it for the cursor.
   Future<void> setUsageDescription(String strumentoId, String value) =>
       _writeNote(strumentoId, ReportStrumentiCompanion(usageDescription: Value(_nullIfBlank(value))));
 
@@ -250,6 +264,28 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
   Future<void> _writeNote(String strumentoId, ReportStrumentiCompanion change) async {
     if (!state.items.any((i) => i.strumentoId == strumentoId)) return;
     await _repo.updateLocalStrumentoNotes(reportId, strumentoId, change);
+    if (!mounted) return;
+    // Patch the snapshot to match the row just written. Without this the note lived only in
+    // Drift: the card seeds its text controllers from `state.items` exactly once per mount, so
+    // closing and reopening the Strumenti sheet brought the fields back blank even though the
+    // write had succeeded — the note was saved, the screen had simply forgotten it.
+    state = StrumentiSelectionState(
+      isLoading: state.isLoading,
+      workDate: state.workDate,
+      available: state.available,
+      items: [
+        for (final item in state.items)
+          if (item.strumentoId != strumentoId)
+            item
+          else
+            item.copyWith(
+              usageDescription: change.usageDescription.present
+                  ? (change.usageDescription.value ?? '')
+                  : null,
+              outcome: change.outcome.present ? (change.outcome.value ?? '') : null,
+            ),
+      ],
+    );
   }
 }
 
