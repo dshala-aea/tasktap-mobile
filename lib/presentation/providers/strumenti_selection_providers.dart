@@ -36,6 +36,8 @@ class StrumentoSelectionItem {
     required this.expiredAcknowledged,
     required this.expired,
     required this.inCatalogue,
+    this.isMine = false,
+    this.holderName,
     this.usageDescription = '',
     this.outcome = '',
   });
@@ -54,6 +56,13 @@ class StrumentoSelectionItem {
   /// False when the instrument was retired from the catalogue after it was saved on the draft.
   final bool inCatalogue;
 
+  /// True when it is in the technician's own kit; false for a borrowed one.
+  final bool isMine;
+
+  /// Whose it is when it is not the technician's own; null when it sits on the shelf or when the
+  /// instrument is no longer in the catalogue (nothing left to resolve it from).
+  final String? holderName;
+
   /// Free-text notes, '' when none. Optional: never blocks a submit.
   final String usageDescription;
   final String outcome;
@@ -67,6 +76,8 @@ class StrumentoSelectionItem {
         expiredAcknowledged: expiredAcknowledged,
         expired: expired,
         inCatalogue: inCatalogue,
+        isMine: isMine,
+        holderName: holderName,
         usageDescription: usageDescription ?? this.usageDescription,
         outcome: outcome ?? this.outcome,
       );
@@ -197,6 +208,8 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
           expiredAcknowledged: expired && r.expiredAcknowledged,
           expired: expired,
           inCatalogue: cat != null,
+          isMine: cat?.isMine ?? false,
+          holderName: cat?.holderName,
           usageDescription: r.usageDescription ?? '',
           outcome: r.outcome ?? '',
         ),

@@ -304,6 +304,8 @@ Future<void> replaceStrumenti(
               calibrationExpiry: Value(_label(s.calibrationExpiry)),
               certificateReference: Value(s.certificateReference),
               isMine: Value(s.isMine),
+              holderUserId: Value(s.holderUserId),
+              holderName: Value(s.holderName),
             ),
         ],
         mode: InsertMode.insertOrReplace,

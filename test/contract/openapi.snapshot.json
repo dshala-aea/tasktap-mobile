@@ -13548,7 +13548,7 @@
         "tags": [
           "ReportTemplates"
         ],
-        "summary": "Uploads the variant\u0027s AcroForm PDF, replacing the one it owns, and clears every field\n    mapping.",
+        "summary": "Uploads the variant\u0027s AcroForm PDF, replacing the one it owns. Bindings survive the\n    replacement while the new document still answers them under the same field names and kinds\n    (see AcroFormConfig AcroFormConfig.KeepBindingsFor(IReadOnlyDictionary\u0026lt;string, string\u0026gt; fieldKindsByName)); only the ones it no longer answers are\n    dropped.",
         "parameters": [
           {
             "name": "id",
@@ -36474,6 +36474,19 @@
           },
           "isMine": {
             "type": "boolean"
+          },
+          "holderUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "holderName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "An active instrument of the tenant; bool SyncStrumentoDto.IsMine = the caller is its current holder (borrowing works offline)."

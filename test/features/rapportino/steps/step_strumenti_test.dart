@@ -52,9 +52,19 @@ Future<void> _seedCatalogue(AppDatabase db) async {
       ),
       StrumentiCompanion.insert(
         id: 'other',
+        // A colleague's instrument, held by someone the technician must be able to name on the
+        // rapportino — that is what the holder columns are for.
         name: 'Anemometro',
         matricola: 'A-3',
         calibrationExpiry: const Value('2027-03-03'),
+        holderUserId: const Value('u-anna'),
+        holderName: const Value('Anna Neri'),
+      ),
+      StrumentiCompanion.insert(
+        id: 'shelf',
+        // Nobody holds it: the picker must stay silent about an owner rather than print a blank.
+        name: 'Livella',
+        matricola: 'L-7',
       ),
     ]),
   );
@@ -283,6 +293,25 @@ void main() {
       expect(byId['mine-expired']!.expiredAcknowledged, isTrue);
       expect(byId['mine-valid']!.expiredAcknowledged, isFalse);
     });
+
+    test('a borrowed instrument carries its holder; one on the shelf carries nobody', () async {
+      await _seedDraft(db, prefilled: true);
+      await _seedCatalogue(db);
+      final c = _container(db);
+      final n = c.read(strumentiSelectionProvider(_rid).notifier);
+      await n.ready;
+
+      await n.add('other');
+      await n.add('shelf');
+      final byId = {
+        for (final i in c.read(strumentiSelectionProvider(_rid)).items) i.strumentoId: i,
+      };
+      expect(byId['other']!.holderName, 'Anna Neri');
+      expect(byId['other']!.isMine, isFalse);
+      // Nobody holds it: no owner to name, and nothing for the card to print.
+      expect(byId['shelf']!.holderName, isNull);
+      expect(byId['shelf']!.isMine, isFalse);
+    });
   });
 
   group('StepStrumenti widget', () {
@@ -315,6 +344,38 @@ void main() {
       )..where((s) => s.strumentoId.equals('mine-expired'))).getSingle();
       expect(row.expiredAcknowledged, isTrue);
       expect(row.isLocal, isTrue);
+    });
+
+    // The complaint this closes: "we do not actually see who owns the strumento". A colleague's
+    // instrument was a bare name in the picker, and the technician had to guess whose it was
+    // before borrowing it on the rapportino.
+    testWidgets('the picker names the holder, and both picker and card stay silent when nobody holds it',
+        (tester) async {
+      await _seedDraft(db, prefilled: true);
+      await _seedCatalogue(db);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+          child: const MaterialApp(
+            home: Scaffold(body: SingleChildScrollView(child: StepStrumenti(reportId: _rid))),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Aggiungi strumento'));
+      await tester.tap(find.text('Aggiungi strumento'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('di Anna Neri'), findsOneWidget);
+      // On the shelf: the matricola alone, never "di null" or an empty owner segment.
+      expect(find.text('L-7'), findsOneWidget);
+
+      await tester.tap(find.text('Anemometro'));
+      await tester.pumpAndSettle();
+
+      // The card is what the technician reads back before sending, so the owner is repeated there.
+      expect(find.text('Di Anna Neri'), findsOneWidget);
     });
 
     testWidgets('typing in the two note fields persists to the Drift row, counter hidden until 1800',
