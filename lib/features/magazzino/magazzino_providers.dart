@@ -116,23 +116,37 @@ final furgoneDiUserProvider = FutureProvider.autoDispose
 /// shows the server's copy. Offline it answers from the `magazzini` mirror, so a material line
 /// picked up on site can still name the Sede it came from.
 ///
-/// Nothing cached is not the same as nothing existing: an empty mirror throws
-/// [MagazziniOfflineException] rather than returning `[]`, because the picker renders an empty
-/// list as "Nessun magazzino disponibile." — a false statement about the tenant's stock that a
-/// technician would act on.
+/// A *never-synced* device is not the same as a tenant with no warehouses: before the first sync
+/// an empty mirror throws [MagazziniOfflineException] rather than returning `[]`, because the
+/// picker renders an empty list as "Nessun magazzino disponibile." — a false statement about the
+/// tenant's stock that a technician would act on. Once something *has* synced, an empty mirror is
+/// the tenant's real answer and is returned as such.
+///
+/// Same online-then-mirror shape as [furgoneDiUserProvider]: a request that never arrived (5xx,
+/// 408, 429, timeout) falls back to the mirror instead of failing the line.
 final magazziniProvider = FutureProvider.autoDispose<List<MagazzinoDto>>((
   ref,
 ) async {
-  if (ref.watch(isOnlineProvider)) {
-    return ref.watch(magazzinoApiClientProvider).getMagazzini();
+  Future<List<MagazzinoDto>> fromMirror() async {
+    final db = ref.watch(appDatabaseProvider);
+    final rows =
+        await (db.select(
+          db.magazzini,
+        )..orderBy([(w) => OrderingTerm.asc(w.nome)])).get();
+    if (rows.isEmpty && await db.getLastSync() == null) {
+      throw const MagazziniOfflineException();
+    }
+    return rows.map(_fromMirror).toList(growable: false);
   }
-  final db = ref.watch(appDatabaseProvider);
-  final rows =
-      await (db.select(
-        db.magazzini,
-      )..orderBy([(w) => OrderingTerm.asc(w.nome)])).get();
-  if (rows.isEmpty) throw const MagazziniOfflineException();
-  return rows.map(_fromMirror).toList(growable: false);
+
+  if (ref.watch(isOnlineProvider)) {
+    try {
+      return await ref.watch(magazzinoApiClientProvider).getMagazzini();
+    } catch (e) {
+      if (!isTransportOrServerFault(e)) rethrow;
+    }
+  }
+  return fromMirror();
 });
 
 /// The warehouses live on the server but this device has never downloaded them.

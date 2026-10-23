@@ -6,7 +6,8 @@
 //
 // Online each one still reads through: criterion 1 is that a connected device shows the server's
 // copy, never a mirror that may be a sync behind. Offline they answer from the `magazzini` mirror,
-// and an empty mirror is reported as "not downloaded yet" rather than as an empty tenant.
+// and an empty mirror on a device that never synced is reported as "not downloaded yet" rather
+// than as an empty tenant (a *synced* empty mirror is the tenant's real, empty answer).
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
@@ -128,6 +129,56 @@ void main() {
         throwsA(isA<MagazziniOfflineException>()),
       );
       expect(api.calls, 0);
+    });
+
+    test('a synced-but-empty mirror is the tenant\'s real answer, not "not downloaded"', () async {
+      // Something synced (so the device has seen the tenant) and the tenant has no warehouses —
+      // the picker's plain empty state is then the truth, not the download warning.
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      final api = _FakeApiClient();
+      final container = buildContainer(online: false, api: api);
+      addTearDown(container.dispose);
+
+      expect(await container.read(magazziniProvider.future), isEmpty);
+      expect(api.calls, 0);
+    });
+
+    test('online, a request that never arrived falls back to the mirror', () async {
+      await seedMirror();
+      final api = _FakeApiClient(
+        error: DioException(
+          requestOptions: RequestOptions(path: '/api/magazzini'),
+          type: DioExceptionType.connectionTimeout,
+        ),
+      );
+      final container = buildContainer(online: true, api: api);
+      addTearDown(container.dispose);
+
+      final list = await container.read(magazziniProvider.future);
+
+      expect(api.calls, 1);
+      expect(list.map((m) => m.nome), ['Furgone Rossi', 'Sede Milano']);
+    });
+
+    test('online, a 403 is about the account and is not papered over with the mirror', () async {
+      await seedMirror();
+      final api = _FakeApiClient(
+        error: DioException(
+          requestOptions: RequestOptions(path: '/api/magazzini'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/magazzini'),
+            statusCode: 403,
+          ),
+          type: DioExceptionType.badResponse,
+        ),
+      );
+      final container = buildContainer(online: true, api: api);
+      addTearDown(container.dispose);
+
+      await expectLater(
+        container.read(magazziniProvider.future),
+        throwsA(isA<DioException>()),
+      );
     });
 
     test('online the live answer wins, never merged with the mirror', () async {
