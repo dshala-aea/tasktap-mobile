@@ -27,6 +27,7 @@ import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/sync/sync_freshness_provider.dart';
 import '../timbra/cantiere_timbra_screen.dart'
     show cantiereActiveSessionProvider, cantiereTodayHoursProvider, cantieriProvider;
 
@@ -63,6 +64,12 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
     // For the "Timbrato oggi" per-row indicator below — the currently-active cantiere (if any)
     // counts as "timbrato oggi" even before it has a closed interval of its own yet.
     final activeCantiereId = ref.watch(cantiereActiveSessionProvider)?.cantiereId;
+
+    // "No cantieri synced on this device" is a claim about the phone, so it is only true before the
+    // first completed sync. After one, an empty mirror means the technician really has no cantiere
+    // in scope, and the copy must say that instead of sending them to pull-to-refresh for data
+    // that has already arrived.
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -105,14 +112,22 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
                   ),
                 )
               else if (allCantieri.isEmpty)
-                const SliverToBoxAdapter(
-                  child: UnavailableState(
-                    icon: LucideIcons.hardHat,
-                    titolo: 'Nessun cantiere disponibile',
-                    motivo:
-                        'Non risultano cantieri sincronizzati su questo dispositivo. Trascina in '
-                        'basso per aggiornare, oppure riprova tra poco.',
-                  ),
+                SliverToBoxAdapter(
+                  child: neverSynced
+                      ? const UnavailableState(
+                          icon: LucideIcons.cloudOff,
+                          titolo: 'Cantieri non ancora scaricati',
+                          motivo:
+                              'Questo telefono non ha ancora completato una sincronizzazione: i '
+                              'cantieri compariranno qui appena i dati saranno scaricati.',
+                        )
+                      : const UnavailableState(
+                          icon: LucideIcons.hardHat,
+                          titolo: 'Nessun cantiere in corso',
+                          motivo:
+                              'Non risultano cantieri attivi tra quelli che ti sono assegnati. '
+                              'Trascina in basso per aggiornare.',
+                        ),
                 )
               // An empty *filter* is not the same claim as an empty catalogue — same distinction
               // magazzino_screen.dart's Articoli tab already draws.

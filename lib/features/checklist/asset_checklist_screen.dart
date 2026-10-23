@@ -148,7 +148,10 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
     final mirrorKnown =
         ref.watch(ticketMirrorKnownProvider(ticketId)).valueOrNull != false;
     final unfiltered = _query.filter == ChecklistFilter.all && _query.text.isEmpty;
-    final notDownloaded = unfiltered && !mirrorKnown;
+    // ...except when the ticket is *omitted*: the banner above already says in full why its
+    // checklist is not here and offers "Scarica checklist", so repeating "non ancora scaricati"
+    // underneath would say the same thing twice and, at 400px, overflow the fixed body column.
+    final notDownloaded = unfiltered && !mirrorKnown && !tree.omitted;
     _lastTree = tree;
     _lastShown = {
       for (final i in items)

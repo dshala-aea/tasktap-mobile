@@ -81,6 +81,45 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    /// Three different things reach the empty branch and only two of them are answers: a search
+    /// that matches nothing, a phone that has never downloaded anything, and a tenant with no
+    /// ticket. Showing one message for all three turned a typo into "this company has no tickets".
+    testWidgets('a device that never synced says so, not "no tickets"', (tester) async {
+      await pump(tester);
+
+      expect(find.text('Ticket non ancora scaricati'), findsOneWidget);
+      expect(find.text('Nessun ticket'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('after a sync, an empty mirror reads as "no ticket", not "not downloaded"', (
+      tester,
+    ) async {
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      await pump(tester);
+
+      expect(find.text('Nessun ticket'), findsOneWidget);
+      expect(find.text('Ticket non ancora scaricati'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a search that matches nothing is "no result", never "no tickets"', (
+      tester,
+    ) async {
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      await pump(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'inesistente');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun risultato'), findsOneWidget);
+      expect(find.text('Nessun ticket'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('renders a row per ticket, titled', (tester) async {
       await db
           .into(db.tickets)

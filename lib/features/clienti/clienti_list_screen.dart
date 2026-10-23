@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_freshness_provider.dart';
 import 'clienti_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -83,6 +84,11 @@ class _ClientiListBody extends ConsumerWidget {
           (c.city?.toLowerCase().contains(q) ?? false);
     }).toList();
 
+    // A search that matches nothing is an answer to the technician's own question; an empty mirror
+    // on a phone that has never synced is a missing download; only the third case is a fact about
+    // the tenant. One message for all three let a typo read as "this company has no customers".
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+
     // Pull-to-refresh: this list *is* the synced mirror (`customersProvider`), so a sync is the
     // whole refresh — there is no separate server read backing the screen. Added because the
     // Cliente screens were the one list in the app with no way to ask for newer data at all: a
@@ -117,11 +123,25 @@ class _ClientiListBody extends ConsumerWidget {
             )
           else if (filtered.isEmpty)
             SliverToBoxAdapter(
-              child: EmptyState(
-                icon: LucideIcons.users,
-                title: 'Nessun cliente',
-                body: 'I clienti sincronizzati appariranno qui.',
-              ),
+              child: query.isNotEmpty
+                  ? EmptyState(
+                      icon: LucideIcons.searchX,
+                      title: 'Nessun risultato',
+                      body: 'Nessun cliente corrisponde a "$query".',
+                    )
+                  : neverSynced
+                  ? const EmptyState(
+                      icon: LucideIcons.cloudOff,
+                      title: 'Clienti non ancora scaricati',
+                      body:
+                          'Questo telefono non ha ancora completato una sincronizzazione: i '
+                          'clienti compariranno qui appena i dati saranno scaricati.',
+                    )
+                  : const EmptyState(
+                      icon: LucideIcons.users,
+                      title: 'Nessun cliente',
+                      body: 'Non ci sono clienti da mostrare.',
+                    ),
             )
           else
             SliverList(
