@@ -93,6 +93,10 @@ void main() {
       ]),
     );
     await tester.pump();
+    // The override is a `Stream.value`: it emits on a microtask, after the frame that built the
+    // banner with no value yet (`aggiornato mai`). One pump is a race — it passed in the three
+    // device-zone shards and failed in the UTC job on the same commit — so pump until it lands.
+    await tester.pump();
 
     expect(find.textContaining('Offline'), findsOneWidget);
     expect(find.textContaining('aggiornato oggi 08:42'), findsOneWidget);
