@@ -428,7 +428,8 @@ void main() {
       await pumpScreen(tester, online: false);
 
       expect(find.text('Contratto cessato'), findsOneWidget);
-      expect(find.text('Inattivo'), findsOneWidget);
+      // StatusStamp renders its label all-caps (status_stamp.dart), not in its original case.
+      expect(find.text('INATTIVO'), findsOneWidget);
 
       await teardown(tester);
     });
