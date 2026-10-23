@@ -77,6 +77,29 @@ class TicketAttachmentUploadQueue {
     return _attempt(id);
   }
 
+  /// Surface rows an app kill left mid-upload, so they are neither invisible nor auto-resent.
+  ///
+  /// `submitting` is a state the queue only holds *during* an attempt. When the process dies
+  /// before the response arrives, the state outlives the attempt: [processAll] sweeps only
+  /// `pendingSync`, and the Allegati tab renders `submitting` as "Caricamento…" forever — the
+  /// attachment is never retried, never reported as failed, and never reaches the ticket.
+  ///
+  /// The outcome is genuinely unknown (the request may have reached the server), which is exactly
+  /// the condition this queue already answers with `failed` — kept for a manual "Riprova" instead
+  /// of an automatic resend, because the endpoint has no client idempotency key and a resend
+  /// could attach the same photo twice. Returns how many rows were surfaced.
+  Future<int> recoverInterrupted() async {
+    final interrupted = await _repo.getByState(PendingTicketAttachmentState.submitting);
+    for (final a in interrupted) {
+      await _repo.updateState(
+        id: a.id,
+        state: PendingTicketAttachmentState.failed,
+        error: 'Caricamento interrotto. Verifica che l\'allegato non sia già presente, poi riprova.',
+      );
+    }
+    return interrupted.length;
+  }
+
   /// Auto-retry every attachment that has not reached the server yet — only `pendingSync`. See
   /// the class doc comment for why `failed` is excluded. Called on reconnect and on app start.
   Future<void> processAll() async {

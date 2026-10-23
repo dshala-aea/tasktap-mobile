@@ -373,6 +373,71 @@ void main() {
     });
   });
 
+  group('TicketAttachmentUploadQueue.recoverInterrupted — the app was killed mid-upload', () {
+    test('a row left in submitting is surfaced as failed, and never auto-resent', () async {
+      // `submitting` only ever holds during an attempt, so a row still in it at startup means the
+      // process died before the response arrived. Nothing else reads that state: processAll
+      // sweeps pendingSync only, and the Allegati tab would show "Caricamento…" forever.
+      await repo.insert(
+        id: 'killed-1',
+        ticketId: 'ticket-k',
+        localPath: '/tmp/killed.jpg',
+        fileName: 'killed.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 10,
+        state: PendingTicketAttachmentState.submitting,
+      );
+
+      final surfaced = await queue.recoverInterrupted();
+      expect(surfaced, 1);
+
+      final row = (await repo.getById('killed-1'))!;
+      expect(row.state, 'failed');
+      // Rendered verbatim under "Caricamento non riuscito", so it has to be a sentence.
+      expect(row.error, contains('Caricamento interrotto'));
+
+      // Manual retry by design: the killed request may have reached the server, and the endpoint
+      // has no idempotency key to make an automatic resend safe.
+      await queue.processAll();
+      verifyNever(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      );
+    });
+
+    test('an untouched pendingSync row is still uploaded afterwards', () async {
+      await repo.insert(
+        id: 'waiting-1',
+        ticketId: 'ticket-k',
+        localPath: '/tmp/waiting.jpg',
+        fileName: 'waiting.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 10,
+        state: PendingTicketAttachmentState.pendingSync,
+      );
+      when(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const TicketAttachmentUploadResponse(allegatoId: 'srv-1', contentUrl: '/content/1'),
+      );
+
+      expect(await queue.recoverInterrupted(), 0);
+      await queue.processAll();
+
+      expect((await repo.getById('waiting-1'))!.state, 'submitted');
+    });
+  });
+
   group('TicketAttachmentUploadQueue.processAll — multiple pending attachments', () {
     test('processes each pendingSync attachment independently', () async {
       final a = await queue.upload(
