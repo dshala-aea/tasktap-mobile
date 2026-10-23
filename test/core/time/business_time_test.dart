@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
+import 'package:tasktap_mobile/core/time/work_time.dart'
+    show formatTimeSpan, parseTimeSpan;
 
 BusinessTime _at(String zone, [DateTime? instant]) =>
     BusinessTime(zone, clock: instant == null ? null : () => instant);
@@ -301,6 +303,45 @@ void main() {
       );
       expect(rome.formatInZone(r, 'yyyy-MM-dd'), '2027-03-28');
       expect(r, DateTime.utc(2027, 3, 28, 1, 30)); // forward shift to 03:30
+    });
+  });
+
+  group('legacyLabelOf', () {
+    final rome = _at('Europe/Rome');
+
+    test('reads the Rome wall clock, summer and winter', () {
+      expect(
+        rome.legacyLabelOf(DateTime.utc(2026, 7, 10, 6, 5, 9)),
+        (_d(2026, 7, 10), const Duration(hours: 8, minutes: 5, seconds: 9)),
+      );
+      expect(
+        rome.legacyLabelOf(DateTime.utc(2026, 12, 1, 7, 0, 0)),
+        (_d(2026, 12, 1), const Duration(hours: 8)),
+      );
+    });
+
+    // The frame is the legacy one, not the tenant zone: the same instant must read 08:00 whatever
+    // the tenant's business zone says, or the label would stop matching the server's columns.
+    test('is Rome even when the tenant zone is elsewhere', () {
+      for (final zone in ['America/New_York', 'Asia/Tokyo', 'UTC']) {
+        expect(
+          _at(zone).legacyLabelOf(DateTime.utc(2026, 7, 10, 6)),
+          (_d(2026, 7, 10), const Duration(hours: 8)),
+        );
+      }
+    });
+
+    // `formatTimeSpan` is the label the backend's StartTime column carries; this is the whole
+    // path a local punch takes to become a suggestion, so it has to survive the round trip.
+    test('round-trips through instantOfLegacyLabel to the second', () {
+      final instant = DateTime.utc(2026, 7, 10, 6, 5, 9, 250);
+      final (civilDate, timeOfDay) = rome.legacyLabelOf(instant);
+      final back = rome.instantOfLegacyLabel(
+        civilDate,
+        parseTimeSpan(formatTimeSpan(timeOfDay))!,
+      );
+
+      expect(back, DateTime.utc(2026, 7, 10, 6, 5, 9)); // milliseconds truncated
     });
   });
 
