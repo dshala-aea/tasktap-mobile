@@ -244,6 +244,11 @@ class TimbraSyncService {
             latitude: i.latitude,
             longitude: i.longitude,
             gpsAccuracyMeters: i.gpsAccuracyMeters,
+            // Read once, here, at the moment the batch is handed to Dio — the same reading on
+            // every session, because the comparison the server makes is per batch, not per
+            // punch. Never i.startTime: a punch queued hours ago says nothing about the gap
+            // between the two clocks now.
+            deviceUtc: _clock().toUtc(),
           ),
         )
         .toList();
@@ -397,7 +402,7 @@ class TimbraSyncService {
       try {
         switch (e.eventType) {
           case 'fine':
-            await _apiClient.endWork();
+            await _apiClient.endWork(deviceUtc: _clock().toUtc());
           case 'pausa':
             await _apiClient.startBreak();
           case 'ripresa':

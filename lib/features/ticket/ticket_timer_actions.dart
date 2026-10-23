@@ -44,9 +44,16 @@ Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
 
   final TicketTimerStart started;
   try {
+    // This is the tap instant: the online route is only taken when the tap reaches the server
+    // now, and the server measures the gap from its own receipt time. Queued timer sessions go
+    // through the batch upsert instead, which stamps a separate send-time reading.
     started = await ref
         .read(ticketWorkflowApiClientProvider)
-        .startTimer(ticketId, clientId: clientId);
+        .startTimer(
+          ticketId,
+          clientId: clientId,
+          deviceUtc: DateTime.now().toUtc(),
+        );
   } on TicketWorkflowFailure catch (e) {
     if (e.cause?.response != null) rethrow;
     await locally();
@@ -96,7 +103,9 @@ Future<bool> stopTicketTimer(WidgetRef ref, String ticketId) async {
     throw const TicketTimerNotOnDevice();
   }
   try {
-    await ref.read(ticketWorkflowApiClientProvider).stopTimer(ticketId);
+    await ref
+        .read(ticketWorkflowApiClientProvider)
+        .stopTimer(ticketId, deviceUtc: DateTime.now().toUtc());
   } on TicketWorkflowFailure catch (e) {
     // The mirror is closed on every path where it holds the session: a technician who tapped
     // "Ferma" ends the clock they see, and the queued close re-sends it through the idempotent

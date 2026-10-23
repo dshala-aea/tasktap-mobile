@@ -209,6 +209,8 @@ class CantiereTimbraSyncService {
               equipmentUsed: i.equipmentUsed,
               teamSize: i.teamSize,
               weatherConditions: i.weatherConditions,
+              // Read once per batch, at send time — see TimbraSyncService._pushDay's same field.
+              deviceUtc: _clock().toUtc(),
             ),
           )
           .toList();

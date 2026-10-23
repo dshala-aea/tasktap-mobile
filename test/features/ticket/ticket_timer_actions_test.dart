@@ -42,9 +42,18 @@ class _ScriptedWorkflowClient extends TicketWorkflowApiClient {
   final TicketWorkflowFailure? failure;
   final List<String?> receivedClientIds = <String?>[];
 
+  /// The device reading the online tap carried — O-10: absent means the server stamped its own
+  /// clock, which is only right when the phone has nothing to say about the instant.
+  DateTime? receivedDeviceUtc;
+
   @override
-  Future<TicketTimerStart> startTimer(String ticketId, {String? clientId}) async {
+  Future<TicketTimerStart> startTimer(
+    String ticketId, {
+    String? clientId,
+    DateTime? deviceUtc,
+  }) async {
     receivedClientIds.add(clientId);
+    receivedDeviceUtc = deviceUtc;
     if (failure != null) throw failure!;
     return result!;
   }

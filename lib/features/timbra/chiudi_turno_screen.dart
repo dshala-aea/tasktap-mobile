@@ -125,6 +125,8 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
           departureLatitude: location?.lat,
           departureLongitude: location?.lng,
           safetyNotes: safetyNotes,
+          // See StartCantiereRequest.deviceUtc — the same instant-as-witness, gap-as-evidence rule.
+          deviceUtc: DateTime.now().toUtc(),
         ),
       );
       _onEndedSuccessfully(offline: false);

@@ -61,6 +61,7 @@ class CantiereMobileSessionDto {
     this.equipmentUsed,
     this.teamSize,
     this.weatherConditions,
+    this.deviceUtc,
   });
 
   final String clientId;
@@ -86,6 +87,11 @@ class CantiereMobileSessionDto {
   final int? teamSize;
   final String? weatherConditions;
 
+  /// This device's clock reading at the moment the batch is sent — never the punch instant; see
+  /// `MobileSessionDto.deviceUtc` for the full reasoning. The server records the gap from its own
+  /// receipt time and flags it when large; it does not use the value as the worklog instant.
+  final DateTime? deviceUtc;
+
   /// CantiereWorkLogTypeEnum: Site=0, Travel=1, Setup=2.
   final int workLogType;
 
@@ -107,6 +113,7 @@ class CantiereMobileSessionDto {
     if (equipmentUsed != null) 'equipmentUsed': equipmentUsed,
     if (teamSize != null) 'teamSize': teamSize,
     if (weatherConditions != null) 'weatherConditions': weatherConditions,
+    if (deviceUtc != null) 'deviceUtc': deviceUtc!.toUtc().toIso8601String(),
   };
 }
 
@@ -154,7 +161,13 @@ class StartCantiereRequest {
     this.arrivalLongitude,
     this.weatherConditions,
     this.workLogType = 0, // 0 = Site (default)
+    this.deviceUtc,
   });
+
+  /// This device's clock reading at the moment of sending. Becomes the session's start instant —
+  /// the phone is the witness of when work began, the server is the recorder — and the gap from
+  /// the server's receipt time is what gets recorded as the clock disagreement.
+  final DateTime? deviceUtc;
 
   final String cantiereId;
   final String customerId;
@@ -186,6 +199,7 @@ class StartCantiereRequest {
     if (arrivalLongitude != null) 'arrivalLongitude': arrivalLongitude,
     if (weatherConditions != null) 'weatherConditions': weatherConditions,
     'workLogType': workLogType,
+    if (deviceUtc != null) 'deviceUtc': deviceUtc!.toUtc().toIso8601String(),
   };
 }
 
@@ -196,6 +210,7 @@ class EndCantiereRequest {
     this.departureLatitude,
     this.departureLongitude,
     this.safetyNotes,
+    this.deviceUtc,
   });
 
   final String? description;
@@ -203,11 +218,16 @@ class EndCantiereRequest {
   final double? departureLongitude;
   final String? safetyNotes;
 
+  /// This device's clock reading at the moment of sending. Becomes the session's end instant, and
+  /// the gap from the server's receipt time is recorded as the clock disagreement.
+  final DateTime? deviceUtc;
+
   Map<String, dynamic> toJson() => {
     if (description != null) 'description': description,
     if (departureLatitude != null) 'departureLatitude': departureLatitude,
     if (departureLongitude != null) 'departureLongitude': departureLongitude,
     if (safetyNotes != null) 'safetyNotes': safetyNotes,
+    if (deviceUtc != null) 'deviceUtc': deviceUtc!.toUtc().toIso8601String(),
   };
 }
 
