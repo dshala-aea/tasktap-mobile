@@ -110,7 +110,7 @@ Widget _buildDetail({
       if (attachmentCache != null)
         attachmentContentCacheProvider.overrideWithValue(attachmentCache),
       if (ticketMirrorKnown != null)
-        ticketMirrorKnownProvider.overrideWith((ref, _) async => ticketMirrorKnown!),
+        ticketMirrorKnownProvider.overrideWith((ref, _) async => ticketMirrorKnown),
     ],
     child: MaterialApp(home: TicketDetailScreen(ticketId: ticketId)),
   );

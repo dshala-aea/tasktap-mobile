@@ -24,7 +24,7 @@ Widget host(
     isOnlineProvider.overrideWithValue(online),
     if (backfill != null) checklistBackfillProvider.overrideWithValue(backfill),
     if (ticketMirrorKnown != null)
-      ticketMirrorKnownProvider.overrideWith((ref, _) async => ticketMirrorKnown!),
+      ticketMirrorKnownProvider.overrideWith((ref, _) async => ticketMirrorKnown),
   ],
   child: const MaterialApp(home: AssetChecklistScreen(ticketId: 't1')),
 );
