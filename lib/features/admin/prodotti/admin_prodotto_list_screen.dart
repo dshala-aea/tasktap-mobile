@@ -8,24 +8,56 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
+import '../../../data/reference/reference_cache_repository.dart';
+import '../../../data/sync/connectivity_provider.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// The list's search text. Its own provider (not a family argument on the list provider) so the
 /// form screen can keep invalidating [adminProdottiAssistenzaProvider] without knowing the query.
 final adminProdottiQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
-/// Fetches prodotti assistenza from backend API; the search text is sent as `q`, so the server
-/// searches every row rather than the client filtering the first page.
+/// Prodotti assistenza for the Asset list: live from the API, or from the Drift mirror when there
+/// is no signal.
+///
+/// Offline the mirror holds the assets of the customers this phone carries — a real subset of the
+/// tenant, not the whole book — so it answers with those and the screen says so. It is deliberately
+/// *not* used as a fallback for a failed live call while online: this is a browse list, and there
+/// the error plus its retry is the honest answer (unlike the customer screen, where the mirrored
+/// rows for one customer are complete by construction).
+///
+/// Online the search text goes to the server as `q`, so it searches every row instead of the client
+/// filtering a first page; offline the same text filters the mirrored rows locally.
 final adminProdottiAssistenzaProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
   ref,
 ) async {
-  final api = ref.watch(adminApiClientProvider);
   final q = ref.watch(adminProdottiQueryProvider);
-  return api.fetchProdottiAssistenza(q: q);
+
+  if (!ref.watch(isOnlineProvider)) {
+    final rows = await ref.read(referenceCacheProvider).allProdottiWithCustomer();
+    final term = q.trim().toLowerCase();
+    bool matches(String? value) => term.isEmpty || (value ?? '').toLowerCase().contains(term);
+    return [
+      for (final (p, customerName) in rows)
+        if (matches(p.name) || matches(p.codice))
+          {
+            'id': p.id,
+            'name': p.name,
+            'isActive': p.isActive,
+            'codice': p.codice,
+            'categoria': p.categoria,
+            'serialNumber': p.serialNumber,
+            // The row prints this; without it an offline list cannot say whose asset it is.
+            'customerName': customerName ?? '—',
+          },
+    ];
+  }
+
+  return ref.watch(adminApiClientProvider).fetchProdottiAssistenza(q: q);
 });
 
-/// Admin prodotto assistenza list — online-only.
+/// Admin prodotto assistenza list — live online, mirrored offline.
 class AdminProdottoListScreen extends ConsumerWidget {
   const AdminProdottoListScreen({super.key});
 
@@ -90,6 +122,9 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
   Widget build(BuildContext context) {
     final filtered = widget.prodotti;
     final searching = ref.watch(adminProdottiQueryProvider).isNotEmpty;
+    // Offline the list comes from the mirror, which only holds this device's customers. Saying so
+    // is the difference between "these are the tenant's assets" and "these are the ones I can see".
+    final offline = !ref.watch(isOnlineProvider);
 
     return RefreshIndicator(
       onRefresh: () => ref.refresh(adminProdottiAssistenzaProvider.future),
@@ -109,6 +144,23 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
               onChanged: _onQueryChanged,
             ),
           ),
+          if (offline)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  0,
+                  AppSpacing.pagePadding,
+                  AppSpacing.md,
+                ),
+                child: Text(
+                  'Offline: solo gli asset dei clienti sincronizzati su questo telefono.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: context.colors.inkMuted),
+                ),
+              ),
+            ),
           if (filtered.isEmpty)
             SliverToBoxAdapter(
               child: EmptyState(

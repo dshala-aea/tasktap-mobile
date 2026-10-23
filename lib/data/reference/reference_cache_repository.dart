@@ -211,6 +211,30 @@ class ReferenceCacheRepository {
             ..orderBy([(p) => OrderingTerm.asc(p.name)]))
           .get();
 
+  /// Active assets across every customer this device carries — the offline answer for the Asset
+  /// hub list, which has no customer scope of its own.
+  ///
+  /// Each row comes with its customer's name, resolved here rather than by walking a customers
+  /// endpoint: the list's whole job is saying *whose* asset it is, and the mirror already holds
+  /// the names. Null when the device does not carry that customer (an asset synced via a ticket
+  /// whose customer has not been through yet) — the caller shows a dash rather than inventing one.
+  Future<List<(ProdottiAssistenzaData, String?)>> allProdottiWithCustomer() async {
+    final prodotti =
+        await (_db.select(_db.prodottiAssistenza)
+              ..where((p) => p.isActive.equals(true))
+              ..orderBy([(p) => OrderingTerm.asc(p.name)]))
+            .get();
+    if (prodotti.isEmpty) return const [];
+
+    final customerIds = prodotti.map((p) => p.customerId).toSet();
+    final customers = await (_db.select(
+      _db.customers,
+    )..where((c) => c.id.isIn(customerIds))).get();
+    final nameById = {for (final c in customers) c.id: c.companyName};
+
+    return [for (final p in prodotti) (p, nameById[p.customerId])];
+  }
+
   Future<List<Agent>> activeAgents() =>
       (_db.select(_db.agents)
             ..where((a) => a.isActive.equals(true))

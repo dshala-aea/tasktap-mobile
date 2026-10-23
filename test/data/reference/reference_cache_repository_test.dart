@@ -105,4 +105,53 @@ void main() {
 
     expect((await repo.contractsForCustomer('cu1')).map((r) => r.id), ['c1']);
   });
+
+  group('allProdottiWithCustomer', () {
+    ProdottoAssistenzaSyncDto prodotto(String id, String customerId, {bool active = true}) =>
+        ProdottoAssistenzaSyncDto(
+          id: id,
+          tenantId: 't',
+          createdAt: DateTime.now(),
+          name: id,
+          customerId: customerId,
+          locationId: 'l1',
+          isActive: active,
+        );
+
+    Future<void> seedCustomer(String id, String name) => db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: id,
+            tenantId: 't',
+            createdAt: DateTime.now(),
+            companyName: name,
+          ),
+        );
+
+    // The Asset hub list has no customer scope, and its rows print whose asset it is — so the
+    // reader resolves the name here instead of leaving the screen to walk a customers endpoint.
+    test('names the customer and skips deactivated assets', () async {
+      await seedCustomer('cu1', 'ACME Srl');
+      await seedCustomer('cu2', 'Beta Spa');
+      await repo.upsertProdottiAssistenza([
+        prodotto('p1', 'cu1'),
+        prodotto('p2', 'cu2'),
+        prodotto('p3', 'cu1', active: false),
+      ]);
+
+      final rows = await repo.allProdottiWithCustomer();
+
+      expect(rows.map((r) => (r.$1.id, r.$2)), [('p1', 'ACME Srl'), ('p2', 'Beta Spa')]);
+    });
+
+    test('an asset whose customer this device does not carry gets no name, not a guess', () async {
+      await repo.upsertProdottiAssistenza([prodotto('p1', 'cu-absent')]);
+
+      final rows = await repo.allProdottiWithCustomer();
+
+      expect(rows.single.$1.id, 'p1');
+      expect(rows.single.$2, isNull);
+    });
+  });
 }
