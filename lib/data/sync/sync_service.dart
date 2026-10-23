@@ -1332,28 +1332,29 @@ class SyncService {
   /// the server deliberately withheld — the exact trap the report children close by re-sending
   /// everything. Here the cutoff is exact instead, so nothing needs re-sending.
   ///
-  /// Rows leave with their ticket: the ticket manifest prunes them (`_pruneTickets`). Written in
-  /// one batch because a busy ticket's timeline is a few hundred rows per sync.
+  /// Rows leave with their ticket: the ticket manifest prunes them (`_pruneTickets`).
   Future<void> _applyTicketHistory(SyncResultDto payload) async {
     if (!payload.carriesTicketHistory) return;
     if (payload.ticketHistory.isEmpty) return;
 
-    await db.batch((b) {
-      for (final h in payload.ticketHistory) {
-        b.insertOnConflictUpdate(
-          db.ticketHistory,
-          TicketHistoryCompanion.insert(
-            id: h.id,
-            ticketId: h.ticketId,
-            fieldName: h.fieldName,
-            oldValue: Value(h.oldValue),
-            newValue: Value(h.newValue),
-            changedByUserId: h.changedByUserId,
-            changedAt: h.changedAt,
-          ),
-        );
-      }
-    });
+    // One statement per row rather than a `db.batch`: drift's `Batch` has no
+    // `insertOnConflictUpdate` (the method lives on the insert statement), and the volume here is a
+    // few hundred rows at most — the same shape `_applyTicketTimers` above uses.
+    for (final h in payload.ticketHistory) {
+      await db
+          .into(db.ticketHistory)
+          .insertOnConflictUpdate(
+            TicketHistoryCompanion.insert(
+              id: h.id,
+              ticketId: h.ticketId,
+              fieldName: h.fieldName,
+              oldValue: Value(h.oldValue),
+              newValue: Value(h.newValue),
+              changedByUserId: h.changedByUserId,
+              changedAt: h.changedAt,
+            ),
+          );
+    }
   }
 
   Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {

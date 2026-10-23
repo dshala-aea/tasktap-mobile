@@ -1,6 +1,6 @@
 // dart format width=100
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -40,7 +40,7 @@ Map<String, dynamic> payload({
   'colleagues': <Object>[],
   // Absent entirely when the caller passes none, which is how an older backend's payload looks.
   'ticketHistory': ?history,
-  if (scope != null) 'scope': scope,
+  'scope': ?scope,
 };
 
 Map<String, dynamic> ticketJson(String id) => {
