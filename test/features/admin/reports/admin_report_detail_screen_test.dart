@@ -47,7 +47,7 @@ void main() {
           adminApiClientProvider.overrideWithValue(api),
           adminReportsProvider.overrideWith((ref, filter) async {
             fetchCalls++;
-            return const <Map<String, dynamic>>[];
+            return const ReportListRows([], fromMirror: false);
           }),
         ],
         child: MaterialApp(
@@ -98,7 +98,9 @@ void main() {
         ProviderScope(
           overrides: [
             adminApiClientProvider.overrideWithValue(api),
-            adminReportsProvider.overrideWith((ref, filter) async => const <Map<String, dynamic>>[]),
+            adminReportsProvider.overrideWith(
+              (ref, filter) async => const ReportListRows([], fromMirror: false),
+            ),
           ],
           child: MaterialApp(
             home: Navigator(
