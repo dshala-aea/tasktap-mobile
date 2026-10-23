@@ -1138,7 +1138,12 @@ class _TicketControlStatusCard extends StatelessWidget {
 
   String? _valueLabel(TicketControlDto c) {
     switch (c.type) {
+      // Same split as the editable field: a tick is an assertion read back as "Spuntato", only a
+      // TrueFalse control answers Sì/No. Collapsing them here made a checkbox look like the
+      // wrong control type on the one screen a technician re-reads after the fact.
       case ControlType.checkbox:
+        if (c.boolValue == null) return null;
+        return c.boolValue! ? 'Spuntato' : 'Non spuntato';
       case ControlType.trueFalse:
         if (c.boolValue == null) return null;
         return c.boolValue! ? 'Sì' : 'No';

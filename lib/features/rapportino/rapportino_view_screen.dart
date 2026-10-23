@@ -1258,7 +1258,13 @@ class _ControlloAnswerRow extends StatelessWidget {
   /// whether this device can currently say which type it is.
   String? _valueLabel(ControlType? type) {
     switch (type) {
+      // Same split as the editable field — a tick is an assertion, not a choice between two
+      // answers. The `null`/unknown fallback below still has to guess "whichever column is
+      // populated" and cannot tell the two boolean types apart, so it keeps the neutral Sì/No
+      // wording rather than inventing a tick the record may not describe.
       case ControlType.checkbox:
+        if (controllo.boolValue == null) return null;
+        return controllo.boolValue! ? 'Spuntato' : 'Non spuntato';
       case ControlType.trueFalse:
         if (controllo.boolValue == null) return null;
         return controllo.boolValue! ? 'Sì' : 'No';

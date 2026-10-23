@@ -947,7 +947,9 @@ void main() {
 
       expect(find.text('Controlli'), findsOneWidget);
       expect(find.text('Pressione OK'), findsOneWidget);
-      expect(find.text('Sì'), findsOneWidget);
+      // A Checkbox control reads back as a tick, not as the Sì/No pair a TrueFalse control gets.
+      expect(find.text('Spuntato'), findsOneWidget);
+      expect(find.text('Sì'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
