@@ -105,19 +105,21 @@ void main() {
 
     test('names the same day as the long form', () {
       // The compact form must never disagree with the settings row about the answer, only about
-      // how much room it takes to say it.
+      // how much room it takes to say it. The clock time is the part both forms share on the two
+      // days that name the day itself.
       // DateTime has no const constructor, so this map cannot be const.
-      final cases = {
-        'oggi': DateTime(2026, 10, 21, 14, 32),
-        'ieri': DateTime(2026, 10, 20, 9, 10),
-        '3 gg fa': DateTime(2026, 10, 18, 9, 10),
-        '12/10/26': DateTime(2026, 10, 12, 9, 10),
+      final cases = <String, (DateTime, String?)>{
+        'oggi 14:32': (DateTime(2026, 10, 21, 14, 32), '14:32'),
+        'ieri 09:10': (DateTime(2026, 10, 20, 9, 10), '09:10'),
+        '3 gg fa': (DateTime(2026, 10, 18, 9, 10), null),
+        '12/10/26': (DateTime(2026, 10, 12, 9, 10), null),
       };
       for (final entry in cases.entries) {
-        expect(formatLastSyncCompact(entry.value, now: now), entry.key);
-        // Same day, whichever form: "Oggi alle 14:32" and "oggi 14:32" carry the same clock time.
-        final clock = entry.key.split(' ').last;
-        expect(formatLastSyncLabel(entry.value, now: now), contains(clock == 'fa' ? '' : clock));
+        final (at, clock) = entry.value;
+        expect(formatLastSyncCompact(at, now: now), entry.key);
+        if (clock != null) {
+          expect(formatLastSyncLabel(at, now: now), contains(clock));
+        }
       }
     });
   });
