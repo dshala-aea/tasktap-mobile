@@ -78,11 +78,27 @@ class TicketWorkflowApiClient {
   /// this ticket. Its own message ("You already have an active ticket work log. Stop it first.")
   /// is mapped in [_italianFor] to say which recovery is meant, because "stop it first" is not
   /// actionable if the technician is looking at a ticket whose timer is not the one running.
-  Future<void> startTimer(String ticketId) async {
-    await _run(
-      () => _dio.post<dynamic>('/api/tickets/$ticketId/worklogs/start'),
+  /// [clientId] is this device's idempotency key for the session it is starting. A phone that
+  /// never saw the reply to its own start sends the same value again and is answered with the row
+  /// it already owns, instead of a 400 or — worse — a second timer with the same hours booked
+  /// twice. Optional so a server that does not know it yet still serves the request.
+  ///
+  /// Returns the row the server holds. [TicketTimerStart.isActive] is false when that row is
+  /// already closed, which happens when the reply was lost long enough for the office to end the
+  /// session: the caller must not paint a running clock over it.
+  Future<TicketTimerStart> startTimer(String ticketId, {String? clientId}) async {
+    final response = await _run(
+      () => _dio.post<dynamic>(
+        '/api/tickets/$ticketId/worklogs/start',
+        queryParameters: clientId == null ? null : {'clientId': clientId},
+      ),
       fallback: 'Impossibile avviare il timer.',
     );
+    final body = response.data;
+    if (body is! Map<String, dynamic>) {
+      throw const TicketWorkflowFailure('Impossibile avviare il timer.');
+    }
+    return TicketTimerStart.fromJson(body);
   }
 
   /// POST /api/tickets/{ticketId}/worklogs/stop
@@ -146,12 +162,12 @@ class TicketWorkflowApiClient {
 
   // ── Plumbing ───────────────────────────────────────────────────────────────
 
-  Future<void> _run(
+  Future<Response<dynamic>> _run(
     Future<Response<dynamic>> Function() call, {
     required String fallback,
   }) async {
     try {
-      await call();
+      return await call();
     } on DioException catch (e) {
       throw TicketWorkflowFailure(_italianFor(e, fallback), cause: e);
     }
@@ -246,6 +262,27 @@ class TicketWorkflowFailure implements Exception {
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
+
+/// The row the server holds after a ticket timer start.
+class TicketTimerStart {
+  const TicketTimerStart({required this.id, required this.isActive});
+
+  /// The server's id for the session — what the mirror row is keyed on so "Ferma" works without a
+  /// round trip.
+  final String id;
+
+  /// Whether that row is still running. False means the office ended it between a lost reply and
+  /// this retry.
+  final bool isActive;
+
+  /// A server that does not know the `clientId` key yet answers with a bare `{id}`, and a row that
+  /// call just created is running — so the absent flag defaults to true rather than to a stopped
+  /// timer that never started.
+  factory TicketTimerStart.fromJson(Map<String, dynamic> json) => TicketTimerStart(
+    id: json['id'] as String,
+    isActive: json['isActive'] as bool? ?? true,
+  );
+}
 
 /// One entry booked against a ticket.
 class TicketWorkLogDto {

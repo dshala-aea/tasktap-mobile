@@ -1,11 +1,10 @@
 // dart format width=100
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../data/sync/connectivity_provider.dart';
-import '../../data/sync/sync_service.dart' show syncServiceProvider;
 import '../../data/timbratura/ticket_timer_sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'ticket_workflow_api_client.dart';
@@ -19,8 +18,10 @@ import 'ticket_workflow_api_client.dart';
 /// implementation: a call that reaches the server is a decision, and everything else is written to
 /// the mirror and queued.
 ///
-/// The online route is check-then-act and cannot be retried, which is why the offline path is a
-/// different endpoint with a client-generated key (see `TicketTimerApiClient`).
+/// Both paths carry the same client-generated key: the online start passes it as `clientId` so a
+/// reply that never arrives can be retried onto the row it already owns, and the offline path
+/// sends it to the batch upsert (see `TicketTimerApiClient`). Without a shared key the two paths
+/// could each create a session for the same visit and bill the hours twice.
 
 /// Starts the clock online when the server can be reached, locally when it cannot.
 ///
@@ -29,38 +30,44 @@ import 'ticket_workflow_api_client.dart';
 /// session is written to the device and queued.
 Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
   final repo = ref.read(ticketTimerRepositoryProvider);
+  // The key this tap owns, generated before the call: a reply that never arrives is then retried
+  // onto the same server row instead of opening a second timer with the same hours.
+  final clientId = const Uuid().v4();
+
   Future<void> locally() async {
     final userId = await ref.read(internalUserIdProvider.future) ?? '';
-    await repo.start(ticketId: ticketId, userId: userId);
+    await repo.start(ticketId: ticketId, userId: userId, clientId: clientId);
     unawaited(ref.read(ticketTimerSyncServiceProvider).syncNow());
   }
 
   if (!ref.read(isOnlineProvider)) return locally();
+
+  final TicketTimerStart started;
   try {
-    await ref.read(ticketWorkflowApiClientProvider).startTimer(ticketId);
+    started = await ref
+        .read(ticketWorkflowApiClientProvider)
+        .startTimer(ticketId, clientId: clientId);
   } on TicketWorkflowFailure catch (e) {
     if (e.cause?.response != null) rethrow;
     await locally();
     return;
   }
-  unawaited(_pullIntoMirror(ref));
-}
 
-/// Pulls the session the server just started into the mirror.
-///
-/// `POST /worklogs/start` answers 200 with no body, so the server id — the key this row will ever
-/// have — is not in hand and cannot be written here. Without the row, an app restart with no
-/// signal shows no running clock on that ticket, and an offline "Ferma" has nothing to close. The
-/// delta sync carries the signed-in technician's own sessions including any still running, so it
-/// is the one thing that fills it.
-///
-/// Failures are swallowed: the start already succeeded, and the same sync runs on reconnect.
-Future<void> _pullIntoMirror(WidgetRef ref) async {
-  try {
-    await ref.read(syncServiceProvider).sync();
-  } catch (e) {
-    debugPrint('ticket timer: pull after start failed ($e)');
-  }
+  // The server answered, and the row this key names is already closed: the reply to an earlier
+  // attempt was lost long enough for the office to end the session. Queuing a local start here
+  // would show a clock that is not running, so the technician is told instead.
+  if (!started.isActive) throw const TicketTimerAlreadyClosed();
+
+  // Mirror the running clock now, from the id the reply carries — not from the next delta sync.
+  // Without this row, a technician who started the clock in the office and lost signal on the way
+  // to site could not stop it: an offline "Ferma" has nothing to close.
+  final userId = await ref.read(internalUserIdProvider.future) ?? '';
+  await repo.adoptServerStart(
+    serverId: started.id,
+    clientId: clientId,
+    ticketId: ticketId,
+    userId: userId,
+  );
 }
 
 /// Stops the ticket's clock, returning true when the close exists only on this device.
@@ -114,5 +121,18 @@ class TicketTimerNotOnDevice extends TicketWorkflowFailure {
     : super(
         'Senza connessione posso fermare solo un timer avviato da questo telefono con i dati '
         'disponibili. Riprova quando hai segnale.',
+      );
+}
+
+/// The session this tap's key names is already closed, so there is nothing to show running.
+///
+/// Only reachable when a start's reply was lost and the office ended the session before the retry:
+/// the server answers for the same row with `isActive: false`. Reporting it as a fresh start would
+/// paint a clock that is not running and never will be.
+class TicketTimerAlreadyClosed extends TicketWorkflowFailure {
+  const TicketTimerAlreadyClosed()
+    : super(
+        'Questo timer risulta già chiuso sul server: aggiorna l\'intervento per vedere le ore '
+        'registrate.',
       );
 }
