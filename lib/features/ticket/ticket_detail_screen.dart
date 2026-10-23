@@ -219,7 +219,8 @@ class _TicketDetailBody extends ConsumerWidget {
     );
 
     // Feature audit module #13, Gap 6: mobile already syncs `Ticket.commessaId` but showed it
-    // nowhere. Resolved the same way as the contract row above — live-fetched, no local mirror.
+    // nowhere. Resolved the same way as the contract row above — through commessaByIdProvider,
+    // which is online-then-mirror over the `commesse` reference cache.
     final commessaId = ticket.commessaId;
     final commessaAsync = commessaId == null ? null : ref.watch(commessaByIdProvider(commessaId));
     final commessaLabel = commessaAsync?.when(
@@ -1686,17 +1687,14 @@ class _PianificazioniTab extends ConsumerWidget {
       loading: () => const Center(
         child: Padding(padding: EdgeInsets.all(AppSpacing.xxl), child: CircularProgressIndicator()),
       ),
-      // Every sibling tab (Allegati, Materiali, Rapportini, Storico) uses _TabError, which also
-      // names the offline case — this one used to fall back to the generic empty-state widget.
-      error: (e, _) => UnavailableState.forFetchError(
+      // Siblings (Allegati, Materiali, Rapportini, Storico) use UnavailableState.forFetchError,
+      // which also names the offline case. That split has no meaning here: this tab reads a pure
+      // Drift stream (`schedulesForTicketProvider`), so it never throws
+      // TicketDetailOfflineException — an error here is the local read itself failing.
+      error: (e, _) => const UnavailableState(
         icon: LucideIcons.calendar,
-        offline: e is TicketDetailOfflineException,
-        offlineTitle: 'Pianificazioni non disponibili offline',
-        offlineBody:
-            'Le pianificazioni di questo ticket richiedono una connessione per essere elencate: '
-            'riprova quando torni online.',
-        errorTitle: 'Impossibile caricare le pianificazioni',
-        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+        titolo: 'Impossibile leggere le pianificazioni',
+        motivo: 'Si è verificato un errore leggendo i dati su questo telefono. Riprova più tardi.',
       ).paddedForTab(),
       data: (schedules) => schedules.isEmpty
           ? const _EmptyTab(

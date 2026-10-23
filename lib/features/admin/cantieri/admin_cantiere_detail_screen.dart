@@ -137,8 +137,9 @@ class _CantiereDetailBody extends ConsumerWidget {
         : '—';
 
     // Feature audit module #13, Gap 6: mobile already syncs `Cantiere.commessaId` but showed it
-    // nowhere. Resolved the same way as the ticket detail screen's own commessa row — live-
-    // fetched via the shared commessaByIdProvider, no local mirror exists for commesse.
+    // nowhere. Resolved the same way as the ticket detail screen's own commessa row — through the
+    // shared commessaByIdProvider, which is online-then-mirror over the `commesse` reference
+    // cache (ReferenceCacheRepository.commessaById), so the row still resolves on site.
     final commessaId = cantiere.commessaId;
     final commessaAsync = commessaId == null ? null : ref.watch(commessaByIdProvider(commessaId));
     final commessaLabel = commessaAsync?.when(

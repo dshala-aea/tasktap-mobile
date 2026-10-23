@@ -169,13 +169,15 @@ final schedulesForTicketProvider = StreamProvider.autoDispose
     });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Ticket-detail tabs. Four of them now answer offline from a Drift mirror the
-// sync fills — Rapportini (O-8a/O-8b), Allegati (O-8b/O-8c), Controllo (its
-// checklist mirror) and Fabbisogno (the per-ticket materiali mirror, pruned to
-// the server's scope). What is still online-only — Prodotti and the history —
-// checks connectivity itself and throws [TicketDetailOfflineException] before
-// attempting a request, rather than letting Dio's own network error stand in for
-// it: "no data" and "couldn't fetch it" must stay distinguishable.
+// Ticket-detail tabs. Every one of them now answers offline from a Drift
+// mirror the sync fills — Rapportini (O-8a/O-8b), Allegati (O-8b/O-8c),
+// Controllo (its checklist mirror), Fabbisogno (the per-ticket materiali
+// mirror, pruned to the server's scope) and Prodotti (the ticketAssets +
+// assets rows, falling back to them on any transport/server fault). What is
+// still online-only is the history: it checks connectivity itself and throws
+// [TicketDetailOfflineException] before attempting a request, rather than
+// letting Dio's own network error stand in for it: "no data" and "couldn't
+// fetch it" must stay distinguishable.
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Rapportini recorded against a ticket (Report tab).
