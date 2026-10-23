@@ -1078,6 +1078,84 @@ class TicketTimers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── ticket history (Storico) ─────────────────────────────────────────────────
+/// A ticket's recorded field changes, mirrored from the sync payload.
+///
+/// The Storico tab used to be online-only: the server held the timeline and the device held
+/// nothing, so the one screen that says *who moved this ticket* went blank exactly where the
+/// technician was standing — on site, with no signal.
+///
+/// Append-only on the server (a row is written once and never edited), so the applier upserts and
+/// never rewrites one. [oldValue]/[newValue] hold the server's raw, invariant text — ids as `D`
+/// GUIDs, instants as round-trip `O` — and the screen resolves them through its own mirrors. A
+/// label frozen here would lie after the office renames a status.
+class TicketHistory extends Table {
+  @override
+  String get tableName => 'ticket_history';
+
+  TextColumn get id => text()();
+  TextColumn get ticketId => text()();
+  TextColumn get fieldName => text()();
+  TextColumn get oldValue => text().nullable()();
+  TextColumn get newValue => text().nullable()();
+
+  /// Who made the change. Empty string means no person — a background job or the customer portal —
+  /// and the screen says so rather than inventing a name.
+  TextColumn get changedByUserId => text()();
+  DateTimeColumn get changedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── cantiere work logs (the read mirror) ─────────────────────────────────────
+/// The caller's own cantiere punches as the server holds them — the *read* side of site time.
+///
+/// Deliberately a different table from [CantierePunches], which is an outbox: a punch enters there
+/// when it is queued, is pushed, and is marked sent — so once it drained, the record of the shift
+/// was gone and with no signal a technician could not look back at yesterday's hours at all.
+///
+/// This table only ever mirrors the server: rows are upserted from the sync payload and pruned from
+/// its manifest. Nothing local is written into it — putting unsent state here would make a mirror
+/// of the server disagree with the server, which is the bug the two concepts are kept apart to
+/// avoid.
+///
+/// `workDate` + the time-of-day pair are the Rome-local values the WorkLogs domain stores;
+/// [startUtc]/[endUtc] are the true instants and are null on legacy rows — prefer them for a
+/// duration, since subtracting time-of-day across midnight is negative.
+class CantiereWorkLogs extends Table {
+  @override
+  String get tableName => 'cantiere_work_logs';
+
+  TextColumn get id => text()();
+  TextColumn get cantiereId => text()();
+  TextColumn get userId => text()();
+  TextColumn get ticketId => text().nullable()();
+  DateTimeColumn get workDate => dateTime()();
+  IntColumn get startSeconds => integer()();
+  IntColumn get endSeconds => integer().nullable()();
+  DateTimeColumn get startUtc => dateTime().nullable()();
+  DateTimeColumn get endUtc => dateTime().nullable()();
+
+  /// `CantiereWorkLogTypeEnum`: 0 Site, 1 Travel, 2 Setup.
+  IntColumn get workLogType => integer().withDefault(const Constant(0))();
+
+  /// `WorkLogApprovalStatusEnum`: 0 Draft, 1 Submitted, 2 Approved, 3 Rejected.
+  IntColumn get approvalStatus => integer().withDefault(const Constant(0))();
+
+  TextColumn get description => text().nullable()();
+
+  /// The device's own key for the punch, when it queued one — lets the screen recognise the
+  /// server's row of a shift it is still holding in the outbox [CantierePunches] before the push
+  /// lands. Null for a row written online or in the office.
+  TextColumn get clientId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── notifications ─────────────────────────────────────────────────────────────
 /// Cached notifications from the backend. Used for offline display of the
 /// notification center. Synced via GET /api/notifications; individual
@@ -1486,13 +1564,15 @@ class ChecklistOmittedTickets extends Table {
     CantiereCrewAssignments,
     ExtensionFieldDefinitions,
     Magazzini,
+    TicketHistory,
+    CantiereWorkLogs,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 51;
+  int get schemaVersion => 53;
 
   @override
   MigrationStrategy get migration {
@@ -1503,6 +1583,8 @@ class AppDatabase extends _$AppDatabase {
         await _createReferenceIndexes();
         await _createCantiereCrewIndexes();
         await _createCustomerContactIndexes();
+        await _createTicketHistoryIndexes();
+        await _createCantiereWorkLogIndexes();
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -2085,6 +2167,28 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(cantierePunches, cantierePunches.weatherConditions);
           }
         }
+        if (from < 52) {
+          // The Storico timeline, mirrored so the tab renders with no network. A NEW table, so
+          // `createTable` is additive on its own — no `PRAGMA table_info` guard, and drift emits
+          // `CREATE TABLE IF NOT EXISTS`, which also keeps the older-version test fixtures working
+          // when they rewind a current-schema database.
+          //
+          // Nothing to backfill: the member is re-sent from the window (full sync) or the cutoff
+          // (delta) on the next sync, and the applier only ever upserts — a device that has never
+          // held a row simply fills in.
+          await m.createTable(ticketHistory);
+          await _createTicketHistoryIndexes();
+        }
+        if (from < 53) {
+          // Cantiere site hours, mirrored so a past shift is readable with no network. A NEW table,
+          // same shape of reasoning as the `from < 52` branch above: `createTable` is additive and
+          // `IF NOT EXISTS` keeps a rewound fixture safe.
+          //
+          // Nothing to backfill — the member is re-sent in full on every sync (window plus any
+          // still-open shift), so the first sync after the upgrade fills it.
+          await m.createTable(cantiereWorkLogs);
+          await _createCantiereWorkLogIndexes();
+        }
       },
     );
   }
@@ -2260,6 +2364,22 @@ class AppDatabase extends _$AppDatabase {
   /// Separate from the other index helpers for the same reason they are separate from each other:
   /// the table does not exist on devices older than schema 49, and a `CREATE INDEX ... ON
   /// customer_contacts` emitted from an earlier branch would fail their upgrade.
+  Future<void> _createTicketHistoryIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS ticket_history_ticket '
+      'ON ticket_history (ticket_id, changed_at)',
+    );
+  }
+
+  /// The cantiere detail reads one site's shifts, newest first — without this index that is a full
+  /// scan of the mirror on every open.
+  Future<void> _createCantiereWorkLogIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS cantiere_work_logs_site '
+      'ON cantiere_work_logs (cantiere_id, work_date)',
+    );
+  }
+
   Future<void> _createCustomerContactIndexes() async {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS customer_contacts_customer '
