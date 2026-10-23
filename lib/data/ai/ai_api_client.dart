@@ -316,6 +316,46 @@ class AiDraftMaterialUsage {
   );
 }
 
+/// One instrument the operator said they used, as the draft holds it — mirrors backend
+/// `DraftStrumentoUsage`.
+///
+/// [strumentoId] is empty unless the model obtained the id from the read-only `search_strumenti`
+/// tool; a dictated name alone is a line the operator still has to pick from the catalogue, so it
+/// never reaches the report. [expiredAcknowledged] is the operator's, not the model's: the draft
+/// can echo an acknowledgement only because the operator stated it.
+class AiDraftStrumentoUsage {
+  const AiDraftStrumentoUsage({
+    required this.strumentoId,
+    required this.name,
+    this.matricola,
+    this.usageDescription,
+    this.outcome,
+    required this.state,
+    this.expiredAcknowledged = false,
+    this.source = AiFactSource.operatorInput,
+  });
+
+  final String strumentoId;
+  final String name;
+  final String? matricola;
+  final String? usageDescription;
+  final String? outcome;
+  final AiResolutionState state;
+  final bool expiredAcknowledged;
+  final AiFactSource source;
+
+  factory AiDraftStrumentoUsage.fromJson(Map<String, dynamic> json) => AiDraftStrumentoUsage(
+    strumentoId: json['strumentoId'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    matricola: json['matricola'] as String?,
+    usageDescription: json['usageDescription'] as String?,
+    outcome: json['outcome'] as String?,
+    state: _parseResolutionState(json['state']),
+    expiredAcknowledged: json['expiredAcknowledged'] == true,
+    source: _parseFactSource(json['source']),
+  );
+}
+
 class AiDraftControlAnswer {
   const AiDraftControlAnswer({
     required this.ticketControlId,
@@ -385,6 +425,7 @@ class AiCopilotDraftDto {
     required this.workers,
     required this.materials,
     required this.controlli,
+    this.strumenti = const [],
     required this.activities,
     required this.openItems,
   });
@@ -395,6 +436,7 @@ class AiCopilotDraftDto {
   final List<AiDraftWorkerRef> workers;
   final List<AiDraftMaterialUsage> materials;
   final List<AiDraftControlAnswer> controlli;
+  final List<AiDraftStrumentoUsage> strumenti;
   final List<AiDraftActivity> activities;
   final List<AiCandidateFact> openItems;
 
@@ -402,6 +444,7 @@ class AiCopilotDraftDto {
     workers: [],
     materials: [],
     controlli: [],
+    strumenti: [],
     activities: [],
     openItems: [],
   );
@@ -422,6 +465,9 @@ class AiCopilotDraftDto {
         .toList(),
     controlli: ((json['controlli'] as List<dynamic>?) ?? [])
         .map((c) => AiDraftControlAnswer.fromJson(c as Map<String, dynamic>))
+        .toList(),
+    strumenti: ((json['strumenti'] as List<dynamic>?) ?? [])
+        .map((s) => AiDraftStrumentoUsage.fromJson(s as Map<String, dynamic>))
         .toList(),
     activities: ((json['activities'] as List<dynamic>?) ?? [])
         .map((a) => AiDraftActivity.fromJson(a as Map<String, dynamic>))
@@ -702,6 +748,61 @@ class AiResolvedControl {
   );
 }
 
+/// One resolved instrument line. Mirror of backend `AiResolvedStrumento`.
+///
+/// [expiredAtUse] and [expiredAcknowledged] are the server-verdict / operator-acknowledgement pair
+/// the report write re-derives and enforces: only `(false,false)` or `(true,true)` are accepted at
+/// submit. A line with [expiredAtUse] true and [expiredAcknowledged] false is one the copilot could
+/// not settle — it is written to the draft with the verdict, and the Strumenti step asks the
+/// technician to confirm it (submit is otherwise refused with `strumento_expired_not_acknowledged`).
+///
+/// [calibrationExpiry] is a civil date (`yyyy-MM-dd`), like the sync DTO's.
+class AiResolvedStrumento {
+  const AiResolvedStrumento({
+    required this.strumentoId,
+    required this.name,
+    this.matricola = '',
+    this.calibrationExpiry,
+    this.expiredAtUse = false,
+    this.expiredAcknowledged = false,
+    this.usageDescription,
+    this.outcome,
+  });
+
+  final String strumentoId;
+  final String name;
+  final String matricola;
+  final DateTime? calibrationExpiry;
+  final bool expiredAtUse;
+  final bool expiredAcknowledged;
+  final String? usageDescription;
+  final String? outcome;
+
+  static const Set<String> wireKeys = {
+    'strumentoId',
+    'name',
+    'matricola',
+    'calibrationExpiry',
+    'expiredAtUse',
+    'expiredAcknowledged',
+    'usageDescription',
+    'outcome',
+  };
+
+  factory AiResolvedStrumento.fromJson(Map<String, dynamic> json) => AiResolvedStrumento(
+    strumentoId: json['strumentoId'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    matricola: json['matricola'] as String? ?? '',
+    calibrationExpiry: json['calibrationExpiry'] is String
+        ? DateTime.tryParse(json['calibrationExpiry'] as String)
+        : null,
+    expiredAtUse: json['expiredAtUse'] == true,
+    expiredAcknowledged: json['expiredAcknowledged'] == true,
+    usageDescription: json['usageDescription'] as String?,
+    outcome: json['outcome'] as String?,
+  );
+}
+
 /// What `POST /api/ai/conversations/{id}/confirm` returns: the draft resolved against real tenant
 /// data, and nothing written (spec §5.4). Mirror of backend `AiConversationConfirmResponse`.
 ///
@@ -727,6 +828,7 @@ class AiConversationConfirmResponse {
     this.staff = const [],
     this.materials = const [],
     this.controlli = const [],
+    this.strumenti = const [],
     this.warnings = const [],
   });
 
@@ -740,6 +842,7 @@ class AiConversationConfirmResponse {
   final List<AiResolvedStaff> staff;
   final List<AiResolvedMaterial> materials;
   final List<AiResolvedControl> controlli;
+  final List<AiResolvedStrumento> strumenti;
   final List<String> warnings;
 
   static const Set<String> wireKeys = {
@@ -753,6 +856,7 @@ class AiConversationConfirmResponse {
     'staff',
     'materials',
     'controlli',
+    'strumenti',
     'warnings',
   };
 
@@ -773,6 +877,9 @@ class AiConversationConfirmResponse {
             .toList(),
         controlli: ((json['controlli'] as List<dynamic>?) ?? [])
             .map((c) => AiResolvedControl.fromJson(c as Map<String, dynamic>))
+            .toList(),
+        strumenti: ((json['strumenti'] as List<dynamic>?) ?? [])
+            .map((s) => AiResolvedStrumento.fromJson(s as Map<String, dynamic>))
             .toList(),
         warnings: ((json['warnings'] as List<dynamic>?) ?? [])
             .map((w) => w.toString())

@@ -1437,6 +1437,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                   _draft.workers.isNotEmpty ||
                   _draft.materials.isNotEmpty ||
                   _draft.controlli.isNotEmpty ||
+                  _draft.strumenti.isNotEmpty ||
                   _draft.diagnosi != null ||
                   _draft.soluzione != null ||
                   _draft.customerSignoffText != null ||
@@ -1782,6 +1783,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
               ),
             for (final c in _draft.controlli)
               _draftRow(c.describe(), c.state, AiFactSource.operatorInput),
+            // An instrument with no id is one the model only heard the name of: it stays a line the
+            // technician still has to pick from the catalogue, so it is shown as such, never applied.
+            for (final s in _draft.strumenti)
+              _draftRow(
+                s.strumentoId.isEmpty ? '${s.name} — da scegliere' : s.name,
+                s.state,
+                s.source,
+              ),
             if (_draft.openItems.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 6),

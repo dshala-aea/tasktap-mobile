@@ -10,8 +10,10 @@ import 'package:uuid/uuid.dart';
 import '../../data/ai/ai_api_client.dart';
 import '../../data/local/app_database.dart';
 import '../../data/reports/import_server_report.dart' show controlRowId;
+import '../../data/reports/draft_report_repository.dart';
 import '../../data/sync/draft_submission_state.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
+import 'ai_strumenti_write.dart' show AiStrumentoLine, writeAiStrumenti;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // The AI draft as a LIVE FEED into the ordinary rapportino (AI report builder MVP, Task 12).
@@ -448,11 +450,24 @@ class AiDraftFeed {
     state.knownControls
       ..clear()
       ..addAll(lines.present.where((k) => k.startsWith('control:')));
-    await _marked(
-      state,
-      (recovering) =>
-          _applyLines(state, reportId, lines.lines, present: lines.present, recovering: recovering),
-    );
+    await _marked(state, (recovering) async {
+      await _applyLines(
+        state,
+        reportId,
+        lines.lines,
+        present: lines.present,
+        recovering: recovering,
+      );
+      // Instruments stay out of the line diff: their only hand-editable columns are the two notes
+      // and the expiry acknowledgement, which belong to the Strumenti step — the copilot fills
+      // them and never corrects them. The write is idempotent by row id, so a turn that says the
+      // same thing twice costs nothing.
+      await writeAiStrumenti(
+        DraftReportRepository(_db),
+        reportId: reportId,
+        lines: AiStrumentoLine.fromDraft(draft),
+      );
+    });
     return true;
   });
 
@@ -522,16 +537,23 @@ class AiDraftFeed {
         if (state == null || reportId == null) return false;
         await _guardWritable(state, reportId);
         // No `present` set: Confirm leaves out conflicts and plans, so absence proves nothing here.
-        await _marked(
-          state,
-          (recovering) => _applyLines(
+        await _marked(state, (recovering) async {
+          await _applyLines(
             state,
             reportId,
             _linesOfConfirm(r),
             present: null,
             recovering: recovering,
-          ),
-        );
+          );
+          // The resolved instruments, with the server's calibration verdict for the job's date.
+          // A line the server could not settle (expired, not acknowledged) lands as-is: the
+          // Strumenti step asks the technician to confirm it, and the submit is refused until then.
+          await writeAiStrumenti(
+            DraftReportRepository(_db),
+            reportId: reportId,
+            lines: r.strumenti.map(AiStrumentoLine.fromResolved),
+          );
+        });
         final header = await (_db.select(
           _db.draftReports,
         )..where((t) => t.id.equals(reportId))).getSingleOrNull();
