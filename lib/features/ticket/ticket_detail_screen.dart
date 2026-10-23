@@ -2475,11 +2475,14 @@ class _StoricoTab extends ConsumerWidget {
       error: (e, _) => UnavailableState.forFetchError(
         icon: LucideIcons.history,
         offline: e is TicketDetailOfflineException,
-        offlineTitle: 'Storico non disponibile offline',
-        // G3: state it explicitly. An empty history is indistinguishable from a ticket that was
-        // never touched, and the audit trail is the one thing on this screen a technician might
-        // need to prove a change happened.
-        offlineBody: 'Storico disponibile solo con connessione.',
+        offlineTitle: 'Storico non ancora disponibile',
+        // G3: state it explicitly. The mirror answers offline now, so reaching this branch means
+        // this device has never received this ticket's timeline — which is not the same claim as
+        // "nothing ever changed", and the audit trail is the one thing here a technician might need
+        // to prove a change happened.
+        offlineBody:
+            'Nessuna copia dello storico su questo dispositivo. '
+            'Verrà scaricato alla prossima sincronizzazione.',
         errorTitle: 'Impossibile caricare lo storico',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),

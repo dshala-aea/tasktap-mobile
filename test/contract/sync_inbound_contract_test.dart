@@ -112,6 +112,9 @@ void main() {
     // O-9: the caller's own ticket timer sessions. `SyncScopeDto.ticketWorkLogs` is the prune
     // manifest for the same rows, so both sides of the loop are pinned here.
     'SyncTicketWorkLogDto': SyncTicketWorkLogDto.wireKeys,
+    // The Storico timeline: raw, invariant field changes per ticket. It has no manifest of its
+    // own — it is pruned through the ticket manifest — so only the row shape is pinned here.
+    'SyncTicketHistoryDto': SyncTicketHistoryDto.wireKeys,
     'SyncCantiereCrewAssignmentDto': SyncCantiereCrewAssignmentDto.wireKeys,
     // P2-7: the tenant's custom-field definitions ("campi aggiuntivi"), mirrored so the section
     // renders offline instead of silently disappearing.
@@ -254,6 +257,18 @@ void main() {
     final sx = SyncScopeDto.fromJson(instance('SyncScopeDto'));
     expect(sx.tickets, hasLength(1));
     expect(sx.strumenti, hasLength(1));
+
+    final th = SyncTicketHistoryDto.fromJson(instance('SyncTicketHistoryDto'));
+    expect(th.ticketId, isNotEmpty);
+    expect(
+      th.fieldName,
+      isNotEmpty,
+      reason: 'the timeline switches on it; an empty name would render a blank row',
+    );
+    expect(th.changedByUserId, isNotEmpty);
+    expect(th.changedAt, DateTime.utc(2026, 10, 7, 8));
+    expect(th.oldValue, isA<String>());
+    expect(th.newValue, isA<String>());
   });
 
   test(
