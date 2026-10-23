@@ -2,7 +2,8 @@
 // test/features/rapportino/ai_copilot_live_test.dart
 //
 // Task 11 — the LIVE draft: resume/start from a ticket, the seeded draft with provenance badges,
-// voice turns (record -> transcribe -> turn), correction, and the 409/429 handling around a turn.
+// voice turns (record -> upload -> turn carrying only its audioRef), correction, and the 409/429
+// handling around a turn.
 // A fake AiApiClient and a fake VoiceCaptureController stand in for the network and the microphone.
 
 import 'dart:async';
@@ -34,11 +35,10 @@ import 'package:tasktap_mobile/features/rapportino/draft_provenance_badge.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 class _Posted {
-  _Posted(this.text, this.source, this.audioRef, this.rawTranscript, this.replacesTurnId, this.key);
+  _Posted(this.text, this.source, this.audioRef, this.replacesTurnId, this.key);
   final String text;
   final AiTurnSource source;
   final String? audioRef;
-  final String? rawTranscript;
   final String? replacesTurnId;
   final String key;
 }
@@ -115,7 +115,7 @@ class _FakeAi extends AiApiClient {
     List<Map<String, dynamic>>? confirmedEdits,
     required String idempotencyKey,
   }) async {
-    posted.add(_Posted(text, source, audioRef, rawTranscript, replacesTurnId, idempotencyKey));
+    posted.add(_Posted(text, source, audioRef, replacesTurnId, idempotencyKey));
     postedEdits.add(confirmedEdits);
     await turnGate?.future;
     final next = turnScript.isEmpty
@@ -261,12 +261,12 @@ class _FakeVoice extends VoiceCaptureController {
   }
 
   @override
-  Future<AiTranscription> transcribe(PendingRecording pending) async {
+  Future<AiVoiceCapture> capture(PendingRecording pending) async {
     uploadKeys.add(pending.idempotencyKey);
     final next = uploads.isEmpty
-        ? const AiTranscription(transcript: 'Ho cambiato il filtro', audioRef: 'audio-1')
+        ? const AiVoiceCapture(audioRef: 'audio-1', durationSeconds: 12)
         : uploads.removeFirst();
-    if (next is AiTranscription) return next;
+    if (next is AiVoiceCapture) return next;
     throw next;
   }
 }
@@ -570,7 +570,9 @@ void main() {
   });
 
   group('voice turns', () {
-    testWidgets('a recording is transcribed, shown, and posted as a Voice turn', (tester) async {
+    testWidgets('a recording is uploaded and posted as a Voice turn with no transcript', (
+      tester,
+    ) async {
       final ai = _FakeAi();
       final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(ai, voice));
@@ -581,12 +583,11 @@ void main() {
       expect(voice.uploadKeys, ['rec-key-1']);
       expect(ai.posted, hasLength(1));
       final p = ai.posted.single;
-      expect(p.text, 'Ho cambiato il filtro');
+      expect(p.text, isEmpty, reason: 'the words are in the audio, not in a transcript');
       expect(p.source, AiTurnSource.voice);
       expect(p.audioRef, 'audio-1');
-      expect(p.rawTranscript, 'Ho cambiato il filtro');
       expect(p.replacesTurnId, isNull);
-      expect(find.text('Ho cambiato il filtro'), findsOneWidget);
+      expect(find.text('Registrazione vocale · 0:12'), findsOneWidget);
       await _unmount(tester);
     });
 
@@ -608,18 +609,18 @@ void main() {
       expect(ai.posted[1].key, ai.posted[0].key, reason: 'same key: the server replays, never double-applies');
       expect(ai.posted[1].text, ai.posted[0].text);
       expect(ai.posted[1].audioRef, 'audio-1');
-      expect(voice.uploadKeys, ['rec-key-1'], reason: 'already transcribed: the audio is not uploaded twice');
+      expect(voice.uploadKeys, ['rec-key-1'], reason: 'already uploaded: the audio is not uploaded twice');
       expect(find.text('Riprova invio'), findsNothing);
       await _unmount(tester);
     });
 
-    testWidgets('a failed transcribe keeps the recording and retries it with the SAME key', (
+    testWidgets('a failed upload keeps the recording and retries it with the SAME key', (
       tester,
     ) async {
       final ai = _FakeAi();
       final voice = _FakeVoice()
         ..uploads.add(
-          const AiTranscribeException(AiTranscribeError.offline, 'Nessuna connessione.'),
+          const AiVoiceUploadException(AiVoiceUploadError.offline, 'Nessuna connessione.'),
         );
       await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
@@ -634,16 +635,17 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('Correcting_the_transcript_posts_replacesTurnId', (tester) async {
+    testWidgets('Correcting_a_voice_turn_posts_replacesTurnId', (tester) async {
       final ai = _FakeAi();
       // After the voice turn the server's turn list names the operator turn: that id is what a
-      // correction replaces (the POST response carries no turn id).
+      // correction replaces (the POST response carries no turn id). A voice turn's text is EMPTY
+      // (its words are the recording), so that is what the match sees.
       ai.onRefetch = () => _detail(
         turns: [
           AiConversationTurn(
             turnId: 'turn-7',
             role: 'Operator',
-            text: 'Ho cambiato il filtro',
+            text: '',
             source: AiTurnSource.voice,
             at: DateTime.utc(2026, 10, 20, 9),
           ),
@@ -664,7 +666,6 @@ void main() {
       final c = ai.posted[1];
       expect(c.replacesTurnId, 'turn-7');
       expect(c.text, 'Ho cambiato il filtro olio');
-      expect(c.rawTranscript, 'Ho cambiato il filtro', reason: 'the unedited STT output is kept');
       expect(c.audioRef, 'audio-1');
       expect(c.key, isNot(ai.posted[0].key), reason: 'a correction is a new turn: its own key');
       await _unmount(tester);
@@ -674,8 +675,8 @@ void main() {
       final ai = _FakeAi();
       final voice = _FakeVoice()
         ..uploads.add(
-          const AiTranscribeException(
-            AiTranscribeError.voiceDisabled,
+          const AiVoiceUploadException(
+            AiVoiceUploadError.voiceDisabled,
             'La trascrizione vocale non è attiva per questa azienda.',
           ),
         );
@@ -1043,7 +1044,7 @@ void main() {
       await _unmount(tester);
     });
 
-    test('transcribe keeps the files; upload (legacy) still deletes them', () async {
+    test('capture keeps the files; upload (one-shot) still deletes them', () async {
       final dir = await Directory.systemTemp.createTemp('pending_voice_test');
       addTearDown(() => dir.delete(recursive: true));
       final store = PendingRecordingStore(dir);
@@ -1054,10 +1055,10 @@ void main() {
         store: store,
         consentAccepted: () async => true,
         currentUserId: () => 'user-1',
-        upload: (f, k) async => const AiTranscription(transcript: 't', audioRef: 'a'),
+        upload: (f, k) async => const AiVoiceCapture(audioRef: 'a', durationSeconds: 2),
       );
       final rec = await store.add(src, userId: 'user-1', ticketId: 'tkt-1');
-      await c.transcribe(rec);
+      await c.capture(rec);
       expect(rec.file.existsSync(), isTrue);
       await c.upload(rec);
       expect(rec.file.existsSync(), isFalse);
@@ -1248,21 +1249,24 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('Empty_transcript_of_a_pending_recording_is_removed_with_a_message', (tester) async {
+    testWidgets('A_pending_recording_is_sent_as_a_voice_turn_even_if_it_holds_no_words', (
+      tester,
+    ) async {
+      // There is no transcript to be empty any more: the recording IS the turn, and the server's
+      // model decides what was said (and asks, if nothing was).
       final ai = _FakeAi();
-      final voice = _FakeVoice()
-        ..pending = [_rec('a')]
-        ..uploads.add(const AiTranscription(transcript: '  ', audioRef: 'a-1'));
+      final voice = _FakeVoice()..pending = [_rec('a')];
       await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Invia'));
       await tester.pumpAndSettle();
 
-      expect(ai.posted, isEmpty);
-      expect(voice.fakeStore.deleted, ['p-a']);
-      expect(find.textContaining('non inviate'), findsNothing);
-      expect(find.textContaining('Non ho sentito nulla'), findsOneWidget);
+      expect(ai.posted, hasLength(1));
+      expect(ai.posted.single.audioRef, 'audio-1');
+      expect(ai.posted.single.text, isEmpty);
+      expect(voice.fakeStore.deleted, ['p-a'], reason: 'accepted: the local copy goes');
+      expect(find.textContaining('Non ho sentito nulla'), findsNothing);
       await _unmount(tester);
     });
 
@@ -1681,7 +1685,7 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('a transcribe 429 disables ONLY the microphone; typed turns continue', (
+    testWidgets('an upload refused for credits disables ONLY the microphone; typed turns continue', (
       tester,
     ) async {
       final ai = _FakeAi(detail: _detail(draft: liveDraft()));
@@ -1703,11 +1707,11 @@ void main() {
     });
 
     // ── SHOULD FIX (d): voice disabled deletes the file ────────────────────────
-    testWidgets('a transcribe 404 deletes the pending file instead of re-offering it', (tester) async {
+    testWidgets('a 404 on the capture upload deletes the pending file instead of re-offering it', (tester) async {
       final ai = _FakeAi();
       final voice = _FakeVoice()
         ..uploads.add(
-          const AiTranscribeException(AiTranscribeError.voiceDisabled, 'La trascrizione non è attiva.'),
+          const AiVoiceUploadException(AiVoiceUploadError.voiceDisabled, 'La registrazione non è attiva.'),
         );
       await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
@@ -1749,11 +1753,10 @@ void main() {
       tester,
     ) async {
       final ai = _FakeAi(detail: _detail(draft: liveDraft()));
-      final voice = _FakeVoice()
-        ..uploads.add(AiTranscription(transcript: 'a' * (maxTurnCharacters + 1), audioRef: 'audio-9'));
+      final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
-      await _recordOnce(tester);
+      await _typeAndSend(tester, 'a' * (maxTurnCharacters + 1));
 
       expect(ai.posted, isEmpty, reason: 'refused locally, no doomed request');
       expect(find.text('Accorcia il testo'), findsOneWidget);
@@ -1763,7 +1766,6 @@ void main() {
       await tester.tap(find.text('Invia'));
       await tester.pumpAndSettle();
       expect(ai.posted.single.text, 'Riassunto');
-      expect(ai.posted.single.rawTranscript!.length, maxTurnCharacters);
       await _unmount(tester);
     });
 
