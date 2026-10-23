@@ -338,7 +338,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     if (e is AiConversationException && e.offline) {
       return 'La bozza AI richiede la connessione e ora non c\'è segnale. '
-          'La dettatura sul telefono funziona anche offline: puoi compilare il rapportino '
+          'La dettatura sul telefono funziona anche offline: puoi compilare il rapporto di lavoro '
           'a mano e dettare nei campi.';
     }
     return e.toString();
@@ -411,8 +411,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   void _markDraftUsed(String reason) {
     _linkedReportId = null;
     _usedDraftMessage =
-        'Questa bozza è già stata usata per un rapportino inviato. $reason '
-        'Per un nuovo rapportino abbandonala e ricomincia.';
+        'Questa bozza è già stata usata per un rapporto di lavoro inviato. $reason '
+        'Per un nuovo rapporto di lavoro abbandonala e ricomincia.';
   }
 
   /// On entry (and before Compila): a linked report that is no longer an editable draft means
@@ -509,7 +509,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         reportId = await _createManualDraft();
         if (reportId == null) {
           if (mounted) {
-            showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+            showAppToast(
+              context,
+              message: 'Accedi per creare un rapporto di lavoro.',
+              tone: ToastTone.warning,
+            );
           }
           return;
         }
@@ -1129,7 +1133,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         setState(() => _confirming = false);
         showAppToast(
           context,
-          message: 'Non riesco a creare il rapportino su questo telefono. Riprova.',
+          message: 'Non riesco a creare il rapporto di lavoro su questo telefono. Riprova.',
           tone: ToastTone.error,
         );
         return;
@@ -1297,7 +1301,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     final id = await _createManualDraft();
     if (!mounted) return;
     if (id == null) {
-      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+      showAppToast(
+        context,
+        message: 'Accedi per creare un rapporto di lavoro.',
+        tone: ToastTone.warning,
+      );
       return;
     }
     context.go(AppRoutes.rapportiniEditor(id));
@@ -1318,7 +1326,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     final id = await createLocalDraft(
       ref,
-      title: ticket != null ? 'Rapportino — ${ticket.title}' : 'Nuovo rapportino',
+      title: ticket != null ? 'Rapporto di lavoro — ${ticket.title}' : 'Nuovo rapporto di lavoro',
       locationId: ticket?.locationId ?? '',
       ticketId: ticketId,
       cantiereId: widget.cantiereId,
@@ -1368,7 +1376,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       body: SafeArea(
         child: Column(
           children: [
-            ScreenHeader(title: 'Rapportino con AI Copilot', showBack: true, onBack: _leave),
+            ScreenHeader(
+              title: 'Rapporto di lavoro con AI Copilot',
+              showBack: true,
+              onBack: _leave,
+            ),
             if (_starting) const Expanded(child: Center(child: CircularProgressIndicator())),
             if (_startError != null)
               Expanded(
@@ -1424,8 +1436,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                 ),
                 child: AppButton.secondary(
                   label: _linkedReportId != null
-                      ? 'Apri il rapportino collegato'
-                      : 'Compila nel rapportino',
+                      ? 'Apri il rapporto di lavoro collegato'
+                      : 'Compila nel rapporto di lavoro',
                   isLoading: _opening,
                   // Never while a turn, an edit or an apply is in flight: the editor would hydrate
                   // rows that are about to change underneath it.
@@ -1461,7 +1473,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                       // sent. Copy that said "crea" would be the one place in the app where a
                       // rapportino looks filed and is not.
                       child: AppButton(
-                        label: _confirming ? 'Preparo il rapportino…' : 'Conferma e apri il rapportino',
+                        label: _confirming
+                            ? 'Preparo il rapporto di lavoro…'
+                            : 'Conferma e apri il rapporto di lavoro',
                         onPressed: !sessionReady ||
                                 _messages.isEmpty ||
                                 blocked ||

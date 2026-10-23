@@ -176,7 +176,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       appBar: ScreenHeaderBar(
-        title: 'Rapportino',
+        title: 'Rapporto di lavoro',
         subtitle: subtitle,
         actions: [
           // Autosave indicator — spinner ↔ cloud used to hard-cut, on the single most-repeated
@@ -186,7 +186,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Semantics(
-              label: editorState.isSaving ? 'Salvataggio in corso' : 'Rapportino salvato',
+              label: editorState.isSaving ? 'Salvataggio in corso' : 'Rapporto di lavoro salvato',
               liveRegion: true,
               child: AnimatedSwitcher(
                 duration: MediaQuery.of(context).disableAnimations

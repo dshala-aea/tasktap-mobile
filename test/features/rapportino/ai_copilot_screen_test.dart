@@ -34,7 +34,7 @@ import 'package:tasktap_mobile/core/location/location_service.dart' show gpsPref
 /// The label the Conferma button carries, asserted and tapped in five places below. It says
 /// "apri", not "crea": Confirm no longer creates anything server-side, and the technician lands on
 /// a local Bozza that is not yet sent.
-const _confirmLabel = 'Conferma e apri il rapportino';
+const _confirmLabel = 'Conferma e apri il rapporto di lavoro';
 
 /// A realistic confirm response: a resolved draft, no reportId, and a null location — the exact
 /// shape `POST /api/ai/conversations/{id}/confirm` returns (spec §5.4).

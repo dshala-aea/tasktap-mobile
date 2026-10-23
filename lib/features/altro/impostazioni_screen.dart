@@ -126,8 +126,8 @@ class ImpostazioniScreen extends ConsumerWidget {
                   ),
                   _ToggleRow(
                     icon: LucideIcons.fileText,
-                    title: 'Rapportini',
-                    subtitle: 'Aggiornamenti sui rapportini',
+                    title: 'Rapporti di lavoro',
+                    subtitle: 'Aggiornamenti sui rapporti di lavoro',
                     value: settings.notificheRapportini,
                     onChanged: (_) => notifier.toggle(key: 'notificheRapportini'),
                   ),
@@ -338,7 +338,7 @@ class ImpostazioniScreen extends ConsumerWidget {
         titolo: 'Avvisi sul lavoro',
         motivo:
             'Ti avvisiamo quando ti viene assegnato un intervento, quando cambia un appuntamento '
-            'e quando un rapportino ha bisogno di te. Nient\'altro.',
+            'e quando un rapporto di lavoro ha bisogno di te. Nient\'altro.',
         senzaDiEsso:
             'Senza notifiche l\'app funziona lo stesso: trovi tutto in Dashboard e in Calendario, '
             'ma lo scopri quando apri l\'app.',
@@ -727,7 +727,7 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Puoi comunque compilare il rapportino scrivendo normalmente.',
+                'Puoi comunque compilare il rapporto di lavoro scrivendo normalmente.',
                 style: TextStyle(
                   fontFamily: 'Archivo',
                   fontSize: 11,

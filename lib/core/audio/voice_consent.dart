@@ -6,8 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// materially so existing users are asked again.
 const String voiceConsentText =
     'Registrando un aggiornamento vocale, l\'audio viene inviato al server di TaskTap e '
-    'trascritto automaticamente per aiutarti a compilare il rapportino. La registrazione viene '
-    'conservata come parte della documentazione dell\'intervento. Vuoi continuare?';
+    'trascritto automaticamente per aiutarti a compilare il rapporto di lavoro. La '
+    'registrazione viene conservata come parte della documentazione dell\'intervento. '
+    'Vuoi continuare?';
 
 const String voiceConsentKey = 'voice_recording_consent_v1';
 

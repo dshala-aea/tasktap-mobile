@@ -297,7 +297,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('Crea rapporto di lavoro'), findsOneWidget);
 
       await db.close();
     });
@@ -339,7 +339,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Crea rapportino'));
+        await tester.tap(find.text('Crea rapporto di lavoro'));
         await tester.pumpAndSettle();
 
         expect(fakeApi.calledWithCantiereId, 'c1');
@@ -383,10 +383,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Crea rapportino'));
+      await tester.tap(find.text('Crea rapporto di lavoro'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Accedi per creare un rapportino.'), findsOneWidget);
+      expect(find.text('Accedi per creare un rapporto di lavoro.'), findsOneWidget);
       expect(fakeApi.calledWithCantiereId, isNull);
       expect(await db.select(db.draftReports).get(), isEmpty);
 
@@ -432,7 +432,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Crea rapportino'));
+        await tester.tap(find.text('Crea rapporto di lavoro'));
         await tester.pumpAndSettle();
 
         expect(fakeApi.calledWithCantiereId, 'c1');
@@ -577,7 +577,7 @@ void main() {
         final squadraY = tester.getTopLeft(find.text('Squadra assegnata')).dy;
         final mapY = tester.getTopLeft(find.byType(CantiereMapCard)).dy;
         final timbraY = tester.getTopLeft(find.text('Timbra cantiere')).dy;
-        final creaRapportinoY = tester.getTopLeft(find.text('Crea rapportino')).dy;
+        final creaRapportinoY = tester.getTopLeft(find.text('Crea rapporto di lavoro')).dy;
 
         expect(dettagliY, lessThan(squadraY));
         expect(squadraY, lessThan(mapY));

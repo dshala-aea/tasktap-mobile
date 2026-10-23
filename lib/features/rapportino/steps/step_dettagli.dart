@@ -446,11 +446,11 @@ class _GpsCapture extends ConsumerWidget {
         icon: LucideIcons.mapPin,
         titolo: 'Dove è stato fatto il lavoro',
         motivo:
-            'La posizione viene registrata una sola volta, adesso, e allegata a questo rapportino '
-            'come prova di dove sei intervenuto. Non ti seguiamo in background.',
+            'La posizione viene registrata una sola volta, adesso, e allegata a questo '
+            'rapporto di lavoro come prova di dove sei intervenuto. Non ti seguiamo in background.',
         senzaDiEsso:
-            'Puoi compilare e firmare il rapportino lo stesso: resterà senza coordinate, e '
-            'l\'indirizzo che hai scritto vale comunque.',
+            'Puoi compilare e firmare il rapporto di lavoro lo stesso: resterà senza '
+            'coordinate, e l\'indirizzo che hai scritto vale comunque.',
         cta: 'Consenti la posizione',
       );
       if (!consents) return;

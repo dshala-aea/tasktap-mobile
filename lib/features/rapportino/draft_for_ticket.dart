@@ -76,9 +76,9 @@ Future<ExistingDraftChoice> askAboutExistingDraft(
             const SizedBox(height: 8),
             Text(
               drafts.length == 1
-                  ? 'Per questo ticket c’è già un rapportino in bozza: «${first.title}». '
-                        'Vuoi aprirlo invece di crearne un altro?'
-                  : 'Per questo ticket ci sono già ${drafts.length} rapportini in bozza. '
+                  ? 'Per questo ticket c’è già un rapporto di lavoro in bozza: '
+                        '«${first.title}». Vuoi aprirlo invece di crearne un altro?'
+                  : 'Per questo ticket ci sono già ${drafts.length} rapporti di lavoro in bozza. '
                         'Vuoi aprire «${first.title}», l’ultimo modificato?',
               style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: ctx.colors.inkMuted),
             ),
@@ -122,7 +122,7 @@ Future<void> openEditableDraft(BuildContext context, WidgetRef ref, DraftReport 
       if (!context.mounted) return;
       showAppToast(
         context,
-        message: 'Questo rapportino non è più modificabile.',
+        message: 'Questo rapporto di lavoro non è più modificabile.',
         tone: ToastTone.warning,
       );
       return;
@@ -131,8 +131,8 @@ Future<void> openEditableDraft(BuildContext context, WidgetRef ref, DraftReport 
       showAppToast(
         context,
         message:
-            'Per aprire questo rapportino serve la connessione: i dati completi vanno scaricati '
-            'sul telefono. Riprova più tardi.',
+            'Per aprire questo rapporto di lavoro serve la connessione: i dati completi '
+            'vanno scaricati sul telefono. Riprova più tardi.',
         tone: ToastTone.error,
       );
       return;

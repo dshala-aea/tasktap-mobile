@@ -100,7 +100,7 @@ class _AdminReportListBody extends ConsumerWidget {
         slivers: [
           SliverToBoxAdapter(
             child: ScreenHeader(
-              title: 'Rapportini',
+              title: 'Rapporti di lavoro',
               subtitle: 'Vista amministratore',
               showBack: true,
             ),
@@ -174,8 +174,8 @@ class _AdminReportListBody extends ConsumerWidget {
                 return SliverToBoxAdapter(
                   child: EmptyState(
                     icon: LucideIcons.fileText,
-                    title: 'Nessun rapportino',
-                    body: 'Non ci sono rapportini per questo filtro.',
+                    title: 'Nessun rapporto di lavoro',
+                    body: 'Non ci sono rapporti di lavoro per questo filtro.',
                   ),
                 );
               }

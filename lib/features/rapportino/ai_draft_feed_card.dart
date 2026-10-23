@@ -132,7 +132,7 @@ class _AiDraftFeedCardState extends ConsumerState<AiDraftFeedCard> {
     await _syncer.sync(id);
     final detail = await ref.read(aiApiClientProvider).getConversation(id);
     await _feed.apply(id, detail.draft);
-    return 'Rapportino aggiornato dalla bozza AI.';
+    return 'Rapporto di lavoro aggiornato dalla bozza AI.';
   }
 
   @override

@@ -209,7 +209,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                           // with those hours (and, if this technician started the batch as squadra
                           // lead, their whole team's hours) already filled in.
                           AppButton(
-                            label: 'Crea rapportino',
+                            label: 'Crea rapporto di lavoro',
                             icon: const Icon(LucideIcons.fileText),
                             isLoading: _isCreatingRapportino,
                             onPressed: _isCreatingRapportino
@@ -303,7 +303,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
         setState(() => _isCreatingRapportino = false);
         showAppToast(
           context,
-          message: humanErrorMessage(e, azione: 'creare il rapportino'),
+          message: humanErrorMessage(e, azione: 'creare il rapporto di lavoro'),
           tone: ToastTone.error,
         );
       }
@@ -314,7 +314,11 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
     setState(() => _isCreatingRapportino = false);
 
     if (id == null) {
-      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+      showAppToast(
+        context,
+        message: 'Accedi per creare un rapporto di lavoro.',
+        tone: ToastTone.warning,
+      );
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));

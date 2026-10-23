@@ -151,7 +151,10 @@ class _NewRapportinoFabState extends ConsumerState<_NewRapportinoFab> {
       ignoring: _busy,
       child: Opacity(
         opacity: _busy ? 0.6 : 1,
-        child: AppFab(tooltip: 'Nuovo rapportino', onPressed: () => _createNewDraft(context, ref)),
+        child: AppFab(
+          tooltip: 'Nuovo rapporto di lavoro',
+          onPressed: () => _createNewDraft(context, ref),
+        ),
       ),
     );
   }
@@ -160,11 +163,15 @@ class _NewRapportinoFabState extends ConsumerState<_NewRapportinoFab> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final id = await createLocalDraft(ref, title: 'Nuovo rapportino');
+      final id = await createLocalDraft(ref, title: 'Nuovo rapporto di lavoro');
       if (!context.mounted) return;
       if (id == null) {
         // Refused rather than authored by a placeholder. See createLocalDraft.
-        showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+        showAppToast(
+          context,
+          message: 'Accedi per creare un rapporto di lavoro.',
+          tone: ToastTone.warning,
+        );
         return;
       }
       context.push(AppRoutes.rapportiniEditor(id));
@@ -224,12 +231,12 @@ class _RapportiniListBody extends ConsumerWidget {
           // The filter chips below already do the filtering — this used to carry a second,
           // dead filter icon (`onTap: () {}`) doing nothing beside them. Same fix as the ticket
           // list: a control that looks tappable and isn't teaches distrust of the one that works.
-          child: ScreenHeader(title: 'Rapportini', subtitle: '${allDrafts.length} totali'),
+          child: ScreenHeader(title: 'Rapporti di lavoro', subtitle: '${allDrafts.length} totali'),
         ),
         SliverToBoxAdapter(
           child: AppSearchBar(
             controller: searchCtrl,
-            hint: 'Cerca rapportino…',
+            hint: 'Cerca rapporto di lavoro…',
             onChanged: onQueryChanged,
           ),
         ),
@@ -273,7 +280,7 @@ class _RapportiniListBody extends ConsumerWidget {
           SliverToBoxAdapter(
             child: EmptyState(
               icon: LucideIcons.wifiOff,
-              title: 'Impossibile caricare i rapportini',
+              title: 'Impossibile caricare i rapporti di lavoro',
               body: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
             ),
           )
@@ -281,8 +288,8 @@ class _RapportiniListBody extends ConsumerWidget {
           SliverToBoxAdapter(
             child: EmptyState(
               icon: LucideIcons.fileText,
-              title: 'Nessun rapportino',
-              body: 'I rapportini appariranno qui.',
+              title: 'Nessun rapporto di lavoro',
+              body: 'I rapporti di lavoro appariranno qui.',
             ),
           )
         else
@@ -382,7 +389,7 @@ class _RapportinoRow extends ConsumerWidget {
               unawaited(ref.read(syncProvider.notifier).performSync());
               showAppToast(
                 context,
-                message: 'Questo rapportino non è più modificabile.',
+                message: 'Questo rapporto di lavoro non è più modificabile.',
                 tone: ToastTone.warning,
               );
               return;
@@ -391,8 +398,8 @@ class _RapportinoRow extends ConsumerWidget {
               showAppToast(
                 context,
                 message:
-                    'Per aprire questo rapportino serve la connessione: i dati completi vanno '
-                    'scaricati sul telefono. Riprova più tardi.',
+                    'Per aprire questo rapporto di lavoro serve la connessione: i dati '
+                    'completi vanno scaricati sul telefono. Riprova più tardi.',
                 tone: ToastTone.error,
               );
               return;
@@ -535,7 +542,7 @@ class _RapportinoRow extends ConsumerWidget {
 Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftReport draft) async {
   final confirmed = await confirmDeleteDialog(
     context,
-    title: 'Eliminare il rapportino?',
+    title: 'Eliminare il rapporto di lavoro?',
     message: '"${draft.title}" verrà eliminato definitivamente.',
   );
   if (!confirmed) return false;
@@ -563,9 +570,9 @@ Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftRepor
           context,
           message: e.response == null
               // No response at all: nothing was reached, nothing changed anywhere.
-              ? 'Per eliminare questo rapportino serve la connessione: riprova quando sei '
-                    'online. Il rapportino non è stato eliminato.'
-              : humanErrorMessage(e, azione: 'eliminare il rapportino'),
+              ? 'Per eliminare questo rapporto di lavoro serve la connessione: riprova quando sei '
+                    'online. Il rapporto di lavoro non è stato eliminato.'
+              : humanErrorMessage(e, azione: 'eliminare il rapporto di lavoro'),
           tone: ToastTone.error,
         );
         return false;
@@ -574,7 +581,7 @@ Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftRepor
       if (!context.mounted) return false;
       showAppToast(
         context,
-        message: humanErrorMessage(e, azione: 'eliminare il rapportino'),
+        message: humanErrorMessage(e, azione: 'eliminare il rapporto di lavoro'),
         tone: ToastTone.error,
       );
       return false;

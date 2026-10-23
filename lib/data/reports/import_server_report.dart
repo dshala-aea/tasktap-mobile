@@ -35,7 +35,7 @@ const _uuid = Uuid();
 class ServerReportNotEditableException implements Exception {
   const ServerReportNotEditableException();
   @override
-  String toString() => 'Questo rapportino non è più modificabile.';
+  String toString() => 'Questo rapporto di lavoro non è più modificabile.';
 }
 
 /// The full report is not on this device: sync never delivered its children (an older backend, or a
@@ -43,7 +43,7 @@ class ServerReportNotEditableException implements Exception {
 class ServerReportNotMirroredException implements Exception {
   const ServerReportNotMirroredException();
   @override
-  String toString() => 'I dati completi di questo rapportino non sono sul telefono.';
+  String toString() => 'I dati completi di questo rapporto di lavoro non sono sul telefono.';
 }
 
 /// Row id the Controlli step uses for the answer to one checklist item

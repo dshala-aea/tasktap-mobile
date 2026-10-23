@@ -548,7 +548,7 @@ void main() {
       await seedBase(db);
       await pump(tester);
 
-      expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('Crea rapporto di lavoro'), findsOneWidget);
       expect(find.text('Timbra cantiere'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1071,8 +1071,11 @@ void main() {
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nessun rapportino'), findsOneWidget);
-      expect(find.text('Non ci sono rapportini registrati per questo ticket.'), findsOneWidget);
+      expect(find.text('Nessun rapporto di lavoro'), findsOneWidget);
+      expect(
+        find.text('Non ci sono rapporti di lavoro registrati per questo ticket.'),
+        findsOneWidget,
+      );
       await resetAndDispose(tester);
     });
 
@@ -1085,10 +1088,10 @@ void main() {
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rapportini non ancora sul telefono'), findsOneWidget);
+      expect(find.text('Rapporti di lavoro non ancora sul telefono'), findsOneWidget);
       // Never claims "nessun rapportino" — that would say "there is
       // nothing" when the truth is "we could not check".
-      expect(find.text('Nessun rapportino'), findsNothing);
+      expect(find.text('Nessun rapporto di lavoro'), findsNothing);
       await resetAndDispose(tester);
     });
 
@@ -1119,8 +1122,8 @@ void main() {
       // The row renders `StatusPill`, which is a `StatusStamp` — the stamp device upper-cases its
       // label (same as the Rapportini list's 'BOZZA'/'INVIATA' assertions).
       expect(find.text('INVIATO'), findsOneWidget, reason: 'the mirror stato, by name');
-      expect(find.text('Rapportini non ancora sul telefono'), findsNothing);
-      expect(find.text('Nessun rapportino'), findsNothing);
+      expect(find.text('Rapporti di lavoro non ancora sul telefono'), findsNothing);
+      expect(find.text('Nessun rapporto di lavoro'), findsNothing);
       await resetAndDispose(tester);
     });
   });

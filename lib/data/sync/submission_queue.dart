@@ -61,8 +61,9 @@ export 'draft_submission_state.dart';
 /// merge / re-import ("take the office's version" vs "keep mine") is a product decision, not
 /// something to guess at here — guessing would discard someone's work in one direction or the other.
 const String kStaleSubmitConflictMessage =
-    'Questo rapportino è stato modificato in ufficio dopo che ne è stata scaricata una copia su '
-    'questo telefono. Non riprovare a inviarlo: contatta l\'ufficio per farlo aggiornare. '
+    'Questo rapporto di lavoro è stato modificato in ufficio dopo che ne è stata scaricata '
+    'una copia su questo telefono. Non riprovare a inviarlo: contatta l\'ufficio per farlo '
+    'aggiornare. '
     'Quello che hai compilato è ancora salvato sul telefono.';
 
 /// Whether [error] — a draft's persisted `submissionError` — is the stale-submit conflict text
@@ -342,10 +343,10 @@ class SubmissionQueue {
       // guaranteed to 409 again. See kStaleSubmitConflictMessage.
       final message = e is FileSystemException
           ? 'File non trovato sul dispositivo: una foto o una firma non è più disponibile. '
-                'Rimuovila dal rapportino e riprova.'
+                'Rimuovila dal rapporto di lavoro e riprova.'
           : _isStaleSubmitConflict(e)
           ? kStaleSubmitConflictMessage
-          : humanErrorMessage(e, azione: 'inviare il rapportino');
+          : humanErrorMessage(e, azione: 'inviare il rapporto di lavoro');
       await _repo.updateSubmissionState(
         reportId: draft.id,
         state: DraftSubmissionState.failed,

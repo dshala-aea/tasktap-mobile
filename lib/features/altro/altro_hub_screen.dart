@@ -110,7 +110,7 @@ class AltroHubScreen extends ConsumerWidget {
       ),
       (
         icon: LucideIcons.fileText,
-        label: 'Rapportini',
+        label: 'Rapporti di lavoro',
         module: 'rapportini',
         onTap: () => context.go(AppRoutes.altroRapportini),
       ),
