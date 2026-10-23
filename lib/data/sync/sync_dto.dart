@@ -120,6 +120,18 @@ class SyncResultDto {
   /// empty the device's site history — see `SyncService._pruneToScope`.
   final bool carriesCantiereWorkLogs;
 
+  /// Every ferie / permesso / malattia request the caller filed for themselves. Carried in full on
+  /// every sync — never delta-filtered, and with no manifest of its own — so when this member is
+  /// present its list IS the whole in-scope set and the applier replaces what the device holds.
+  ///
+  /// Only rows where the caller is the person the absence is FOR arrive: an office-filed request
+  /// counts, a colleague's never does.
+  final List<SyncAbsenceRequestDto> absenceRequests;
+
+  /// False when the payload came from a backend that predates this mirror. The applier then leaves
+  /// the table alone — an older server must not look like "every request was withdrawn".
+  final bool carriesAbsenceRequests;
+
   /// False when the payload came from a backend that predates the report aggregate. Without it an
   /// older backend would look like "every report lost its staff, materials and answers", and the
   /// per-report replace would delete children the device already holds.
@@ -289,6 +301,8 @@ class SyncResultDto {
     this.ticketHistory = const [],
     this.cantiereWorkLogs = const [],
     this.carriesCantiereWorkLogs = false,
+    this.absenceRequests = const [],
+    this.carriesAbsenceRequests = false,
     this.carriesReportAggregate = false,
     this.carriesAllegati = false,
     this.checklistTruncated = false,
@@ -388,6 +402,10 @@ class SyncResultDto {
         j['cantiereWorkLogs'],
         SyncCantiereWorkLogDto.fromJson,
       ),
+      absenceRequests: _list(
+        j['absenceRequests'],
+        SyncAbsenceRequestDto.fromJson,
+      ),
       checklistTruncated: j['checklistTruncated'] as bool? ?? false,
       checklistOmittedTicketIds:
           ((j['checklistOmittedTicketIds'] as List<dynamic>?) ?? const [])
@@ -405,6 +423,7 @@ class SyncResultDto {
       carriesCantiereCrewAssignments: j.containsKey('cantiereCrewAssignments'),
       carriesTicketHistory: j.containsKey('ticketHistory'),
       carriesCantiereWorkLogs: j.containsKey('cantiereWorkLogs'),
+      carriesAbsenceRequests: j.containsKey('absenceRequests'),
       carriesMagazzini: j.containsKey('magazzini'),
       carriesExtensionFieldDefinitions: j.containsKey('extensionFieldDefinitions'),
       carriesContacts: j.containsKey('contacts'),
@@ -2294,6 +2313,93 @@ class SyncCantiereWorkLogDto {
     approvalStatus: _intOrNull(j['approvalStatus']) ?? 0,
     description: j['description'] as String?,
     clientId: j['clientId'] as String?,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+  );
+}
+
+/// One ferie / permesso / malattia request the signed-in technician filed for themselves.
+///
+/// Mirrors `SyncAbsenceRequestDto` on the backend. [startDate]/[endDate] are CIVIL days parsed to
+/// UTC midnight (the same `parseDateOnlyOrThrow` the ticket due date uses) — render them through a
+/// formatter that prints y/m/d, never through a zone conversion. [startTime]/[endTime] are the
+/// wire's own `HH:mm:ss` strings and mean Rome office time, not an instant.
+///
+/// [type] is an `AbsenceTypeEnum` ordinal 0..9 — read it through `absenceTypeLabel`, which knows all
+/// ten; the list is not dense, and the legacy `Permesso` (1) still appears on old rows.
+class SyncAbsenceRequestDto {
+  final String id;
+  final String tenantId;
+  final String requestedByUserId;
+  final String createdByUserId;
+  final int type;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String? startTime;
+  final String? endTime;
+  final String? reason;
+
+  /// `AbsenceRequestStatusEnum`: 0 Pending, 1 Approved, 2 Rejected, 3 Cancelled.
+  final int status;
+  final String? decidedByUserId;
+  final DateTime? decidedAt;
+  final String? decisionReason;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'requestedByUserId',
+    'createdByUserId',
+    'type',
+    'startDate',
+    'endDate',
+    'startTime',
+    'endTime',
+    'reason',
+    'status',
+    'decidedByUserId',
+    'decidedAt',
+    'decisionReason',
+    'createdAt',
+    'updatedAt',
+  };
+
+  const SyncAbsenceRequestDto({
+    required this.id,
+    required this.tenantId,
+    required this.requestedByUserId,
+    required this.createdByUserId,
+    required this.type,
+    required this.startDate,
+    required this.endDate,
+    this.startTime,
+    this.endTime,
+    this.reason,
+    this.status = 0,
+    this.decidedByUserId,
+    this.decidedAt,
+    this.decisionReason,
+    required this.createdAt,
+    this.updatedAt,
+  });
+
+  factory SyncAbsenceRequestDto.fromJson(Map<String, dynamic> j) => SyncAbsenceRequestDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    requestedByUserId: j['requestedByUserId'] as String,
+    createdByUserId: j['createdByUserId'] as String,
+    type: _intOrNull(j['type']) ?? 0,
+    startDate: parseDateOnlyOrThrow(j['startDate']),
+    endDate: parseDateOnlyOrThrow(j['endDate']),
+    startTime: j['startTime'] as String?,
+    endTime: j['endTime'] as String?,
+    reason: j['reason'] as String?,
+    status: _intOrNull(j['status']) ?? 0,
+    decidedByUserId: j['decidedByUserId'] as String?,
+    decidedAt: _dt(j['decidedAt']),
+    decisionReason: j['decisionReason'] as String?,
     createdAt: DateTime.parse(j['createdAt'] as String),
     updatedAt: _dt(j['updatedAt']),
   );

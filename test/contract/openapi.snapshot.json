@@ -29518,6 +29518,13 @@
             },
             "description": "The caller\u0027s OWN cantiere clock-in/clock-out rows: the 90-day window, plus any still open.\nRe-sent in full on every sync rather than delta-filtered, for the same reason as\nIReadOnlyList\u0026lt;SyncTicketWorkLogDto\u0026gt; MobileUserSyncResult.TicketWorkLogs \u2014 a punch the device queued and the server accepted has no\nmarker the phone can observe beyond the row appearing."
           },
+          "absenceRequests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncAbsenceRequestDto"
+            },
+            "description": "Every ferie / permesso / malattia request the caller filed for themselves \u2014 the whole set,\nevery sync, so the \u0022Ferie e Permessi\u0022 list renders with no signal."
+          },
           "checklistTruncated": {
             "type": "boolean",
             "description": "True when the per-sync cap on asset-level checklist rows (int MobileUserSyncService.MaxAssetControlRowsPerSync)\nleft tickets out, or when the first ticket alone exceeds it (it is still sent whole)."
@@ -35248,6 +35255,124 @@
           }
         },
         "description": "The tenant\u0027s subscription as it stands."
+      },
+      "SyncAbsenceRequestDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "requestedByUserId",
+          "createdByUserId",
+          "type",
+          "startDate",
+          "endDate",
+          "startTime",
+          "endTime",
+          "reason",
+          "status",
+          "decidedByUserId",
+          "decidedAt",
+          "decisionReason",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestedByUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "\u0060AbsenceTypeEnum\u0060 ordinal: 0 Ferie, 1 Permesso, 2 Malattia.",
+            "format": "int32"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "startTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Set only for a same-day partial Permesso; null means whole days.",
+            "format": "time"
+          },
+          "endTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "\u0060AbsenceRequestStatusEnum\u0060 ordinal: 0 Pending, 1 Approved, 2 Rejected, 3 Cancelled.",
+            "format": "int32"
+          },
+          "decidedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "decidedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "decisionReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "One ferie / permesso / malattia request the authenticated technician filed for themselves, as\nthe device mirrors it for the \u0022Ferie e Permessi\u0022 list."
       },
       "SyncAgentDto": {
         "required": [

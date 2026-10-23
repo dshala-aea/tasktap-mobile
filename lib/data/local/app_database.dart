@@ -1156,6 +1156,57 @@ class CantiereWorkLogs extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── ferie / permessi (the read mirror) ───────────────────────────────────────
+/// The caller's own absence requests as the server holds them, so "Ferie e Permessi" answers "was
+/// my request approved" with no signal — the one question that screen exists to answer.
+///
+/// A mirror only: the sync payload replaces this table wholesale whenever it carries the member.
+/// Filing and cancelling stay online, because both need the server's validation and its decision to
+/// mean anything, so nothing local is ever written here.
+///
+/// The two dates are CIVIL days stored as `yyyy-MM-dd` TEXT — the same rule as
+/// [Strumenti.calibrationExpiry], and for a sharper reason: a Drift [DateTimeColumn] comes back
+/// local and renders the previous day west of UTC, and a ferie request shown starting a day early is
+/// exactly the mistake this screen cannot afford. [startTime]/[endTime] stay the wire's own
+/// `HH:mm:ss` strings; they mean Rome office time, not an instant.
+@DataClassName('AbsenceRequestRow')
+class AbsenceRequests extends Table {
+  @override
+  String get tableName => 'absence_requests';
+
+  TextColumn get id => text()();
+  TextColumn get requestedByUserId => text()();
+  TextColumn get createdByUserId => text()();
+
+  /// `AbsenceTypeEnum`: 0 Ferie, 1 Permesso (legacy), 2 Malattia, 3 ROL, 4 Ex festività,
+  /// 5 Permesso retribuito, 6 Permesso non retribuito, 7 Legge 104, 8 Congedo parentale,
+  /// 9 Altri congedi/permessi. Raw ordinal — never renumbered server-side.
+  IntColumn get type => integer()();
+
+  /// `yyyy-MM-dd`, inclusive on both ends.
+  TextColumn get startDate => text()();
+  TextColumn get endDate => text()();
+
+  /// Set only for a same-day partial permesso; null means whole days.
+  TextColumn get startTime => text().nullable()();
+  TextColumn get endTime => text().nullable()();
+
+  TextColumn get reason => text().nullable()();
+
+  /// `AbsenceRequestStatusEnum`: 0 Pending, 1 Approved, 2 Rejected, 3 Cancelled.
+  IntColumn get status => integer()();
+
+  TextColumn get decidedByUserId => text().nullable()();
+  DateTimeColumn get decidedAt => dateTime().nullable()();
+  TextColumn get decisionReason => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── notifications ─────────────────────────────────────────────────────────────
 /// Cached notifications from the backend. Used for offline display of the
 /// notification center. Synced via GET /api/notifications; individual
@@ -1566,13 +1617,14 @@ class ChecklistOmittedTickets extends Table {
     Magazzini,
     TicketHistory,
     CantiereWorkLogs,
+    AbsenceRequests,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 53;
+  int get schemaVersion => 54;
 
   @override
   MigrationStrategy get migration {
@@ -1585,6 +1637,7 @@ class AppDatabase extends _$AppDatabase {
         await _createCustomerContactIndexes();
         await _createTicketHistoryIndexes();
         await _createCantiereWorkLogIndexes();
+        await _createAbsenceRequestIndexes();
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -2189,6 +2242,13 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(cantiereWorkLogs);
           await _createCantiereWorkLogIndexes();
         }
+        if (from < 54) {
+          // Ferie e permessi, mirrored so the list answers offline. A NEW table, same shape of
+          // reasoning as the `from < 53` branch above; nothing to backfill — the member is re-sent
+          // in full on every sync, so the first sync after the upgrade fills it.
+          await m.createTable(absenceRequests);
+          await _createAbsenceRequestIndexes();
+        }
       },
     );
   }
@@ -2380,8 +2440,16 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<void> _createCustomerContactIndexes() async {
+  /// The list reads one user's requests, newest first — without this index that is a full scan on
+  /// every open, and the order would come from a sort instead of the index.
+  Future<void> _createAbsenceRequestIndexes() async {
     await customStatement(
+      'CREATE INDEX IF NOT EXISTS absence_requests_owner '
+      'ON absence_requests (requested_by_user_id, created_at)',
+    );
+  }
+
+  Future<void> _createCustomerContactIndexes() async {    await customStatement(
       'CREATE INDEX IF NOT EXISTS customer_contacts_customer '
       'ON customer_contacts (customer_id)',
     );
