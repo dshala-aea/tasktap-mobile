@@ -81,6 +81,17 @@ abstract interface class IWorkSessionRepository {
   /// Retires event [id] after a permanent 409 `active_session_exists`: keeps it for support under
   /// [syncFailedMarker], stops it being pending, and hides it from today's view.
   Future<void> markSyncFailed(String id);
+
+  /// Punches the server permanently refused, newest first, limited to the last [within].
+  ///
+  /// Hiding a rejected punch from "today" is what keeps it from doubling the shift on screen; it is
+  /// not a reason for the technician never to hear about it again. Without this the only trace was
+  /// a toast that scrolled away, and nothing in the app ever mentioned the punch again — the data
+  /// survived for support, but the person whose hours they were did not.
+  ///
+  /// Bounded by a window rather than shown forever: a rejection months old is no longer something
+  /// anyone can act on, and a permanent badge that can never be cleared trains people to ignore it.
+  Stream<List<WorkSession>> watchSyncFailedSessions({Duration within});
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -88,11 +99,16 @@ abstract interface class IWorkSessionRepository {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class WorkSessionRepository implements IWorkSessionRepository {
-  WorkSessionRepository(this._db, {BusinessTime? businessTime})
-    : _businessTime = businessTime ?? BusinessTime.fallback();
+  WorkSessionRepository(this._db, {BusinessTime? businessTime, DateTime Function()? clock})
+    : _businessTime = businessTime ?? BusinessTime.fallback(),
+      _clock = clock ?? DateTime.now;
 
   final AppDatabase _db;
   final BusinessTime _businessTime;
+
+  /// Now, for the rejection window in [watchSyncFailedSessions]. Injected so the window can be
+  /// tested without waiting a week; every other read is windowed by [BusinessTime].
+  final DateTime Function() _clock;
 
   /// The one definition of "today": the tenant business day as a half-open UTC window.
   (DateTime, DateTime) _todayRange() => _businessTime.todayRangeUtc();
@@ -195,5 +211,16 @@ class WorkSessionRepository implements IWorkSessionRepository {
     await (_db.update(_db.workSessions)..where((s) => s.id.equals(id))).write(
       const WorkSessionsCompanion(notes: Value(syncFailedMarker), isPendingSync: Value(false)),
     );
+  }
+
+  @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({
+    Duration within = const Duration(days: 7),
+  }) {
+    final since = _clock().toUtc().subtract(within);
+    return (_db.select(_db.workSessions)
+          ..where((s) => s.notes.equals(syncFailedMarker) & s.eventTime.isBiggerOrEqualValue(since))
+          ..orderBy([(s) => OrderingTerm.desc(s.eventTime)]))
+        .watch();
   }
 }

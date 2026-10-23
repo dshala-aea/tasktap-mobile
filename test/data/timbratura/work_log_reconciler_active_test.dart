@@ -19,6 +19,11 @@ import '../../support/active_tracker_fixtures.dart';
 
 class _Repo implements IWorkSessionRepository {
   @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({
+    Duration within = const Duration(days: 7),
+  }) => const Stream<List<WorkSession>>.empty();
+
+  @override
   Future<void> markSyncFailed(String id) async {}
 
   _Repo(this.sessions);

@@ -40,6 +40,11 @@ import 'package:tasktap_mobile/features/timbra/timbra_providers.dart' show deriv
 
 class _FakeRepo implements IWorkSessionRepository {
   @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({
+    Duration within = const Duration(days: 7),
+  }) => const Stream<List<WorkSession>>.empty();
+
+  @override
   Future<void> markSyncFailed(String id) async {}
 
   final List<WorkSession> sessions;

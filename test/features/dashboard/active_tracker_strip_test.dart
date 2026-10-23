@@ -36,6 +36,11 @@ class MockDio extends Mock implements Dio {}
 /// constraint violation, anything that would legitimately reach `PunchNotifier`'s own catch block.
 class _FailingOnEventTypeRepo implements IWorkSessionRepository {
   @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({
+    Duration within = const Duration(days: 7),
+  }) => const Stream<List<WorkSession>>.empty();
+
+  @override
   Future<void> markSyncFailed(String id) async {}
 
   _FailingOnEventTypeRepo(this._inner, this._failingType);
