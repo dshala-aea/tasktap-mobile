@@ -384,7 +384,12 @@ void main() {
     await seedTicketTimer();
     final mockDio = MockDio();
     when(
-      () => mockDio.post<dynamic>('/api/tickets/ticket-1/worklogs/stop'),
+      () => mockDio.post<dynamic>(
+        '/api/tickets/ticket-1/worklogs/stop',
+        // The stop now carries the device's own clock reading (O-10), so the stub must match a
+        // call that has query parameters rather than the bare path.
+        queryParameters: any(named: 'queryParameters'),
+      ),
     ).thenAnswer(
       (_) async => Response<dynamic>(
         data: null,
@@ -406,7 +411,10 @@ void main() {
       findsNothing,
     );
     expect(find.text('Operazione non riuscita.'), findsNothing);
-    verify(() => mockDio.post<dynamic>('/api/tickets/ticket-1/worklogs/stop')).called(1);
+    verify(() => mockDio.post<dynamic>(
+      '/api/tickets/ticket-1/worklogs/stop',
+      queryParameters: any(named: 'queryParameters'),
+    )).called(1);
 
     final row = await (db.select(db.ticketTimers)..where((t) => t.id.equals('tt-1'))).getSingle();
     expect(row.endUtc, isNotNull);
@@ -420,7 +428,10 @@ void main() {
     await seedTicketTimer();
     final mockDio = MockDio();
     when(
-      () => mockDio.post<dynamic>('/api/tickets/ticket-1/worklogs/stop'),
+      () => mockDio.post<dynamic>(
+        '/api/tickets/ticket-1/worklogs/stop',
+        queryParameters: any(named: 'queryParameters'),
+      ),
     ).thenAnswer(
       (_) async => throw DioException(
         requestOptions: RequestOptions(path: '/api/tickets/ticket-1/worklogs/stop'),
