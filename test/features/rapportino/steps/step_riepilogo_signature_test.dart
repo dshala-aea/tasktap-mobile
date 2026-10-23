@@ -95,8 +95,11 @@ ProviderContainer _buildContainer(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       isOnlineProvider.overrideWithValue(online),
-      if (internalUserId != null)
-        internalUserIdProvider.overrideWith((ref) async => internalUserId),
+      // Always overridden, even with null: the real provider reads SharedPreferences, and under
+      // `flutter test` that platform channel never answers — the pre-fill future then waits
+      // forever inside `runAsync`, so the block silently keeps its "no signature" state and the
+      // test fails on the finder with no exception to explain it.
+      internalUserIdProvider.overrideWith((ref) async => internalUserId),
       userSignatureApiClientProvider.overrideWithValue(
         signatureClient ?? const _StubUserSignatureApiClient(),
       ),
@@ -668,7 +671,11 @@ void main() {
       const userId = 'user-1';
       final savedBytes = Uint8List.fromList(List.generate(24, (i) => i + 1));
       final cache = UserSignatureCache(rootLoader: getApplicationDocumentsDirectory);
-      await cache.write(userId, savedBytes);
+      // Real file I/O only completes inside `runAsync` — awaited bare in a widget-test body it
+      // hangs until the 10-minute test timeout.
+      await tester.runAsync(() async {
+        await cache.write(userId, savedBytes);
+      });
 
       final mockClient = _MockUserSignatureApiClient();
       container = _buildContainer(
