@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time.dart' show parseDateOnly;
 import '../api/dio_client.dart';
 import '../api/json_parse.dart';
 
@@ -793,9 +794,10 @@ class AiResolvedStrumento {
     strumentoId: json['strumentoId'] as String? ?? '',
     name: json['name'] as String? ?? '',
     matricola: json['matricola'] as String? ?? '',
-    calibrationExpiry: json['calibrationExpiry'] is String
-        ? DateTime.tryParse(json['calibrationExpiry'] as String)
-        : null,
+    // A civil date: it must land as `DateTime.utc(y, m, d)` like every other calendar label in
+    // the app. `DateTime.tryParse` returns a LOCAL twin, which compares unequal to the expiry the
+    // Strumenti step reads for the same instrument.
+    calibrationExpiry: parseDateOnly(json['calibrationExpiry']),
     expiredAtUse: json['expiredAtUse'] == true,
     expiredAcknowledged: json['expiredAcknowledged'] == true,
     usageDescription: json['usageDescription'] as String?,
