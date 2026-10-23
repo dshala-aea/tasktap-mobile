@@ -54,9 +54,11 @@ import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../presentation/providers/auth_providers.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../cantiere/cantiere_providers.dart';
 import 'chiudi_turno_screen.dart';
+import 'clock_disagreement_note.dart';
 import 'gps_status_indicator.dart';
 import 'teammate_picker_sheet.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -595,6 +597,11 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     final active = ref.watch(cantiereActiveSessionProvider);
     final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;
     final hasPendingSync = ref.watch(cantiereHasPendingSyncProvider);
+    // The server compared this phone's clock with its own receipt instant when the batch landed
+    // and found them far apart. Only the server can make that comparison, so this is the only way
+    // the technician can hear about it. Advisory: the visits are already recorded, and the office
+    // reads the same flag in Correzioni.
+    final clockDisagreement = ref.watch(cantiereClockDisagreementProvider);
 
     // Watched here (not just read via `_effectiveCantiere`) so the screen rebuilds once this
     // resolves — the fixed-cantiere card below also needs its loading/error/not-found states,
@@ -620,6 +627,20 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ScreenHeader(title: 'Timbra cantiere', showBack: true),
+            if (clockDisagreement != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  0,
+                ),
+                child: ClockDisagreementNote(
+                  seconds: clockDisagreement,
+                  onDismiss: () =>
+                      ref.read(cantiereClockDisagreementProvider.notifier).dismiss(),
+                ),
+              ),
             Expanded(
               child: localEventsAsync.hasError
                   ? _ErrorBody(

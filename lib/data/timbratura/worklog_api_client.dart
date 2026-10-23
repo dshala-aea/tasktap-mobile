@@ -67,6 +67,7 @@ class UpsertSessionResponse {
     this.endTime,
     this.tipoOra,
     required this.isActive,
+    this.clockDisagreementSeconds,
   });
 
   final String clientId;
@@ -76,6 +77,12 @@ class UpsertSessionResponse {
   final String? tipoOra;
   final bool isActive;
 
+  /// Present only when this phone's clock and the server's disagreed by more than the server's own
+  /// threshold: the device reading minus the server receipt, signed. Null for ordinary drift, for a
+  /// client that sent no clock, and from a backend that predates the field — which is exactly why
+  /// the phone renders "show advice if present" instead of computing its own comparison.
+  final int? clockDisagreementSeconds;
+
   factory UpsertSessionResponse.fromJson(Map<String, dynamic> json) => UpsertSessionResponse(
     clientId: json['clientId'] as String,
     workLogId: json['workLogId'] as String,
@@ -83,6 +90,7 @@ class UpsertSessionResponse {
     endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
     tipoOra: json['tipoOra'] as String?,
     isActive: json['isActive'] as bool? ?? false,
+    clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)?.toInt(),
   );
 }
 

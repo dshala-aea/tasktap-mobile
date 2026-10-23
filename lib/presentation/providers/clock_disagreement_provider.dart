@@ -59,3 +59,41 @@ String describeClockDisagreement(int seconds) {
   final direction = seconds > 0 ? 'avanti' : 'indietro';
   return '$minutes min $direction';
 }
+
+// ── The punch screens ─────────────────────────────────────────────────────────
+
+/// The plain-timbra banner: the last disagreement the server reported for a queued timbra batch.
+///
+/// Not keyed by anything, unlike [clockDisagreementProvider]: a punch has no ticket, and the advice
+/// is about this phone, not about one row. One value is enough because every session in a batch
+/// carried the same send-time reading — the server compares per request, not per punch.
+final timbraClockDisagreementProvider =
+    NotifierProvider<ScreenClockDisagreementNotifier, int?>(
+      ScreenClockDisagreementNotifier.new,
+    );
+
+/// The cantiere banner, a separate notifier from [timbraClockDisagreementProvider] on purpose: the
+/// two screens run their own punch flow, and a cantiere batch's advice has no business appearing
+/// over a plain attendance punch.
+final cantiereClockDisagreementProvider =
+    NotifierProvider<ScreenClockDisagreementNotifier, int?>(
+      ScreenClockDisagreementNotifier.new,
+    );
+
+/// One screen's "the server says my clock was off" line. Same contract as the ticket map above:
+/// record is idempotent (a batch retried every sync reports the same gap) and dismiss only clears
+/// this screen's reminder — the server keeps the record.
+class ScreenClockDisagreementNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void record(int seconds) {
+    if (state == seconds) return;
+    state = seconds;
+  }
+
+  void dismiss() {
+    if (state == null) return;
+    state = null;
+  }
+}

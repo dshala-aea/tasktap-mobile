@@ -42,6 +42,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/utils/error_message.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart'
+    show cantiereClockDisagreementProvider;
 import '../local/app_database.dart' show CantierePunche;
 import '../sync/sync_service.dart' show appDatabaseProvider;
 import 'cantiere_session_assembler.dart';
@@ -64,6 +66,8 @@ final cantiereTimbraSyncServiceProvider = Provider<CantiereTimbraSyncService>((r
     repo: repo,
     apiClient: client,
     businessTime: ref.watch(businessTimeProvider),
+    onClockDisagreement: (seconds) =>
+        ref.read(cantiereClockDisagreementProvider.notifier).record(seconds),
   );
 });
 
@@ -75,14 +79,23 @@ class CantiereTimbraSyncService {
     required CantiereWorklogApiClient apiClient,
     DateTime Function()? clock,
     BusinessTime? businessTime,
+    void Function(int seconds)? onClockDisagreement,
   }) : _repo = repo,
        _apiClient = apiClient,
        _clock = clock ?? DateTime.now,
-       _businessTime = businessTime ?? BusinessTime.fallback(clock: clock);
+       _businessTime = businessTime ?? BusinessTime.fallback(clock: clock),
+       _onClockDisagreement = onClockDisagreement;
 
   final ICantiereSessionRepository _repo;
   final CantiereWorklogApiClient _apiClient;
   final DateTime Function() _clock;
+
+  /// Told once per batch that the server judged this phone's clock off by [seconds].
+  ///
+  /// The batch response is the only place the phone can hear it: the server compares the reading
+  /// the batch carried with its own receipt instant and answers only when the two disagreed by
+  /// more than its threshold. This service therefore reports; it never decides.
+  final void Function(int seconds)? _onClockDisagreement;
 
   /// The tenant's business calendar: decides which events belong to the same day when the batch
   /// carries a backlog from more than one (see [_byBusinessDay]).
@@ -216,7 +229,18 @@ class CantiereTimbraSyncService {
           .toList();
 
       try {
-        await _apiClient.upsertSessions(dtos);
+        final results = await _apiClient.upsertSessions(dtos);
+        // The server answers per session, already filtered: it only fills the field in when the
+        // two clocks actually disagreed. One report per batch — every session in it carried the
+        // same device reading (see the `deviceUtc` above), so repeating it would say the same
+        // thing several times.
+        for (final result in results) {
+          final seconds = result.clockDisagreementSeconds;
+          if (seconds != null) {
+            _onClockDisagreement?.call(seconds);
+            break;
+          }
+        }
         _batchFailures = 0;
         _batchRetryAt = null;
       } catch (e) {

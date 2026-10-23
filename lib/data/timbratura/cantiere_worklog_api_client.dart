@@ -125,6 +125,7 @@ class CantiereMobileSessionResult {
     required this.startTime,
     this.endTime,
     required this.isActive,
+    this.clockDisagreementSeconds,
   });
 
   final String clientId;
@@ -133,6 +134,12 @@ class CantiereMobileSessionResult {
   final DateTime? endTime;
   final bool isActive;
 
+  /// Signed seconds this device's clock was off by, when the server judged it a disagreement
+  /// (more than ten minutes). Null for ordinary drift, for a client that sent no clock, and from
+  /// an older backend — the server applies the threshold before answering, so the phone never
+  /// compares anything itself.
+  final int? clockDisagreementSeconds;
+
   factory CantiereMobileSessionResult.fromJson(Map<String, dynamic> json) =>
       CantiereMobileSessionResult(
         clientId: json['clientId'] as String,
@@ -140,6 +147,7 @@ class CantiereMobileSessionResult {
         startTime: DateTime.parse(json['startTime'] as String),
         endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
         isActive: json['isActive'] as bool? ?? false,
+        clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)?.toInt(),
       );
 }
 

@@ -208,6 +208,41 @@ void main() {
       expect(result.first.clientId, 'client-1');
       expect(result.first.cantiereWorkLogId, 'wl-1');
       expect(result.first.isActive, isFalse);
+      // Absent from the payload = no disagreement (ordinary drift, no device clock, older backend).
+      expect(result.first.clockDisagreementSeconds, isNull);
+    });
+
+    test('parses the clock disagreement the server echoes', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/cantiereworklog/mobile/sessions',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'sessions': [
+            {
+              'clientId': 'client-1',
+              'cantiereWorkLogId': 'wl-1',
+              'startTime': '2026-08-16T07:00:00Z',
+              'isActive': true,
+              'clockDisagreementSeconds': -1800,
+            },
+          ],
+        }, '/api/cantiereworklog/mobile/sessions'),
+      );
+
+      final result = await client.upsertSessions([
+        CantiereMobileSessionDto(
+          clientId: 'client-1',
+          cantiereId: 'cant-1',
+          customerId: 'cust-1',
+          startTime: DateTime.utc(2026, 8, 16, 7),
+        ),
+      ]);
+
+      // Negative = the phone was behind the server. The phone relays this; it never re-derives it.
+      expect(result.first.clockDisagreementSeconds, -1800);
     });
   });
 

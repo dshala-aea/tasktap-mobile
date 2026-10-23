@@ -29,6 +29,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/timbra/timbra_providers.dart' show workSessionRepositoryProvider;
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart';
 import '../api/dio_client.dart';
@@ -58,6 +59,11 @@ final Provider<TimbraSyncService> timbraSyncServiceProvider = Provider<TimbraSyn
     onRemoteCommandsApplied: () =>
         ref.read(workLogRefreshCoordinatorProvider).refreshNow(sync: false),
     onNotice: (m) => ref.read(timbraNoticeProvider.notifier).state = TimbraNotice(m, ++seq),
+    // The server measured this phone's clock against its own receipt. The phone cannot make that
+    // comparison — it never sees a receipt instant — so when the answer comes back flagged it is
+    // surfaced on the timbra screen, where the technician is standing.
+    onClockDisagreement: (seconds) =>
+        ref.read(timbraClockDisagreementProvider.notifier).record(seconds),
   );
 });
 
@@ -70,6 +76,7 @@ class TimbraSyncService {
     Future<List<ActiveTracker>> Function()? fetchActive,
     void Function()? onRemoteCommandsApplied,
     void Function(String message)? onNotice,
+    void Function(int seconds)? onClockDisagreement,
     DateTime Function()? clock,
     BusinessTime? businessTime,
   }) : _repo = repo,
@@ -77,6 +84,7 @@ class TimbraSyncService {
        _fetchActive = fetchActive,
        _onRemoteCommandsApplied = onRemoteCommandsApplied,
        _onNotice = onNotice,
+       _onClockDisagreement = onClockDisagreement,
        _clock = clock ?? DateTime.now,
        _businessTime = businessTime ?? BusinessTime.fallback(clock: clock);
 
@@ -85,6 +93,12 @@ class TimbraSyncService {
   final Future<List<ActiveTracker>> Function()? _fetchActive;
   final void Function()? _onRemoteCommandsApplied;
   final void Function(String message)? _onNotice;
+
+  /// Called with the server's measurement when a queued batch comes back flagged as a clock
+  /// disagreement. Null-safe because most constructions (tests, background syncs) have no UI to
+  /// tell, and the advice is advisory — never a reason to fail a sync that otherwise succeeded.
+  final void Function(int seconds)? _onClockDisagreement;
+
   final DateTime Function() _clock;
 
   /// The tenant's business calendar: decides which events belong to the same day when a batch
@@ -254,7 +268,18 @@ class TimbraSyncService {
         .toList();
 
     try {
-      await _apiClient.upsertSessions(dtos);
+      final results = await _apiClient.upsertSessions(dtos);
+      // The server answers per session, already filtered: it only fills this in when the two
+      // clocks actually disagreed, so there is nothing to compare here. One report per batch —
+      // every session in it carried the same reading, so repeating it would say the same thing
+      // several times.
+      for (final result in results) {
+        final seconds = result.clockDisagreementSeconds;
+        if (seconds != null) {
+          _onClockDisagreement?.call(seconds);
+          break;
+        }
+      }
       _batchFailures = 0;
       _batchRetryAt = null;
     } catch (e) {
