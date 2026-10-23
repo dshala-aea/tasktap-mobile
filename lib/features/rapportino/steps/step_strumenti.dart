@@ -137,7 +137,13 @@ class StepStrumenti extends ConsumerWidget {
                   subtitle: Text(
                     [
                       s.matricola,
-                      if (s.isMine) 'nel tuo kit',
+                      // Whose it is, before the calibration line: picking a colleague's
+                      // instrument is borrowing, and the technician should know who from before
+                      // it goes onto the rapportino.
+                      if (s.isMine)
+                        'nel tuo kit'
+                      else if (s.holderName != null)
+                        'di ${s.holderName}',
                       if (s.calibrationExpiry != null)
                         'taratura ${formatCivilDate(s.calibrationExpiry)}',
                     ].join(' · '),
@@ -225,6 +231,16 @@ class _StrumentoCardState extends State<_StrumentoCard> {
                       item.matricola,
                       style: TextStyle(fontSize: 12, color: c.inkMuted),
                     ),
+                    // A selected instrument that is not the technician's own: say whose it is, on
+                    // the rapportino itself and not only in the picker, because the card is what
+                    // he reads back before sending.
+                    if (item.inCatalogue && item.isMine)
+                      Text('Nel tuo kit', style: TextStyle(fontSize: 12, color: c.inkMuted))
+                    else if (item.inCatalogue && item.holderName != null)
+                      Text(
+                        'Di ${item.holderName}',
+                        style: TextStyle(fontSize: 12, color: c.inkMuted),
+                      ),
                     if (item.calibrationExpiry != null)
                       Text(
                         'Taratura valida fino al ${formatCivilDate(item.calibrationExpiry)}',

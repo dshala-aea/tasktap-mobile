@@ -1367,6 +1367,12 @@ class Strumenti extends Table {
   TextColumn get certificateReference => text().nullable()();
   BoolColumn get isMine => boolean().withDefault(const Constant(false))();
 
+  /// Who has the instrument in charge: the id the office knows it by, and the display name the
+  /// rapportino shows. Both null when it sits on the shelf — never an empty string, so the picker
+  /// can tell "unassigned" from "someone we could not name".
+  TextColumn get holderUserId => text().nullable()();
+  TextColumn get holderName => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1466,7 +1472,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 49;
+  int get schemaVersion => 50;
 
   @override
   MigrationStrategy get migration {
@@ -1995,6 +2001,28 @@ class AppDatabase extends _$AppDatabase {
           // customer would never receive its contacts until something else edited that customer.
           await m.createTable(customerContacts);
           await _createCustomerContactIndexes();
+        }
+        if (from < 50) {
+          // Whose instrument it is, so the rapportino picker can say "di Anna Neri" instead of
+          // offering a bare name the technician has to guess the owner of. The name travels from
+          // the server rather than being resolved from the colleague mirror, which carries active
+          // users only — an instrument stays with someone who has since been deactivated until the
+          // office reassigns it.
+          //
+          // Nothing to backfill and no cursor bump: `strumenti` is one of the members that travel
+          // WHOLE on every sync (`replaceStrumenti` deletes and re-inserts), so the next sync fills
+          // these columns whatever its cursor.
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `strumenti` from the current definition today, but the guard is what
+          // keeps an `alterTable` added later from turning this into a crash on `duplicate column
+          // name` before the app opens.
+          if (!await _columnExists(m.database, 'strumenti', 'holder_user_id')) {
+            await m.addColumn(strumenti, strumenti.holderUserId);
+          }
+          if (!await _columnExists(m.database, 'strumenti', 'holder_name')) {
+            await m.addColumn(strumenti, strumenti.holderName);
+          }
         }
       },
     );

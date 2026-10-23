@@ -315,6 +315,27 @@ void main() {
     expect(await db.select(db.strumenti).get(), isEmpty);
   });
 
+  test('replaceStrumenti carries the holder down, and writes nulls when nobody holds it', () async {
+    await replaceStrumenti(db, [
+      const SyncStrumentoDto(
+        id: 's1',
+        name: 'Anemometro',
+        matricola: 'A-3',
+        holderUserId: 'u-anna',
+        holderName: 'Anna Neri',
+      ),
+      const SyncStrumentoDto(id: 's2', name: 'Pinza', matricola: 'P1'),
+    ]);
+
+    final rows = {for (final r in await db.select(db.strumenti).get()) r.id: r};
+    expect(rows['s1']!.holderUserId, 'u-anna');
+    expect(rows['s1']!.holderName, 'Anna Neri');
+    // On the shelf. Written as null rather than left alone: the catalogue is replaced whole, so a
+    // stale owner from a previous sync would otherwise survive forever.
+    expect(rows['s2']!.holderUserId, isNull);
+    expect(rows['s2']!.holderName, isNull);
+  });
+
   test('server report instruments replace for synced drafts and never touch a local-only draft', () async {
     Future<void> draft(String id, {required bool local}) => db.into(db.draftReports).insert(
           DraftReportsCompanion.insert(

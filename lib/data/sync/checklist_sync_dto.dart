@@ -205,6 +205,8 @@ class SyncStrumentoDto {
     this.calibrationExpiry,
     this.certificateReference,
     this.isMine = false,
+    this.holderUserId,
+    this.holderName,
   });
 
   final String id;
@@ -216,6 +218,13 @@ class SyncStrumentoDto {
   final String? certificateReference;
   final bool isMine;
 
+  /// Who has the instrument in charge and the name to show for them; both null when it sits on
+  /// the shelf. Sent down rather than resolved from the colleague mirror, which carries active
+  /// users only: an instrument stays with someone who has since been deactivated until the office
+  /// reassigns it, and the rapportino still has to say whose it was.
+  final String? holderUserId;
+  final String? holderName;
+
   static const Set<String> wireKeys = {
     'id',
     'name',
@@ -223,6 +232,8 @@ class SyncStrumentoDto {
     'calibrationExpiry',
     'certificateReference',
     'isMine',
+    'holderUserId',
+    'holderName',
   };
 
   factory SyncStrumentoDto.fromJson(Map<String, dynamic> j) => SyncStrumentoDto(
@@ -232,6 +243,8 @@ class SyncStrumentoDto {
     calibrationExpiry: parseDateOnly(j['calibrationExpiry']),
     certificateReference: j['certificateReference'] as String?,
     isMine: j['isMine'] as bool? ?? false,
+    holderUserId: j['holderUserId'] as String?,
+    holderName: j['holderName'] as String?,
   );
 }
 
