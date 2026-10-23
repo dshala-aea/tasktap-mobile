@@ -27,6 +27,7 @@ class TicketMobileSessionDto {
     required this.startTime,
     this.endTime,
     this.description,
+    this.deviceUtc,
   });
 
   final String clientId;
@@ -40,12 +41,21 @@ class TicketMobileSessionDto {
 
   final String? description;
 
+  /// This phone's own clock reading at the moment this batch was sent.
+  ///
+  /// Deliberately not [startTime]: a queued session can be hours old and the phone's clock may have
+  /// been corrected in between, so comparing the start with the server's receipt would measure how
+  /// long the queue sat rather than how far the clock was off (O-10 plan §2). The server records the
+  /// difference beside the row and never moves the recorded instants because of it.
+  final DateTime? deviceUtc;
+
   Map<String, dynamic> toJson() => {
     'clientId': clientId,
     'ticketId': ticketId,
     'startTime': startTime.toUtc().toIso8601String(),
     'endTime': endTime?.toUtc().toIso8601String(),
     if (description != null) 'description': description,
+    if (deviceUtc != null) 'deviceUtc': deviceUtc!.toUtc().toIso8601String(),
   };
 }
 

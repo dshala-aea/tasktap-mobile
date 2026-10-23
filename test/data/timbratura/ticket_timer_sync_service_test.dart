@@ -123,6 +123,33 @@ void main() {
     expect(session['endTime'], isNull, reason: 'still running: no end to send');
   });
 
+  test('stamps the send-time clock reading, not the tap instant', () async {
+    // Queued at 08:30 and sent two hours later, from a phone whose clock may have been corrected in
+    // between: the reading the server can honestly compare with its receipt is "now", and it is the
+    // same for every session in the batch (O-10 plan §2).
+    await repo.start(ticketId: 't1', userId: 'u1');
+    final sentAt = now.add(const Duration(hours: 2));
+
+    await TicketTimerSyncService(
+      repo: repo,
+      apiClient: TicketTimerApiClient(Dio()..httpClientAdapter = adapter),
+      businessTime: BusinessTime.fallback(),
+      clock: () => sentAt,
+    ).syncNow();
+
+    final session = (adapter.sentBody!['sessions'] as List<dynamic>).single as Map<String, dynamic>;
+    expect(
+      DateTime.parse(session['deviceUtc'] as String),
+      sentAt,
+      reason: 'a tap-time reading would measure how long the queue sat and call it clock skew',
+    );
+    expect(
+      DateTime.parse(session['startTime'] as String),
+      now,
+      reason: 'the recorded start must stay the instant the technician tapped',
+    );
+  });
+
   test('a session the server never echoes stays queued', () async {
     await repo.start(ticketId: 't1', userId: 'u1');
     adapter = _Adapter(

@@ -90,7 +90,11 @@ class TicketTimerSyncService {
         .toList();
     if (rows.isEmpty) return;
 
-    final dtos = rows.map(_toDto).toList();
+    // One reading for the whole batch: this is the moment the request leaves the phone, which is
+    // the only thing the server can honestly compare with its own receipt. Stamping each row with
+    // its tap time would measure how long the queue sat, not how far the clock was off (O-10 §2).
+    final deviceUtc = _clock().toUtc();
+    final dtos = rows.map((row) => _toDto(row, deviceUtc)).toList();
     try {
       final results = await _apiClient.upsertSessions(dtos);
       _batchFailures = 0;
@@ -118,7 +122,7 @@ class TicketTimerSyncService {
   /// A row as the batch endpoint takes it. The instants are preferred and the Rome-local frame is
   /// the fallback for a legacy server row that never carried them — the same precedence every
   /// worklog reader applies.
-  TicketMobileSessionDto _toDto(TicketTimer row) {
+  TicketMobileSessionDto _toDto(TicketTimer row, DateTime deviceUtc) {
     final workDate = row.workDate;
     final startSeconds = row.startSeconds;
     final start =
@@ -148,6 +152,7 @@ class TicketTimerSyncService {
       startTime: start,
       endTime: end,
       description: row.description,
+      deviceUtc: deviceUtc,
     );
   }
 
