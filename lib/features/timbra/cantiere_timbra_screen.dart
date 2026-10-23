@@ -762,7 +762,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       final client = ref.read(cantiereWorklogApiClientProvider);
       // Online-first: the ordinary route, and the one that answers synchronously. The offline
       // fallback below carries the same rich fields (see this file's own header comment).
-      await client.startCantiere(
+      final clockDisagreement = await client.startCantiere(
         StartCantiereRequest(
           cantiereId: cantiere.id,
           customerId: customerId,
@@ -780,6 +780,11 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
           deviceUtc: DateTime.now().toUtc(),
         ),
       );
+      // The answer to this very request: the server measured this phone against its own receipt
+      // instant and only fills the value in when the two disagreed. Nothing to compare here.
+      if (clockDisagreement != null) {
+        ref.read(cantiereClockDisagreementProvider.notifier).record(clockDisagreement);
+      }
       if (mounted) {
         await ref.read(activeCantiereLogProvider.notifier).refresh();
         setState(() => _isLoading = false);

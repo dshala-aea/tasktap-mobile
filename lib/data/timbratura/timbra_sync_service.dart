@@ -427,7 +427,10 @@ class TimbraSyncService {
       try {
         switch (e.eventType) {
           case 'fine':
-            await _apiClient.endWork(deviceUtc: _clock().toUtc());
+            final clockDisagreement = await _apiClient.endWork(deviceUtc: _clock().toUtc());
+            // Same banner as the batch path: a shift opened on another device is closed through
+            // this route, so this is the only chance its technician gets to hear the advice.
+            if (clockDisagreement != null) _onClockDisagreement?.call(clockDisagreement);
           case 'pausa':
             await _apiClient.startBreak();
           case 'ripresa':

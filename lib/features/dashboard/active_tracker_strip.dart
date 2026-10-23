@@ -16,6 +16,7 @@ import '../../data/worklogs/active_tracker_api_client.dart';
 import '../../features/ticket/ticket_timer_actions.dart';
 import '../../features/ticket/ticket_workflow_api_client.dart';
 import '../../data/timbratura/remote_shift.dart' show OfflineRemoteShiftException;
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../timbra/timbra_providers.dart';
 import 'active_trackers_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -137,7 +138,13 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
               );
             }
           } else {
-            await ref.read(cantiereWorklogApiClientProvider).endCantiere();
+            final clockDisagreement =
+                await ref.read(cantiereWorklogApiClientProvider).endCantiere();
+            // Same banner as the punch screens: this is the other door the same close comes
+            // through, and the server's answer is the only place the advice exists.
+            if (clockDisagreement != null) {
+              ref.read(cantiereClockDisagreementProvider.notifier).record(clockDisagreement);
+            }
           }
         case ActiveTrackerKind.ticket:
           final id = t.entityId;

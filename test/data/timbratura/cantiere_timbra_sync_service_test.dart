@@ -134,9 +134,10 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   int? clockDisagreementSeconds;
 
   @override
-  Future<void> endCantiere([EndCantiereRequest? request]) async {
+  Future<int?> endCantiere([EndCantiereRequest? request]) async {
     if (endErrorToThrow != null) throw endErrorToThrow!;
     endedCalls.add(request ?? const EndCantiereRequest());
+    return null;
   }
 
   @override

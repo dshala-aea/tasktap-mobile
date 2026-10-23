@@ -312,7 +312,7 @@ class CantiereTimbraSyncService {
   /// synced like a success.
   Future<bool> _pushOrphanClose(CantierePunche close) async {
     try {
-      await _apiClient.endCantiere(
+      final clockDisagreement = await _apiClient.endCantiere(
         EndCantiereRequest(
           description: close.description,
           departureLatitude: close.departureLatitude,
@@ -320,6 +320,12 @@ class CantiereTimbraSyncService {
           safetyNotes: close.safetyNotes,
         ),
       );
+      // This route records no device clock (the close's instant is the queued event's, not the
+      // send time), so the server normally measures nothing here — but if it does answer with a
+      // disagreement, the technician should hear it like any other.
+      if (clockDisagreement != null) {
+        _onClockDisagreement?.call(clockDisagreement);
+      }
     } catch (e) {
       if (e is DioException && e.response?.statusCode == 404) {
         // Nothing open on the server any more — the visit is closed either way.

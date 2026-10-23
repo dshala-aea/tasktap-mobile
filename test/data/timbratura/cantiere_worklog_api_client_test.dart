@@ -77,6 +77,38 @@ void main() {
       expect(body.containsKey('arrivalLongitude'), isFalse);
     });
 
+    test('returns the clock disagreement the server echoes', () async {
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: any(named: 'data')),
+      ).thenAnswer(
+        (_) async => _okResponse(<String, dynamic>{
+          'id': 'wl-1',
+          'clockDisagreementSeconds': 720,
+        }, '/api/cantiereworklog/start'),
+      );
+
+      final seconds = await client.startCantiere(
+        const StartCantiereRequest(cantiereId: 'cant-1', customerId: 'cust-1'),
+      );
+
+      expect(seconds, 720);
+    });
+
+    test('returns null when the server judged the clocks close enough', () async {
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: any(named: 'data')),
+      ).thenAnswer(
+        (_) async =>
+            _okResponse(<String, dynamic>{'id': 'wl-1'}, '/api/cantiereworklog/start'),
+      );
+
+      final seconds = await client.startCantiere(
+        const StartCantiereRequest(cantiereId: 'cant-1', customerId: 'cust-1'),
+      );
+
+      expect(seconds, isNull);
+    });
+
     test('propagates DioException on server error', () async {
       when(
         () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: any(named: 'data')),
@@ -130,6 +162,21 @@ void main() {
       ).captured;
 
       expect(captured.first, isEmpty);
+    });
+
+    test('returns the clock disagreement the server echoes', () async {
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/end', data: any(named: 'data')),
+      ).thenAnswer(
+        (_) async => _okResponse(<String, dynamic>{
+          'message': 'Work ended successfully',
+          'clockDisagreementSeconds': -1800,
+        }, '/api/cantiereworklog/end'),
+      );
+
+      final seconds = await client.endCantiere();
+
+      expect(seconds, -1800);
     });
   });
 
