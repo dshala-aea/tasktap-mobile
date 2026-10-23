@@ -25,7 +25,7 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_form_screen.dart';
 import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_list_screen.dart'
-    show adminProdottiAssistenzaProvider;
+    show adminProdottiAssistenzaProvider, ProdottoListRows;
 
 class MockDio extends Mock implements Dio {}
 
@@ -209,7 +209,7 @@ void main() {
           extraOverrides: [
             adminProdottiAssistenzaProvider.overrideWith((ref) async {
               fetchCalls++;
-              return const <Map<String, dynamic>>[];
+              return const ProdottoListRows([], fromMirror: false);
             }),
           ],
           persistentWatcher: (context) => Consumer(
