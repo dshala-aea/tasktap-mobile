@@ -123,6 +123,91 @@ void main() {
     expect(session['endTime'], isNull, reason: 'still running: no end to send');
   });
 
+  test('stamps the send-time clock reading, not the tap instant', () async {
+    // Queued at 08:30 and sent two hours later, from a phone whose clock may have been corrected in
+    // between: the reading the server can honestly compare with its receipt is "now", and it is the
+    // same for every session in the batch (O-10 plan §2).
+    await repo.start(ticketId: 't1', userId: 'u1');
+    final sentAt = now.add(const Duration(hours: 2));
+
+    await TicketTimerSyncService(
+      repo: repo,
+      apiClient: TicketTimerApiClient(Dio()..httpClientAdapter = adapter),
+      businessTime: BusinessTime.fallback(),
+      clock: () => sentAt,
+    ).syncNow();
+
+    final session = (adapter.sentBody!['sessions'] as List<dynamic>).single as Map<String, dynamic>;
+    expect(
+      DateTime.parse(session['deviceUtc'] as String),
+      sentAt,
+      reason: 'a tap-time reading would measure how long the queue sat and call it clock skew',
+    );
+    expect(
+      DateTime.parse(session['startTime'] as String),
+      now,
+      reason: 'the recorded start must stay the instant the technician tapped',
+    );
+  });
+
+  test('hands the server\'s clock-disagreement answer to the caller', () async {
+    // The phone cannot work this out for itself — it never sees the server's receipt instant — so
+    // the answer travels back with the session. Dropping it would leave the flag visible only in the
+    // office, long after the technician could have fixed the phone.
+    await repo.start(ticketId: 't1', userId: 'u1');
+    adapter = _Adapter((options) async {
+      final sent = (options.data as Map<String, dynamic>)['sessions'] as List<dynamic>;
+      return ResponseBody.fromString(
+        jsonEncode({
+          'sessions': [
+            for (final s in sent.cast<Map<String, dynamic>>())
+              {
+                'clientId': s['clientId'],
+                'ticketWorkLogId': 'server-${s['clientId']}',
+                'ticketId': s['ticketId'],
+                'startTime': s['startTime'],
+                'endTime': s['endTime'],
+                'isActive': s['endTime'] == null,
+                'clockDisagreementSeconds': 720,
+              },
+          ],
+        }),
+        200,
+        headers: _json,
+      );
+    });
+
+    final reported = <(String, int)>[];
+    await TicketTimerSyncService(
+      repo: repo,
+      apiClient: TicketTimerApiClient(Dio()..httpClientAdapter = adapter),
+      businessTime: BusinessTime.fallback(),
+      clock: () => now,
+      onClockDisagreement: (ticketId, seconds) => reported.add((ticketId, seconds)),
+    ).syncNow();
+
+    expect(reported, [('t1', 720)]);
+  });
+
+  test('says nothing when the server judged the clock to agree', () async {
+    await repo.start(ticketId: 't1', userId: 'u1');
+
+    var called = false;
+    await TicketTimerSyncService(
+      repo: repo,
+      apiClient: TicketTimerApiClient(Dio()..httpClientAdapter = adapter),
+      businessTime: BusinessTime.fallback(),
+      clock: () => now,
+      onClockDisagreement: (_, _) => called = true,
+    ).syncNow();
+
+    expect(
+      called,
+      isFalse,
+      reason: 'a null means ordinary drift, no device clock, or an older backend — never a warning',
+    );
+  });
+
   test('a session the server never echoes stays queued', () async {
     await repo.start(ticketId: 't1', userId: 'u1');
     adapter = _Adapter(

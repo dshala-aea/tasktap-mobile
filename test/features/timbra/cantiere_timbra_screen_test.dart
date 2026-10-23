@@ -120,7 +120,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
       activeLog != null ? [activeLog!] : [];
 
   @override
-  Future<void> startCantiere(StartCantiereRequest request) async {
+  Future<int?> startCantiere(StartCantiereRequest request) async {
     if (startShouldThrow) {
       throw DioException(
         requestOptions: RequestOptions(path: '/api/cantiereworklog/start'),
@@ -128,6 +128,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
       );
     }
     startedRequests.add(request);
+    return null;
   }
 
   // The offline-fallback/error-handling behaviour of the end-of-session call itself moved to
@@ -136,8 +137,9 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   // (see the 'active session' group's own navigation test below), so there's no throw branch here
   // to exercise from this file.
   @override
-  Future<void> endCantiere([EndCantiereRequest? request]) async {
+  Future<int?> endCantiere([EndCantiereRequest? request]) async {
     endCalled = true;
+    return null;
   }
 
   @override

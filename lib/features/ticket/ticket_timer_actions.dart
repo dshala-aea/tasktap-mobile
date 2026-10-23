@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/timbratura/ticket_timer_sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import 'ticket_workflow_api_client.dart';
 
 /// Start/stop for a ticket's timer, in the one place both entry points use.
@@ -65,6 +66,14 @@ Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
   // would show a clock that is not running, so the technician is told instead.
   if (!started.isActive) throw const TicketTimerAlreadyClosed();
 
+  // The server measured this phone's clock against its own receipt and, when the two were far
+  // enough apart to matter, says so here. Recorded before the mirror write: the technician should
+  // hear about a wrong clock on the same turn the hours are booked, not at the next sync.
+  final disagreement = started.clockDisagreementSeconds;
+  if (disagreement != null) {
+    ref.read(clockDisagreementProvider.notifier).record(ticketId, disagreement);
+  }
+
   // Mirror the running clock now, from the id the reply carries — not from the next delta sync.
   // Without this row, a technician who started the clock in the office and lost signal on the way
   // to site could not stop it: an offline "Ferma" has nothing to close.
@@ -103,9 +112,14 @@ Future<bool> stopTicketTimer(WidgetRef ref, String ticketId) async {
     throw const TicketTimerNotOnDevice();
   }
   try {
-    await ref
+    final disagreement = await ref
         .read(ticketWorkflowApiClientProvider)
         .stopTimer(ticketId, deviceUtc: DateTime.now().toUtc());
+    // The close's answer carries the row's merged disagreement — same banner the start's answer
+    // raises, so a skew first seen at the start is not lost when the session ends online.
+    if (disagreement != null) {
+      ref.read(clockDisagreementProvider.notifier).record(ticketId, disagreement);
+    }
   } on TicketWorkflowFailure catch (e) {
     // The mirror is closed on every path where it holds the session: a technician who tapped
     // "Ferma" ends the clock they see, and the queued close re-sends it through the idempotent

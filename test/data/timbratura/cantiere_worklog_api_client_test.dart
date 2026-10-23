@@ -77,6 +77,38 @@ void main() {
       expect(body.containsKey('arrivalLongitude'), isFalse);
     });
 
+    test('returns the clock disagreement the server echoes', () async {
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: any(named: 'data')),
+      ).thenAnswer(
+        (_) async => _okResponse(<String, dynamic>{
+          'id': 'wl-1',
+          'clockDisagreementSeconds': 720,
+        }, '/api/cantiereworklog/start'),
+      );
+
+      final seconds = await client.startCantiere(
+        const StartCantiereRequest(cantiereId: 'cant-1', customerId: 'cust-1'),
+      );
+
+      expect(seconds, 720);
+    });
+
+    test('returns null when the server judged the clocks close enough', () async {
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: any(named: 'data')),
+      ).thenAnswer(
+        (_) async =>
+            _okResponse(<String, dynamic>{'id': 'wl-1'}, '/api/cantiereworklog/start'),
+      );
+
+      final seconds = await client.startCantiere(
+        const StartCantiereRequest(cantiereId: 'cant-1', customerId: 'cust-1'),
+      );
+
+      expect(seconds, isNull);
+    });
+
     test('propagates DioException on server error', () async {
       when(
         () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: any(named: 'data')),
@@ -130,6 +162,21 @@ void main() {
       ).captured;
 
       expect(captured.first, isEmpty);
+    });
+
+    test('returns the clock disagreement the server echoes', () async {
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/end', data: any(named: 'data')),
+      ).thenAnswer(
+        (_) async => _okResponse(<String, dynamic>{
+          'message': 'Work ended successfully',
+          'clockDisagreementSeconds': -1800,
+        }, '/api/cantiereworklog/end'),
+      );
+
+      final seconds = await client.endCantiere();
+
+      expect(seconds, -1800);
     });
   });
 
@@ -208,6 +255,41 @@ void main() {
       expect(result.first.clientId, 'client-1');
       expect(result.first.cantiereWorkLogId, 'wl-1');
       expect(result.first.isActive, isFalse);
+      // Absent from the payload = no disagreement (ordinary drift, no device clock, older backend).
+      expect(result.first.clockDisagreementSeconds, isNull);
+    });
+
+    test('parses the clock disagreement the server echoes', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/cantiereworklog/mobile/sessions',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'sessions': [
+            {
+              'clientId': 'client-1',
+              'cantiereWorkLogId': 'wl-1',
+              'startTime': '2026-08-16T07:00:00Z',
+              'isActive': true,
+              'clockDisagreementSeconds': -1800,
+            },
+          ],
+        }, '/api/cantiereworklog/mobile/sessions'),
+      );
+
+      final result = await client.upsertSessions([
+        CantiereMobileSessionDto(
+          clientId: 'client-1',
+          cantiereId: 'cant-1',
+          customerId: 'cust-1',
+          startTime: DateTime.utc(2026, 8, 16, 7),
+        ),
+      ]);
+
+      // Negative = the phone was behind the server. The phone relays this; it never re-derives it.
+      expect(result.first.clockDisagreementSeconds, -1800);
     });
   });
 
