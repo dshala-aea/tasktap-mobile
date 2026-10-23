@@ -199,6 +199,16 @@ class ReferenceCacheRepository {
             ..orderBy([(c) => OrderingTerm.asc(c.name)]))
           .get();
 
+  /// Every contract the sync put in scope — the Contratti list's own rows.
+  ///
+  /// No `isActive` filter, unlike [contractsForCustomer]: the list shows inactive contracts too
+  /// (as an "Inattivo" pill), and this stands in for `GET /api/contracts`, which filters none.
+  /// The sync payload is technician-scoped, so this is a *partial* view of the tenant's contracts
+  /// whenever the account cannot see them all — call sites say so rather than presenting it as
+  /// the whole book of business.
+  Future<List<Contract>> allContracts() =>
+      (_db.select(_db.contracts)..orderBy([(c) => OrderingTerm.asc(c.name)])).get();
+
   Future<List<CommesseData>> commesseForCustomer(String customerId) =>
       (_db.select(_db.commesse)
             ..where((c) => c.customerId.equals(customerId) & c.isActive.equals(true))

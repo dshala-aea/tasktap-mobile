@@ -42,11 +42,15 @@ class AdminContractDetailScreen extends ConsumerWidget {
     final price = contract['price'] as num?;
     final startDate = contract['startDate'] as String?;
     final endDate = contract['endDate'] as String?;
-    final frequencyValue = contract['frequencyValue'] as int? ?? 1;
+    // These four are absent from the synced `contracts` mirror (the sync payload carries only the
+    // list-shaped fields), so an offline visit reaches this screen without them. They stay null
+    // rather than defaulting: "Frequenza 1 mesi" and "Rinnovo automatico No" are claims about a
+    // contract, and this screen has no grounds for either when the row came from the mirror.
+    final frequencyValue = contract['frequencyValue'] as int?;
     // The backend serializes ContractFrequencyUnit as a STRING ("Days"/"Months"/"Years") — see
     // AdminApiClient.createContract's doc comment.
-    final frequencyUnit = contract['frequencyUnit'] as String? ?? 'Months';
-    final autoRenewal = contract['autoRenewal'] as bool? ?? false;
+    final frequencyUnit = contract['frequencyUnit'] as String?;
+    final autoRenewal = contract['autoRenewal'] as bool?;
     final scadenzaGiorni = contract['scadenzaGiorni'] as int?;
 
     final startLabel = startDate != null
@@ -56,7 +60,9 @@ class AdminContractDetailScreen extends ConsumerWidget {
         ? DateFormat('dd/MM/yyyy').format(DateTime.parse(endDate))
         : 'Nessuna data fine';
     final priceLabel = price != null ? '€${price.toStringAsFixed(2)}' : '—';
-    final freqLabel = '$frequencyValue ${_frequencyUnitLabel(frequencyUnit)}';
+    final freqLabel = frequencyValue == null || frequencyUnit == null
+        ? '—'
+        : '$frequencyValue ${_frequencyUnitLabel(frequencyUnit)}';
     final isActive = contract['isActive'] as bool? ?? true;
 
     return Scaffold(
@@ -133,7 +139,10 @@ class AdminContractDetailScreen extends ConsumerWidget {
                             label: 'Preavviso scadenza',
                             value: scadenzaGiorni != null ? '$scadenzaGiorni giorni' : '—',
                           ),
-                          KeyVal(label: 'Rinnovo automatico', value: autoRenewal ? 'Sì' : 'No'),
+                          KeyVal(
+                            label: 'Rinnovo automatico',
+                            value: autoRenewal == null ? '—' : (autoRenewal ? 'Sì' : 'No'),
+                          ),
                           KeyVal(
                             label: 'Condizioni',
                             value: condizioni.isNotEmpty ? condizioni : '—',

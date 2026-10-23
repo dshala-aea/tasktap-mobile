@@ -1135,11 +1135,11 @@ class AdminApiClient {
   }
 
   /// Live contract detail — `GET /api/contracts/{id}` (`ContractsController.GetById`). Feature
-  /// audit module #11, Gap D: a technician viewing a ticket/cantiere tied to a contract has no
-  /// local Drift mirror to read it from (contracts, like Contratti's other sub-resources, are
-  /// never synced to the device — see `fetchContracts`'s own doc comment), so this fetches the
-  /// single contract live the same way `fetchCantiereDetail`/`fetchSquadraDetail` do for their
-  /// entities.
+  /// audit module #11, Gap D. Contracts *are* mirrored (the `contracts` list in the sync
+  /// payload), but the mirror carries only the list-shaped fields — no `price`, `condizioni`,
+  /// `frequency*`, `autoRenewal` or `scadenzaGiorni` — so the detail reads still ask the server
+  /// first and fall back to the mirror through `contractByIdProvider`, the same shape
+  /// `fetchCantiereDetail`/`fetchSquadraDetail` use for their entities.
   Future<Map<String, dynamic>?> fetchContractById(String id) async {
     final res = await _dio.get<Map<String, dynamic>>('/api/contracts/$id');
     return res.data;
