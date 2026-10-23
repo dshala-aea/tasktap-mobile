@@ -9,15 +9,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/time/business_time.dart';
 import '../../../core/time/business_time_providers.dart';
-import '../../../core/time/work_time.dart' show parseTimeSpan;
+import '../../../core/time/work_time.dart' show formatTimeSpan, parseTimeSpan;
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/timbratura/cantiere_worklog_api_client.dart' show CantiereWorkLogDto;
+import '../../../data/timbratura/timbra_session_assembler.dart' show assembleIntervals;
 import '../../../data/timbratura/worklog_api_client.dart'
     show UserWorkLogDto, worklogApiClientProvider;
+import '../../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../cantiere/cantiere_providers.dart' show cantiereWorklogsProvider;
+import '../../timbra/timbra_providers.dart' show workSessionRepositoryProvider;
 import '../../ticket/ticket_providers.dart' show ticketWorklogsProvider;
 import '../../ticket/ticket_workflow_api_client.dart' show TicketWorkLogDto;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -414,16 +417,52 @@ WorklogHoursSuggestion? recentWorkLogSuggestionFor(
   return WorklogHoursSuggestion(hours: hours, startTime: start, endTime: end);
 }
 
-/// The plain-timbratura fallback provider (StepOre's third tier) — same online-only posture as
-/// [ticketWorklogsProvider]/`cantiereWorklogsProvider`, for the same reason: a live network call
-/// against a table this device does not otherwise sync. 30 days back is generous enough to catch
-/// "last time this person logged hours" without pulling a user's entire history for a single
-/// suggestion chip.
+/// The plain-timbratura fallback provider (StepOre's third tier). Online it asks the API — a live
+/// call against a table this device does not otherwise sync; 30 days back is generous enough to
+/// catch "this person's still-open punch" without pulling their entire history for one suggestion
+/// chip.
+///
+/// Offline the table is unreachable, but this phone does hold one fact the suggestion needs: its
+/// own open timbratura, in `work_sessions`. `work_sessions` carries no user id — those rows are
+/// this device's punches, hence the signed-in user's by construction — so a request for anyone
+/// else answers empty rather than handing a technician someone else's shift.
 final recentWorkLogProvider = FutureProvider.autoDispose.family<List<UserWorkLogDto>, String>((
   ref,
   userId,
 ) async {
-  if (!ref.watch(isOnlineProvider)) return const [];
+  if (!ref.watch(isOnlineProvider)) {
+    final me = await ref.watch(internalUserIdProvider.future);
+    if (me == null || me != userId) return const [];
+
+    final businessTime = ref.watch(businessTimeProvider);
+    final sessions = await ref
+        .watch(workSessionRepositoryProvider)
+        .getTodaySessions();
+    final open = [
+      for (final i in assembleIntervals(
+        sessions,
+        businessDateOf: businessTime.businessDateOf,
+      ))
+        if (i.endTime == null) i,
+    ];
+    if (open.isEmpty) return const [];
+
+    // Same reading as [recentWorkLogSuggestionFor]: an open timbratura is at most one entry, and
+    // when a lost close left several, the most recent start is the shift still running.
+    final start = open
+        .map((i) => i.startTime)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final (workDate, timeOfDay) = businessTime.legacyLabelOf(start);
+    return [
+      UserWorkLogDto(
+        id: 'local-${start.toUtc().toIso8601String()}',
+        userId: userId,
+        workDate: workDate,
+        startTime: formatTimeSpan(timeOfDay),
+        endTime: null,
+      ),
+    ];
+  }
   final api = ref.watch(worklogApiClientProvider);
   // The API reads the y/m/d fields of these as date labels. WorkDate labels live in the legacy
   // (Rome) frame, so the window is anchored there, not on the device zone.
