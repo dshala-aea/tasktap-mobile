@@ -190,6 +190,12 @@ enum KioskScanFailureReason {
   /// mismatched UserId.
   forbidden,
 
+  /// The day moved between the prompt and the tap: the named action is no longer possible from
+  /// the state the server now sees (already on a break, not clocked in, payroll period closed).
+  /// The server's own reason code travels on [KioskScanException.code]; re-reading the day is
+  /// what makes the prompt right again, so retrying is worthwhile.
+  conflict,
+
   /// No usable response reached us (offline, DNS, timeout).
   network,
 
@@ -198,10 +204,15 @@ enum KioskScanFailureReason {
 }
 
 class KioskScanException implements Exception {
-  const KioskScanException(this.reason, [this.message]);
+  const KioskScanException(this.reason, [this.message, this.code]);
 
   final KioskScanFailureReason reason;
   final String? message;
+
+  /// Server reason code, present on [KioskScanFailureReason.conflict] — the same strings
+  /// `GET /worklog/today` projects in `availableActions` (`already_clocked_in`, `on_break`, …),
+  /// so the two surfaces never grow separate vocabularies.
+  final String? code;
 
   @override
   String toString() => 'KioskScanException($reason${message != null ? ': $message' : ''})';
@@ -212,7 +223,7 @@ class KioskScanException implements Exception {
 class KioskScanResult {
   const KioskScanResult({required this.action, required this.workLogId, this.endTime});
 
-  /// "in" or "out".
+  /// `in` | `out` | `breakStart` | `breakEnd`.
   final String action;
   final String workLogId;
   final DateTime? endTime;
@@ -407,11 +418,22 @@ class WorklogApiClient {
   /// [userId] must be the caller's own internal db id (`internalUserIdProvider`) —
   /// `WorkLogController.KioskScan`'s Check 5 rejects anything else, by design (no
   /// buddy-punching).
-  Future<KioskScanResult> kioskScan({required String token, required String userId}) async {
+  ///
+  /// [action] names the transition (`ClockIn` | `ClockOut` | `StartBreak` | `EndBreak`) — the
+  /// same vocabulary [GiornataActionDto.action] carries. Omitting it keeps the legacy blind
+  /// toggle, which is what a scan must fall back to when the day could not be read: an offline
+  /// phone still gets its punch, and the server decides. With it, scanning a totem while
+  /// something is already open performs exactly the chosen transition instead of toggling —
+  /// which is the difference between "pausa" and clocking out by accident.
+  Future<KioskScanResult> kioskScan({
+    required String token,
+    required String userId,
+    String? action,
+  }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/worklog/kiosk/scan',
-        data: {'token': token, 'userId': userId},
+        data: {'token': token, 'userId': userId, 'action': ?action},
       );
       final data = response.data ?? const <String, dynamic>{};
       return KioskScanResult(
@@ -428,6 +450,15 @@ class WorklogApiClient {
     final status = e.response?.statusCode;
     if (status == 402) return const KioskScanException(KioskScanFailureReason.notEntitled);
     if (status == 403) return const KioskScanException(KioskScanFailureReason.forbidden);
+    // 409 is the named-action refusal: the server validated the requested transition against the
+    // day as it stands now and said no. Its body is a ProblemDetails carrying BOTH the Italian
+    // `detail` to show and the stable `code` — the read model's own reason vocabulary.
+    if (status == 409) {
+      final body = e.response?.data;
+      final message = body is Map ? body['detail'] as String? ?? body['title'] as String? : null;
+      final code = body is Map ? body['code'] as String? : null;
+      return KioskScanException(KioskScanFailureReason.conflict, message, code);
+    }
     if (status == 400) {
       // WorkLogController's kiosk/scan 400s are plain `BadRequest("...")` results, not
       // ProblemDetails — [ApiController]'s automatic problem-details filter only rewrites

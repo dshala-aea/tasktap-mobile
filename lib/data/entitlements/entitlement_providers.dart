@@ -59,6 +59,22 @@ final effectiveClockInMethodProvider = Provider<String>((ref) {
   return cached?.clockInMethod ?? 'Both';
 });
 
+/// Fetches `/auth/me`'s entitlement answer now, and invalidates the cache-reading providers only
+/// on a real change — a failed refresh must not churn the UI into re-reading a cache that did not
+/// move.
+///
+/// Called by [initEntitlementRefreshWatcher] (app start + reconnect) and by HomeShell on every app
+/// resume: a tenant that changed this user's timbratura mode, seat type or modules while the app sat
+/// backgrounded is exactly the change nothing used to pick up — reconnect never fires on a device
+/// that never lost its network interface, so the answer stayed at whatever it was at launch.
+Future<void> refreshEntitlements(WidgetRef ref) async {
+  final updated = await ref.read(entitlementServiceProvider).refresh();
+  if (updated) {
+    ref.invalidate(cachedEntitlementProvider);
+    ref.invalidate(hasFeatureProvider);
+  }
+}
+
 /// Call once on app start, alongside initAuthReconnectWatcher.
 ///
 /// Fetches immediately as well as on every reconnect. Reconnect alone was not enough and the
@@ -71,16 +87,6 @@ final effectiveClockInMethodProvider = Provider<String>((ref) {
 /// remount (e.g. forced sign-out → re-login) leaves the old closure's `ref` in the listener list
 /// forever, and the next reconnect throws on that stale entry.
 VoidCallback initEntitlementRefreshWatcher(WidgetRef ref) {
-  Future<void> refresh() async {
-    final updated = await ref.read(entitlementServiceProvider).refresh();
-    // Only invalidate on a real change — a failed refresh must not churn the UI into
-    // re-reading a cache that did not move.
-    if (updated) {
-      ref.invalidate(cachedEntitlementProvider);
-      ref.invalidate(hasFeatureProvider);
-    }
-  }
-
-  refresh();
-  return ref.read(connectivityProvider.notifier).onReconnect(refresh);
+  refreshEntitlements(ref);
+  return ref.read(connectivityProvider.notifier).onReconnect(() => refreshEntitlements(ref));
 }

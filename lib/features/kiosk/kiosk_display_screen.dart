@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -48,6 +49,14 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
   @override
   void initState() {
     super.initState();
+    // A totem is mounted horizontally on a wall, and the app is portrait-locked at boot
+    // (main.dart) — without this the QR renders rotated 90° on the only device this screen is
+    // designed for. Landscape for the whole time this screen is mounted; dispose hands the app
+    // its own portrait lock back.
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     _refresh();
     _timer = Timer.periodic(_refreshInterval, (_) => _refresh());
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -59,6 +68,12 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
   void dispose() {
     _timer?.cancel();
     _clockTimer?.cancel();
+    // Back to the app's own lock (main.dart), not "any orientation": every other screen is
+    // designed and tested for portrait only.
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
     super.dispose();
   }
 

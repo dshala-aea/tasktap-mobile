@@ -199,7 +199,11 @@ class TimbraGuard {
 }
 
 /// Human-readable text for a server reason code, falling back to the server's own prose.
-String? _guardReason(GiornataActionDto action) {
+///
+/// Public because more than one surface has to explain the same refusal: the punch guard here,
+/// and the kiosk prompt (which disables the actions the day does not allow). A second copy of
+/// this map is how the same reason ends up worded two different ways on two screens.
+String? reasonTextFor(GiornataActionDto action) {
   const known = <String, String>{
     'payroll_locked': 'Il periodo è chiuso per le buste paga: chiedi all\'amministrazione.',
     'already_clocked_in': 'Risulti già in servizio.',
@@ -245,7 +249,7 @@ TimbraGuard resolveGuard({
   final isLock = availability.reasonCode == 'payroll_locked';
   if (hasPendingSync && !isLock) return TimbraGuard.allowed;
 
-  return TimbraGuard(blocked: true, reason: _guardReason(availability));
+  return TimbraGuard(blocked: true, reason: reasonTextFor(availability));
 }
 
 /// The guard for the punch button, whose action depends on whether a shift is open.

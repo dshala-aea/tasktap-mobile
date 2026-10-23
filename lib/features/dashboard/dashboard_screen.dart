@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/entitlements/entitlement_providers.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../altro/notifiche_provider.dart';
 import '../timbra/timbra_providers.dart';
@@ -44,6 +45,10 @@ class _DashboardView extends ConsumerWidget {
     final stats = ref.watch(dashboardStatsProvider);
     final trackers = ref.watch(visibleTrackersProvider);
     final unreadNotifiche = ref.watch(notificheUnreadCountProvider);
+    // Tenant default merged with this user's own override (and the Kiosk entitlement) by the
+    // server — /auth/me's own answer, cached. 'Both' until the first /auth/me lands, matching
+    // effectiveClockInMethodProvider's documented "no answer means allow" asymmetry.
+    final clockInMethod = ref.watch(effectiveClockInMethodProvider);
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -180,18 +185,22 @@ class _DashboardView extends ConsumerWidget {
                         onTap: () => context.push(AppRoutes.timbra),
                       ),
                     ),
-                    Expanded(
-                      child: QuickAction(
-                        icon: LucideIcons.scanLine,
-                        label: 'Timbra\ncon QR',
-                        // Same destination as TimbraScreen's own header action — there's no
-                        // Timbra bottom-nav tab, so this was previously two taps deep (Dashboard →
-                        // Timbra → QR) for what's meant to be the fast path when arriving at a
-                        // kiosk totem. TimbraScreen keeps its own copy of this action too; nothing
-                        // else about that screen changes.
-                        onTap: () => context.push(AppRoutes.timbraQr),
+                    // ButtonOnly: no server endpoint accepts a kiosk-QR punch (the backend's own
+                    // EnsureClockInMethodAllowedAsync), so the entry point is hidden rather than
+                    // shown-but-doomed — same rule TimbraScreen's header action already applies.
+                    if (clockInMethod != 'ButtonOnly')
+                      Expanded(
+                        child: QuickAction(
+                          icon: LucideIcons.scanLine,
+                          label: 'Timbra\ncon QR',
+                          // Same destination as TimbraScreen's own header action — there's no
+                          // Timbra bottom-nav tab, so this was previously two taps deep (Dashboard →
+                          // Timbra → QR) for what's meant to be the fast path when arriving at a
+                          // kiosk totem. TimbraScreen keeps its own copy of this action too; nothing
+                          // else about that screen changes.
+                          onTap: () => context.push(AppRoutes.timbraQr),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -217,6 +226,40 @@ class _ClockInPrompt extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final punchState = ref.watch(punchNotifierProvider);
     final busy = punchState.isLoading;
+
+    // QrOnly: the tenant (or this user's override) requires a kiosk scan, and the server refuses
+    // a button punch outright (WorkLogService.EnsureClockInMethodAllowedAsync). Offering "Timbra
+    // ingresso" here would be a CTA whose only outcome is a refused request — the same defect
+    // TimbraScreen's own _QrRequiredNotice exists to avoid. Same primary-action language, same
+    // destination; the punch path below is simply unreachable.
+    if (ref.watch(effectiveClockInMethodProvider) == 'QrOnly') {
+      return AppCard(
+        padding: EdgeInsets.zero,
+        backgroundColor: AppColors.Y,
+        onTap: () => context.push(AppRoutes.timbraQr),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.base),
+          child: Row(
+            children: [
+              const Icon(LucideIcons.scanLine, size: 18, color: AppColors.WHITE),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Timbra con QR',
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.WHITE,
+                  ),
+                ),
+              ),
+              Icon(LucideIcons.chevronRight, size: 16, color: AppColors.WHITE.withAlpha(179)),
+            ],
+          ),
+        ),
+      );
+    }
 
     // A CTA, not a passive readout — flat AppColors.Y fill + white ink, same primary-action
     // language AppButton's own primary variant already uses (this replaces the old VetroGlass

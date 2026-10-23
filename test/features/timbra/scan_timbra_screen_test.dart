@@ -6,7 +6,8 @@
 // scanned token as a plain constructor parameter — see scan_timbra_screen.dart's own header
 // comment for why it's split this way). No location/customer here: the backend now resolves the
 // kiosk device's own registered site server-side (WorkLogController.KioskScan), so this screen
-// has nothing to pick — it submits automatically on mount.
+// has nothing to pick. It reads the day first: clocked out submits immediately (a scan can only
+// mean clock-in), anything else asks which transition was meant and sends it as a named action.
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -24,20 +25,47 @@ Future<void> _teardown(WidgetTester tester) async {
 }
 
 class _FakeWorklogApiClient extends WorklogApiClient {
-  _FakeWorklogApiClient({this.result, this.error}) : super(Dio());
+  _FakeWorklogApiClient({this.result, this.error, this.day}) : super(Dio());
 
   final KioskScanResult? result;
   final KioskScanException? error;
 
-  final List<Map<String, String>> calls = [];
+  /// The day `GET /worklog/today` would answer. Null means the read failed — the phone is
+  /// offline, and the scan must fall back to the blind toggle rather than strand the technician.
+  final GiornataDto? day;
+
+  final List<Map<String, String?>> calls = [];
 
   @override
-  Future<KioskScanResult> kioskScan({required String token, required String userId}) async {
-    calls.add({'token': token, 'userId': userId});
+  Future<GiornataDto> getGiornata() async {
+    final d = day;
+    if (d == null) throw StateError('offline');
+    return d;
+  }
+
+  @override
+  Future<KioskScanResult> kioskScan({
+    required String token,
+    required String userId,
+    String? action,
+  }) async {
+    calls.add({'token': token, 'userId': userId, 'action': action});
     if (error != null) throw error!;
     return result!;
   }
 }
+
+/// A day as the server would project it: [status] plus exactly the actions the prompt should
+/// offer for it.
+GiornataDto _day(String status, {List<GiornataActionDto> actions = const []}) => GiornataDto(
+  status: status,
+  workedMinutes: 0,
+  breakMinutes: 0,
+  isPayrollLocked: false,
+  actions: actions,
+);
+
+GiornataActionDto _available(String action) => GiornataActionDto(action: action, enabled: true);
 
 /// Wraps KioskConfirmTimbraScreen in a real two-route Navigator stack (a marker screen
 /// underneath, this one pushed on top) rather than pumping it as `MaterialApp.home` directly —
@@ -110,7 +138,9 @@ void main() {
         );
 
         expect(client.calls, [
-          {'token': 'dev-9:200:hmac', 'userId': 'user-9'},
+          // No day readable (this fake leaves `day` null) → the legacy toggle, exactly what
+          // every app build before the prompt sent.
+          {'token': 'dev-9:200:hmac', 'userId': 'user-9', 'action': null},
         ]);
         // Popped back to the marker screen on success — no confirm button, no picker to tap.
         expect(find.text('MARKER-UNDERNEATH'), findsOneWidget);
@@ -185,6 +215,161 @@ void main() {
 
       await _teardown(tester);
     });
+
+    testWidgets('a clocked-out day skips the prompt: a scan can only mean clock-in', (
+      tester,
+    ) async {
+      final client = _FakeWorklogApiClient(
+        result: const KioskScanResult(action: 'in', workLogId: 'wl-1'),
+        day: _day(
+          'ClockedOut',
+          actions: [_available('ClockIn')],
+        ),
+      );
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      expect(client.calls.single['action'], 'ClockIn');
+      expect(find.text('Cosa vuoi fare?'), findsNothing);
+      expect(find.text('MARKER-UNDERNEATH'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets(
+      'a working day asks what the scan means, and "pausa" sends StartBreak',
+      (tester) async {
+        final client = _FakeWorklogApiClient(
+          result: const KioskScanResult(action: 'breakStart', workLogId: 'wl-2'),
+          day: _day(
+            'Working',
+            actions: [_available('StartBreak'), _available('ClockOut')],
+          ),
+        );
+        await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+        // Nothing was punched just by scanning a totem while already on the clock.
+        expect(client.calls, isEmpty);
+        expect(find.text('Sei in servizio'), findsOneWidget);
+        expect(find.widgetWithText(AppButton, 'Inizia la pausa'), findsOneWidget);
+        expect(find.widgetWithText(AppButton, 'Fine turno'), findsOneWidget);
+
+        await tester.tap(find.widgetWithText(AppButton, 'Inizia la pausa'));
+        await tester.pumpAndSettle();
+
+        expect(client.calls.single['action'], 'StartBreak');
+        expect(find.text('MARKER-UNDERNEATH'), findsOneWidget);
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets('"fine turno" sends ClockOut — ending the turn, not a break', (tester) async {
+      final client = _FakeWorklogApiClient(
+        result: const KioskScanResult(action: 'out', workLogId: 'wl-3'),
+        day: _day(
+          'Working',
+          actions: [_available('StartBreak'), _available('ClockOut')],
+        ),
+      );
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      await tester.tap(find.widgetWithText(AppButton, 'Fine turno'));
+      await tester.pumpAndSettle();
+
+      expect(client.calls.single['action'], 'ClockOut');
+
+      await _teardown(tester);
+    });
+
+    testWidgets('a day on break offers "riprendi" (EndBreak) rather than clocking out', (
+      tester,
+    ) async {
+      final client = _FakeWorklogApiClient(
+        result: const KioskScanResult(action: 'breakEnd', workLogId: 'wl-4'),
+        day: _day(
+          'OnBreak',
+          actions: [_available('EndBreak'), _available('ClockOut')],
+        ),
+      );
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      expect(find.text('Sei in pausa'), findsOneWidget);
+      await tester.tap(find.widgetWithText(AppButton, 'Riprendi il lavoro'));
+      await tester.pumpAndSettle();
+
+      expect(client.calls.single['action'], 'EndBreak');
+
+      await _teardown(tester);
+    });
+
+    testWidgets('an action the server disabled is not tappable and explains itself', (
+      tester,
+    ) async {
+      final client = _FakeWorklogApiClient(
+        result: const KioskScanResult(action: 'breakStart', workLogId: 'wl-5'),
+        day: _day(
+          'Working',
+          actions: [
+            const GiornataActionDto(
+              action: 'StartBreak',
+              enabled: false,
+              reasonCode: 'payroll_locked',
+              reason: 'Periodo chiuso',
+            ),
+            const GiornataActionDto(
+              action: 'ClockOut',
+              enabled: false,
+              reasonCode: 'payroll_locked',
+              reason: 'Periodo chiuso',
+            ),
+          ],
+        ),
+      );
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      expect(
+        tester.widget<AppButton>(find.widgetWithText(AppButton, 'Inizia la pausa')).onPressed,
+        isNull,
+      );
+      expect(
+        tester.widget<AppButton>(find.widgetWithText(AppButton, 'Fine turno')).onPressed,
+        isNull,
+      );
+      expect(find.textContaining('buste paga'), findsOneWidget);
+      expect(client.calls, isEmpty);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('a conflict offers Riprova, which re-reads the day instead of repeating it', (
+      tester,
+    ) async {
+      final client = _FakeWorklogApiClient(
+        error: const KioskScanException(
+          KioskScanFailureReason.conflict,
+          'Sei già in pausa.',
+          'on_break',
+        ),
+        day: _day(
+          'Working',
+          actions: [_available('StartBreak'), _available('ClockOut')],
+        ),
+      );
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      await tester.tap(find.widgetWithText(AppButton, 'Inizia la pausa'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sei già in pausa.'), findsOneWidget);
+      await tester.tap(find.widgetWithText(AppButton, 'Riprova'));
+      await tester.pumpAndSettle();
+
+      // Re-read the day and asked again rather than resubmitting the refused action.
+      expect(client.calls, hasLength(1));
+      expect(find.text('Cosa vuoi fare?'), findsOneWidget);
+
+      await _teardown(tester);
+    });
   });
 }
 
@@ -194,7 +379,14 @@ class _SlowFakeWorklogApiClient extends WorklogApiClient {
   final Future<KioskScanResult> pending;
 
   @override
-  Future<KioskScanResult> kioskScan({required String token, required String userId}) => pending;
+  Future<GiornataDto> getGiornata() async => throw StateError('offline');
+
+  @override
+  Future<KioskScanResult> kioskScan({
+    required String token,
+    required String userId,
+    String? action,
+  }) => pending;
 }
 
 class _CountingFakeWorklogApiClient extends WorklogApiClient {
@@ -203,6 +395,12 @@ class _CountingFakeWorklogApiClient extends WorklogApiClient {
   final KioskScanResult Function() onCall;
 
   @override
-  Future<KioskScanResult> kioskScan({required String token, required String userId}) async =>
-      onCall();
+  Future<GiornataDto> getGiornata() async => throw StateError('offline');
+
+  @override
+  Future<KioskScanResult> kioskScan({
+    required String token,
+    required String userId,
+    String? action,
+  }) async => onCall();
 }
