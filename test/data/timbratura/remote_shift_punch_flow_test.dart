@@ -19,7 +19,7 @@ class _Api extends WorklogApiClient {
   final calls = <String>[];
   Object? error;
   @override
-  Future<void> endWork() async {
+  Future<void> endWork({DateTime? deviceUtc}) async {
     calls.add('end');
     if (error != null) throw error!;
   }

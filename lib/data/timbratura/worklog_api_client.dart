@@ -26,6 +26,7 @@ class MobileSessionDto {
     this.latitude,
     this.longitude,
     this.gpsAccuracyMeters,
+    this.deviceUtc,
   });
 
   final String clientId;
@@ -33,6 +34,13 @@ class MobileSessionDto {
   final DateTime? endTime; // UTC, null if active
   final double? latitude; // null for simple timbra
   final double? longitude; // null for simple timbra
+
+  /// This device's own clock reading at the moment the batch is sent — deliberately not the
+  /// punch instant. A queued punch is hours old by the time it goes out, and the phone may have
+  /// corrected its clock in between, so only the send-time reading can be compared with the
+  /// server's receipt instant. The server stores the gap (and flags it when it is large); it
+  /// never uses this value as the worklog instant. Null means "nothing measured", not "agreed".
+  final DateTime? deviceUtc;
 
   /// Device-reported GPS accuracy radius, in meters, at the moment [latitude]/[longitude] were
   /// captured. Capture-only, mirrors `WorkLog.GpsAccuracyMeters` server-side.
@@ -45,6 +53,7 @@ class MobileSessionDto {
     'latitude': latitude,
     'longitude': longitude,
     'gpsAccuracyMeters': gpsAccuracyMeters,
+    if (deviceUtc != null) 'deviceUtc': deviceUtc!.toUtc().toIso8601String(),
   };
 }
 
@@ -320,10 +329,18 @@ class WorklogApiClient {
   }
 
   /// POST /api/worklog/end — clock out. The server ends whatever open row the caller has (during
-  /// a break that is the break row, which closes the day) using ITS clock; 404 when nothing is
-  /// open. Used for a shift that was started on another device — see TimbraSyncService.
-  Future<void> endWork() async {
-    await _dio.post<dynamic>('/api/worklog/end');
+  /// a break that is the break row, which closes the day); 404 when nothing is open. Used for a
+  /// shift that was started on another device — see TimbraSyncService.
+  ///
+  /// [deviceUtc] is this device's clock reading at the moment of sending, not the tap instant: it
+  /// becomes the row's end instant and the gap from the server's receipt time is recorded as the
+  /// clock disagreement. Omitted by callers with no clock to offer, which leaves the server
+  /// stamping its own clock exactly as before.
+  Future<void> endWork({DateTime? deviceUtc}) async {
+    await _dio.post<dynamic>(
+      '/api/worklog/end',
+      data: deviceUtc == null ? null : {'deviceUtc': deviceUtc.toUtc().toIso8601String()},
+    );
   }
 
   /// POST /api/worklog/break/start — 400 unless an ordinary (non-break) row is open.

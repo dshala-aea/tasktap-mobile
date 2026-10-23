@@ -33,7 +33,7 @@ class _Api extends WorklogApiClient {
   _Api() : super(Dio());
   final calls = <String>[];
   @override
-  Future<void> endWork() async => calls.add('end');
+  Future<void> endWork({DateTime? deviceUtc}) async => calls.add('end');
   @override
   Future<void> startBreak() async => calls.add('break/start');
   @override

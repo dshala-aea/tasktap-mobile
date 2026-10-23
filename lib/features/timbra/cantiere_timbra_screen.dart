@@ -753,6 +753,10 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
           arrivalLatitude: location?.lat,
           arrivalLongitude: location?.lng,
           weatherConditions: _weatherConditions,
+          // The tap is the event: the server records this instant and measures the gap from its
+          // own receipt time, so a phone with a wrong clock produces a flagged row rather than a
+          // silently shifted one.
+          deviceUtc: DateTime.now().toUtc(),
         ),
       );
       if (mounted) {

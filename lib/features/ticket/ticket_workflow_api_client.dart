@@ -83,14 +83,25 @@ class TicketWorkflowApiClient {
   /// it already owns, instead of a 400 or — worse — a second timer with the same hours booked
   /// twice. Optional so a server that does not know it yet still serves the request.
   ///
+  /// [deviceUtc] is this device's own clock reading at the moment of the tap. The server uses it
+  /// as the session's start instant and records the gap from its own receipt time as the clock
+  /// disagreement — the flag the office reviews, never a silent correction.
+  ///
   /// Returns the row the server holds. [TicketTimerStart.isActive] is false when that row is
   /// already closed, which happens when the reply was lost long enough for the office to end the
   /// session: the caller must not paint a running clock over it.
-  Future<TicketTimerStart> startTimer(String ticketId, {String? clientId}) async {
+  Future<TicketTimerStart> startTimer(
+    String ticketId, {
+    String? clientId,
+    DateTime? deviceUtc,
+  }) async {
     final response = await _run(
       () => _dio.post<dynamic>(
         '/api/tickets/$ticketId/worklogs/start',
-        queryParameters: clientId == null ? null : {'clientId': clientId},
+        queryParameters: {
+          'clientId': ?clientId,
+          ...?_deviceQuery(deviceUtc),
+        },
       ),
       fallback: 'Impossibile avviare il timer.',
     );
@@ -101,13 +112,21 @@ class TicketWorkflowApiClient {
     return TicketTimerStart.fromJson(body);
   }
 
-  /// POST /api/tickets/{ticketId}/worklogs/stop
-  Future<void> stopTimer(String ticketId) async {
+  /// POST /api/tickets/{ticketId}/worklogs/stop — same [deviceUtc] contract as [startTimer].
+  Future<void> stopTimer(String ticketId, {DateTime? deviceUtc}) async {
     await _run(
-      () => _dio.post<dynamic>('/api/tickets/$ticketId/worklogs/stop'),
+      () => _dio.post<dynamic>(
+        '/api/tickets/$ticketId/worklogs/stop',
+        queryParameters: _deviceQuery(deviceUtc),
+      ),
       fallback: 'Impossibile fermare il timer.',
     );
   }
+
+  /// The endpoints bind `deviceUtc` from the query string, not a body: a null value must send no
+  /// key at all, so the server stamps its own clock exactly as it did before this field existed.
+  static Map<String, dynamic>? _deviceQuery(DateTime? deviceUtc) =>
+      deviceUtc == null ? null : {'deviceUtc': deviceUtc.toUtc().toIso8601String()};
 
   /// POST /api/tickets/{ticketId}/worklogs/manual
   ///
