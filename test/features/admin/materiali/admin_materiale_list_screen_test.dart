@@ -37,4 +37,45 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+
+  // An empty mirror is only a statement about the tenant once a sync has landed: before that it
+  // says nothing, and the old single message told a fresh install the catalogue did not exist.
+  testWidgets('never-synced empty mirror says the catalogue was not downloaded', (tester) async {
+    await tester.pumpWidget(_buildScreen(db));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Catalogo materiali non ancora scaricato'), findsOneWidget);
+    expect(find.text('Catalogo materiali vuoto'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a synced, genuinely empty catalogue says so instead', (tester) async {
+    await db.setLastSync(DateTime.utc(2026, 10, 1));
+    await tester.pumpWidget(_buildScreen(db));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Catalogo materiali vuoto'), findsOneWidget);
+    expect(find.text('Catalogo materiali non ancora scaricato'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  // A search that matched nothing is not a sync problem — it used to send the technician chasing
+  // a nonexistent sync issue over a typo.
+  testWidgets('a search with no match says no result, not "not downloaded"', (tester) async {
+    await tester.pumpWidget(_buildScreen(db));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'bullone inesistente');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nessun risultato'), findsOneWidget);
+    expect(find.text('Catalogo materiali non ancora scaricato'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
 }

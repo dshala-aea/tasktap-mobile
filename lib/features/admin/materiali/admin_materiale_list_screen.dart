@@ -9,6 +9,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/materiali/materiale_barcode_lookup.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -115,6 +116,13 @@ class _AdminMaterialeListBody extends ConsumerWidget {
           (m.description?.toLowerCase().contains(query.toLowerCase()) ?? false);
       return matchActive && matchCategory && matchQuery;
     }).toList();
+
+    // The message below used to be one line for all three: a search that matched nothing was told
+    // the catalogue was not synced, and so was a genuinely empty catalogue.
+    // `showInactive` is off by default, so it narrows nothing the technician did not ask for —
+    // counting it as an active filter would make the default view answer "nessun risultato".
+    final hasActiveFilter = query.isNotEmpty || selectedCategory != null;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
 
     return RefreshIndicator(
       onRefresh: () => refreshWithFeedback(context, ref),
@@ -229,15 +237,28 @@ class _AdminMaterialeListBody extends ConsumerWidget {
             )
           else if (filtered.isEmpty)
             SliverToBoxAdapter(
-              child: UnavailableState(
-                icon: LucideIcons.package,
-                titolo: 'Catalogo materiali non disponibile',
-                motivo:
-                    'Il catalogo materiali non è ancora sincronizzato sul '
-                    'dispositivo. I materiali creati con il pulsante + vengono '
-                    'salvati sul server ma non compariranno in questa lista '
-                    'finché la sincronizzazione non sarà collegata.',
-              ),
+              child: hasActiveFilter
+                  ? const EmptyState(
+                      icon: LucideIcons.searchX,
+                      title: 'Nessun risultato',
+                      body: 'Nessun materiale corrisponde a ricerca e filtri attivi.',
+                    )
+                  : neverSynced
+                  ? const UnavailableState(
+                      icon: LucideIcons.cloudOff,
+                      titolo: 'Catalogo materiali non ancora scaricato',
+                      motivo:
+                          'Questo telefono non ha ancora completato una sincronizzazione. '
+                          'Il catalogo comparirà qui dopo la prossima: trascina in basso per '
+                          'aggiornare.',
+                    )
+                  : const EmptyState(
+                      icon: LucideIcons.package,
+                      title: 'Catalogo materiali vuoto',
+                      body:
+                          'Non è ancora stato creato nessun materiale. Usa il pulsante + per '
+                          'aggiungerne uno.',
+                    ),
             )
           else
             SliverList(

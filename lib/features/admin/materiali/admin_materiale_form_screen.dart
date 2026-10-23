@@ -13,6 +13,7 @@ import '../../../core/constants/catalog_constants.dart';
 import '../../../core/scanner/barcode_scan_sheet.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -445,13 +446,22 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
       return Scaffold(
         backgroundColor: context.colors.bg2,
         appBar: ScreenHeaderBar(title: 'Modifica materiale', showBack: true),
-        body: const UnavailableState(
-          titolo: 'Materiale non disponibile',
-          motivo:
-              'Il catalogo materiali non è ancora sincronizzato sul '
-              'dispositivo, quindi non è possibile precompilare o '
-              'modificare questo materiale da qui.',
-        ),
+        // Missing on a synced device is a deletion, not a download still in flight.
+        body: ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+            ? const UnavailableState(
+                icon: LucideIcons.cloudOff,
+                titolo: 'Materiale non disponibile',
+                motivo:
+                    'Il catalogo materiali non è ancora sincronizzato sul '
+                    'dispositivo, quindi non è possibile precompilare o '
+                    'modificare questo materiale da qui.',
+              )
+            : const UnavailableState(
+                icon: LucideIcons.package,
+                titolo: 'Materiale non trovato',
+                motivo: 'Questo materiale non è più nel catalogo: potrebbe essere stato eliminato. '
+                    'Torna all\'elenco e aggiorna.',
+              ),
       );
     }
 

@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -89,6 +90,10 @@ class _AdminCantiereListBody extends ConsumerWidget {
           (c.city?.toLowerCase().contains(query.toLowerCase()) ?? false);
     }).toList();
 
+    // The empty branch below already separates "no search match" from the rest; this separates the
+    // remaining two, so a tenant that simply has no cantieri is not told to wait for a sync.
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+
     return RefreshIndicator(
       onRefresh: () => refreshWithFeedback(context, ref),
       child: CustomScrollView(
@@ -118,15 +123,21 @@ class _AdminCantiereListBody extends ConsumerWidget {
             )
           else if (allCantieri.isEmpty)
             SliverToBoxAdapter(
-              child: UnavailableState(
-                icon: LucideIcons.hardHat,
-                titolo: 'Cantieri non disponibili',
-                motivo:
-                    "L'elenco cantieri non è ancora sincronizzato sul "
-                    'dispositivo. I cantieri creati con il pulsante + vengono '
-                    'salvati sul server ma non compariranno in questa lista '
-                    'finché la sincronizzazione non sarà collegata.',
-              ),
+              child: neverSynced
+                  ? const UnavailableState(
+                      icon: LucideIcons.cloudOff,
+                      titolo: 'Cantieri non ancora scaricati',
+                      motivo:
+                          'Questo telefono non ha ancora completato una sincronizzazione. '
+                          'I cantieri compariranno qui dopo la prossima: trascina in basso per '
+                          'aggiornare.',
+                    )
+                  : const EmptyState(
+                      icon: LucideIcons.hardHat,
+                      title: 'Nessun cantiere',
+                      body: 'Non è ancora stato creato nessun cantiere. Usa il pulsante + per '
+                          'crearne uno.',
+                    ),
             )
           else if (filtered.isEmpty)
             // A search with no matches is not a sync problem — showing the "not synced" message

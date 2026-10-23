@@ -136,6 +136,22 @@ void main() {
     await unmount(tester);
   });
 
+  // Same missing row, but on a device that has already synced: the sedi mirror arrived and simply
+  // holds no such id, so promising a sync would never deliver it.
+  testWidgets('a synced device reports the sede as not found, not as not downloaded', (
+    tester,
+  ) async {
+    await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+    await tester.pumpWidget(_buildDetail(db: db, locationId: 'missing'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sede non trovata'), findsOneWidget);
+    expect(find.text('Sede non disponibile'), findsNothing);
+
+    await unmount(tester);
+  });
+
   testWidgets(
     'shows GeoMapCard, never a raw "Coordinate" row, when the location already has lat/lng',
     (tester) async {

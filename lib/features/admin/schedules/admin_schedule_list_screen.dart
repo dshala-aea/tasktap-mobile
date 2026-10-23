@@ -11,6 +11,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../features/calendario/calendario_providers.dart';
 import '../../../features/calendario/views/mese_view.dart';
@@ -271,6 +272,17 @@ class _AdminScheduleListBody extends ConsumerWidget {
 
     final filtered = allSchedules.where(matchesFilters).toList();
 
+    // Every filter here is client-side over the local mirror, so an empty result has the same three
+    // possible causes as the other admin lists: no match, no sync yet, or genuinely none.
+    final hasActiveFilter =
+        query.isNotEmpty ||
+        filters.dateFrom != null ||
+        filters.dateTo != null ||
+        filters.statusId != null ||
+        filters.technicianId != null ||
+        filters.squadraId != null;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+
     return RefreshIndicator(
       onRefresh: () => refreshWithFeedback(context, ref),
       child: CustomScrollView(
@@ -359,11 +371,26 @@ class _AdminScheduleListBody extends ConsumerWidget {
             )
           else if (filtered.isEmpty)
             SliverToBoxAdapter(
-              child: EmptyState(
-                icon: LucideIcons.calendarDays,
-                title: 'Nessuna pianificazione',
-                body: 'Crea una nuova pianificazione con il pulsante +, o modifica i filtri.',
-              ),
+              child: hasActiveFilter
+                  ? const EmptyState(
+                      icon: LucideIcons.searchX,
+                      title: 'Nessun risultato',
+                      body: 'Nessuna pianificazione corrisponde a ricerca e filtri attivi.',
+                    )
+                  : neverSynced
+                  ? const UnavailableState(
+                      icon: LucideIcons.cloudOff,
+                      titolo: 'Pianificazioni non ancora scaricate',
+                      motivo:
+                          'Questo telefono non ha ancora completato una sincronizzazione. '
+                          'Le pianificazioni compariranno qui dopo la prossima: trascina in basso '
+                          'per aggiornare.',
+                    )
+                  : const EmptyState(
+                      icon: LucideIcons.calendarDays,
+                      title: 'Nessuna pianificazione',
+                      body: 'Crea una nuova pianificazione con il pulsante +.',
+                    ),
             )
           else
             SliverList(

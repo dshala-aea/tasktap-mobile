@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -97,6 +98,12 @@ class _AdminLocationListBody extends ConsumerWidget {
       return matchCustomer && matchQuery;
     }).toList();
 
+    // Three situations share one empty list, and only one of them is a fact about the tenant: a
+    // filter that matched nothing, a phone that never completed a sync, and a customer with no
+    // sedi. Telling all three "nessuna sede" sent a technician to create a duplicate.
+    final hasActiveFilter = query.isNotEmpty || selectedCustomerId != null;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+
     return RefreshIndicator(
       onRefresh: () => refreshWithFeedback(context, ref),
       child: CustomScrollView(
@@ -158,11 +165,26 @@ class _AdminLocationListBody extends ConsumerWidget {
             )
           else if (filtered.isEmpty)
             SliverToBoxAdapter(
-              child: EmptyState(
-                icon: LucideIcons.mapPin,
-                title: 'Nessuna sede',
-                body: 'Crea una nuova sede con il pulsante +.',
-              ),
+              child: hasActiveFilter
+                  ? const EmptyState(
+                      icon: LucideIcons.searchX,
+                      title: 'Nessun risultato',
+                      body: 'Nessuna sede corrisponde ai filtri attivi.',
+                    )
+                  : neverSynced
+                  ? const UnavailableState(
+                      icon: LucideIcons.cloudOff,
+                      titolo: 'Sedi non ancora scaricate',
+                      motivo:
+                          'Questo telefono non ha ancora completato una sincronizzazione. '
+                          'Le sedi compariranno qui dopo la prossima: trascina in basso per '
+                          'aggiornare.',
+                    )
+                  : const EmptyState(
+                      icon: LucideIcons.mapPin,
+                      title: 'Nessuna sede',
+                      body: 'Crea una nuova sede con il pulsante +.',
+                    ),
             )
           else
             SliverList(

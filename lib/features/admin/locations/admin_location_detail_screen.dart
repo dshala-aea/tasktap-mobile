@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/widgets/geo_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart' show locationGeocodedLocationProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -48,14 +49,24 @@ class AdminLocationDetailScreen extends ConsumerWidget {
               ErrorState(onRetry: () => ref.invalidate(adminLocationDetailProvider(locationId))),
           data: (location) {
             if (location == null) {
-              return const UnavailableState(
-                icon: LucideIcons.mapPin,
-                titolo: 'Sede non disponibile',
-                motivo:
-                    "L'elenco sedi non è ancora sincronizzato sul "
-                    'dispositivo, quindi questa sede non può essere '
-                    'letta dalla cache locale anche se esiste sul server.',
-              );
+              // A missing row on a synced device is not "not downloaded": the sedi mirror is
+              // there and simply has no such id — deleted, or no longer visible to this role.
+              return ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+                  ? const UnavailableState(
+                      icon: LucideIcons.cloudOff,
+                      titolo: 'Sede non disponibile',
+                      motivo:
+                          "L'elenco sedi non è ancora sincronizzato sul "
+                          'dispositivo, quindi questa sede non può essere '
+                          'letta dalla cache locale anche se esiste sul server.',
+                    )
+                  : const UnavailableState(
+                      icon: LucideIcons.mapPin,
+                      titolo: 'Sede non trovata',
+                      motivo:
+                          'Questa sede non è presente sul telefono. Potrebbe essere stata '
+                          'eliminata o non essere più visibile con il tuo ruolo.',
+                    );
             }
             return _LocationDetailBody(location: location, locationId: locationId);
           },

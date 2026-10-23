@@ -190,12 +190,21 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                   ),
                 )
               else if (filtered.isEmpty)
-                const SliverToBoxAdapter(
-                  child: EmptyState(
-                    icon: LucideIcons.bellOff,
-                    title: 'Nessuna notifica',
-                    body: 'Le notifiche ricevute appariranno qui.',
-                  ),
+                // "Non lette" emptying out while the inbox has rows is the filter doing its job,
+                // not an empty inbox — the old single message told the technician they had
+                // received nothing at the exact moment they had just read everything.
+                SliverToBoxAdapter(
+                  child: _filter == _NotificaFilter.nonLette && all.isNotEmpty
+                      ? const EmptyState(
+                          icon: LucideIcons.checkCircle,
+                          title: 'Nessuna notifica non letta',
+                          body: 'Hai letto tutte le notifiche.',
+                        )
+                      : const EmptyState(
+                          icon: LucideIcons.bellOff,
+                          title: 'Nessuna notifica',
+                          body: 'Le notifiche ricevute appariranno qui.',
+                        ),
                 )
               else
                 SliverList(
