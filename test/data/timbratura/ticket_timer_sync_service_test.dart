@@ -150,6 +150,64 @@ void main() {
     );
   });
 
+  test('hands the server\'s clock-disagreement answer to the caller', () async {
+    // The phone cannot work this out for itself — it never sees the server's receipt instant — so
+    // the answer travels back with the session. Dropping it would leave the flag visible only in the
+    // office, long after the technician could have fixed the phone.
+    await repo.start(ticketId: 't1', userId: 'u1');
+    adapter = _Adapter((options) async {
+      final sent = (options.data as Map<String, dynamic>)['sessions'] as List<dynamic>;
+      return ResponseBody.fromString(
+        jsonEncode({
+          'sessions': [
+            for (final s in sent.cast<Map<String, dynamic>>())
+              {
+                'clientId': s['clientId'],
+                'ticketWorkLogId': 'server-${s['clientId']}',
+                'ticketId': s['ticketId'],
+                'startTime': s['startTime'],
+                'endTime': s['endTime'],
+                'isActive': s['endTime'] == null,
+                'clockDisagreementSeconds': 720,
+              },
+          ],
+        }),
+        200,
+        headers: _json,
+      );
+    });
+
+    final reported = <(String, int)>[];
+    await TicketTimerSyncService(
+      repo: repo,
+      apiClient: TicketTimerApiClient(Dio()..httpClientAdapter = adapter),
+      businessTime: BusinessTime.fallback(),
+      clock: () => now,
+      onClockDisagreement: (ticketId, seconds) => reported.add((ticketId, seconds)),
+    ).syncNow();
+
+    expect(reported, [('t1', 720)]);
+  });
+
+  test('says nothing when the server judged the clock to agree', () async {
+    await repo.start(ticketId: 't1', userId: 'u1');
+
+    var called = false;
+    await TicketTimerSyncService(
+      repo: repo,
+      apiClient: TicketTimerApiClient(Dio()..httpClientAdapter = adapter),
+      businessTime: BusinessTime.fallback(),
+      clock: () => now,
+      onClockDisagreement: (_, _) => called = true,
+    ).syncNow();
+
+    expect(
+      called,
+      isFalse,
+      reason: 'a null means ordinary drift, no device clock, or an older backend — never a warning',
+    );
+  });
+
   test('a session the server never echoes stays queued', () async {
     await repo.start(ticketId: 't1', userId: 'u1');
     adapter = _Adapter(

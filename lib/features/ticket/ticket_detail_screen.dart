@@ -23,6 +23,7 @@ import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_attachment_state.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_deletion.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import '../cantiere/cantiere_providers.dart';
@@ -1969,6 +1970,11 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
         async.hasError && async.error is TicketDetailOfflineException;
     final offline = !ref.watch(isOnlineProvider);
 
+    // Only ever set from the server's answer: this phone cannot see a receipt instant, so it can
+    // never conclude that its own clock was off. Null covers ordinary drift, a backend that predates
+    // the field, and the overwhelming majority of sessions, where nothing is shown at all.
+    final disagreement = ref.watch(clockDisagreementProvider)[widget.ticketId];
+
     final running = ref.watch(runningTicketWorklogProvider(widget.ticketId));
     final isRunning = running != null;
 
@@ -2050,29 +2056,63 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
       ],
     );
 
-    if (!mirrorEmpty && !offline) return AppCard(child: bar);
+    if (!mirrorEmpty && !offline && disagreement == null) {
+      return AppCard(child: bar);
+    }
 
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           bar,
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(LucideIcons.cloudOff, size: 14, color: c.inkMuted),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  mirrorEmpty
-                      ? 'Ore di questo ticket non ancora sincronizzate. Il timer funziona: '
-                            'verrà inviato appena torni online.'
-                      : 'Offline: il timer funziona e verrà inviato appena torni online.',
-                  style: TextStyle(fontSize: 11, color: c.inkMuted),
+          if (disagreement != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(LucideIcons.alertTriangle, size: 14, color: c.amber),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'L\'orologio del telefono non coincideva con il server: segnava '
+                    '${describeClockDisagreement(disagreement)}. Le ore sono registrate '
+                    'con l\'ora del telefono: se non tornano, segnalale all\'ufficio.',
+                    style: TextStyle(fontSize: 11, color: c.ink),
+                  ),
                 ),
-              ),
-            ],
-          ),
+                // Dismissible: it is advice about one session, and a technician who has already
+                // corrected the phone's clock should not carry the warning for the rest of the day.
+                // The server keeps the record either way — this only hides the reminder.
+                IconButton(
+                  icon: Icon(LucideIcons.x, size: 14, color: c.inkMuted),
+                  tooltip: 'Nascondi avviso orologio',
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.only(left: 6),
+                  onPressed: () => ref
+                      .read(clockDisagreementProvider.notifier)
+                      .dismiss(widget.ticketId),
+                ),
+              ],
+            ),
+          ],
+          if (mirrorEmpty || offline) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(LucideIcons.cloudOff, size: 14, color: c.inkMuted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    mirrorEmpty
+                        ? 'Ore di questo ticket non ancora sincronizzate. Il timer funziona: '
+                              'verrà inviato appena torni online.'
+                        : 'Offline: il timer funziona e verrà inviato appena torni online.',
+                    style: TextStyle(fontSize: 11, color: c.inkMuted),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

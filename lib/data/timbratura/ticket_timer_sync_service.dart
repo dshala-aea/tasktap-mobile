@@ -26,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/utils/error_message.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../local/app_database.dart' show TicketTimer;
 import '../sync/sync_service.dart' show appDatabaseProvider;
 import 'ticket_timer_api_client.dart';
@@ -45,6 +46,11 @@ final ticketTimerSyncServiceProvider = Provider<TicketTimerSyncService>((ref) {
     repo: ref.watch(ticketTimerRepositoryProvider),
     apiClient: ref.watch(ticketTimerApiClientProvider),
     businessTime: ref.watch(businessTimeProvider),
+    // The server is the only party that can say "this phone's clock was off" — it alone sees the
+    // receipt instant. The answer comes back on the upsert, minutes or hours after the tap, so it
+    // is handed to the screen that shows the clock rather than dropped with the response.
+    onClockDisagreement: (ticketId, seconds) =>
+        ref.read(clockDisagreementProvider.notifier).record(ticketId, seconds),
   );
 });
 
@@ -59,15 +65,21 @@ class TicketTimerSyncService {
     required TicketTimerApiClient apiClient,
     DateTime Function()? clock,
     BusinessTime? businessTime,
+    void Function(String ticketId, int seconds)? onClockDisagreement,
   }) : _repo = repo,
        _apiClient = apiClient,
        _clock = clock ?? DateTime.now,
-       _businessTime = businessTime ?? BusinessTime.fallback(clock: clock);
+       _businessTime = businessTime ?? BusinessTime.fallback(clock: clock),
+       _onClockDisagreement = onClockDisagreement;
 
   final TicketTimerRepository _repo;
   final TicketTimerApiClient _apiClient;
   final DateTime Function() _clock;
   final BusinessTime _businessTime;
+
+  /// Called with the gap the server reported for a session whose clock it judged to be off. Already
+  /// flagged server-side, so this is never a number the client has to weigh.
+  final void Function(String ticketId, int seconds)? _onClockDisagreement;
 
   static const _maxBatchAttempts = 5;
   int _batchFailures = 0;
@@ -103,6 +115,8 @@ class TicketTimerSyncService {
       // guessing that it landed would risk logging the hours twice.
       for (final result in results) {
         await _repo.markSynced(result.clientId, result.ticketWorkLogId);
+        final seconds = result.clockDisagreementSeconds;
+        if (seconds != null) _onClockDisagreement?.call(result.ticketId, seconds);
       }
     } catch (e) {
       if (_isPermanent(e)) {

@@ -68,6 +68,7 @@ class TicketMobileSessionResult {
     required this.startTime,
     this.endTime,
     required this.isActive,
+    this.clockDisagreementSeconds,
   });
 
   final String clientId;
@@ -76,6 +77,16 @@ class TicketMobileSessionResult {
   final DateTime startTime;
   final DateTime? endTime;
   final bool isActive;
+
+  /// How far this phone's clock was from the server's at the moment this batch was sent, signed —
+  /// **only when the server judged it a disagreement** (its own ten-minute threshold). Null for
+  /// ordinary drift, for a batch sent without a device clock, and for a backend that predates the
+  /// field.
+  ///
+  /// This is the answer to a question the phone cannot answer itself: it never sees the server's
+  /// receipt instant. So it travels back with the session it concerns, and it is rendered rather
+  /// than re-judged — the threshold lives in exactly one place (`WorkLogClocks`).
+  final int? clockDisagreementSeconds;
 
   factory TicketMobileSessionResult.fromJson(Map<String, dynamic> json) =>
       TicketMobileSessionResult(
@@ -87,6 +98,8 @@ class TicketMobileSessionResult {
             ? DateTime.parse(json['endTime'] as String)
             : null,
         isActive: json['isActive'] as bool? ?? false,
+        clockDisagreementSeconds:
+            (json['clockDisagreementSeconds'] as num?)?.toInt(),
       );
 }
 

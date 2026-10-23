@@ -284,7 +284,11 @@ class TicketWorkflowFailure implements Exception {
 
 /// The row the server holds after a ticket timer start.
 class TicketTimerStart {
-  const TicketTimerStart({required this.id, required this.isActive});
+  const TicketTimerStart({
+    required this.id,
+    required this.isActive,
+    this.clockDisagreementSeconds,
+  });
 
   /// The server's id for the session — what the mirror row is keyed on so "Ferma" works without a
   /// round trip.
@@ -294,12 +298,22 @@ class TicketTimerStart {
   /// this retry.
   final bool isActive;
 
+  /// How far this phone's clock was from the server's, in seconds, signed — **only when the server
+  /// already judged it a disagreement** (over its own ten-minute threshold). Null for ordinary drift,
+  /// for a start that sent no device clock, and for a backend that predates the field.
+  ///
+  /// The number is rendered, never re-judged: the threshold is defined once, server-side, and a
+  /// client that compared it against its own copy would drift from the office's Correzioni list.
+  /// It is advice — the recorded start is this device's instant regardless.
+  final int? clockDisagreementSeconds;
+
   /// A server that does not know the `clientId` key yet answers with a bare `{id}`, and a row that
   /// call just created is running — so the absent flag defaults to true rather than to a stopped
   /// timer that never started.
   factory TicketTimerStart.fromJson(Map<String, dynamic> json) => TicketTimerStart(
     id: json['id'] as String,
     isActive: json['isActive'] as bool? ?? true,
+    clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)?.toInt(),
   );
 }
 

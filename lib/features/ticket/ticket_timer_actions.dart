@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/timbratura/ticket_timer_sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import 'ticket_workflow_api_client.dart';
 
 /// Start/stop for a ticket's timer, in the one place both entry points use.
@@ -64,6 +65,14 @@ Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
   // attempt was lost long enough for the office to end the session. Queuing a local start here
   // would show a clock that is not running, so the technician is told instead.
   if (!started.isActive) throw const TicketTimerAlreadyClosed();
+
+  // The server measured this phone's clock against its own receipt and, when the two were far
+  // enough apart to matter, says so here. Recorded before the mirror write: the technician should
+  // hear about a wrong clock on the same turn the hours are booked, not at the next sync.
+  final disagreement = started.clockDisagreementSeconds;
+  if (disagreement != null) {
+    ref.read(clockDisagreementProvider.notifier).record(ticketId, disagreement);
+  }
 
   // Mirror the running clock now, from the id the reply carries — not from the next delta sync.
   // Without this row, a technician who started the clock in the office and lost signal on the way
