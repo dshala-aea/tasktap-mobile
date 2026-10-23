@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../features/altro/logout_action.dart';
 import '../../providers/auth_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -17,7 +18,6 @@ class ProfiloScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-    final loginNotifier = ref.read(loginProvider.notifier);
 
     return Scaffold(
       backgroundColor: context.colors.bg1,
@@ -91,14 +91,14 @@ class ProfiloScreen extends ConsumerWidget {
             child: AppButton.danger(
               label: 'Disconnetti',
               icon: const Icon(LucideIcons.logOut, size: 18),
-              onPressed: () async {
-                final confirmed = await _confirmLogout(context);
-                if (confirmed) {
-                  await loginNotifier.signOut();
-                  // Router redirect to /login happens automatically via
-                  // authStateProvider stream.
-                }
-              },
+              // The shared action, not a local confirm + signOut: signing out wipes Drift, so
+              // this button has to name what is still unsent before it can lose it.
+              onPressed: () => confirmLogout(
+                context,
+                ref,
+                title: 'Disconnetti',
+                confirmLabel: 'Disconnetti',
+              ),
             ),
           ),
         ],
@@ -112,11 +112,4 @@ class ProfiloScreen extends ConsumerWidget {
     if (parts.length == 1) return parts.first[0].toUpperCase();
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
-
-  Future<bool> _confirmLogout(BuildContext context) => confirmDeleteDialog(
-    context,
-    title: 'Disconnetti',
-    message: 'Sei sicuro di voler uscire dall\'account?',
-    confirmLabel: 'Disconnetti',
-  );
 }

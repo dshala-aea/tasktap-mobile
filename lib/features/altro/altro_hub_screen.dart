@@ -11,6 +11,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/entitlements/entitlement_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
+import 'logout_action.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -334,20 +335,10 @@ class _LogoutRow extends StatelessWidget {
         title: 'Esci dall\'account',
         subtitle: 'Disconnetti questo dispositivo',
         showDivider: false,
-        onTap: () => _confirmLogout(context),
+        // The shared action, not a local confirm + signOut: signing out wipes Drift, so this
+        // row has to name what is still unsent before it can lose it.
+        onTap: () => confirmLogout(context, ref),
       ),
     );
-  }
-
-  Future<void> _confirmLogout(BuildContext context) async {
-    final confirmed = await confirmDeleteDialog(
-      context,
-      title: 'Esci dall\'account',
-      message: 'Sei sicuro di voler uscire dall\'account?',
-      confirmLabel: 'Esci',
-    );
-    if (confirmed) {
-      await ref.read(loginProvider.notifier).signOut();
-    }
   }
 }
