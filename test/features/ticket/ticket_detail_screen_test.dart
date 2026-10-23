@@ -30,6 +30,8 @@ import 'package:tasktap_mobile/data/sync/checklist_sync_dto.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/domain/checklist/control_type.dart';
+import 'package:tasktap_mobile/features/checklist/checklist_providers.dart'
+    show ticketMirrorKnownProvider;
 import 'package:tasktap_mobile/features/ticket/ticket_detail_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
@@ -91,6 +93,10 @@ Widget _buildDetail({
   // channel with no platform implementation in a widget test. Only the two tap-to-open tests need
   // it; every other test never opens an attachment.
   AttachmentContentCache? attachmentCache,
+  // Null leaves the real provider in place, which answers from the `tickets` row `seedBase`
+  // writes (`true`). Only the unknown-mirror test needs to say otherwise, because a ticket that
+  // reaches the screen has by definition already reached the mirror.
+  bool? ticketMirrorKnown,
 }) {
   return ProviderScope(
     overrides: [
@@ -103,6 +109,8 @@ Widget _buildDetail({
         captureStoreProvider.overrideWith((ref) async => captureStore),
       if (attachmentCache != null)
         attachmentContentCacheProvider.overrideWithValue(attachmentCache),
+      if (ticketMirrorKnown != null)
+        ticketMirrorKnownProvider.overrideWith((ref, _) async => ticketMirrorKnown!),
     ],
     child: MaterialApp(home: TicketDetailScreen(ticketId: ticketId)),
   );
@@ -245,6 +253,7 @@ void main() {
     // design, never stops.
     bool settle = true,
     AttachmentContentCache? attachmentCache,
+    bool? ticketMirrorKnown,
   }) async {
     await tester.pumpWidget(
       _buildDetail(
@@ -255,6 +264,7 @@ void main() {
         isOnline: isOnline,
         captureStore: captureStore,
         attachmentCache: attachmentCache,
+        ticketMirrorKnown: ticketMirrorKnown,
       ),
     );
     await tester.pump();
@@ -1756,6 +1766,22 @@ void main() {
       await tapTab(tester, 'Fabbisogno');
 
       expect(find.text('Nessun fabbisogno'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('an unknown mirror is "not downloaded yet", never "nothing planned"', (
+      tester,
+    ) async {
+      await seedBase(db);
+
+      // The payload replaces a ticket's fabbisogno wholesale, so an empty mirror speaks for the
+      // tenant only once the ticket is on the phone. Until then the tab would otherwise report
+      // the phone's missing download as a fact about the customer's site.
+      await pump(tester, isOnline: true, ticketMirrorKnown: false);
+      await tapTab(tester, 'Fabbisogno');
+
+      expect(find.text('Nessun fabbisogno'), findsNothing);
+      expect(find.text('Fabbisogno non ancora scaricato'), findsOneWidget);
       await resetAndDispose(tester);
     });
 

@@ -140,6 +140,15 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
       (id) => _frozen[id],
       liveProgress: (id) => live[id],
     );
+    // An empty tree only speaks for the tenant once this ticket has reached the phone — the sync
+    // payload carries a ticket's checklist wholesale, so zero rows under a known ticket is the
+    // real answer. Under a ticket the device has never synced it is a missing download, and
+    // "questo ticket non ha asset con una checklist" states it as a fact about the customer's
+    // site. `!= false`, i.e. the plain sentence stands while the check is still in flight.
+    final mirrorKnown =
+        ref.watch(ticketMirrorKnownProvider(ticketId)).valueOrNull != false;
+    final unfiltered = _query.filter == ChecklistFilter.all && _query.text.isEmpty;
+    final notDownloaded = unfiltered && !mirrorKnown;
     _lastTree = tree;
     _lastShown = {
       for (final i in items)
@@ -159,11 +168,14 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
         Expanded(
           child: items.isEmpty
               ? EmptyState(
-                  icon: LucideIcons.clipboardCheck,
-                  title: 'Nessun elemento',
-                  body: _query.filter == ChecklistFilter.all && _query.text.isEmpty
-                      ? 'Questo ticket non ha asset con una checklist.'
-                      : 'Nessun asset corrisponde ai filtri scelti.',
+                  icon: notDownloaded ? LucideIcons.cloudOff : LucideIcons.clipboardCheck,
+                  title: notDownloaded ? 'Controlli non ancora scaricati' : 'Nessun elemento',
+                  body: !unfiltered
+                      ? 'Nessun asset corrisponde ai filtri scelti.'
+                      : notDownloaded
+                      ? 'La checklist di questo ticket non è ancora arrivata su questo telefono: '
+                            'comparirà qui dopo la prossima sincronizzazione.'
+                      : 'Questo ticket non ha asset con una checklist.',
                 )
               : CustomScrollView(
                   slivers: [

@@ -471,9 +471,26 @@ void main() {
 
   group('ListaView', () {
     testWidgets('shows EmptyState when no schedules', (tester) async {
+      // A device that has synced already: the mirror is empty, so "nothing planned" is its own
+      // answer. Without this the list would be reporting its own missing download instead — see
+      // the never-synced test below.
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
       await pump(tester, view: CalendarioView.lista);
       expect(find.byType(EmptyState), findsOneWidget);
       expect(find.text('Nessun intervento'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an empty list on a device that never synced is not "nothing planned"', (
+      tester,
+    ) async {
+      // Fresh install, offline since setup: every table is empty because nothing was ever
+      // downloaded, and the technician's week is not the thing being described.
+      await pump(tester, view: CalendarioView.lista);
+      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.text('Nessun intervento'), findsNothing);
+      expect(find.text('Calendario non ancora scaricato'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

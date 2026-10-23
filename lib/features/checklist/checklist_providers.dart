@@ -16,6 +16,24 @@ final ticketChecklistProvider = StreamProvider.autoDispose.family<TicketChecklis
   (ref, ticketId) => ref.watch(checklistReadRepositoryProvider).watchTicketChecklist(ticketId),
 );
 
+/// Whether [ticketId] itself ever reached this device's mirror.
+///
+/// The per-ticket counterpart of `hasSyncedAtLeastOnceProvider`: a ticket the device knows has
+/// mirror rows that are its own complete answer, empty included — the sync payload replaces a
+/// ticket's fabbisogno and checklist wholesale, so absence there is the tenant's answer, not a
+/// gap. A ticket the device does not know proves nothing at all, and a tab rendering its empty
+/// mirror as "nessun fabbisogno" / "questo ticket non ha asset con una checklist" was turning
+/// "not downloaded" into a statement about the customer's site.
+///
+/// Wraps the repository's own test rather than repeating the query: it is a plain "is there a
+/// `tickets` row", and a second copy would be free to drift from the first.
+final ticketMirrorKnownProvider = FutureProvider.autoDispose.family<bool, String>((
+  ref,
+  ticketId,
+) {
+  return ref.watch(checklistReadRepositoryProvider).hasSyncedTicket(ticketId);
+});
+
 /// "Scarica checklist": the per-ticket REST backfill. A provider so tests can replace it.
 final checklistBackfillProvider = Provider<Future<void> Function(String ticketId)>(
   (ref) =>

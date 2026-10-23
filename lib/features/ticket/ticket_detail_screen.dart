@@ -1586,6 +1586,14 @@ class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
           );
         }
 
+        // The empty mirror only speaks for the tenant once this ticket has actually landed on the
+        // phone — a ticket the device has never synced says nothing about what the office planned.
+        // `!= false`, i.e. the plain answer stands while the check is still in flight: accusing
+        // the phone of missing data it may well have would be the same error pointing the other
+        // way.
+        final ticketKnown =
+            ref.watch(ticketMirrorKnownProvider(widget.ticketId)).valueOrNull != false;
+
         return Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.pagePadding,
@@ -1606,11 +1614,19 @@ class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              if (materiali.isEmpty)
+              if (materiali.isEmpty && ticketKnown)
                 const _EmptyTab(
                   icon: LucideIcons.package,
                   label: 'Nessun fabbisogno',
                   body: 'Non ci sono materiali pianificati per questo ticket.',
+                )
+              else if (materiali.isEmpty)
+                const _EmptyTab(
+                  icon: LucideIcons.cloudOff,
+                  label: 'Fabbisogno non ancora scaricato',
+                  body:
+                      'Il fabbisogno di questo ticket non è ancora arrivato su questo telefono. '
+                      'Comparirà qui dopo la prossima sincronizzazione.',
                 )
               else
                 for (final m in materiali) ...[

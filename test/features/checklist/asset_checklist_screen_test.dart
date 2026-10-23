@@ -11,11 +11,20 @@ import 'package:tasktap_mobile/features/checklist/checklist_providers.dart';
 
 import '../../support/checklist_fixtures.dart';
 
-Widget host(AppDatabase db, {bool online = true, Future<void> Function(String)? backfill}) => ProviderScope(
+Widget host(
+  AppDatabase db, {
+  bool online = true,
+  Future<void> Function(String)? backfill,
+  // Null leaves the real provider in place, which reads the `tickets` mirror. The empty-state test
+  // needs to say "this device has never seen this ticket" without inventing a fixture for it.
+  bool? ticketMirrorKnown,
+}) => ProviderScope(
   overrides: [
     appDatabaseProvider.overrideWithValue(db),
     isOnlineProvider.overrideWithValue(online),
     if (backfill != null) checklistBackfillProvider.overrideWithValue(backfill),
+    if (ticketMirrorKnown != null)
+      ticketMirrorKnownProvider.overrideWith((ref, _) async => ticketMirrorKnown!),
   ],
   child: const MaterialApp(home: AssetChecklistScreen(ticketId: 't1')),
 );
@@ -87,6 +96,21 @@ void main() {
 
     expect(find.byType(ControlItemTile), findsWidgets);
     expect(find.text('Sicurezza'), findsOneWidget);
+    await disposeScreen(tester);
+  });
+
+  /// The mirror replaces a ticket's checklist wholesale, so zero rows under a ticket the device
+  /// knows is the tenant's answer — but zero rows under a ticket it has never synced is a missing
+  /// download, and saying "questo ticket non ha asset con una checklist" would report the phone's
+  /// gap as a fact about the customer's site.
+  testWidgets('an unknown ticket is "not downloaded yet", never "no assets with a checklist"', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host(db, ticketMirrorKnown: false));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Controlli non ancora scaricati'), findsOneWidget);
+    expect(find.text('Questo ticket non ha asset con una checklist.'), findsNothing);
     await disposeScreen(tester);
   });
 
