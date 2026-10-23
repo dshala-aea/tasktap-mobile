@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -20,7 +19,9 @@ import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/attachments/attachment_content_cache.dart';
 import '../../data/local/app_database.dart';
+import '../../data/reports/report_pdf_cache.dart';
 import '../../data/reports/ticket_controls_cache_repository.dart' show cachedTicketControlsProvider;
+import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../ticket/ticket_detail_api_client.dart'
     show ControlType, FlatTicketControl, flattenTicketControls;
 import 'create_draft.dart';
@@ -718,13 +719,12 @@ class _RapportinoViewBody extends ConsumerWidget {
   }
 }
 
-/// Downloads the report's PDF (`GET /api/Reports/{id}/pdf`, already generated server-side —
-/// this was the missing half, no client code path called it) to a temp file and opens it in
-/// the device's default PDF viewer. Temp, not the app-documents directory `step_riepilogo.dart`
-/// uses for a signature: a downloaded PDF is disposable cache content the OS can reclaim, not
-/// something this app owns going forward.
+/// Opens the report's PDF (`GET /api/Reports/{id}/pdf`, generated server-side) in the device's
+/// default viewer, from [reportPdfCacheProvider]: online it is re-downloaded and stored, offline
+/// the stored copy is served. This is the document the technician hands to the customer, so it has
+/// to survive the drive to the site — it used to live in the temp directory and vanish with it.
 Future<void> _openReportPdf(BuildContext context, WidgetRef ref, String reportId) async {
-  final file = await _fetchPdfToTempFile(ref, reportId, context);
+  final file = await _resolveReportPdf(ref, reportId, context);
   if (file == null) return;
 
   final result = await OpenFilex.open(file.path);
@@ -738,33 +738,28 @@ Future<void> _openReportPdf(BuildContext context, WidgetRef ref, String reportId
   }
 }
 
-/// Shared fetch-and-save step behind [_openReportPdf] and [_SharePdfButton] — downloads once,
-/// each caller decides what to do with the file. Returns null (and has already shown the
-/// error) on failure, so callers can just check for null rather than duplicating error UI.
-Future<File?> _fetchPdfToTempFile(WidgetRef ref, String reportId, BuildContext context) async {
+/// Shared resolve step behind [_openReportPdf] and [_SharePdfButton] — each caller decides what to
+/// do with the file. Returns null (and has already said why) when there is no PDF to be had, so
+/// callers check for null rather than duplicating error UI.
+///
+/// The three outcomes are told apart on purpose: "never downloaded" is a first-time problem the
+/// technician can fix by going back online once, "download failed" is the server's, and a stale
+/// copy is not an error at all.
+Future<File?> _resolveReportPdf(WidgetRef ref, String reportId, BuildContext context) async {
   try {
-    final dio = ref.read(dioProvider);
-    final response = await dio.get<List<int>>(
-      '/api/Reports/$reportId/pdf',
-      options: Options(responseType: ResponseType.bytes),
-    );
-    final bytes = response.data;
-    if (bytes == null) throw StateError('empty PDF response');
-
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/report-$reportId.pdf');
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
-  } on DioException catch (e) {
-    final offline =
-        e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout;
+    return await ref
+        .read(reportPdfCacheProvider)
+        .resolve(reportId, online: ref.read(isOnlineProvider));
+  } on ReportPdfUnavailable catch (e) {
     if (!context.mounted) return null;
     showAppToast(
       context,
-      message: offline
-          ? 'Nessuna connessione — riprova quando sei online.'
-          : 'Impossibile scaricare il PDF. Riprova più tardi.',
-      tone: offline ? ToastTone.warning : ToastTone.error,
+      message: switch (e.reason) {
+        ReportPdfFailure.notDownloaded =>
+          'PDF non ancora scaricato su questo telefono — serve la connessione la prima volta.',
+        ReportPdfFailure.downloadFailed => 'Impossibile scaricare il PDF. Riprova più tardi.',
+      },
+      tone: e.reason == ReportPdfFailure.notDownloaded ? ToastTone.warning : ToastTone.error,
     );
     return null;
   } catch (_) {
@@ -830,7 +825,7 @@ class _SharePdfButtonState extends ConsumerState<_SharePdfButton> {
 
   Future<void> _share() async {
     setState(() => _busy = true);
-    final file = await _fetchPdfToTempFile(ref, widget.reportId, context);
+    final file = await _resolveReportPdf(ref, widget.reportId, context);
     if (mounted) setState(() => _busy = false);
     if (file == null) return;
 
