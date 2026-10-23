@@ -1078,6 +1078,36 @@ class TicketTimers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── ticket history (Storico) ─────────────────────────────────────────────────
+/// A ticket's recorded field changes, mirrored from the sync payload.
+///
+/// The Storico tab used to be online-only: the server held the timeline and the device held
+/// nothing, so the one screen that says *who moved this ticket* went blank exactly where the
+/// technician was standing — on site, with no signal.
+///
+/// Append-only on the server (a row is written once and never edited), so the applier upserts and
+/// never rewrites one. [oldValue]/[newValue] hold the server's raw, invariant text — ids as `D`
+/// GUIDs, instants as round-trip `O` — and the screen resolves them through its own mirrors. A
+/// label frozen here would lie after the office renames a status.
+class TicketHistory extends Table {
+  @override
+  String get tableName => 'ticket_history';
+
+  TextColumn get id => text()();
+  TextColumn get ticketId => text()();
+  TextColumn get fieldName => text()();
+  TextColumn get oldValue => text().nullable()();
+  TextColumn get newValue => text().nullable()();
+
+  /// Who made the change. Empty string means no person — a background job or the customer portal —
+  /// and the screen says so rather than inventing a name.
+  TextColumn get changedByUserId => text()();
+  DateTimeColumn get changedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── notifications ─────────────────────────────────────────────────────────────
 /// Cached notifications from the backend. Used for offline display of the
 /// notification center. Synced via GET /api/notifications; individual
@@ -1486,13 +1516,14 @@ class ChecklistOmittedTickets extends Table {
     CantiereCrewAssignments,
     ExtensionFieldDefinitions,
     Magazzini,
+    TicketHistory,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 51;
+  int get schemaVersion => 52;
 
   @override
   MigrationStrategy get migration {
@@ -1503,6 +1534,7 @@ class AppDatabase extends _$AppDatabase {
         await _createReferenceIndexes();
         await _createCantiereCrewIndexes();
         await _createCustomerContactIndexes();
+        await _createTicketHistoryIndexes();
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -2085,6 +2117,18 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(cantierePunches, cantierePunches.weatherConditions);
           }
         }
+        if (from < 52) {
+          // The Storico timeline, mirrored so the tab renders with no network. A NEW table, so
+          // `createTable` is additive on its own — no `PRAGMA table_info` guard, and drift emits
+          // `CREATE TABLE IF NOT EXISTS`, which also keeps the older-version test fixtures working
+          // when they rewind a current-schema database.
+          //
+          // Nothing to backfill: the member is re-sent from the window (full sync) or the cutoff
+          // (delta) on the next sync, and the applier only ever upserts — a device that has never
+          // held a row simply fills in.
+          await m.createTable(ticketHistory);
+          await _createTicketHistoryIndexes();
+        }
       },
     );
   }
@@ -2260,6 +2304,13 @@ class AppDatabase extends _$AppDatabase {
   /// Separate from the other index helpers for the same reason they are separate from each other:
   /// the table does not exist on devices older than schema 49, and a `CREATE INDEX ... ON
   /// customer_contacts` emitted from an earlier branch would fail their upgrade.
+  Future<void> _createTicketHistoryIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS ticket_history_ticket '
+      'ON ticket_history (ticket_id, changed_at)',
+    );
+  }
+
   Future<void> _createCustomerContactIndexes() async {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS customer_contacts_customer '

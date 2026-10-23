@@ -5867,6 +5867,54 @@
         }
       }
     },
+    "/api/admin/kiosk-devices/{id}/activation-key": {
+      "get": {
+        "tags": [
+          "KioskDevices"
+        ],
+        "summary": "Re-opens the device\u0027s registration key, counting the read against its reuse cap.\n\nThis exists because the key used to be shown exactly once, in the registration sheet \u2014 so a\ntablet wiped before pairing, or a pairing screen closed a second too early, left the office\ndeleting and re-registering a device that had done nothing wrong. The cap and the counter\n(returned on every response, and visible in the list) are what keep \u0022show me the key\u0022 from\nbecoming an unlimited key-reading button.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/kiosk-devices/{id}/activation-key/rotate": {
+      "post": {
+        "tags": [
+          "KioskDevices"
+        ],
+        "summary": "Issues a replacement key for the device. The only way out of an exhausted re-open cap, an\nunrecoverable row, or a key that leaked \u2014 and the old key dies in the same save.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Locations": {
       "get": {
         "tags": [
@@ -18270,6 +18318,7 @@
         "tags": [
           "TicketWorkLog"
         ],
+        "summary": "Starts the caller\u0027s timer on this ticket.",
         "parameters": [
           {
             "name": "ticketId",
@@ -18278,6 +18327,22 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Optional idempotency key from the device. A phone that never saw the reply to its own start\nre-sends the same value and gets the row it already has instead of a 400 or a second timer:\nthis route creates a row per call, so a blind retry used to log the hours twice.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deviceUtc",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
             }
           }
         ],
@@ -18301,6 +18366,14 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "deviceUtc",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
             }
           }
         ],
@@ -23912,7 +23985,7 @@
               "null",
               "string"
             ],
-            "description": "The clock-in screen's rich fields, mirrored from <see cref=\"!:StartCantiereRequest\" />. They are\narrival data — written when the punch is created and never rewritten afterwards — so a\ntechnician who clocked in without signal no longer loses the work order, the equipment, the\ncrew size and the weather the office prices the job from."
+            "description": "The clock-in screen\u0027s rich fields, mirrored from \u003Csee cref=\u0022!:StartCantiereRequest\u0022 /\u003E. They are\narrival data \u2014 written when the punch is created and never rewritten afterwards \u2014 so a\ntechnician who clocked in without signal no longer loses the work order, the equipment, the\ncrew size and the weather the office prices the job from."
           },
           "equipmentUsed": {
             "type": [
@@ -23937,6 +24010,14 @@
               "string"
             ],
             "description": "See WorkOrderNumber."
+          },
+          "deviceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The device\u0027s own clock reading at the moment it sent this batch \u2014 deliberately separate from\nStartTime, which may be hours old by the time a queued punch is sent. Optional; null records\nno disagreement.",
+            "format": "date-time"
           }
         },
         "description": "Request model for starting cantiere work."
@@ -26928,6 +27009,14 @@
               "string"
             ],
             "description": "Optional session key \u2014 the SAME value the device sent as \u0060clientId\u0060 on the start that\nopened this session. This reuses string? CantiereWorkLog.ClientId as the session key,\nso no new column is needed: when there is no active row but this key already closed one,\nthe close is a replay of a stop whose response was lost and answers success instead of 404.\nA stop of a session that was started under a \u003Cem\u003Edifferent\u003C/em\u003E key cannot be replayed \u2014\nno row carries that key, so it still answers 404."
+          },
+          "deviceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The device\u0027s own clock reading at the moment it sent this request \u2014 the same field\nStartCantiereWorkLogRequest carries. On a close it becomes the entry\u0027s end instant and the\ngap from the server\u0027s receipt time is what gets recorded.",
+            "format": "date-time"
           }
         },
         "description": "Request model for ending cantiere work."
@@ -26971,6 +27060,14 @@
             ],
             "description": "Ending device-reported GPS accuracy radius, in meters (optional, capture-only).",
             "format": "double"
+          },
+          "deviceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The device\u0027s own clock reading at the moment it sent this request \u2014 the same field\nStartWorkLogRequest carries. On a close it becomes the entry\u0027s end instant and the gap from\nthe server\u0027s receipt time is what gets recorded.",
+            "format": "date-time"
           }
         },
         "description": "Request model for ending work (clock out). Moved from \u0060WorkLogController\u0060."
@@ -28244,13 +28341,23 @@
         "type": "object",
         "properties": {
           "token": {
-            "type": "string"
+            "type": "string",
+            "description": "The rotating QR token shown by the kiosk device."
           },
           "userId": {
             "type": "string",
+            "description": "Must be the caller\u0027s own internal db id \u2014 KioskScan\u0027s check 5 refuses anyone else.",
             "format": "uuid"
+          },
+          "action": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Which transition the technician chose: \u0060ClockIn\u0060, \u0060ClockOut\u0060, \u0060StartBreak\u0060 or\n\u0060EndBreak\u0060 \u2014 the same names \u0060GET /worklog/today\u0060 projects. Null is the legacy contract\nand still means \u0022toggle\u0022: the app offers a prompt only once it can name an action, so an older\nbuild keeps clocking in and out exactly as it always did."
           }
-        }
+        },
+        "description": "A kiosk scan from a technician\u0027s own phone."
       },
       "KpiDto": {
         "required": [
@@ -29107,6 +29214,14 @@
             ],
             "description": "Device-reported GPS accuracy radius, in meters (optional, capture-only).",
             "format": "double"
+          },
+          "deviceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The device\u0027s own clock reading at the moment it sent this batch. Optional, and deliberately\nseparate from StartTime: a queued session\u0027s start is hours old by the time it is sent, and the\nphone may have corrected its clock in between, so only the send-time reading can be compared\nwith the server\u0027s receipt instant. Null when the client offers no clock; the server then\nrecords nothing.",
+            "format": "date-time"
           }
         },
         "description": "One offline session record from the mobile app.\nClientId is a client-generated dedup key (e.g. UUID).\nStartTime and EndTime are UTC timestamps from the device."
@@ -29389,6 +29504,13 @@
             },
             "description": "The caller\u0027s OWN ticket timer sessions: the 90-day window, plus any still running. Re-sent in full on\nevery sync rather than delta-filtered \u2014 a session the device queued and the server accepted has no\nmarker the phone can observe beyond the row appearing. Other users\u0027 sessions never travel here; a\nsupervisor reads those online."
           },
+          "ticketHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncTicketHistoryDto"
+            },
+            "description": "The recorded changes of every ticket in scope \u2014 the Storico tab\u0027s timeline, which until now\nwas online-only because the device held nothing to render."
+          },
           "checklistTruncated": {
             "type": "boolean",
             "description": "True when the per-sync cap on asset-level checklist rows (int MobileUserSyncService.MaxAssetControlRowsPerSync)\nleft tickets out, or when the first ticket alone exceeds it (it is still sent whole)."
@@ -29414,7 +29536,8 @@
           "ore",
           "orePausa",
           "oreNotturno",
-          "festivo"
+          "festivo",
+          "assenza"
         ],
         "type": "object",
         "properties": {
@@ -29452,6 +29575,13 @@
           },
           "festivo": {
             "type": "boolean"
+          },
+          "assenza": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The approved absence covering this day, e.g. \u0022Ferie\u0022 or \u0022Permesso retribuito 4h\u0022; null when the\nperson was expected at work. Only approved requests are marked \u2014 see\n\u0060IWorkLogAggregator\u0060\u0027s \u0060WorkLogUserDayAbsence\u0060 for why a pending one is not."
           }
         },
         "description": "One person on one day."
@@ -34221,6 +34351,14 @@
               "string"
             ],
             "description": "Optional idempotency key for this start \u2014 the same key the device will send as the mobile\npunch\u0027s \u0060clientId\u0060. Stored on string? CantiereWorkLog.ClientId (unique per\ntenant\u002Buser), so a retry of a start whose response was lost returns the row the first\nattempt created instead of a 400 \u0022already active\u0022, and the device\u0027s queued copy drains\nthrough \u0060mobile/sessions\u0060 onto that same row rather than opening a duplicate.\nOmitted by callers with no queue to deduplicate; their behaviour is unchanged."
+          },
+          "deviceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The device\u0027s own clock reading at the moment it sent this request. Optional. When present it\nbecomes the entry\u0027s start instant and the gap from the server\u0027s receipt time is stored as\n\u0060ClockDisagreementSeconds\u0060; absent (web, older app builds) the server stamps its own\nclock exactly as before. See docs/superpowers/plans/2026-10-23-worklog-clock-disagreement.md.",
+            "format": "date-time"
           }
         }
       },
@@ -34295,6 +34433,14 @@
             ],
             "description": "Device-reported GPS accuracy radius, in meters (optional, capture-only).",
             "format": "double"
+          },
+          "deviceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The device\u0027s own clock reading at the moment it sent this request. Optional. When present it\nbecomes the entry\u0027s start instant (the phone is the witness of when work began; the server is\nthe recorder) and the gap from the server\u0027s receipt time is stored as\n\u0060ClockDisagreementSeconds\u0060. Absent \u2014 web, kiosk, older app builds \u2014 means the server\nstamps its own clock exactly as before. See\ndocs/superpowers/plans/2026-10-23-worklog-clock-disagreement.md.",
+            "format": "date-time"
           }
         },
         "description": "Request model for starting work (clock in). Moved from \u0060WorkLogController\u0060 \u2014\nthe Api layer references this type directly (it already depends on Application)."
@@ -36704,6 +36850,58 @@
           }
         },
         "description": "One materialised checklist row with its PINNED definition (label, type, options, required, group) and its current answer.\nGuid? SyncTicketControlDto.ProdottoAssistenzaId is null for a ticket-level row."
+      },
+      "SyncTicketHistoryDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "ticketId",
+          "fieldName",
+          "oldValue",
+          "newValue",
+          "changedByUserId",
+          "changedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ticketId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fieldName": {
+            "type": "string"
+          },
+          "oldValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "newValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "changedByUserId": {
+            "type": "string",
+            "description": "Who made the change. Guid Guid.Empty means no person \u2014 a background job or the customer\nportal \u2014 and the phone renders it as a system change rather than inventing a name.",
+            "format": "uuid"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "One recorded change of one ticket, as the device mirrors it for the offline Storico tab."
       },
       "SyncTicketWorkLogDto": {
         "required": [
@@ -41361,6 +41559,15 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "clockDisagreementSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         },
         "description": "One worklog row of any kind, as the office correction screens see it. \u0060StartLocal/EndLocal\u0060 are\nISO local date-times without offset in \u0060TimeZoneId\u0060; the instants are null only for legacy rows\nwhose local time cannot be placed on the timeline (DST gap)."

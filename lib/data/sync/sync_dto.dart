@@ -99,6 +99,14 @@ class SyncResultDto {
   /// a colleague's hours stays an online read.
   final List<SyncTicketWorkLogDto> ticketWorkLogs;
 
+  /// The recorded field changes of every ticket in scope — the Storico tab's timeline.
+  ///
+  /// Append-only on the server, so unlike every other member here the cutoff is exact: a full sync
+  /// carries a window of it and each delta only what was written since. The applier therefore
+  /// UPSERTS and never replaces a ticket's set; rows are pruned with their ticket, through the
+  /// ticket manifest, because the payload has no manifest of its own for them.
+  final List<SyncTicketHistoryDto> ticketHistory;
+
   /// False when the payload came from a backend that predates the report aggregate. Without it an
   /// older backend would look like "every report lost its staff, materials and answers", and the
   /// per-report replace would delete children the device already holds.
@@ -144,6 +152,11 @@ class SyncResultDto {
   /// an older backend would look like "every crew is empty" and the per-cantiere replace would wipe
   /// the mirror — the same trap [carriesMaintenanceTemplates] closes for the template catalogue.
   final bool carriesCantiereCrewAssignments;
+
+  /// False when the payload came from a backend that predates the ticket-history member. Only
+  /// informational: history is upsert-only and pruned by the ticket manifest, so a missing member
+  /// deletes nothing — it just means this sync carries no timeline.
+  final bool carriesTicketHistory;
 
   /// False when the payload came from a backend that predates the warehouse member. Without it an
   /// older backend would look like "the tenant has no warehouses" and the wholesale replace would
@@ -260,6 +273,7 @@ class SyncResultDto {
     this.allegati = const [],
     this.reportVersions = const [],
     this.ticketWorkLogs = const [],
+    this.ticketHistory = const [],
     this.carriesReportAggregate = false,
     this.carriesAllegati = false,
     this.checklistTruncated = false,
@@ -273,6 +287,7 @@ class SyncResultDto {
     this.carriesMaintenanceTemplates = false,
     this.carriesTicketMateriali = false,
     this.carriesCantiereCrewAssignments = false,
+    this.carriesTicketHistory = false,
     this.carriesMagazzini = false,
     this.carriesExtensionFieldDefinitions = false,
     this.carriesContacts = false,
@@ -350,6 +365,10 @@ class SyncResultDto {
         j['ticketWorkLogs'],
         SyncTicketWorkLogDto.fromJson,
       ),
+      ticketHistory: _list(
+        j['ticketHistory'],
+        SyncTicketHistoryDto.fromJson,
+      ),
       checklistTruncated: j['checklistTruncated'] as bool? ?? false,
       checklistOmittedTicketIds:
           ((j['checklistOmittedTicketIds'] as List<dynamic>?) ?? const [])
@@ -365,6 +384,7 @@ class SyncResultDto {
       carriesAllegati: j.containsKey('allegati'),
       carriesTicketMateriali: j.containsKey('ticketMateriali'),
       carriesCantiereCrewAssignments: j.containsKey('cantiereCrewAssignments'),
+      carriesTicketHistory: j.containsKey('ticketHistory'),
       carriesMagazzini: j.containsKey('magazzini'),
       carriesExtensionFieldDefinitions: j.containsKey('extensionFieldDefinitions'),
       carriesContacts: j.containsKey('contacts'),
@@ -2156,6 +2176,66 @@ class SyncTicketWorkLogDto {
         clientId: j['clientId'] as String?,
         createdAt: DateTime.parse(j['createdAt'] as String),
         updatedAt: _dt(j['updatedAt']),
+      );
+}
+
+/// One recorded change of one ticket, as the server holds it.
+///
+/// Mirrors `SyncTicketHistoryDto` on the backend. `oldValue`/`newValue` are the server's RAW,
+/// invariant text — ids as `D` GUIDs, instants as round-trip `O` — never a rendered label, because
+/// the timeline resolves them through the mirrors this device already holds (a status id to the
+/// status name in the tenant's language). Storing labels would freeze a translation at write time
+/// and lie after a rename.
+///
+/// [changedByUserId] is empty for a change no person made (a background job, the customer portal);
+/// the screen says so instead of guessing a colleague.
+class SyncTicketHistoryDto {
+  final String id;
+  final String tenantId;
+  final String ticketId;
+
+  /// The ticket property name (`StatusId`, `AssignedUserId`, …). Unknown names are still shown
+  /// with their raw value rather than dropped.
+  final String fieldName;
+  final String? oldValue;
+  final String? newValue;
+  final String changedByUserId;
+  final DateTime changedAt;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'ticketId',
+    'fieldName',
+    'oldValue',
+    'newValue',
+    'changedByUserId',
+    'changedAt',
+  };
+
+  const SyncTicketHistoryDto({
+    required this.id,
+    required this.tenantId,
+    required this.ticketId,
+    required this.fieldName,
+    this.oldValue,
+    this.newValue,
+    required this.changedByUserId,
+    required this.changedAt,
+  });
+
+  factory SyncTicketHistoryDto.fromJson(Map<String, dynamic> j) =>
+      SyncTicketHistoryDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        ticketId: j['ticketId'] as String,
+        fieldName: j['fieldName'] as String? ?? '',
+        oldValue: j['oldValue'] as String?,
+        newValue: j['newValue'] as String?,
+        changedByUserId: j['changedByUserId'] as String? ?? '',
+        // The instant the change was recorded. `_dt` parses the server's `Z` instant; Drift hands
+        // it back later as a LOCAL-kind value, so readers re-stamp it to UTC before comparing.
+        changedAt: _dt(j['changedAt']) ?? DateTime.now().toUtc(),
       );
 }
 
