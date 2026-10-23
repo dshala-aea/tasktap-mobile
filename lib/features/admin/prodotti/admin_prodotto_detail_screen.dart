@@ -10,6 +10,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -289,9 +290,20 @@ class _MatricoleSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => AppSectionError(
-            onRetry: () => ref.invalidate(adminProdottoMatricoleProvider(prodottoId)),
-          ),
+          // Matricole are the one thing on this screen with no mirror behind them, so offline the
+          // honest answer is "not on this device", not a generic failure with a retry the
+          // technician cannot make until they are back on a network.
+          error: (e, _) => ref.watch(isOnlineProvider)
+              ? AppSectionError(
+                  onRetry: () => ref.invalidate(adminProdottoMatricoleProvider(prodottoId)),
+                )
+              : const UnavailableState(
+                  icon: LucideIcons.fingerprint,
+                  titolo: 'Matricole non disponibili offline',
+                  motivo:
+                      'Le matricole non sono salvate sul dispositivo. Riprova quando torni '
+                      'online.',
+                ),
           data: (matricole) {
             if (matricole.isEmpty) {
               return const EmptyState(

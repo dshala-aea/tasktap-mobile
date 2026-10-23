@@ -215,6 +215,16 @@ class ReferenceCacheRepository {
             ..orderBy([(c) => OrderingTerm.asc(c.codice)]))
           .get();
 
+  /// Every asset the sync put in scope — the Asset list's own rows.
+  ///
+  /// No `isActive` filter, matching `GET /api/prodottoassistenza` (which returns inactive assets
+  /// too, marked with a pill). Technician-scoped like everything else the sync carries, so a
+  /// mirrored list is a partial one and its screen says so.
+  Future<List<ProdottiAssistenzaData>> allProdottiAssistenza() =>
+      (_db.select(_db.prodottiAssistenza)
+            ..orderBy([(p) => OrderingTerm.asc(p.name)]))
+          .get();
+
   Future<List<ProdottiAssistenzaData>> prodottiForCustomer(String customerId) =>
       (_db.select(_db.prodottiAssistenza)
             ..where((p) => p.customerId.equals(customerId) & p.isActive.equals(true))
