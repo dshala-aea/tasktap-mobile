@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../features/calendario/calendario_providers.dart' show scheduleStatusName;
 import '../../../presentation/providers/schedule_providers.dart';
@@ -49,14 +50,23 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
               ErrorState(onRetry: () => ref.invalidate(adminScheduleDetailProvider(scheduleId))),
           data: (schedule) {
             if (schedule == null) {
-              return const UnavailableState(
-                icon: LucideIcons.calendarDays,
-                titolo: 'Pianificazione non disponibile',
-                motivo:
-                    "L'elenco pianificazioni non è ancora sincronizzato sul "
-                    'dispositivo, quindi questa pianificazione non può essere '
-                    'letta dalla cache locale anche se esiste sul server.',
-              );
+              // Missing on a synced device means the schedule is gone (deleted, or reassigned out
+              // of this user's visibility) — not that the mirror is still waiting to arrive.
+              return ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+                  ? const UnavailableState(
+                      icon: LucideIcons.cloudOff,
+                      titolo: 'Pianificazione non disponibile',
+                      motivo:
+                          "L'elenco pianificazioni non è ancora sincronizzato sul "
+                          'dispositivo, quindi questa pianificazione non può essere '
+                          'letta dalla cache locale anche se esiste sul server.',
+                    )
+                  : const UnavailableState(
+                      icon: LucideIcons.calendarDays,
+                      titolo: 'Pianificazione non trovata',
+                      motivo: 'Questa pianificazione non è più disponibile: potrebbe essere '
+                          'stata eliminata.',
+                    );
             }
             return _ScheduleDetailBody(schedule: schedule, scheduleId: scheduleId);
           },

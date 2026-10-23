@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/sync/connectivity_provider.dart' show isOnlineProvider;
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../new_ticket_form_state.dart';
 import '../ticket_api_client.dart';
@@ -89,6 +90,12 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
   @override
   Widget build(BuildContext context) {
     final techsAsync = ref.watch(techniciansProvider);
+    // An empty colleagues mirror is "this phone has not downloaded the anagrafica yet", not
+    // "there are no technicians" — the provider's fallback can only be trusted once a sync has
+    // filled it.
+    final colleaguesUnknown =
+        !ref.watch(isOnlineProvider) &&
+        ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -154,7 +161,10 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
               return Padding(
                 padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Text(
-                  'Nessun tecnico disponibile.',
+                  colleaguesUnknown
+                      ? 'Tecnici non ancora scaricati su questo telefono: puoi assegnare dopo la '
+                            'prossima sincronizzazione, oppure selezionare "Nessuna assegnazione".'
+                      : 'Nessun tecnico disponibile.',
                   style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
                 ),
               );

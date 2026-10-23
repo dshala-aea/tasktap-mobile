@@ -162,4 +162,35 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+
+  // The elenco tab's empty state distinguishes three cases; the mirror-empty one is not a fact
+  // about the tenant until a sync has landed.
+  testWidgets('never-synced empty mirror says pianificazioni were not downloaded', (tester) async {
+    await tester.pumpWidget(_buildView(db: db));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Elenco'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pianificazioni non ancora scaricate'), findsOneWidget);
+    expect(find.text('Nessuna pianificazione'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a synced, genuinely empty list offers the create action instead', (tester) async {
+    await db.setLastSync(DateTime.utc(2026, 10, 1));
+    await tester.pumpWidget(_buildView(db: db));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Elenco'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nessuna pianificazione'), findsOneWidget);
+    expect(find.text('Pianificazioni non ancora scaricate'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
 }

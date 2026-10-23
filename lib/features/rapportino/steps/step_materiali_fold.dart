@@ -19,6 +19,7 @@ import '../../../data/local/app_database.dart';
 import '../../../data/magazzino/magazzino_api_client.dart';
 import '../../../data/materiali/materiale_barcode_lookup.dart';
 import '../../../data/reports/ticket_controls_cache_repository.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -716,10 +717,15 @@ class _MaterialeLookupField extends ConsumerWidget {
       selectedId: selectedId,
       initialText: initialText,
       items: [for (final m in catalogo) LookupItem(id: m.id, name: m.name, subtitle: m.code)],
-      // Distinguishes "still syncing" from "genuinely nothing at catalog" — silence either way
-      // used to read as the field being broken rather than as a sync state.
+      // Three states, not two: the stream has not emitted yet, the phone never completed a sync
+      // (so an empty catalogue says nothing about the tenant), and a real empty catalogue.
+      // Collapsing the middle one into the last told a technician on a fresh install that their
+      // company stocks no materials.
       emptyCacheHint: materialiAsync.isLoading
           ? 'Catalogo in caricamento…'
+          : ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+          ? 'Catalogo non ancora scaricato su questo telefono: scrivi il nome per registrarlo '
+                'comunque.'
           : 'Nessun materiale a catalogo: scrivi il nome per registrarlo comunque.',
       onSelected: (id) {
         for (final m in catalogo) {

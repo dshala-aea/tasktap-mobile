@@ -226,6 +226,23 @@ void main() {
     await drain(tester);
   });
 
+  // ── 6b. Non lette, everything read: the filter did its job ────────────────
+  // The single "Nessuna notifica" message told a technician who had just read everything that
+  // they had received nothing at all.
+  testWidgets('Non lette with everything read says no unread, not an empty inbox', (tester) async {
+    final notifiche = [_fakeNotifica(id: 'n1', letta: true)];
+
+    await tester.pumpWidget(await _buildScreen(notifiche: notifiche));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Non lette'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nessuna notifica non letta'), findsOneWidget);
+    expect(find.text('Nessuna notifica'), findsNothing);
+    await drain(tester);
+  });
+
   // ── 7. Fetch error shows a distinct state, not the empty inbox ────────────
   testWidgets('shows error state with retry when refresh failed and cache is empty', (
     tester,

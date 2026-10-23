@@ -10,6 +10,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -53,13 +54,24 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
               ErrorState(onRetry: () => ref.invalidate(adminMaterialeDetailProvider(materialeId))),
           data: (materiale) {
             if (materiale == null) {
-              return const UnavailableState(
-                titolo: 'Materiale non disponibile',
-                motivo:
-                    'Il catalogo materiali non è ancora sincronizzato sul '
-                    'dispositivo, quindi questo materiale non può essere '
-                    'letto dalla cache locale anche se esiste sul server.',
-              );
+              // Missing on a synced device means the catalogue no longer holds this id; saying
+              // "not synced" there sent the user to wait for an update that would never come.
+              return ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+                  ? const UnavailableState(
+                      icon: LucideIcons.cloudOff,
+                      titolo: 'Materiale non disponibile',
+                      motivo:
+                          'Il catalogo materiali non è ancora sincronizzato sul '
+                          'dispositivo, quindi questo materiale non può essere '
+                          'letto dalla cache locale anche se esiste sul server.',
+                    )
+                  : const UnavailableState(
+                      icon: LucideIcons.package,
+                      titolo: 'Materiale non trovato',
+                      motivo:
+                          'Questo materiale non è più nel catalogo: potrebbe essere stato '
+                          'eliminato.',
+                    );
             }
             return _MaterialeDetailBody(materiale: materiale);
           },

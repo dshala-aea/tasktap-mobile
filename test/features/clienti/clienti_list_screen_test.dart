@@ -113,6 +113,45 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    /// A search that matches nothing is an answer to the technician's own question; an empty
+    /// mirror on a phone that has never synced is a missing download. Neither is a statement
+    /// about the tenant, and the third case is.
+    testWidgets('a device that never synced says so, not "no customers"', (tester) async {
+      await pump(tester);
+
+      expect(find.text('Clienti non ancora scaricati'), findsOneWidget);
+      expect(find.text('Nessun cliente'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('after a sync, an empty mirror reads as "no customers", not "not downloaded"', (
+      tester,
+    ) async {
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      await pump(tester);
+
+      expect(find.text('Nessun cliente'), findsOneWidget);
+      expect(find.text('Clienti non ancora scaricati'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a search that matches nothing is "no result", never "no customers"', (
+      tester,
+    ) async {
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      await pump(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'inesistente');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun risultato'), findsOneWidget);
+      expect(find.text('Nessun cliente'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('renders a ListRow per customer', (tester) async {
       await seedCustomers(db);
       await pump(tester);

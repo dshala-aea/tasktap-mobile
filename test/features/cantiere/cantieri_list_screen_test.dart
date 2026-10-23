@@ -16,6 +16,9 @@ void main() {
   // Scrollable, so pull-to-refresh silently did nothing in the empty/loading/error states.
   testWidgets('pull-to-refresh is reachable in the empty state', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
+    // Seeded so the screen is past its first sync: that is the branch whose copy tells the
+    // technician to pull down, and the one this test is about.
+    await db.setLastSync(DateTime.utc(2026, 10, 1));
 
     await tester.pumpWidget(
       ProviderScope(
@@ -25,7 +28,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Nessun cantiere disponibile'), findsOneWidget);
+    expect(find.text('Nessun cantiere in corso'), findsOneWidget);
     expect(find.byType(RefreshIndicator), findsOneWidget);
 
     // The whole page (header + empty state) is one Scrollable inside the RefreshIndicator, so a
@@ -40,7 +43,12 @@ void main() {
   });
 
 
-  testWidgets('shows an empty state when no cantieri are synced', (tester) async {
+  /// "no cantieri synced on this device" is a claim about the phone, so it may only be made
+  /// before the first completed sync. After one, the empty mirror is the technician's actual
+  /// scope, and the copy must not send them to refresh for data that has already arrived.
+  testWidgets('a device that never synced says so instead of "no cantieri in progress"', (
+    tester,
+  ) async {
     final db = AppDatabase(NativeDatabase.memory());
 
     await tester.pumpWidget(
@@ -51,7 +59,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Nessun cantiere disponibile'), findsOneWidget);
+    expect(find.text('Cantieri non ancora scaricati'), findsOneWidget);
+    expect(find.text('Nessun cantiere in corso'), findsNothing);
 
     await db.close();
   });

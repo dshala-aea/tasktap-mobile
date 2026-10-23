@@ -10,6 +10,7 @@ import '../../core/theme/app_vetro_palette.dart';
 import '../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_freshness_provider.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../data/tickets/ticket_deletion.dart';
@@ -151,6 +152,16 @@ class _TicketListBody extends ConsumerWidget {
       return matchFilter && matchQuery;
     }).toList();
 
+    // Three different things reach the empty branch, and only two of them are answers:
+    //  - a filter or a search that matches nothing is "no result" for a question the technician
+    //    just asked, not a statement about the tenant;
+    //  - an empty mirror on a device that has never completed a sync is "not downloaded yet";
+    //  - anything else is the tenant genuinely having no ticket in view.
+    // Printing the third message for all of them told a technician with a typo in the search field
+    // that the company has no tickets, and told a first-run phone the same.
+    final hasActiveFilter = query.isNotEmpty || filter != _TicketFilter.tutti;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+
     return RefreshIndicator(
       onRefresh: () => refreshWithFeedback(context, ref),
       child: CustomScrollView(
@@ -226,12 +237,28 @@ class _TicketListBody extends ConsumerWidget {
                       child: Center(child: CircularProgressIndicator()),
                     )
                   : filtered.isEmpty
-                  ? EmptyState(
-                      key: const ValueKey('empty'),
-                      icon: LucideIcons.ticket,
-                      title: 'Nessun ticket',
-                      body: 'I ticket sincronizzati appariranno qui.',
-                    )
+                  ? hasActiveFilter
+                        ? const EmptyState(
+                            key: ValueKey('empty-filter'),
+                            icon: LucideIcons.searchX,
+                            title: 'Nessun risultato',
+                            body: 'Nessun ticket corrisponde ai filtri scelti.',
+                          )
+                        : neverSynced
+                        ? const EmptyState(
+                            key: ValueKey('empty-not-downloaded'),
+                            icon: LucideIcons.cloudOff,
+                            title: 'Ticket non ancora scaricati',
+                            body:
+                                'Questo telefono non ha ancora completato una sincronizzazione: '
+                                'i ticket compariranno qui appena i dati saranno scaricati.',
+                          )
+                        : const EmptyState(
+                            key: ValueKey('empty'),
+                            icon: LucideIcons.ticket,
+                            title: 'Nessun ticket',
+                            body: 'Non ci sono ticket da mostrare.',
+                          )
                   : const SizedBox.shrink(key: ValueKey('list-placeholder')),
             ),
           ),

@@ -204,12 +204,30 @@ void main() {
     testWidgets('nothing today and nothing in the next seven days keeps the single empty state', (
       tester,
     ) async {
+      // Synced device: the mirror is empty, so "nothing anywhere" is its own answer.
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
       await tester.pumpWidget(_buildSection(db: db));
       await tester.pumpAndSettle();
 
       expect(find.text('Nessun intervento oggi'), findsOneWidget);
       expect(find.textContaining('PROSSIMI 7 GIORNI'), findsNothing);
       expect(find.text('Nessun lavoro assegnato per la giornata di oggi.'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an empty queue on a device that never synced does not wish anyone a good day', (
+      tester,
+    ) async {
+      // Fresh install, offline since setup: the queue is empty because nothing was ever
+      // downloaded, and "Buona giornata" would be a report on the phone, not on the technician's
+      // day.
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun intervento oggi'), findsNothing);
+      expect(find.text('Lavori non ancora scaricati'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

@@ -463,7 +463,11 @@ void main() {
       WidgetTester tester,
       AppDatabase db, {
       bool seedMirroredCrew = true,
+      bool synced = true,
     }) async {
+      // Offline, the crew list comes from the Drift mirror, and an empty mirror only means "no
+      // crew" once a sync has actually filled it. `synced: false` is the first-run phone.
+      if (synced) await db.setLastSync(DateTime.utc(2026, 10, 1));
       await db
           .into(db.cantieri)
           .insert(
@@ -526,6 +530,22 @@ void main() {
 
       expect(find.text('Squadra assegnata'), findsOneWidget);
       expect(find.text('Nessuna squadra assegnata'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await db.close();
+    });
+
+    /// The same empty mirror on a phone that has never synced proves nothing, so the section must
+    /// not turn it into "nobody is assigned to this cantiere".
+    testWidgets('an empty mirror on a never-synced phone is "not downloaded", not "no crew"', (
+      tester,
+    ) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await buildOffline(tester, db, seedMirroredCrew: false, synced: false);
+
+      expect(find.text('Squadra non ancora scaricata'), findsOneWidget);
+      expect(find.text('Nessuna squadra assegnata'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

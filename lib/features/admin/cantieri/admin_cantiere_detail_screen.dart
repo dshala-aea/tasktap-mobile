@@ -17,6 +17,7 @@ import '../../../core/widgets/app_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/connectivity_provider.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../../../presentation/providers/schedule_providers.dart';
@@ -72,13 +73,23 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
               ErrorState(onRetry: () => ref.invalidate(adminCantiereDetailProvider(cantiereId))),
           data: (cantiere) {
             if (cantiere == null) {
-              return const UnavailableState(
-                titolo: 'Cantiere non disponibile',
-                motivo:
-                    "L'elenco cantieri non è ancora sincronizzato sul "
-                    'dispositivo, quindi questo cantiere non può essere '
-                    'letto dalla cache locale anche se esiste sul server.',
-              );
+              // A missing row on a synced device is a deletion, not a download problem — the old
+              // single message promised a sync that would never bring it back.
+              return ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+                  ? const UnavailableState(
+                      icon: LucideIcons.cloudOff,
+                      titolo: 'Cantiere non disponibile',
+                      motivo:
+                          "L'elenco cantieri non è ancora sincronizzato sul "
+                          'dispositivo, quindi questo cantiere non può essere '
+                          'letto dalla cache locale anche se esiste sul server.',
+                    )
+                  : const UnavailableState(
+                      icon: LucideIcons.hardHat,
+                      titolo: 'Cantiere non trovato',
+                      motivo: 'Questo cantiere non è più disponibile: potrebbe essere stato '
+                          'eliminato.',
+                    );
             }
             return _CantiereDetailBody(cantiere: cantiere, cantiereId: cantiereId);
           },
@@ -137,8 +148,9 @@ class _CantiereDetailBody extends ConsumerWidget {
         : '—';
 
     // Feature audit module #13, Gap 6: mobile already syncs `Cantiere.commessaId` but showed it
-    // nowhere. Resolved the same way as the ticket detail screen's own commessa row — live-
-    // fetched via the shared commessaByIdProvider, no local mirror exists for commesse.
+    // nowhere. Resolved the same way as the ticket detail screen's own commessa row — through the
+    // shared commessaByIdProvider, which is online-then-mirror over the `commesse` reference
+    // cache (ReferenceCacheRepository.commessaById), so the row still resolves on site.
     final commessaId = cantiere.commessaId;
     final commessaAsync = commessaId == null ? null : ref.watch(commessaByIdProvider(commessaId));
     final commessaLabel = commessaAsync?.when(

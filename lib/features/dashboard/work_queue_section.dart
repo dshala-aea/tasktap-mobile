@@ -9,6 +9,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_freshness_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'dashboard_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -36,6 +37,23 @@ class WorkQueueSection extends ConsumerWidget {
 
     // Nothing anywhere: one empty state for the whole queue.
     if (!q.hasTodayWork && q.upcoming.isEmpty) {
+      // The queue is built from the mirror, so "nothing anywhere" is only the technician's day
+      // once a sync has landed on this phone. On a device that has never synced it is the phone
+      // that has nothing — wishing them a good day on the strength of a missing download is the
+      // wrong sentence, and a field technician cannot tell the two apart from the screen.
+      // `== false`, never `!= true`: an unanswered check must not be read as "never synced".
+      if (ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: EmptyState(
+            icon: LucideIcons.cloudOff,
+            title: 'Lavori non ancora scaricati',
+            body:
+                'Questo telefono non ha ancora completato una sincronizzazione: i lavori '
+                'assegnati compariranno qui appena i dati saranno scaricati.',
+          ),
+        );
+      }
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         child: EmptyState(

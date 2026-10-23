@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/theme/status_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -28,6 +29,20 @@ class ListaView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (schedules.isEmpty) {
+      // The list is read from the mirror, so an empty one only means "nothing is planned" once a
+      // sync has actually landed on this phone. Before that it means "the phone has nothing
+      // downloaded", and saying "non ci sono interventi" turns a missing sync into news about the
+      // technician's week. `== false`, never `!= true`: an unanswered check must not be read as
+      // "never synced".
+      if (ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false) {
+        return const EmptyState(
+          icon: LucideIcons.cloudOff,
+          title: 'Calendario non ancora scaricato',
+          body:
+              'Questo telefono non ha ancora completato una sincronizzazione: gli interventi '
+              'compariranno qui appena i dati saranno scaricati.',
+        );
+      }
       return const EmptyState(
         icon: LucideIcons.calendarX,
         title: 'Nessun intervento',

@@ -19,6 +19,8 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
+import '../../data/sync/sync_freshness_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../rapportino/create_draft.dart';
 import '../ticket/ticket_providers.dart' show commessaByIdProvider;
@@ -346,11 +348,12 @@ class _DettagliSection extends ConsumerWidget {
         hasNotes;
     if (!hasAnything) return const SizedBox.shrink();
 
-    // Live-fetched, no local mirror for either — same shape as
-    // admin_cantiere_detail_screen.dart's own Cliente/Commessa rows. `error`/`null` both fall
-    // back to '—': a commessa lookup throws TicketDetailOfflineException while offline (see
-    // commessaByIdProvider's own doc comment), which must read the same as "not resolved yet",
-    // not surface as a broken row on an otherwise-fine offline screen.
+    // Both resolve from what the phone already has: `customerByIdProvider` is a pure mirror
+    // stream over `db.customers`, and `commessaByIdProvider` is online-then-mirror (reference
+    // cache). `error`/`null` still fall back to '—': the commessa lookup throws
+    // TicketDetailOfflineException when neither the server nor the mirror can answer (see its own
+    // doc comment), which must read the same as "not resolved yet", not surface as a broken row on
+    // an otherwise-fine offline screen.
     final customerId = cantiere.customerId;
     final customerAsync = customerId == null ? null : ref.watch(customerByIdProvider(customerId));
     final customerLabel = customerAsync?.when(
@@ -420,8 +423,10 @@ class _DettagliSection extends ConsumerWidget {
 //   - loading / error: collapse to nothing. An error no longer means "offline" (the provider
 //     answers from the mirror without signal), so it is the genuinely unavailable case — the local
 //     read itself failed — and saying "no crew" then would be a claim the app cannot make.
-//   - data, empty: render "Nessuna squadra assegnata". This is an authoritative answer (the live
-//     server's or the mirrored crew's), so it must read differently from "couldn't ask".
+//   - data, empty: render "Nessuna squadra assegnata" — but only when the answer can be trusted.
+//     Online, the server said so. Offline, the provider reads the Drift crew mirror, and that
+//     mirror is empty on a phone that has never completed a sync: there "no crew" is a claim the
+//     app cannot make, and it says "Squadra non ancora scaricata" instead.
 //   - data, non-empty: the crew list.
 // Never an empty card or an empty list: the section is a convenience read, not something this
 // screen's primary Timbra/Crea-rapportino flows depend on, so it must not clutter the page while
@@ -436,6 +441,10 @@ class _SquadraSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final assignmentsAsync = ref.watch(cantiereCrewAssignmentsProvider(cantiereId));
+    // Offline plus a mirror that has never been filled is "we don't know", not "nobody".
+    final crewUnknown =
+        !ref.watch(isOnlineProvider) &&
+        ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
 
     return assignmentsAsync.when(
       loading: () => const SizedBox.shrink(),
@@ -455,7 +464,7 @@ class _SquadraSection extends ConsumerWidget {
                   : EdgeInsets.zero,
               child: assignments.isEmpty
                   ? Text(
-                      'Nessuna squadra assegnata',
+                      crewUnknown ? 'Squadra non ancora scaricata' : 'Nessuna squadra assegnata',
                       style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
                     )
                   : Column(

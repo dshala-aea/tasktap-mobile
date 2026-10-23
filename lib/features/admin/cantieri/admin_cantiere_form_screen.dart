@@ -6,6 +6,7 @@ import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../../core/utils/offline_guard.dart';
@@ -13,6 +14,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/reference/reference_cache_repository.dart';
 import '../../../data/sync/connectivity_provider.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
@@ -241,13 +243,23 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
       return Scaffold(
         backgroundColor: context.colors.bg2,
         appBar: ScreenHeaderBar(title: 'Modifica cantiere', showBack: true),
-        body: const UnavailableState(
-          titolo: 'Cantiere non disponibile',
-          motivo:
-              "L'elenco cantieri non è ancora sincronizzato sul "
-              'dispositivo, quindi non è possibile precompilare o '
-              'modificare questo cantiere da qui.',
-        ),
+        // The row can be missing because the mirror has not arrived yet OR because the cantiere
+        // was deleted meanwhile; the old single message asserted the first for both.
+        body: ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+            ? const UnavailableState(
+                icon: LucideIcons.cloudOff,
+                titolo: 'Cantiere non disponibile',
+                motivo:
+                    "L'elenco cantieri non è ancora sincronizzato sul "
+                    'dispositivo, quindi non è possibile precompilare o '
+                    'modificare questo cantiere da qui.',
+              )
+            : const UnavailableState(
+                icon: LucideIcons.hardHat,
+                titolo: 'Cantiere non trovato',
+                motivo: 'Questo cantiere non è più disponibile: potrebbe essere stato eliminato. '
+                    'Torna all\'elenco e aggiorna.',
+              ),
       );
     }
 

@@ -13,6 +13,7 @@ import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
 import '../../data/materiali/materiale_barcode_lookup.dart';
+import '../../data/sync/sync_freshness_provider.dart';
 import 'magazzino_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -248,14 +249,25 @@ class _MagazzinoBody extends ConsumerWidget {
       // catalogue means sync has not delivered it; an empty *filter* means this technician's
       // search matched nothing, which is not a fault at all.
       else if (allMateriali.isEmpty)
+        // The third claim, after "no match" and "not downloaded": a catalogue that really is
+        // empty. Telling a tenant with no materials to wait for a sync is a promise that never
+        // comes true.
         SliverToBoxAdapter(
-          child: UnavailableState(
-            icon: LucideIcons.package,
-            titolo: 'Catalogo non ancora sincronizzato',
-            motivo:
-                "L'elenco materiali arriva con la sincronizzazione. "
-                'Se hai appena effettuato l\'accesso, attendi il primo aggiornamento.',
-          ),
+          child: ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+              ? const UnavailableState(
+                  icon: LucideIcons.cloudOff,
+                  titolo: 'Catalogo non ancora sincronizzato',
+                  motivo:
+                      "L'elenco materiali arriva con la sincronizzazione. "
+                      'Se hai appena effettuato l\'accesso, attendi il primo aggiornamento.',
+                )
+              : const UnavailableState(
+                  icon: LucideIcons.package,
+                  titolo: 'Catalogo materiali vuoto',
+                  motivo:
+                      'Non è ancora stato registrato nessun materiale a catalogo. '
+                      'Puoi crearne uno da Altro → Magazzino → Catalogo.',
+                ),
         )
       else if (filtered.isEmpty)
         SliverToBoxAdapter(

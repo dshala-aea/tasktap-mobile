@@ -112,7 +112,21 @@ void main() {
     await tester.pumpWidget(_buildScreen(db: db));
     await tester.pumpAndSettle();
 
-    expect(find.text('Nessun cantiere disponibile'), findsOneWidget);
+    expect(find.text('Cantieri non ancora scaricati'), findsOneWidget);
+    await _teardown(tester);
+  });
+
+  /// Once a sync has completed, the same empty mirror means the technician really has no cantiere
+  /// in scope — a different answer, with a different remedy.
+  testWidgets('after a sync, an empty picker is "no cantiere in progress", not "not downloaded"', (
+    tester,
+  ) async {
+    await db.setLastSync(DateTime.utc(2026, 10, 1));
+    await tester.pumpWidget(_buildScreen(db: db));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nessun cantiere in corso'), findsOneWidget);
+    expect(find.text('Cantieri non ancora scaricati'), findsNothing);
     await _teardown(tester);
   });
 
