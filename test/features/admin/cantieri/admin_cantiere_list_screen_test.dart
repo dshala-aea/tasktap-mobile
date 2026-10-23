@@ -55,6 +55,19 @@ void main() {
   });
 
   testWidgets('a search with no match says no result, not "not downloaded"', (tester) async {
+    // One real row, so the mirror is not empty and the search is what narrowed the list to
+    // nothing. On an empty mirror the "not downloaded" branch still wins — there is nothing a
+    // search could have matched, and promising "no result" there would be the same lie inverted.
+    await db
+        .into(db.cantieri)
+        .insert(
+          CantieriCompanion.insert(
+            id: 'cant-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            name: 'Cantiere Milano',
+          ),
+        );
     await tester.pumpWidget(_buildScreen(db));
     await tester.pumpAndSettle();
 
