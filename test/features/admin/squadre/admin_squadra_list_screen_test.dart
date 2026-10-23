@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/admin/squadre/admin_squadra_list_screen.dart';
 
@@ -34,9 +35,23 @@ class _FakeAdminApiClient extends AdminApiClient {
   }
 }
 
-Widget _buildView(_FakeAdminApiClient api) {
+/// Squadre are not in the sync payload, so a network failure is the only way this screen ever
+/// errors. What it says then is a product decision, not a detail: "impossibile caricare" reads as
+/// "your squadre may be gone", which the screen has no grounds for.
+class _FailingAdminApiClient extends AdminApiClient {
+  _FailingAdminApiClient() : super(Dio());
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchSquadre() async =>
+      throw DioException(requestOptions: RequestOptions(path: '/api/squadre'));
+}
+
+Widget _buildView(AdminApiClient api, {bool? online}) {
   return ProviderScope(
-    overrides: [adminApiClientProvider.overrideWithValue(api)],
+    overrides: [
+      adminApiClientProvider.overrideWithValue(api),
+      if (online != null) isOnlineProvider.overrideWithValue(online),
+    ],
     child: const MaterialApp(home: AdminSquadraListScreen()),
   );
 }
@@ -89,6 +104,29 @@ void main() {
     expect(find.text('Squadra Nord'), findsOneWidget);
 
     await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('offline, a failed load names the offline case instead of a retry error', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildView(_FailingAdminApiClient(), online: false));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Squadre non disponibili offline'), findsOneWidget);
+    expect(find.textContaining('Impossibile caricare'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('online, a failed load keeps the ordinary retryable error', (tester) async {
+    await tester.pumpWidget(_buildView(_FailingAdminApiClient(), online: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Squadre non disponibili offline'), findsNothing);
+
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });

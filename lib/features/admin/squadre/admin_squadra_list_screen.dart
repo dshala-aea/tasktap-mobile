@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
+import '../../../data/sync/connectivity_provider.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -26,7 +27,7 @@ final allUsersWithSquadraProvider = FutureProvider.autoDispose<List<Map<String, 
   return api.fetchAllUsersWithSquadraInfo();
 });
 
-/// Admin squadra list — online-only.
+/// Admin squadra list — online-only (squadre are not in the sync payload).
 class AdminSquadraListScreen extends ConsumerWidget {
   const AdminSquadraListScreen({super.key});
 
@@ -39,7 +40,24 @@ class AdminSquadraListScreen extends ConsumerWidget {
       body: SafeArea(
         child: squadreAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ErrorState(onRetry: () => ref.invalidate(adminSquadreProvider)),
+          // Offline is not a failure: nothing was attempted, and retrying cannot help until the
+          // radio is back. The red "Impossibile caricare i dati" card would read as "your squadre
+          // may be gone", which is the one thing this screen cannot know.
+          error: (e, _) => !ref.watch(isOnlineProvider)
+              ? UnavailableState(
+                  icon: LucideIcons.wifiOff,
+                  titolo: 'Squadre non disponibili offline',
+                  motivo:
+                      'Le squadre si leggono con la connessione: non vengono scaricate sul '
+                      'dispositivo.',
+                  action: AppButton(
+                    label: 'Riprova',
+                    size: AppButtonSize.sm,
+                    fullWidth: false,
+                    onPressed: () => ref.invalidate(adminSquadreProvider),
+                  ),
+                )
+              : ErrorState(onRetry: () => ref.invalidate(adminSquadreProvider)),
           data: (squadre) => _SquadraListBody(squadre: squadre),
         ),
       ),
