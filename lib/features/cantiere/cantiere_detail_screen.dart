@@ -481,7 +481,7 @@ class _TimbratureSection extends ConsumerWidget {
   /// The shift length. True instants when the row has them — the only safe way across midnight —
   /// otherwise the time-of-day pair, which on an overnight shift reads negative and is shown as
   /// the domain's own overnight correction rather than a nonsense duration.
-  static String _duration(CantiereWorkLogData w) {
+  static String _duration(CantiereWorkLog w) {
     Duration d;
     if (w.startUtc != null && w.endUtc != null) {
       d = w.endUtc!.difference(w.startUtc!);
@@ -497,7 +497,7 @@ class _TimbratureSection extends ConsumerWidget {
   /// The shift's wall clock. Always the business-zone time of day the server stored, never the
   /// phone's own zone: a technician whose handset is set to another timezone (or travelling) must
   /// read the same hours the office prices the job from.
-  static String _window(CantiereWorkLogData w) {
+  static String _window(CantiereWorkLog w) {
     final start = _hm(w.startSeconds);
     final end = w.endSeconds == null ? null : _hm(w.endSeconds!);
     return end == null ? '$start – in corso' : '$start – $end';

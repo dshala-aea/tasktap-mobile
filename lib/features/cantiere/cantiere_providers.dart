@@ -6,7 +6,7 @@
 // same offline-first shape as cantieriProvider (features/timbra/cantiere_timbra_screen.dart),
 // which this file's cantiereByIdProvider complements with a single-row lookup by id.
 
-import 'package:drift/drift.dart' show OrderingTerm, Value;
+import 'package:drift/drift.dart' show BooleanExpressionOperators, OrderingTerm, Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/location/geocoding_service.dart';
@@ -46,7 +46,7 @@ final cantiereByIdProvider = StreamProvider.autoDispose.family<CantieriData?, St
 /// Only this technician's rows are stored, so "empty" here always means "this device has none of
 /// your shifts for this site", never "your colleagues did not work" — the screen says the former.
 final cantiereWorkLogMirrorProvider =
-    StreamProvider.autoDispose.family<List<CantiereWorkLogData>, String>((ref, cantiereId) {
+    StreamProvider.autoDispose.family<List<CantiereWorkLog>, String>((ref, cantiereId) {
       final db = ref.watch(appDatabaseProvider);
       return (db.select(db.cantiereWorkLogs)
             ..where((w) => w.cantiereId.equals(cantiereId))

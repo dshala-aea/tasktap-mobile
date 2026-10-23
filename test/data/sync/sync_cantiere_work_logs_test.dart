@@ -95,7 +95,7 @@ void main() {
     ).thenAnswer((_) async => ok(body));
   }
 
-  Future<List<CantiereWorkLogData>> rows() => db.select(db.cantiereWorkLogs).get();
+  Future<List<CantiereWorkLog>> rows() => db.select(db.cantiereWorkLogs).get();
 
   group('SyncCantiereWorkLogDto', () {
     test('reads the member, marks the payload as carrying it, and keeps the raw values', () {
