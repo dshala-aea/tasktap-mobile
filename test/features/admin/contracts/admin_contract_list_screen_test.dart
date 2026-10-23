@@ -144,7 +144,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Contratto Annuale'), findsOneWidget);
-      expect(find.text('Inattivo'), findsOneWidget);
+      // StatusStamp uppercases its label, so the pill reads INATTIVO on screen.
+      expect(find.text('INATTIVO'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

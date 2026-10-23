@@ -267,9 +267,20 @@ final adminReportsProvider = FutureProvider.autoDispose
     });
 
 /// Simple wrapper for the stato filter value.
+///
+/// Value equality is load-bearing, not tidiness: this is a Riverpod *family key*, and the list
+/// screen constructs a fresh one on every build (`StatoFilter(filter.statusMatch)`). Without `==`
+/// each rebuild is a new provider instance, which re-runs it, which rebuilds — an endless
+/// reload that never settles (`pumpAndSettle` times out, and on a device the list just spins).
 class StatoFilter {
   const StatoFilter(this.value);
   final String? value;
+
+  @override
+  bool operator ==(Object other) => other is StatoFilter && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
 }
 
 class _AdminReportRow extends StatelessWidget {

@@ -156,6 +156,12 @@ void main() {
 
         expect(find.textContaining(expected), findsOneWidget, reason: 'query: $query');
         expect(find.textContaining(absent), findsNothing, reason: 'query: $query');
+
+        // Unmount between iterations: re-pumping the same element types keeps the ProviderScope
+        // alive, so the screen's state — including the search text — survives into the next pump
+        // and every iteration would silently re-run the first query.
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
       }
 
       await tester.pumpWidget(const SizedBox.shrink());
