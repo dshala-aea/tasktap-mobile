@@ -99,7 +99,7 @@ class TicketWorkflowApiClient {
       () => _dio.post<dynamic>(
         '/api/tickets/$ticketId/worklogs/start',
         queryParameters: {
-          if (clientId != null) 'clientId': clientId,
+          'clientId': ?clientId,
           ...?_deviceQuery(deviceUtc),
         },
       ),
