@@ -179,6 +179,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
       ref.read(syncProvider.notifier).performSync();
       ref.read(workLogRefreshCoordinatorProvider).refreshNow();
       ref.read(cantiereWorkLogReconcilerProvider).reconcile();
+      // The tenant's timbratura mode (and modules, seat type) are decided by the office, not this
+      // device: an admin switching the tenant to QrOnly, or overriding this user, produced a phone
+      // that kept offering a button punch the server then refused — the cache was only ever
+      // refreshed at app start and on reconnect, and a device that never lost signal never
+      // reconnects. Resume is the moment the answer may have changed.
+      unawaited(refreshEntitlements(ref));
       // A rapportino whose send failed for a transient reason (or was queued offline) is
       // retried on resume too — reconnect alone misses a device that never lost its interface.
       // Deliberately outside the background-sync gate: this is the technician's own record.
