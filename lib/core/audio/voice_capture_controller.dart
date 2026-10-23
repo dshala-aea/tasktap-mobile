@@ -23,7 +23,7 @@ class VoiceCaptureController {
     required this.store,
     required this.consentAccepted,
     required this.currentUserId,
-    required Future<AiTranscription> Function(File audio, String idempotencyKey) upload,
+    required Future<AiVoiceCapture> Function(File audio, String idempotencyKey) upload,
   }) : _uploader = upload;
 
   final AudioRecorderService recorder;
@@ -33,7 +33,7 @@ class VoiceCaptureController {
 
   /// The signed-in user, or null when signed out (recording is then refused).
   final String? Function() currentUserId;
-  final Future<AiTranscription> Function(File audio, String idempotencyKey) _uploader;
+  final Future<AiVoiceCapture> Function(File audio, String idempotencyKey) _uploader;
 
   bool get isRecording => _recording;
 
@@ -169,20 +169,21 @@ class VoiceCaptureController {
     return u == null ? const [] : store.list(userId: u);
   }
 
-  /// Transcribes with the recording's OWN key and KEEPS the local files. The server replays a
-  /// repeated key (same transcript and `audioRef`, no new charge), so this is safe to repeat after a
-  /// restart. The caller deletes the recording only once the turn built from it was accepted.
-  Future<AiTranscription> transcribe(PendingRecording pending) async {
+  /// Stores the recording with its OWN key and KEEPS the local files, so the operator's own voice
+  /// can be the turn's input. The server replays a repeated key (same `audioRef`, no second
+  /// object), so this is safe to repeat after a restart. The caller deletes the recording only once
+  /// the turn built from it was accepted.
+  Future<AiVoiceCapture> capture(PendingRecording pending) async {
     if (pending.userId != currentUserId()) {
       throw StateError('Questa registrazione appartiene a un altro utente.');
     }
     return _uploader(pending.file, pending.idempotencyKey);
   }
 
-  /// [transcribe], then delete the local files. On any failure they are kept. Prefer [transcribe]
-  /// when the result still has to reach the server as a turn.
-  Future<AiTranscription> upload(PendingRecording pending) async {
-    final result = await transcribe(pending);
+  /// [capture], then delete the local files. On any failure they are kept. Prefer [capture] when
+  /// the result still has to reach the server as a turn.
+  Future<AiVoiceCapture> upload(PendingRecording pending) async {
+    final result = await capture(pending);
     await store.delete(pending);
     return result;
   }

@@ -122,6 +122,9 @@ void main() {
     'AiResolvedStaff': AiResolvedStaff.wireKeys,
     'AiResolvedMaterial': AiResolvedMaterial.wireKeys,
     'AiResolvedControl': AiResolvedControl.wireKeys,
+    // The instruments slice: Confirm resolves each id and computes the calibration verdict, so the
+    // app reads the resolved line (and writes the report's own instrument rows from it).
+    'AiResolvedStrumento': AiResolvedStrumento.wireKeys,
   };
 
   for (final entry in readKeys.entries) {
@@ -175,6 +178,7 @@ void main() {
     expect(r.staff, hasLength(1));
     expect(r.materials, hasLength(1));
     expect(r.controlli, hasLength(1));
+    expect(r.strumenti, hasLength(1));
     expect(r.warnings, hasLength(1));
 
     // The resolved shapes are the ones the editor's apply path reads, and the free-text material
@@ -183,6 +187,15 @@ void main() {
     expect(m.freeTextName, isNotEmpty);
     final c = AiResolvedControl.fromJson(instance('AiResolvedControl'));
     expect(c.ticketControlId, isNotEmpty);
+    // The instruments write keys off the resolved line alone: an id that parsed to null would land
+    // an instrument on the wrong report row, and a false expiry verdict would silently let an
+    // expired instrument through without the technician's confirmation.
+    final s = AiResolvedStrumento.fromJson(instance('AiResolvedStrumento'));
+    expect(s.strumentoId, isNotEmpty);
+    expect(s.calibrationExpiry, DateTime.utc(2026, 10, 7));
+    expect(s.expiredAtUse, isTrue);
+    expect(s.expiredAcknowledged, isTrue);
+    expect(s.usageDescription, isA<String>());
   });
 
   test('every DTO parses an instance generated from the snapshot schema', () {

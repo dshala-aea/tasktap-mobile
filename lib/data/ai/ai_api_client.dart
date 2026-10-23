@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time.dart' show parseDateOnly;
 import '../api/dio_client.dart';
 import '../api/json_parse.dart';
 
@@ -19,9 +20,11 @@ import '../api/json_parse.dart';
 /// ## Two voice paths
 ///
 /// On-device dictation (`DictateButton`, `lib/core/dictation/`, ADR-0017) fills a text field and
-/// never leaves the phone. [AiApiClient.transcribe] is the ONLINE path: a recording from
-/// `lib/core/audio/` is uploaded to `POST /api/ai/transcribe` and the server returns the
-/// transcript plus an `audioRef`.
+/// never leaves the phone. [AiApiClient.uploadVoiceCapture] is the ONLINE path: a recording from
+/// `lib/core/audio/` is stored by `POST /api/ai/voice-captures` and comes back as an `audioRef`.
+/// Nothing is transcribed — the turn carries the reference and the model hears the technician's
+/// own voice (ADR-0023). `POST /api/ai/transcribe` exists on the server for clients that want text,
+/// but this app never calls it, so it has no method here.
 
 /// What the company has left this month.
 class AiQuotaDto {
@@ -314,6 +317,46 @@ class AiDraftMaterialUsage {
   );
 }
 
+/// One instrument the operator said they used, as the draft holds it — mirrors backend
+/// `DraftStrumentoUsage`.
+///
+/// [strumentoId] is empty unless the model obtained the id from the read-only `search_strumenti`
+/// tool; a dictated name alone is a line the operator still has to pick from the catalogue, so it
+/// never reaches the report. [expiredAcknowledged] is the operator's, not the model's: the draft
+/// can echo an acknowledgement only because the operator stated it.
+class AiDraftStrumentoUsage {
+  const AiDraftStrumentoUsage({
+    required this.strumentoId,
+    required this.name,
+    this.matricola,
+    this.usageDescription,
+    this.outcome,
+    required this.state,
+    this.expiredAcknowledged = false,
+    this.source = AiFactSource.operatorInput,
+  });
+
+  final String strumentoId;
+  final String name;
+  final String? matricola;
+  final String? usageDescription;
+  final String? outcome;
+  final AiResolutionState state;
+  final bool expiredAcknowledged;
+  final AiFactSource source;
+
+  factory AiDraftStrumentoUsage.fromJson(Map<String, dynamic> json) => AiDraftStrumentoUsage(
+    strumentoId: json['strumentoId'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    matricola: json['matricola'] as String?,
+    usageDescription: json['usageDescription'] as String?,
+    outcome: json['outcome'] as String?,
+    state: _parseResolutionState(json['state']),
+    expiredAcknowledged: json['expiredAcknowledged'] == true,
+    source: _parseFactSource(json['source']),
+  );
+}
+
 class AiDraftControlAnswer {
   const AiDraftControlAnswer({
     required this.ticketControlId,
@@ -383,6 +426,7 @@ class AiCopilotDraftDto {
     required this.workers,
     required this.materials,
     required this.controlli,
+    this.strumenti = const [],
     required this.activities,
     required this.openItems,
   });
@@ -393,6 +437,7 @@ class AiCopilotDraftDto {
   final List<AiDraftWorkerRef> workers;
   final List<AiDraftMaterialUsage> materials;
   final List<AiDraftControlAnswer> controlli;
+  final List<AiDraftStrumentoUsage> strumenti;
   final List<AiDraftActivity> activities;
   final List<AiCandidateFact> openItems;
 
@@ -400,6 +445,7 @@ class AiCopilotDraftDto {
     workers: [],
     materials: [],
     controlli: [],
+    strumenti: [],
     activities: [],
     openItems: [],
   );
@@ -420,6 +466,9 @@ class AiCopilotDraftDto {
         .toList(),
     controlli: ((json['controlli'] as List<dynamic>?) ?? [])
         .map((c) => AiDraftControlAnswer.fromJson(c as Map<String, dynamic>))
+        .toList(),
+    strumenti: ((json['strumenti'] as List<dynamic>?) ?? [])
+        .map((s) => AiDraftStrumentoUsage.fromJson(s as Map<String, dynamic>))
         .toList(),
     activities: ((json['activities'] as List<dynamic>?) ?? [])
         .map((a) => AiDraftActivity.fromJson(a as Map<String, dynamic>))
@@ -700,6 +749,62 @@ class AiResolvedControl {
   );
 }
 
+/// One resolved instrument line. Mirror of backend `AiResolvedStrumento`.
+///
+/// [expiredAtUse] and [expiredAcknowledged] are the server-verdict / operator-acknowledgement pair
+/// the report write re-derives and enforces: only `(false,false)` or `(true,true)` are accepted at
+/// submit. A line with [expiredAtUse] true and [expiredAcknowledged] false is one the copilot could
+/// not settle — it is written to the draft with the verdict, and the Strumenti step asks the
+/// technician to confirm it (submit is otherwise refused with `strumento_expired_not_acknowledged`).
+///
+/// [calibrationExpiry] is a civil date (`yyyy-MM-dd`), like the sync DTO's.
+class AiResolvedStrumento {
+  const AiResolvedStrumento({
+    required this.strumentoId,
+    required this.name,
+    this.matricola = '',
+    this.calibrationExpiry,
+    this.expiredAtUse = false,
+    this.expiredAcknowledged = false,
+    this.usageDescription,
+    this.outcome,
+  });
+
+  final String strumentoId;
+  final String name;
+  final String matricola;
+  final DateTime? calibrationExpiry;
+  final bool expiredAtUse;
+  final bool expiredAcknowledged;
+  final String? usageDescription;
+  final String? outcome;
+
+  static const Set<String> wireKeys = {
+    'strumentoId',
+    'name',
+    'matricola',
+    'calibrationExpiry',
+    'expiredAtUse',
+    'expiredAcknowledged',
+    'usageDescription',
+    'outcome',
+  };
+
+  factory AiResolvedStrumento.fromJson(Map<String, dynamic> json) => AiResolvedStrumento(
+    strumentoId: json['strumentoId'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    matricola: json['matricola'] as String? ?? '',
+    // A civil date: it must land as `DateTime.utc(y, m, d)` like every other calendar label in
+    // the app. `DateTime.tryParse` returns a LOCAL twin, which compares unequal to the expiry the
+    // Strumenti step reads for the same instrument.
+    calibrationExpiry: parseDateOnly(json['calibrationExpiry']),
+    expiredAtUse: json['expiredAtUse'] == true,
+    expiredAcknowledged: json['expiredAcknowledged'] == true,
+    usageDescription: json['usageDescription'] as String?,
+    outcome: json['outcome'] as String?,
+  );
+}
+
 /// What `POST /api/ai/conversations/{id}/confirm` returns: the draft resolved against real tenant
 /// data, and nothing written (spec §5.4). Mirror of backend `AiConversationConfirmResponse`.
 ///
@@ -725,6 +830,7 @@ class AiConversationConfirmResponse {
     this.staff = const [],
     this.materials = const [],
     this.controlli = const [],
+    this.strumenti = const [],
     this.warnings = const [],
   });
 
@@ -738,6 +844,7 @@ class AiConversationConfirmResponse {
   final List<AiResolvedStaff> staff;
   final List<AiResolvedMaterial> materials;
   final List<AiResolvedControl> controlli;
+  final List<AiResolvedStrumento> strumenti;
   final List<String> warnings;
 
   static const Set<String> wireKeys = {
@@ -751,6 +858,7 @@ class AiConversationConfirmResponse {
     'staff',
     'materials',
     'controlli',
+    'strumenti',
     'warnings',
   };
 
@@ -772,16 +880,19 @@ class AiConversationConfirmResponse {
         controlli: ((json['controlli'] as List<dynamic>?) ?? [])
             .map((c) => AiResolvedControl.fromJson(c as Map<String, dynamic>))
             .toList(),
+        strumenti: ((json['strumenti'] as List<dynamic>?) ?? [])
+            .map((s) => AiResolvedStrumento.fromJson(s as Map<String, dynamic>))
+            .toList(),
         warnings: ((json['warnings'] as List<dynamic>?) ?? [])
             .map((w) => w.toString())
             .toList(),
       );
 }
 
-/// Per-request limits for `transcribe` only (the shared Dio allows 30 s to receive, with no send
-/// limit). The server reads the whole upload and calls the transcription provider before it
-/// answers, so a 5 minute recording legitimately takes far longer than 30 s.
-const Duration transcribeSendTimeout = Duration(minutes: 5);
+/// Per-request limits for the voice-upload request only (the shared Dio allows 30 s to receive,
+/// with no send limit). The server reads and stores the whole recording before it answers, so a
+/// 5 minute file on a field connection legitimately takes far longer than 30 s.
+const Duration voiceUploadSendTimeout = Duration(minutes: 5);
 
 /// Per-request limits for a turn. The server may work up to 45 s on one turn
 /// (`AiAgentLimits.MaxExecutionTimePerTurn`); the shared Dio's 30 s would abandon a turn the
@@ -791,24 +902,30 @@ const Duration turnReceiveTimeout = Duration(seconds: 60);
 
 /// The server's per-turn text cap (`AiAgentLimits.MaxOperatorTurnCharacters`).
 const int maxTurnCharacters = 8000;
-const Duration transcribeReceiveTimeout = Duration(minutes: 4);
+const Duration voiceUploadReceiveTimeout = Duration(minutes: 4);
 
-/// What `POST /api/ai/transcribe` returns: the transcript and the id of the retained audio.
-class AiTranscription {
-  const AiTranscription({required this.transcript, required this.audioRef});
+/// What `POST /api/ai/voice-captures` returns: the id of the stored recording and its sniffed
+/// duration. No transcript — nothing was transcribed.
+class AiVoiceCapture {
+  const AiVoiceCapture({required this.audioRef, required this.durationSeconds});
 
-  final String transcript;
+  /// Opaque capture id: the `audioRef` a turn carries. Resolvable only by this user, in this
+  /// tenant, until the server's retention sweep.
   final String audioRef;
 
-  factory AiTranscription.fromJson(Map<String, dynamic> json) => AiTranscription(
-    transcript: json['transcript'] as String? ?? '',
+  /// The duration the SERVER parsed from the container — what the turn will be metered on, and what
+  /// the chat bubble shows, rather than a client-side count the server may disagree with.
+  final int durationSeconds;
+
+  factory AiVoiceCapture.fromJson(Map<String, dynamic> json) => AiVoiceCapture(
     audioRef: json['audioRef'] as String? ?? '',
+    durationSeconds: asIntOr0(json['durationSeconds']),
   );
 }
 
-/// Why an upload for transcription did not produce a transcript. Quota exhaustion (429) is
-/// [AiQuotaExhaustedException], not a value here.
-enum AiTranscribeError {
+/// Why a voice upload did not produce a stored capture. Quota exhaustion (429) is
+/// [AiQuotaExhaustedException], not a value here — the upload itself never consumes quota.
+enum AiVoiceUploadError {
   /// 404: `Ai:VoiceCapture:Enabled` is off on the server.
   voiceDisabled,
 
@@ -827,25 +944,25 @@ enum AiTranscribeError {
   /// 403 that is a plain permission failure (not the tenant's AI switch).
   forbidden,
 
-  /// The request ran out of time (upload or waiting for the transcript). Retry with the SAME key:
-  /// the server may already have finished it and will replay the result.
+  /// The request ran out of time (the upload itself, or the server storing it). Retry with the SAME
+  /// key: the server may already hold the capture and will answer with its ref instead of a second.
   timeout,
   offline,
   unavailable,
 }
 
-class AiTranscribeException implements Exception {
-  const AiTranscribeException(this.error, this.message);
+class AiVoiceUploadException implements Exception {
+  const AiVoiceUploadException(this.error, this.message);
 
-  final AiTranscribeError error;
+  final AiVoiceUploadError error;
   final String message;
 
   /// True when the SAME file may succeed later (connection, server hiccup). False when the audio
   /// itself or the feature switch is the problem: repeating the upload cannot help.
   bool get retryable =>
-      error == AiTranscribeError.offline ||
-      error == AiTranscribeError.timeout ||
-      error == AiTranscribeError.unavailable;
+      error == AiVoiceUploadError.offline ||
+      error == AiVoiceUploadError.timeout ||
+      error == AiVoiceUploadError.unavailable;
 
   @override
   String toString() => message;
@@ -900,10 +1017,9 @@ class AiApiClient {
   //
   // Multi-turn counterpart to [generateDraft] above — the model calls TaskTap tools to verify
   // people/hours/materials/checklist items against real data across several turns instead of one
-  // shot. This endpoint itself is text-only (no audio field on the wire), but the screen built on
-  // top of it is not voice-less: dictation via `DictateButton` (on-device, per ADR-0017) fills the
-  // text field before it's sent here — see this file's own "Server-upload transcription is
-  // deliberately absent" note, and `ai_copilot_screen.dart`'s own comment on the same point.
+  // shot. A turn is text plus, optionally, an `audioRef` naming a stored recording — the model then
+  // hears the technician's own voice (ADR-0023). Dictation via `DictateButton` (on-device, per
+  // ADR-0017) is the other, separate way to fill the text field.
 
   /// POST /api/ai/conversations — starts a session bound to at most one of ticketId/cantiereId.
   Future<AiConversationSessionDto> startConversation({
@@ -950,7 +1066,7 @@ class AiApiClient {
     }
   }
 
-  /// POST /api/ai/conversations/{id}/turns — one utterance, typed or transcribed.
+  /// POST /api/ai/conversations/{id}/turns — one utterance, typed or spoken.
   ///
   /// [idempotencyKey] (sent as the `Idempotency-Key` header) must be generated ONCE per logical
   /// turn and reused unchanged on every retry: the server then replays the original response
@@ -1046,12 +1162,17 @@ class AiApiClient {
     }
   }
 
-  /// POST /api/ai/transcribe — multipart field `audio` (m4a, sent as audio/mp4). The server sniffs
-  /// the container from the bytes and rejects a declared type that does not match.
+  /// POST /api/ai/voice-captures — multipart field `audio` (m4a, sent as audio/mp4). The server
+  /// sniffs the container from the bytes and rejects a declared type that does not match.
+  ///
+  /// It does NOT transcribe: the stored recording is what the turn sends to the model. The server
+  /// calls no provider here and charges nothing — the audio seconds are metered on the turn that
+  /// uses the capture — so a capture that never becomes a turn costs nothing and is swept by the
+  /// retention policy.
   ///
   /// [idempotencyKey] must be generated once per recording and reused on every retry: the server
-  /// then returns the same `audioRef` without transcribing or charging again.
-  Future<AiTranscription> transcribe(File audio, {required String idempotencyKey}) async {
+  /// then returns the same `audioRef` instead of storing the audio twice.
+  Future<AiVoiceCapture> uploadVoiceCapture(File audio, {required String idempotencyKey}) async {
     try {
       final form = FormData.fromMap({
         'audio': await MultipartFile.fromFile(
@@ -1061,23 +1182,23 @@ class AiApiClient {
         ),
       });
       final response = await _dio.post<Map<String, dynamic>>(
-        '/api/ai/transcribe',
+        '/api/ai/voice-captures',
         data: form,
         options: Options(
           headers: {'Idempotency-Key': idempotencyKey},
-          sendTimeout: transcribeSendTimeout,
-          receiveTimeout: transcribeReceiveTimeout,
+          sendTimeout: voiceUploadSendTimeout,
+          receiveTimeout: voiceUploadReceiveTimeout,
         ),
       );
       final data = response.data;
       if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
-      return AiTranscription.fromJson(data);
+      return AiVoiceCapture.fromJson(data);
     } on DioException catch (e) {
-      throw _translateTranscribe(e);
+      throw _translateVoiceUpload(e);
     }
   }
 
-  static Exception _translateTranscribe(DioException e) {
+  static Exception _translateVoiceUpload(DioException e) {
     final status = e.response?.statusCode;
     final body = e.response?.data;
     final map = body is Map<String, dynamic> ? body : null;
@@ -1091,22 +1212,22 @@ class AiApiClient {
     }
     if (status == null &&
         (e.type == DioExceptionType.sendTimeout || e.type == DioExceptionType.receiveTimeout)) {
-      return const AiTranscribeException(
-        AiTranscribeError.timeout,
+      return const AiVoiceUploadException(
+        AiVoiceUploadError.timeout,
         'La trascrizione sta impiegando troppo tempo. La registrazione è salvata: riprova.',
       );
     }
     if (status == null &&
         (e.type == DioExceptionType.connectionError ||
             e.type == DioExceptionType.connectionTimeout)) {
-      return const AiTranscribeException(
-        AiTranscribeError.offline,
+      return const AiVoiceUploadException(
+        AiVoiceUploadError.offline,
         'Nessuna connessione. La registrazione è salvata: riprova quando torna la rete.',
       );
     }
     if (status == 404) {
-      return const AiTranscribeException(
-        AiTranscribeError.voiceDisabled,
+      return const AiVoiceUploadException(
+        AiVoiceUploadError.voiceDisabled,
         'La trascrizione vocale non è attiva per questa azienda.',
       );
     }
@@ -1115,19 +1236,19 @@ class AiApiClient {
       // disattivata ..."}`; any other 403 is a permission/entitlement failure.
       final text = (map?['error'] as String?) ?? '';
       if (text.contains('disattivata')) {
-        return const AiTranscribeException(
-          AiTranscribeError.aiDisabled,
+        return const AiVoiceUploadException(
+          AiVoiceUploadError.aiDisabled,
           'La bozza con AI è disattivata per questa azienda.',
         );
       }
-      return const AiTranscribeException(
-        AiTranscribeError.forbidden,
+      return const AiVoiceUploadException(
+        AiVoiceUploadError.forbidden,
         'Non hai i permessi per usare la trascrizione vocale.',
       );
     }
     if (status == 413) {
-      return const AiTranscribeException(
-        AiTranscribeError.audioTooLarge,
+      return const AiVoiceUploadException(
+        AiVoiceUploadError.audioTooLarge,
         'Il file audio è troppo grande.',
       );
     }
@@ -1135,39 +1256,39 @@ class AiApiClient {
       final code = map?['error'] as String?;
       final reason = switch (code) {
         'audio_type_mismatch' => (
-          AiTranscribeError.audioTypeMismatch,
+          AiVoiceUploadError.audioTypeMismatch,
           'Il formato dell\'audio non è riconosciuto dal server.',
         ),
         'audio_unrecognised' => (
-          AiTranscribeError.audioUnrecognised,
+          AiVoiceUploadError.audioUnrecognised,
           'Il file audio non è leggibile.',
         ),
         'audio_too_long' => (
-          AiTranscribeError.audioTooLong,
+          AiVoiceUploadError.audioTooLong,
           'La registrazione è troppo lunga.',
         ),
         'audio_too_short' => (
-          AiTranscribeError.audioTooShort,
+          AiVoiceUploadError.audioTooShort,
           'La registrazione è troppo breve.',
         ),
         'audio_too_large' => (
-          AiTranscribeError.audioTooLarge,
+          AiVoiceUploadError.audioTooLarge,
           'Il file audio è troppo grande.',
         ),
         'audio_type_not_allowed' => (
-          AiTranscribeError.audioTypeNotAllowed,
+          AiVoiceUploadError.audioTypeNotAllowed,
           'Il formato audio non è accettato.',
         ),
         _ => null,
       };
-      if (reason != null) return AiTranscribeException(reason.$1, reason.$2);
-      return const AiTranscribeException(
-        AiTranscribeError.badRequest,
+      if (reason != null) return AiVoiceUploadException(reason.$1, reason.$2);
+      return const AiVoiceUploadException(
+        AiVoiceUploadError.badRequest,
         'Il server ha rifiutato la registrazione.',
       );
     }
-    return const AiTranscribeException(
-      AiTranscribeError.unavailable,
+    return const AiVoiceUploadException(
+      AiVoiceUploadError.unavailable,
       'Il servizio di trascrizione non ha risposto. Riprova più tardi.',
     );
   }
