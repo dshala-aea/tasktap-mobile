@@ -51,8 +51,11 @@ class _RecordingApi extends WorklogApiClient {
       clockProvider.overrideWithValue(() => clock),
       businessZoneIdProvider.overrideWith(() => _FixedZone(zone)),
       if (db != null) appDatabaseProvider.overrideWithValue(db),
-      if (signedInUserId != null)
-        internalUserIdProvider.overrideWith((ref) async => signedInUserId),
+      // Always overridden, even with null: the real provider reads
+      // SharedPreferences, which has no plugin implementation under
+      // `flutter test`, so leaving it in place would throw
+      // MissingPluginException instead of exercising "no user yet".
+      internalUserIdProvider.overrideWith((ref) async => signedInUserId),
     ],
   );
   addTearDown(container.dispose);
