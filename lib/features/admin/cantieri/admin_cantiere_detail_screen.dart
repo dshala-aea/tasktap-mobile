@@ -1139,7 +1139,7 @@ class _ReportsSection extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: Column(
                 children: [
-                  if (data.fromMirror) const _MirrorNotice(what: 'rapporti di lavoro'),
+                  if (data.fromMirror) const _MirrorNotice(what: 'rapportini'),
                   ...reports.asMap().entries.map((entry) {
                     final r = entry.value;
                     final title = r['title'] as String? ?? 'Rapporto di lavoro';
