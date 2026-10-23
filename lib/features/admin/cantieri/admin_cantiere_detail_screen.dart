@@ -246,7 +246,7 @@ class _CantiereDetailBody extends ConsumerWidget {
               AppSpacing.pagePadding,
             ),
             child: AppButton(
-              label: 'Crea rapportino',
+              label: 'Crea rapporto di lavoro',
               icon: const Icon(LucideIcons.fileText),
               onPressed: () => _createRapportino(context, ref, cantiere),
             ),
@@ -278,7 +278,7 @@ class _CantiereDetailBody extends ConsumerWidget {
 
     final id = await createLocalDraft(
       ref,
-      title: 'Rapportino — ${cantiere.name}',
+      title: 'Rapporto di lavoro — ${cantiere.name}',
       cantiereId: cantiere.id,
       customerId: cantiere.customerId,
       tenantId: cantiere.tenantId,
@@ -286,7 +286,11 @@ class _CantiereDetailBody extends ConsumerWidget {
     );
     if (!context.mounted) return;
     if (id == null) {
-      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+      showAppToast(
+        context,
+        message: 'Accedi per creare un rapporto di lavoro.',
+        tone: ToastTone.warning,
+      );
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
@@ -1118,7 +1122,7 @@ class _ReportsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionTitle(title: 'Rapportini'),
+        const SectionTitle(title: 'Rapporti di lavoro'),
         reportsAsync.when(
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
@@ -1139,8 +1143,8 @@ class _ReportsSection extends ConsumerWidget {
             if (reports.isEmpty) {
               return const EmptyState(
                 icon: LucideIcons.fileText,
-                title: 'Nessun rapportino',
-                body: 'Non risultano rapportini collegati a questo cantiere.',
+                title: 'Nessun rapporto di lavoro',
+                body: 'Non risultano rapporti di lavoro collegati a questo cantiere.',
               );
             }
             return Padding(
@@ -1150,7 +1154,7 @@ class _ReportsSection extends ConsumerWidget {
                   if (data.fromMirror) const _MirrorNotice(what: 'rapportini'),
                   ...reports.asMap().entries.map((entry) {
                     final r = entry.value;
-                    final title = r['title'] as String? ?? 'Rapportino';
+                    final title = r['title'] as String? ?? 'Rapporto di lavoro';
                     final stato = r['stato'];
                     final statoLabel =
                         _statoLabels[stato is int ? stato : int.tryParse('$stato')] ?? 'Bozza';

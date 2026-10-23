@@ -1204,10 +1204,10 @@ class AiApiClient {
     'edit_reference_not_found' =>
       'Una modifica riguarda una voce che non esiste più o non appartiene a questo ticket.',
     'edit_value_invalid' || 'edit_property_unknown' || 'edit_kind_unknown' || 'edit_id_required' =>
-      'Una modifica fatta nel rapportino non è stata accettata dal server.',
+      'Una modifica fatta nel rapporto di lavoro non è stata accettata dal server.',
     'edit_sync_extras_not_allowed' => 'Le modifiche non possono essere inviate insieme alla voce.',
     _ => 'Il server ha rifiutato l\'aggiornamento. Riprova; se il problema resta, continua a mano '
-        'nel rapportino.',
+        'nel rapporto di lavoro.',
   };
 
   static Exception _translate(DioException e) {
@@ -1229,7 +1229,7 @@ class AiApiClient {
         e.type == DioExceptionType.receiveTimeout) {
       return const AiFailure(
         'Nessuna connessione. La bozza AI richiede la rete: '
-        'compila il rapportino a mano e riprova più tardi.',
+        'compila il rapporto di lavoro a mano e riprova più tardi.',
       );
     }
 
@@ -1294,7 +1294,7 @@ class AiApiClient {
           'turn_in_progress' => 'L\'aggiornamento precedente è ancora in elaborazione.',
           'concurrent_update' => 'La bozza è stata modificata da un altro dispositivo.',
           'draft_too_large' =>
-            'La bozza è diventata troppo grande: apri il rapportino e completalo a mano.',
+            'La bozza è diventata troppo grande: apri il rapporto di lavoro e completalo a mano.',
           'turn_limit_exceeded' =>
             'Questa conversazione ha raggiunto il limite di aggiornamenti.',
           _ => 'La bozza è cambiata da quando hai provato a confermare — riprova.',
@@ -1334,7 +1334,7 @@ class AiApiClient {
       return AiConversationException(
         status,
         'Il server ha rifiutato i dati inviati. Controlla l\'aggiornamento e riprova; se il '
-        'problema resta, continua a mano nel rapportino.',
+        'problema resta, continua a mano nel rapporto di lavoro.',
         code: rawCode is String ? rawCode : 'validation_failed',
       );
     }

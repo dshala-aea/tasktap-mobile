@@ -128,7 +128,7 @@ class PersonalDataSummary {
   /// The categories, in the order they matter to the person reading them: their own work first,
   /// the location trail flagged, infrastructure last.
   static const _spec = <({String key, String label, String? nota})>[
-    (key: 'reports', label: 'Rapportini che hai scritto', nota: null),
+    (key: 'reports', label: 'Rapporti di lavoro che hai scritto', nota: null),
     (
       key: 'workLogs',
       label: 'Timbrature della giornata',

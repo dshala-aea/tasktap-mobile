@@ -53,11 +53,11 @@ class RapportinoViewScreen extends ConsumerWidget {
         error: (e, _) => SafeArea(
           child: Column(
             children: [
-              ScreenHeader(title: 'Rapportino', showBack: true),
+              ScreenHeader(title: 'Rapporto di lavoro', showBack: true),
               Expanded(
                 child: UnavailableState(
                   icon: LucideIcons.xCircle,
-                  titolo: 'Impossibile caricare il rapportino',
+                  titolo: 'Impossibile caricare il rapporto di lavoro',
                   motivo: 'Si è verificato un errore imprevisto. Riprova.',
                   action: AppButton(
                     label: 'Riprova',
@@ -75,11 +75,11 @@ class RapportinoViewScreen extends ConsumerWidget {
             return SafeArea(
               child: Column(
                 children: [
-                  ScreenHeader(title: 'Rapportino', showBack: true),
+                  ScreenHeader(title: 'Rapporto di lavoro', showBack: true),
                   EmptyState(
                     icon: LucideIcons.fileX,
-                    title: 'Rapportino non trovato',
-                    body: 'Il rapportino richiesto non è disponibile in cache.',
+                    title: 'Rapporto di lavoro non trovato',
+                    body: 'Il rapporto di lavoro richiesto non è disponibile in cache.',
                   ),
                 ],
               ),
@@ -918,7 +918,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
       if (newId == null) {
         showAppToast(
           context,
-          message: 'Accedi per rielaborare il rapportino.',
+          message: 'Accedi per rielaborare il rapporto di lavoro.',
           tone: ToastTone.warning,
         );
         return;
@@ -948,7 +948,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  "L'ufficio ha respinto questo rapportino.",
+                  "L'ufficio ha respinto questo rapporto di lavoro.",
                   style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.ink),
                 ),
               ),
@@ -959,9 +959,9 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
             // The backend has no motivo/reason field to show here — POST
             // /api/reports/{id}/respingi takes no body and Report carries none — so this says
             // what is true instead of a reason that does not exist yet.
-            "Rielaboralo per correggerlo e inviarlo di nuovo: si crea un nuovo rapportino con gli "
-            "stessi dati, quello respinto resta com'è. L'ufficio non ha registrato un motivo per "
-            'questo rifiuto.',
+            "Rielaboralo per correggerlo e inviarlo di nuovo: si crea un nuovo rapporto di "
+            "lavoro con gli stessi dati, quello respinto resta com'è. "
+            "L'ufficio non ha registrato un motivo per questo rifiuto.",
             style: TextStyle(color: context.colors.ink, fontSize: 13),
           ),
           const SizedBox(height: 12),

@@ -130,7 +130,11 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     _hasHandledSubmitSuccess = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showAppToast(context, message: 'Rapportino inviato con successo', tone: ToastTone.success);
+      showAppToast(
+        context,
+        message: 'Rapporto di lavoro inviato con successo',
+        tone: ToastTone.success,
+      );
       Navigator.of(context).pop();
     });
   }
@@ -238,7 +242,9 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
       // the exact moment two people have just signed and the only question is whether the record
       // survived.
       if (mounted) {
-        setState(() => _submitError = humanErrorMessage(e, azione: 'inviare il rapportino'));
+        setState(
+          () => _submitError = humanErrorMessage(e, azione: 'inviare il rapporto di lavoro'),
+        );
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -432,9 +438,10 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                 return _StatusCard(
                   color: context.colors.red,
                   icon: LucideIcons.xCircle,
-                  title: "L'ufficio ha respinto questo rapportino.",
-                  subtitle: 'Sola lettura. Rilavoralo dalla lista rapportini per correggerlo '
-                      'e inviarlo di nuovo.',
+                  title: "L'ufficio ha respinto questo rapporto di lavoro.",
+                  subtitle:
+                      'Sola lettura. Rilavoralo dalla lista dei rapporti di lavoro per '
+                      'correggerlo e inviarlo di nuovo.',
                 );
               }
 
@@ -445,7 +452,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                     _StatusCard(
                       color: context.colors.green,
                       icon: LucideIcons.checkCircle2,
-                      title: 'Rapportino inviato con successo.',
+                      title: 'Rapporto di lavoro inviato con successo.',
                     ),
                     const SizedBox(height: 10),
                     // The one moment worth a stamping entrance (see StatusStamp.animate's own
@@ -462,7 +469,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   icon: LucideIcons.refreshCw,
                   title: subState == DraftSubmissionState.uploadingMedia
                       ? 'Caricamento media in corso...'
-                      : 'Invio rapportino...',
+                      : 'Invio rapporto di lavoro...',
                   showProgress: true,
                 );
               }
@@ -533,14 +540,16 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                       color: context.colors.blue,
                       icon: LucideIcons.refreshCw,
                       title: 'In attesa di connessione',
-                      subtitle: 'Il rapportino è salvato e verrà inviato appena torni online.',
+                      subtitle:
+                          'Il rapporto di lavoro è salvato e verrà inviato appena '
+                          'torni online.',
                     )
                   else if (validation.isValid)
                     _StatusCard(
                       color: context.colors.green,
                       icon: LucideIcons.checkCircle2,
                       title: 'Pronto per l\'invio',
-                      subtitle: 'Il rapportino è completo e pronto per essere inviato.',
+                      subtitle: 'Il rapporto di lavoro è completo e pronto per essere inviato.',
                     ),
                   if (_submitError != null) ...[
                     const SizedBox(height: 8),
@@ -548,7 +557,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   ],
                   const SizedBox(height: 12),
                   AppButton(
-                    label: _submitting ? 'Invio in corso...' : 'Invia rapportino',
+                    label: _submitting ? 'Invio in corso...' : 'Invia rapporto di lavoro',
                     icon: _submitting ? null : const Icon(LucideIcons.send),
                     onPressed: validation.isValid && !_submitting ? _onInvia : null,
                     isLoading: _submitting,

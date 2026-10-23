@@ -212,7 +212,7 @@ void main() {
       await _openRiepilogo(tester);
 
       // Invia button present but disabled (missing sigs)
-      expect(find.text('Invia rapportino'), findsOneWidget);
+      expect(find.text('Invia rapporto di lavoro'), findsOneWidget);
       // Validation messages visible
       expect(find.text('Da completare prima dell\'invio:'), findsOneWidget);
 
@@ -233,7 +233,7 @@ void main() {
       await _openRiepilogo(tester);
 
       // Tap "Invia rapportino" — should be no-op because validation fails
-      final inviaBtn = find.text('Invia rapportino');
+      final inviaBtn = find.text('Invia rapporto di lavoro');
       expect(inviaBtn, findsOneWidget);
       await tester.ensureVisible(inviaBtn);
       await tester.pumpAndSettle();
@@ -337,7 +337,7 @@ void main() {
       await _openRiepilogo(tester);
 
       // Invia button present + enabled
-      final inviaBtn = find.text('Invia rapportino');
+      final inviaBtn = find.text('Invia rapporto di lavoro');
       expect(inviaBtn, findsOneWidget);
       await tester.ensureVisible(inviaBtn);
       await tester.pumpAndSettle();

@@ -251,7 +251,7 @@ void main() {
       await tester.tap(find.text('Da server'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Questo rapportino non è più modificabile.'), findsOneWidget);
+      expect(find.text('Questo rapporto di lavoro non è più modificabile.'), findsOneWidget);
       expect(find.textContaining('serve la connessione'), findsNothing);
       expect(find.text('editor:srv-1'), findsNothing);
       expect(await db.select(db.reportStaffTable).get(), isEmpty);
@@ -383,7 +383,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(EmptyState), findsOneWidget);
-      expect(find.text('Nessun rapportino'), findsOneWidget);
+      expect(find.text('Nessun rapporto di lavoro'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -432,7 +432,7 @@ void main() {
       await tester.drag(find.text('Da eliminare'), const Offset(-500, 0));
       await tester.pumpAndSettle();
 
-      expect(find.text('Eliminare il rapportino?'), findsOneWidget);
+      expect(find.text('Eliminare il rapporto di lavoro?'), findsOneWidget);
       await tester.tap(find.text('Elimina'));
       await tester.pumpAndSettle();
 
@@ -635,7 +635,7 @@ void main() {
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rapportini'), findsOneWidget);
+      expect(find.text('Rapporti di lavoro'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

@@ -508,7 +508,7 @@ class _TicketDetailBody extends ConsumerWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: AppButton(
-                      label: 'Crea rapportino',
+                      label: 'Crea rapporto di lavoro',
                       onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
                     ),
                   ),
@@ -550,7 +550,7 @@ class _TicketDetailBody extends ConsumerWidget {
     }
     final id = await createLocalDraft(
       ref,
-      title: 'Rapportino — ${ticket.title}',
+      title: 'Rapporto di lavoro — ${ticket.title}',
       locationId: ticket.locationId,
       ticketId: ticket.id,
       customerId: ticket.customerId,
@@ -563,7 +563,11 @@ class _TicketDetailBody extends ConsumerWidget {
     );
     if (!context.mounted) return;
     if (id == null) {
-      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+      showAppToast(
+        context,
+        message: 'Accedi per creare un rapporto di lavoro.',
+        tone: ToastTone.warning,
+      );
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
@@ -877,19 +881,19 @@ class _ReportTab extends ConsumerWidget {
         offline: e is TicketDetailOfflineException,
         // Offline the tab reads the local mirror (O-8a/O-8b): it only lands here when none of the
         // ticket's reports has reached this phone yet — a download awaited, not a missing report.
-        offlineTitle: 'Rapportini non ancora sul telefono',
+        offlineTitle: 'Rapporti di lavoro non ancora sul telefono',
         offlineBody:
-            'I rapportini di questo ticket si sincronizzano quando '
+            'I rapporti di lavoro di questo ticket si sincronizzano quando '
             'torni online. Riprova più tardi.',
-        errorTitle: 'Impossibile caricare i rapportini',
+        errorTitle: 'Impossibile caricare i rapporti di lavoro',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),
       data: (reports) {
         if (reports.isEmpty) {
           return const _EmptyTab(
             icon: LucideIcons.fileText,
-            label: 'Nessun rapportino',
-            body: 'Non ci sono rapportini registrati per questo ticket.',
+            label: 'Nessun rapporto di lavoro',
+            body: 'Non ci sono rapporti di lavoro registrati per questo ticket.',
           );
         }
         return Padding(
@@ -904,7 +908,7 @@ class _ReportTab extends ConsumerWidget {
               final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(r.createdAt.toLocal());
               return ListRow(
                 leading: Icon(LucideIcons.fileText, size: 20, color: context.colors.inkMuted),
-                title: r.title.isNotEmpty ? r.title : 'Rapportino',
+                title: r.title.isNotEmpty ? r.title : 'Rapporto di lavoro',
                 subtitle: dateLabel,
                 meta: StatusPill(stato: r.statoLabel, small: true),
                 showDivider: r != reports.last,

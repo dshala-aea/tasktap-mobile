@@ -115,9 +115,9 @@ void main() {
       // _handleDraftUpdateForNavigation's toast-and-pop the instant it saw the persisted
       // submissionState == submitted, closing the sheet before the technician could read it.
       expect(find.byType(StepRiepilogo), findsOneWidget);
-      expect(find.text("L'ufficio ha respinto questo rapportino."), findsOneWidget);
-      expect(find.text('Rapportino inviato con successo.'), findsNothing);
-      expect(find.text('Invia rapportino'), findsNothing);
+      expect(find.text("L'ufficio ha respinto questo rapporto di lavoro."), findsOneWidget);
+      expect(find.text('Rapporto di lavoro inviato con successo.'), findsNothing);
+      expect(find.text('Invia rapporto di lavoro'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

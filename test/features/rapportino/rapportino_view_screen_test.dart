@@ -996,7 +996,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(EmptyState), findsOneWidget);
-      expect(find.text('Rapportino non trovato'), findsOneWidget);
+      expect(find.text('Rapporto di lavoro non trovato'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

@@ -91,7 +91,8 @@ Future<void> _toggleActive(BuildContext context, WidgetRef ref, MaterialiData ma
     context,
     title: deactivating ? 'Disattiva materiale' : 'Riattiva materiale',
     message: deactivating
-        ? 'Il materiale "${materiale.name}" non sarà più selezionabile nei nuovi rapportini o carichi/scarichi. Puoi riattivarlo in qualsiasi momento.'
+        ? 'Il materiale "${materiale.name}" non sarà più selezionabile nei nuovi '
+              'rapporti di lavoro o carichi/scarichi. Puoi riattivarlo in qualsiasi momento.'
         : 'Il materiale "${materiale.name}" tornerà selezionabile.',
     confirmLabel: deactivating ? 'Disattiva' : 'Riattiva',
     danger: deactivating,

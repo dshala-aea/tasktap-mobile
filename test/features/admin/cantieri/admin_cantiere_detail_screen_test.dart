@@ -379,7 +379,7 @@ void main() {
 
       expect(find.text('Nessuna ora registrata'), findsOneWidget);
       expect(find.text('Nessun intervento'), findsOneWidget);
-      expect(find.text('Nessun rapportino'), findsOneWidget);
+      expect(find.text('Nessun rapporto di lavoro'), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -569,7 +569,7 @@ void main() {
       await _seedCantiere(db);
       await _pumpScreen(tester, db: db, api: _FakeAdminApiClient());
 
-      expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('Crea rapporto di lavoro'), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -577,10 +577,10 @@ void main() {
       await _seedCantiere(db);
       await _pumpScreen(tester, db: db, api: _FakeAdminApiClient());
 
-      await tester.tap(find.text('Crea rapportino'));
+      await tester.tap(find.text('Crea rapporto di lavoro'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Accedi per creare un rapportino.'), findsOneWidget);
+      expect(find.text('Accedi per creare un rapporto di lavoro.'), findsOneWidget);
       // Nothing was created — createLocalDraft refuses before ever reaching the repository.
       expect(await db.select(db.draftReports).get(), isEmpty);
       await _teardown(tester);
