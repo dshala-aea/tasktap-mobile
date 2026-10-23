@@ -112,8 +112,12 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
     final description = skipNotes ? null : _blankToNull(_descriptionCtrl.text);
     final safetyNotes = skipNotes ? null : _blankToNull(_safetyNotesCtrl.text);
 
+    // Fetched once, outside the try/catch: `LocationService` never throws (see its own doc
+    // comment), and both the online call and the offline fallback need the same position —
+    // cantiere_timbra_screen.dart's `_handleEndCantiere` does exactly this.
+    final location = await ref.read(locationServiceProvider).getCurrentPosition();
+
     try {
-      final location = await ref.read(locationServiceProvider).getCurrentPosition();
       final client = ref.read(cantiereWorklogApiClientProvider);
       await client.endCantiere(
         EndCantiereRequest(
@@ -133,6 +137,13 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
               eventTime: DateTime.now().toUtc(),
               eventType: 'uscita',
               description: description,
+              // The same three fields the online `end` call sends. Dropping them here made an
+              // offline clock-out a poorer record than the same visit closed with signal: no
+              // safety note, no departure fix. They queue on the 'uscita' row and the batch
+              // upsert carries them (CantiereMobileSessionDto.departureLatitude/…).
+              safetyNotes: safetyNotes,
+              departureLatitude: location?.lat,
+              departureLongitude: location?.lng,
             );
         unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
         _onEndedSuccessfully(offline: true);

@@ -376,6 +376,17 @@ void main() {
             endTime: DateTime.utc(2026, 8, 16, 16),
             latitude: 45.4642,
             longitude: 9.19,
+            // The clock-out screen's own fields. Each must be a key the server declares, or an
+            // offline clock-out drops what was typed on leaving site.
+            departureLatitude: 45.4660,
+            departureLongitude: 9.1880,
+            safetyNotes: 'nessuna anomalia',
+            // The clock-in screen's own fields. Same rule: a key the server does not declare
+            // would be rejected, and an offline clock-in would silently lose them.
+            workOrderNumber: 'OL-2026-118',
+            equipmentUsed: 'piattaforma aerea',
+            teamSize: 3,
+            weatherConditions: 'pioggia leggera',
           ),
         ]),
       );

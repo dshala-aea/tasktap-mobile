@@ -36,10 +36,10 @@ import '../api/dio_client.dart';
 // module's own idempotent batch endpoint (CantiereWorkLogController.MobileSessions). Field names
 // match CantiereMobileSessionDto (backend) verbatim — see test/contract/openapi.snapshot.json's
 // CantiereMobileSessionDto schema, which is what request_body_contract_test.dart checks this
-// against. Deliberately narrower than [StartCantiereRequest]: the backend's batch DTO does not
-// (yet) carry workOrderNumber/equipmentUsed/teamSize/weatherConditions/safetyNotes, so those rich
-// fields only reach the server via the online start/end path; see cantiere_timbra_screen.dart's
-// online-first-with-local-fallback comment for how the two paths are reconciled.
+// against. It carries both screens' rich fields: the clock-out set (safety note, departure GPS)
+// and the clock-in set (work order, equipment, crew size, weather). The clock-in four are arrival
+// data the server writes only when the punch is created, so a queued close that arrives late never
+// puts back a value the office has since corrected.
 
 /// One cantiere punch as the device recorded it, ready for the batch upsert.
 class CantiereMobileSessionDto {
@@ -54,6 +54,13 @@ class CantiereMobileSessionDto {
     this.latitude,
     this.longitude,
     this.workLogType = 0, // 0 = Site (default)
+    this.departureLatitude,
+    this.departureLongitude,
+    this.safetyNotes,
+    this.workOrderNumber,
+    this.equipmentUsed,
+    this.teamSize,
+    this.weatherConditions,
   });
 
   final String clientId;
@@ -65,6 +72,19 @@ class CantiereMobileSessionDto {
   final DateTime? endTime; // UTC, null if active
   final double? latitude;
   final double? longitude;
+
+  /// Clock-out fields — the same ones [EndCantiereRequest] sends: where the phone was when the
+  /// technician left site, and what they wrote about safety. Null unless the punch is closed.
+  final double? departureLatitude;
+  final double? departureLongitude;
+  final String? safetyNotes;
+
+  /// Clock-in fields — the same ones [StartCantiereRequest] sends: what the technician recorded on
+  /// arrival. The server writes them when the punch is created and never on a later close.
+  final String? workOrderNumber;
+  final String? equipmentUsed;
+  final int? teamSize;
+  final String? weatherConditions;
 
   /// CantiereWorkLogTypeEnum: Site=0, Travel=1, Setup=2.
   final int workLogType;
@@ -80,6 +100,13 @@ class CantiereMobileSessionDto {
     if (latitude != null) 'latitude': latitude,
     if (longitude != null) 'longitude': longitude,
     'workLogType': workLogType,
+    if (departureLatitude != null) 'departureLatitude': departureLatitude,
+    if (departureLongitude != null) 'departureLongitude': departureLongitude,
+    if (safetyNotes != null) 'safetyNotes': safetyNotes,
+    if (workOrderNumber != null) 'workOrderNumber': workOrderNumber,
+    if (equipmentUsed != null) 'equipmentUsed': equipmentUsed,
+    if (teamSize != null) 'teamSize': teamSize,
+    if (weatherConditions != null) 'weatherConditions': weatherConditions,
   };
 }
 

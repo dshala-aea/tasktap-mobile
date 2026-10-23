@@ -33,10 +33,18 @@ const String cantiereReconciledOrphanMarker = 'reconciled_orphan';
 abstract interface class ICantiereSessionRepository {
   /// Persist one cantiere clock event ('ingresso' / 'uscita').
   ///
-  /// [cantiereId]/[customerId]/[ticketId]/[description] are the site context — meaningful only
-  /// on 'ingresso' (interval-opening); left null on 'uscita', which only needs a timestamp (see
-  /// cantiere_session_assembler.dart, which inherits the opener's context for the whole
-  /// interval).
+  /// [cantiereId]/[customerId]/[ticketId]/[description]/[latitude]/[longitude] are the site
+  /// context — meaningful only on 'ingresso' (interval-opening); left null on 'uscita', which
+  /// inherits the opener's context for the whole interval (see cantiere_session_assembler.dart).
+  ///
+  /// [safetyNotes]/[departureLatitude]/[departureLongitude] are the reverse: clock-out screen
+  /// fields, meaningful only on 'uscita'. [description] carries the clock-out screen's own note
+  /// on an 'uscita' row, and wins over the opener's when the interval is assembled — the online
+  /// `end` route overwrites the row's Description the same way.
+  ///
+  /// [workOrderNumber]/[equipmentUsed]/[teamSize]/[weatherConditions] are the clock-in screen's
+  /// rich fields, meaningful only on 'ingresso'. The server writes them when the punch is created
+  /// and never on a later close, so they are arrival data by definition.
   Future<void> addEvent({
     required String id,
     required DateTime eventTime,
@@ -47,6 +55,13 @@ abstract interface class ICantiereSessionRepository {
     String? description,
     double? latitude,
     double? longitude,
+    String? safetyNotes,
+    double? departureLatitude,
+    double? departureLongitude,
+    String? workOrderNumber,
+    String? equipmentUsed,
+    int? teamSize,
+    String? weatherConditions,
   });
 
   /// Stream of today's events in chronological order.
@@ -132,6 +147,13 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
     String? description,
     double? latitude,
     double? longitude,
+    String? safetyNotes,
+    double? departureLatitude,
+    double? departureLongitude,
+    String? workOrderNumber,
+    String? equipmentUsed,
+    int? teamSize,
+    String? weatherConditions,
   }) async {
     await _db
         .into(_db.cantierePunches)
@@ -146,6 +168,13 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
             description: Value(description),
             latitude: Value(latitude),
             longitude: Value(longitude),
+            safetyNotes: Value(safetyNotes),
+            departureLatitude: Value(departureLatitude),
+            departureLongitude: Value(departureLongitude),
+            workOrderNumber: Value(workOrderNumber),
+            equipmentUsed: Value(equipmentUsed),
+            teamSize: Value(teamSize),
+            weatherConditions: Value(weatherConditions),
           ),
         );
   }
@@ -238,6 +267,10 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
             endTime: i.endTime?.toUtc(),
             latitude: i.latitude,
             longitude: i.longitude,
+            workOrderNumber: i.workOrderNumber,
+            equipmentUsed: i.equipmentUsed,
+            teamSize: i.teamSize,
+            weatherConditions: i.weatherConditions,
           ),
     ];
   }

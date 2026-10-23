@@ -34,6 +34,13 @@ class _FakeRepo implements ICantiereSessionRepository {
     String? description,
     double? latitude,
     double? longitude,
+    String? safetyNotes,
+    double? departureLatitude,
+    double? departureLongitude,
+    String? workOrderNumber,
+    String? equipmentUsed,
+    int? teamSize,
+    String? weatherConditions,
   }) async {}
 
   @override
@@ -90,6 +97,9 @@ class _FakeRepo implements ICantiereSessionRepository {
       description: e.description,
       latitude: e.latitude,
       longitude: e.longitude,
+      safetyNotes: e.safetyNotes,
+      departureLatitude: e.departureLatitude,
+      departureLongitude: e.departureLongitude,
       notes: e.notes,
       isPendingSync: e.isPendingSync,
       syncError: message,
@@ -111,9 +121,20 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   final List<List<CantiereMobileSessionDto>> calls = [];
   bool shouldThrow = false;
 
+  /// Closes drained through the online `end` route — the orphan-close path. A normal pair must
+  /// never appear here: those belong to the batch.
+  final List<EndCantiereRequest> endedCalls = [];
+  Object? endErrorToThrow;
+
   /// When set, [upsertSessions] throws exactly this instead of [shouldThrow]'s generic exception —
   /// for the classification tests, which need a real server answer.
   Object? errorToThrow;
+
+  @override
+  Future<void> endCantiere([EndCantiereRequest? request]) async {
+    if (endErrorToThrow != null) throw endErrorToThrow!;
+    endedCalls.add(request ?? const EndCantiereRequest());
+  }
 
   @override
   Future<List<CantiereMobileSessionResult>> upsertSessions(
@@ -146,6 +167,14 @@ CantierePunche _cp(
   String? customerId,
   String? ticketId,
   String? notes,
+  String? description,
+  String? safetyNotes,
+  double? departureLatitude,
+  double? departureLongitude,
+  String? workOrderNumber,
+  String? equipmentUsed,
+  int? teamSize,
+  String? weatherConditions,
 }) => CantierePunche(
   id: id,
   eventType: type,
@@ -155,6 +184,14 @@ CantierePunche _cp(
   customerId: customerId,
   ticketId: ticketId,
   notes: notes,
+  description: description,
+  safetyNotes: safetyNotes,
+  departureLatitude: departureLatitude,
+  departureLongitude: departureLongitude,
+  workOrderNumber: workOrderNumber,
+  equipmentUsed: equipmentUsed,
+  teamSize: teamSize,
+  weatherConditions: weatherConditions,
 );
 
 void main() {
@@ -207,6 +244,168 @@ void main() {
       await svc.syncNow();
 
       expect(repo.markedSynced, containsAll(['id-1', 'id-2']));
+    });
+
+    /// The clock-out screen's fields must survive the queue. Sending the interval without them
+    /// makes an offline clock-out a poorer record than the same visit closed with signal, and the
+    /// safety note is the one field on that screen a compliance audit actually asks for.
+    test('the clock-out fields ride on the closing DTO', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+      final events = [
+        _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+        _cp(
+          'id-2',
+          'uscita',
+          t2,
+          safetyNotes: 'area recintata',
+          departureLatitude: 45.4660,
+          departureLongitude: 9.1880,
+        ),
+      ];
+      final repo = _FakeRepo(events);
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      final dto = api.calls[0][0];
+      expect(dto.endTime, t2);
+      expect(dto.safetyNotes, 'area recintata');
+      expect(dto.departureLatitude, 45.4660);
+      expect(dto.departureLongitude, 9.1880);
+    });
+
+    /// The clock-in half of the same rule: a technician who clocked in with no signal used to
+    /// arrive at the office with no work order, no equipment, no crew size and no weather — the
+    /// fields the job is priced from.
+    test('the clock-in fields ride on the opening DTO', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+      final events = [
+        _cp(
+          'id-1',
+          'ingresso',
+          t1,
+          cantiereId: 'cant-1',
+          customerId: 'cust-1',
+          workOrderNumber: 'OL-2026-118',
+          equipmentUsed: 'piattaforma aerea',
+          teamSize: 3,
+          weatherConditions: 'pioggia leggera',
+        ),
+        _cp('id-2', 'uscita', t2),
+      ];
+      final repo = _FakeRepo(events);
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      final dto = api.calls[0][0];
+      expect(dto.workOrderNumber, 'OL-2026-118');
+      expect(dto.equipmentUsed, 'piattaforma aerea');
+      expect(dto.teamSize, 3);
+      expect(dto.weatherConditions, 'pioggia leggera');
+      // ...and on the wire, where the server reads them.
+      final json = dto.toJson();
+      expect(json['workOrderNumber'], 'OL-2026-118');
+      expect(json['teamSize'], 3);
+    });
+
+    group('a close whose clock-in happened online', () {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+
+      /// Clocked in through the online `start` route (no local row), clocked out with no signal.
+      /// The batch cannot carry this: it matches on a clientId the server-created punch was never
+      /// given, so upserting would open a second, empty shift. The row used to stay pending
+      /// forever while the server kept the visit open.
+      test('is closed through the online end route, not the batch', () async {
+        final events = [
+          _cp(
+            'id-close',
+            'uscita',
+            t2,
+            description: 'finito',
+            safetyNotes: 'area recintata',
+            departureLatitude: 45.4660,
+            departureLongitude: 9.1880,
+          ),
+        ];
+        final repo = _FakeRepo(events);
+        final api = _FakeApiClient();
+        final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+        await svc.syncNow();
+
+        expect(api.calls, isEmpty, reason: 'the batch has no opener to pair this close with');
+        expect(api.endedCalls.length, 1);
+        final ended = api.endedCalls.single;
+        expect(ended.description, 'finito');
+        expect(ended.safetyNotes, 'area recintata');
+        expect(ended.departureLatitude, 45.4660);
+        expect(repo.markedSynced, contains('id-close'));
+        expect(repo.syncErrors['id-close'], isNull);
+      });
+
+      /// The server answering 404 means it has no open session left: the office closed it, or an
+      /// earlier attempt landed and only the reply was lost. Either way the visit is closed.
+      test('a 404 from the end route still counts as delivered', () async {
+        final api = _FakeApiClient()
+          ..endErrorToThrow = DioException(
+            requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
+            type: DioExceptionType.badResponse,
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
+              statusCode: 404,
+            ),
+          );
+        final repo = _FakeRepo([_cp('id-close', 'uscita', t2)]);
+        final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+        await svc.syncNow();
+
+        expect(repo.markedSynced, contains('id-close'));
+        expect(repo.syncErrors['id-close'], isNull);
+      });
+
+      /// A close the server refuses outright is a decision, not a delivery: held with a message so
+      /// the technician can act on it, exactly like a refused batch.
+      test('a permanent refusal is held with a message, not marked synced', () async {
+        final api = _FakeApiClient()
+          ..endErrorToThrow = DioException(
+            requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
+            type: DioExceptionType.badResponse,
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
+              statusCode: 400,
+              data: 'La timbratura è già stata corretta in ufficio.',
+            ),
+          );
+        final repo = _FakeRepo([_cp('id-close', 'uscita', t2)]);
+        final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+        await svc.syncNow();
+
+        expect(repo.markedSynced, isNot(contains('id-close')));
+        expect(repo.syncErrors['id-close'], isNotNull);
+      });
+
+      /// The normal shape must not drift onto the end route: a paired visit is one batch call.
+      test('a paired visit never calls the end route', () async {
+        final repo = _FakeRepo([
+          _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+          _cp('id-2', 'uscita', t2),
+        ]);
+        final api = _FakeApiClient();
+        final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+        await svc.syncNow();
+
+        expect(api.calls.length, 1);
+        expect(api.endedCalls, isEmpty);
+      });
     });
 
     test('active interval has null endTime in DTO', () async {
