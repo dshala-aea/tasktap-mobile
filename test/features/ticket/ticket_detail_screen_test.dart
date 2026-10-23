@@ -2130,15 +2130,48 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+    testWidgets('answers offline from the synced mirror', (tester) async {
+      await seedBase(db);
+      await db
+          .into(db.ticketHistory)
+          .insert(
+            TicketHistoryCompanion.insert(
+              id: 'h1',
+              ticketId: 'ticket-1',
+              fieldName: 'StatusId',
+              oldValue: const Value(null),
+              newValue: const Value('1'),
+              changedByUserId: 'u1',
+              changedAt: DateTime.utc(2026, 7, 1, 10),
+            ),
+          );
+
+      await pump(tester, isOnline: false);
+      await tapWideTab(tester, 'Storico');
+
+      // The mirror is the point of this slice: on site, with no signal, the trail of who moved
+      // this ticket is still readable — through the same translation as the online path.
+      expect(find.text('Stato'), findsOneWidget);
+      expect(find.text('— → Aperto'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('says the timeline was never received, not that nothing happened', (tester) async {
       await seedBase(db);
       await pump(tester, isOnline: false);
       await tapWideTab(tester, 'Storico');
 
-      expect(find.text('Storico non disponibile offline'), findsOneWidget);
-      // G3: the state says explicitly that history needs a connection — an empty history must
-      // never be mistaken for a ticket with no activity.
-      expect(find.text('Storico disponibile solo con connessione.'), findsOneWidget);
+      // G3: reaching the offline branch now means this device has never received the timeline —
+      // which must never be mistaken for a ticket with no activity.
+      expect(find.text('Storico non ancora disponibile'), findsOneWidget);
+      expect(
+        find.text(
+          'Nessuna copia dello storico su questo dispositivo. '
+          'Verrà scaricato alla prossima sincronizzazione.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Nessuna modifica registrata'), findsNothing);
       await resetAndDispose(tester);
     });
   });
