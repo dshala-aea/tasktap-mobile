@@ -445,6 +445,82 @@ void main() {
     });
   });
 
+  // The two lists that used to be live-only. Both entities are already mirrored (`db.tickets`
+  // carries `cantiereId`, `db.draft_reports` too), so offline the sections can answer from the
+  // device — but the sync payload is technician-scoped, so the answer is partial and must say so
+  // rather than let an empty or short list read as the cantiere's full truth.
+  group('Interventi / Rapportini offline (mirror fallback)', () {
+    testWidgets('offline, tickets come from the mirror and the list says it is partial', (
+      tester,
+    ) async {
+      await _seedCantiere(db);
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 'tic-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 10, 2),
+              title: 'Perdita dal collettore',
+              customerId: 'cus-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 0,
+              cantiereId: const Value('cant-1'),
+              numero: const Value('2026-00107'),
+            ),
+          );
+
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient(), isOnline: false);
+
+      expect(find.text('Perdita dal collettore'), findsOneWidget);
+      expect(find.textContaining('potrebbero mancare interventi'), findsOneWidget);
+      await _teardown(tester);
+    });
+
+    testWidgets('offline on a never-synced device, it says unavailable — not "nessun intervento"', (
+      tester,
+    ) async {
+      await _seedCantiere(db);
+      // No setLastSync: the mirror is empty because nothing was ever downloaded, which is not the
+      // same claim as "this cantiere has no tickets".
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient(), isOnline: false);
+
+      expect(find.text('Interventi non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun intervento'), findsNothing);
+      await _teardown(tester);
+    });
+
+    testWidgets('offline, reports come from the mirror with their stored stato', (tester) async {
+      await _seedCantiere(db);
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'rep-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 9, 30),
+              title: 'Sostituzione valvola',
+              insertedUserId: 'user-1',
+              locationId: 'loc-1',
+              cantiereId: const Value('cant-1'),
+              // Drift holds the enum's name, the API sends the ordinal — the mapping must land on
+              // the same label either way.
+              stato: const Value('Inviato'),
+            ),
+          );
+
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient(), isOnline: false);
+
+      expect(find.text('Sostituzione valvola'), findsOneWidget);
+      expect(find.text('INVIATO'), findsOneWidget);
+      expect(find.textContaining('potrebbero mancare rapportini'), findsOneWidget);
+      await _teardown(tester);
+    });
+  });
+
   // Feature audit module #13, Gap 6 (not the same as the module-#8 "Gap 6" group above — the
   // numbering restarts per module): mobile already syncs `Cantiere.commessaId` locally but showed
   // it nowhere in the UI.

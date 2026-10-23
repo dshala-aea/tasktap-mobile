@@ -1,6 +1,7 @@
 // dart format width=100
 import 'dart:async';
 
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +16,9 @@ import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/app_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../rapportino/create_draft.dart';
 import '../../ticket/ticket_providers.dart';
@@ -291,18 +294,103 @@ final adminCantiereRemoteDetailProvider = FutureProvider.autoDispose
       return api.fetchCantiereDetail(id);
     });
 
+/// Rows a cantiere section can show, and whether they came from the device.
+///
+/// The two are kept apart on purpose: the mirror only ever holds this technician's slice (sync is
+/// technician-scoped), so an offline list is a *partial* view of the cantiere and the section has
+/// to say so. Returning a bare list would let the screen state "Nessun intervento" for a cantiere
+/// whose other tickets simply have not been downloaded.
+class CantiereSectionRows {
+  const CantiereSectionRows(this.rows, {required this.fromMirror});
+
+  final List<Map<String, dynamic>> rows;
+  final bool fromMirror;
+}
+
 /// Interventi (tickets) raised on this cantiere.
+///
+/// Online the list is the server's. Offline — or when the call dies in transport — it answers
+/// from `db.tickets`, which already carries `cantiereId` (schema 12). A device that has never
+/// synced has nothing to answer with and says so via [TicketDetailOfflineException] rather than
+/// claiming the cantiere has no tickets.
 final adminCantiereTicketsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>((ref, id) async {
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchCantiereTickets(id);
+    .family<CantiereSectionRows, String>((ref, id) async {
+      Future<CantiereSectionRows> fromMirror() async {
+        final db = ref.watch(appDatabaseProvider);
+        final rows =
+            await (db.select(db.tickets)
+                  ..where((t) => t.cantiereId.equals(id))
+                  ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+                .get();
+        if (rows.isEmpty && await db.getLastSync() == null) {
+          throw const TicketDetailOfflineException();
+        }
+        return CantiereSectionRows([
+          for (final t in rows)
+            {'id': t.id, 'title': t.title, 'numero': t.numero, 'statusId': t.statusId},
+        ], fromMirror: true);
+      }
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          final rows = await ref.watch(adminApiClientProvider).fetchCantiereTickets(id);
+          return CantiereSectionRows(rows, fromMirror: false);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
     });
 
 /// Rapportini documenting work on this cantiere.
+///
+/// Same split as [adminCantiereTicketsProvider], answered from `db.draft_reports` (which sync
+/// fills with both drafts and submitted reports, `cantiereId` included). The mirror therefore
+/// holds this technician's reports, not the tenant's — hence [CantiereSectionRows.fromMirror].
 final adminCantiereReportsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>((ref, id) async {
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchReports(cantiereId: id);
+    .family<CantiereSectionRows, String>((ref, id) async {
+      // Drift stores the enum's own name (`ReportStatoEnum` string); the list below renders the
+      // ordinal the server's anonymous projection sends. Kept next to the mapping so the two
+      // shapes cannot drift apart silently.
+      const statoOrdinals = {
+        'Bozza': 0,
+        'Inviato': 1,
+        'Controllato': 2,
+        'Fatturato': 3,
+        'Respinto': 4,
+        'Annullato': 5,
+      };
+
+      Future<CantiereSectionRows> fromMirror() async {
+        final db = ref.watch(appDatabaseProvider);
+        final rows =
+            await (db.select(db.draftReports)
+                  ..where((r) => r.cantiereId.equals(id))
+                  ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
+                .get();
+        if (rows.isEmpty && await db.getLastSync() == null) {
+          throw const TicketDetailOfflineException();
+        }
+        return CantiereSectionRows([
+          for (final r in rows)
+            {
+              'id': r.id,
+              'title': r.title,
+              'stato': statoOrdinals[r.stato] ?? 0,
+              'createdAt': r.createdAt.toIso8601String(),
+            },
+        ], fromMirror: true);
+      }
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          final rows = await ref.watch(adminApiClientProvider).fetchReports(cantiereId: id);
+          return CantiereSectionRows(rows, fromMirror: false);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
     });
 
 /// Hours logged on this cantiere.
@@ -940,10 +1028,18 @@ class _TicketsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => AppSectionError(
-            onRetry: () => ref.invalidate(adminCantiereTicketsProvider(cantiereId)),
-          ),
-          data: (tickets) {
+          error: (e, _) => UnavailableState.forFetchError(
+            offline: e is TicketDetailOfflineException,
+            icon: LucideIcons.ticket,
+            offlineTitle: 'Interventi non disponibili offline',
+            offlineBody:
+                'Questo dispositivo non ha ancora scaricato gli interventi. Riprova quando '
+                'torni online.',
+            errorTitle: 'Impossibile caricare gli interventi',
+            errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+          ).paddedForTab(),
+          data: (data) {
+            final tickets = data.rows;
             if (tickets.isEmpty) {
               return const EmptyState(
                 icon: LucideIcons.ticket,
@@ -954,22 +1050,25 @@ class _TicketsSection extends ConsumerWidget {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: Column(
-                children: tickets.asMap().entries.map((entry) {
-                  final t = entry.value;
-                  final title = t['title'] as String? ?? 'Intervento';
-                  final numero = t['numero'] as String?;
-                  final statusId = t['statusId'] as int?;
-                  final statusLabel = statusMap[statusId] ?? 'Aperto';
-                  final id = t['id'] as String?;
-                  return ListRow(
-                    leading: const RowIconTile(icon: LucideIcons.ticket),
-                    title: title,
-                    subtitle: numero != null && numero.isNotEmpty ? numero : null,
-                    meta: StatusPill(stato: statusLabel, small: true),
-                    onTap: id == null ? null : () => context.push('/ticket/$id'),
-                    showDivider: entry.key < tickets.length - 1,
-                  );
-                }).toList(),
+                children: [
+                  if (data.fromMirror) const _MirrorNotice(what: 'interventi'),
+                  ...tickets.asMap().entries.map((entry) {
+                    final t = entry.value;
+                    final title = t['title'] as String? ?? 'Intervento';
+                    final numero = t['numero'] as String?;
+                    final statusId = t['statusId'] as int?;
+                    final statusLabel = statusMap[statusId] ?? 'Aperto';
+                    final id = t['id'] as String?;
+                    return ListRow(
+                      leading: const RowIconTile(icon: LucideIcons.ticket),
+                      title: title,
+                      subtitle: numero != null && numero.isNotEmpty ? numero : null,
+                      meta: StatusPill(stato: statusLabel, small: true),
+                      onTap: id == null ? null : () => context.push('/ticket/$id'),
+                      showDivider: entry.key < tickets.length - 1,
+                    );
+                  }),
+                ],
               ),
             );
           },
@@ -1013,10 +1112,18 @@ class _ReportsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => AppSectionError(
-            onRetry: () => ref.invalidate(adminCantiereReportsProvider(cantiereId)),
-          ),
-          data: (reports) {
+          error: (e, _) => UnavailableState.forFetchError(
+            offline: e is TicketDetailOfflineException,
+            icon: LucideIcons.fileText,
+            offlineTitle: 'Rapportini non disponibili offline',
+            offlineBody:
+                'Questo dispositivo non ha ancora scaricato i rapportini. Riprova quando '
+                'torni online.',
+            errorTitle: 'Impossibile caricare i rapportini',
+            errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+          ).paddedForTab(),
+          data: (data) {
+            final reports = data.rows;
             if (reports.isEmpty) {
               return const EmptyState(
                 icon: LucideIcons.fileText,
@@ -1027,31 +1134,68 @@ class _ReportsSection extends ConsumerWidget {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: Column(
-                children: reports.asMap().entries.map((entry) {
-                  final r = entry.value;
-                  final title = r['title'] as String? ?? 'Rapportino';
-                  final stato = r['stato'];
-                  final statoLabel =
-                      _statoLabels[stato is int ? stato : int.tryParse('$stato')] ?? 'Bozza';
-                  final createdAt = DateTime.tryParse(r['createdAt'] as String? ?? '');
-                  final dateLabel = createdAt != null
-                      ? DateFormat('dd/MM/yyyy', 'it').format(createdAt.toLocal())
-                      : null;
-                  final id = r['id'] as String?;
-                  return ListRow(
-                    leading: const RowIconTile(icon: LucideIcons.fileText),
-                    title: title,
-                    subtitle: dateLabel,
-                    meta: StatusPill(stato: statoLabel, small: true),
-                    onTap: id == null ? null : () => context.push('/altro/rapportini/view/$id'),
-                    showDivider: entry.key < reports.length - 1,
-                  );
-                }).toList(),
+                children: [
+                  if (data.fromMirror) const _MirrorNotice(what: 'rapportini'),
+                  ...reports.asMap().entries.map((entry) {
+                    final r = entry.value;
+                    final title = r['title'] as String? ?? 'Rapportino';
+                    final stato = r['stato'];
+                    final statoLabel =
+                        _statoLabels[stato is int ? stato : int.tryParse('$stato')] ?? 'Bozza';
+                    final createdAt = DateTime.tryParse(r['createdAt'] as String? ?? '');
+                    final dateLabel = createdAt != null
+                        ? DateFormat('dd/MM/yyyy', 'it').format(createdAt.toLocal())
+                        : null;
+                    final id = r['id'] as String?;
+                    return ListRow(
+                      leading: const RowIconTile(icon: LucideIcons.fileText),
+                      title: title,
+                      subtitle: dateLabel,
+                      meta: StatusPill(stato: statoLabel, small: true),
+                      onTap: id == null ? null : () => context.push('/altro/rapportini/view/$id'),
+                      showDivider: entry.key < reports.length - 1,
+                    );
+                  }),
+                ],
               ),
             );
           },
         ),
       ],
+    );
+  }
+}
+
+/// Says, above a list the device answered from its own mirror, that the list is what this phone
+/// happens to hold — never the cantiere's full population.
+///
+/// The sync payload is technician-scoped, so an office user opening a cantiere's tickets offline
+/// sees only the ones their own sync carried. Without this line the absence of a colleague's
+/// ticket looks like the cantiere having no such ticket at all, which is the one claim a partial
+/// mirror cannot make.
+class _MirrorNotice extends StatelessWidget {
+  const _MirrorNotice({required this.what});
+
+  final String what;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.wifiOff, size: 14, color: c.inkMuted),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Dati salvati sul dispositivo: potrebbero mancare $what non ancora scaricati.',
+              style: TextStyle(fontSize: 12, color: c.inkMuted, height: 1.3),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
