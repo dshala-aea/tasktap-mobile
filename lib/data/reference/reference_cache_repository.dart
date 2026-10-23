@@ -193,11 +193,18 @@ class ReferenceCacheRepository {
   // There is deliberately no pruneAgents: an agent absent from one payload may still be referenced
   // by a ticket already on this device, and deleting it would break that ticket.
 
-  Future<List<Contract>> contractsForCustomer(String customerId) =>
-      (_db.select(_db.contracts)
-            ..where((c) => c.customerId.equals(customerId) & c.isActive.equals(true))
-            ..orderBy([(c) => OrderingTerm.asc(c.name)]))
-          .get();
+  /// [includeInactive] is for the customer screen, which lists a customer's contracts as a record
+  /// and marks a deactivated one "Inattivo" rather than hiding it. The pickers that answer "which
+  /// contract is this ticket tied to" keep the default: an inactive contract must not be selectable.
+  Future<List<Contract>> contractsForCustomer(String customerId, {bool includeInactive = false}) {
+    final query = _db.select(_db.contracts)
+      ..where((c) {
+        final byCustomer = c.customerId.equals(customerId);
+        return includeInactive ? byCustomer : byCustomer & c.isActive.equals(true);
+      })
+      ..orderBy([(c) => OrderingTerm.asc(c.name)]);
+    return query.get();
+  }
 
   Future<List<CommesseData>> commesseForCustomer(String customerId) =>
       (_db.select(_db.commesse)
@@ -205,11 +212,20 @@ class ReferenceCacheRepository {
             ..orderBy([(c) => OrderingTerm.asc(c.codice)]))
           .get();
 
-  Future<List<ProdottiAssistenzaData>> prodottiForCustomer(String customerId) =>
-      (_db.select(_db.prodottiAssistenza)
-            ..where((p) => p.customerId.equals(customerId) & p.isActive.equals(true))
-            ..orderBy([(p) => OrderingTerm.asc(p.name)]))
-          .get();
+  /// Same split as [contractsForCustomer]: the customer screen records every asset the customer
+  /// has, while the pickers that attach an asset to a ticket offer only the live ones.
+  Future<List<ProdottiAssistenzaData>> prodottiForCustomer(
+    String customerId, {
+    bool includeInactive = false,
+  }) {
+    final query = _db.select(_db.prodottiAssistenza)
+      ..where((p) {
+        final byCustomer = p.customerId.equals(customerId);
+        return includeInactive ? byCustomer : byCustomer & p.isActive.equals(true);
+      })
+      ..orderBy([(p) => OrderingTerm.asc(p.name)]);
+    return query.get();
+  }
 
   Future<List<Agent>> activeAgents() =>
       (_db.select(_db.agents)

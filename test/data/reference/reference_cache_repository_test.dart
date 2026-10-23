@@ -105,4 +105,44 @@ void main() {
 
     expect((await repo.contractsForCustomer('cu1')).map((r) => r.id), ['c1']);
   });
+
+  // The customer screen records what the customer has, deactivated rows included (it prints them
+  // as "Inattivo"); the pickers that attach a ticket to a contract must not offer a dead one. One
+  // reader, two answers, chosen by the caller.
+  test('includeInactive records a deactivated contract too, still in name order', () async {
+    await repo.upsertContracts([
+      contract('c1', 'cu1', name: 'Zeta'),
+      contract('c2', 'cu1', name: 'Alfa'),
+      contract('c3', 'cu1', name: 'Cessato', active: false),
+      contract('c4', 'cu2', name: 'Altro cliente'),
+    ]);
+
+    final rows = await repo.contractsForCustomer('cu1', includeInactive: true);
+
+    expect(rows.map((r) => r.name), ['Alfa', 'Cessato', 'Zeta']);
+    expect(rows.firstWhere((r) => r.id == 'c3').isActive, isFalse);
+  });
+
+  test('prodottiForCustomer hides a deactivated asset unless asked for it', () async {
+    ProdottoAssistenzaSyncDto prodotto(String id, {required bool active}) =>
+        ProdottoAssistenzaSyncDto(
+          id: id,
+          tenantId: 't',
+          createdAt: DateTime.now(),
+          name: id,
+          customerId: 'cu1',
+          locationId: 'l1',
+          isActive: active,
+        );
+    await repo.upsertProdottiAssistenza([
+      prodotto('p1', active: true),
+      prodotto('p2', active: false),
+    ]);
+
+    expect((await repo.prodottiForCustomer('cu1')).map((p) => p.id), ['p1']);
+    expect(
+      (await repo.prodottiForCustomer('cu1', includeInactive: true)).map((p) => p.id),
+      ['p1', 'p2'],
+    );
+  });
 }

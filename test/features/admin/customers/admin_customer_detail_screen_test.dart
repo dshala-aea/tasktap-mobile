@@ -2,8 +2,8 @@
 //
 // Gaps 3/7/8 of the feature audit: the customer detail screen had no Sedi, Contratti, or
 // Prodotti assistenza sections at all. Sedi and Referenti read the local Drift mirror (locations
-// and the customer's contacts are both synced now); Contratti/Prodotti have no local mirror and
-// are fetched live, server-filtered by customerId.
+// and the customer's contacts are both synced now); Contratti/Prodotti prefer the live answer and
+// fall back to the mirror — including offline, where the mirror is the whole answer.
 //
 // CRITICAL: every test that pumps this screen (it watches several Drift streams) MUST end with
 // the `teardown` helper below — mirrors the same documented convention in
@@ -109,6 +109,51 @@ void main() {
             name: name,
             role: const Value('Titolare'),
             phone: const Value('3331234567'),
+          ),
+        );
+  }
+
+  /// Contracts and assets as the sync would have left them on the device.
+  Future<void> seedContract(
+    String id, {
+    required String customerId,
+    required String name,
+    bool active = true,
+  }) async {
+    await db
+        .into(db.contracts)
+        .insert(
+          ContractsCompanion.insert(
+            id: id,
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            name: name,
+            customerId: customerId,
+            startDate: DateTime.utc(2026, 1, 1),
+            isActive: Value(active),
+          ),
+        );
+  }
+
+  Future<void> seedAsset(
+    String id, {
+    required String customerId,
+    required String name,
+    String? serial,
+    bool active = true,
+  }) async {
+    await db
+        .into(db.prodottiAssistenza)
+        .insert(
+          ProdottiAssistenzaCompanion.insert(
+            id: id,
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            name: name,
+            customerId: customerId,
+            locationId: 'loc-1',
+            isActive: Value(active),
+            serialNumber: Value(serial),
           ),
         );
   }
@@ -316,6 +361,74 @@ void main() {
       await pumpScreen(tester);
 
       expect(find.text('Nessun asset'), findsOneWidget);
+
+      await teardown(tester);
+    });
+  });
+
+  // Both sections used to be a bare live call, so a technician standing in front of the customer
+  // saw an error card where the contract list belongs — even though the rows were mirrored all
+  // along. Availability from the mirror, freshness from the API.
+  group('Contratti and Asset with no signal', () {
+    testWidgets('offline renders what the mirror holds, and touches no network', (tester) async {
+      await seedCustomer('cust-1');
+      await seedContract('contr-1', customerId: 'cust-1', name: 'Manutenzione annuale');
+      await seedAsset('prod-1', customerId: 'cust-1', name: 'Caldaia condominio', serial: 'SN-42');
+
+      await pumpScreen(tester, online: false);
+
+      expect(find.text('Manutenzione annuale'), findsOneWidget);
+      expect(find.text('Caldaia condominio'), findsOneWidget);
+      expect(find.text('SN-42'), findsOneWidget);
+      verifyNever(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/contracts',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      );
+      verifyNever(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      );
+
+      await teardown(tester);
+    });
+
+    testWidgets('a failed live call falls back to the mirror instead of the error card', (
+      tester,
+    ) async {
+      await seedCustomer('cust-1');
+      await seedContract('contr-1', customerId: 'cust-1', name: 'Manutenzione annuale');
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/contracts',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            throw DioException(requestOptions: RequestOptions(path: '/api/contracts')),
+      );
+
+      await pumpScreen(tester);
+
+      expect(find.text('Manutenzione annuale'), findsOneWidget);
+
+      await teardown(tester);
+    });
+
+    // The office deactivates a contract rather than deleting it, and this section is the record
+    // of what the customer has — so the row stays, marked. The pickers that attach a ticket to a
+    // contract still hide it: they ask the mirror for active rows only.
+    testWidgets('a deactivated contract is recorded, not hidden', (tester) async {
+      await seedCustomer('cust-1');
+      await seedContract('contr-1', customerId: 'cust-1', name: 'Contratto cessato', active: false);
+
+      await pumpScreen(tester, online: false);
+
+      expect(find.text('Contratto cessato'), findsOneWidget);
+      expect(find.text('Inattivo'), findsOneWidget);
 
       await teardown(tester);
     });

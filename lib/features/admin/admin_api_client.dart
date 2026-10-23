@@ -1135,11 +1135,10 @@ class AdminApiClient {
   }
 
   /// Live contract detail — `GET /api/contracts/{id}` (`ContractsController.GetById`). Feature
-  /// audit module #11, Gap D: a technician viewing a ticket/cantiere tied to a contract has no
-  /// local Drift mirror to read it from (contracts, like Contratti's other sub-resources, are
-  /// never synced to the device — see `fetchContracts`'s own doc comment), so this fetches the
-  /// single contract live the same way `fetchCantiereDetail`/`fetchSquadraDetail` do for their
-  /// entities.
+  /// audit module #11, Gap D. Contracts *are* mirrored now
+  /// (`ReferenceCacheRepository.contractsForCustomer`), but the mirror carries only the columns the
+  /// sync payload sends — no `price`, no `condizioni`, no frequency — so this single-row fetch is
+  /// what fills a detail screen the list could not.
   Future<Map<String, dynamic>?> fetchContractById(String id) async {
     final res = await _dio.get<Map<String, dynamic>>('/api/contracts/$id');
     return res.data;

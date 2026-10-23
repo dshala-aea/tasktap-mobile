@@ -12,6 +12,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/clienti/cliente_overview_api_client.dart';
 import '../../../data/clienti/customer_contact_api_client.dart';
 import '../../../data/local/app_database.dart' show Customer, CustomerContactRow;
+import '../../../data/reference/reference_cache_repository.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../clienti/clienti_providers.dart';
@@ -98,11 +99,11 @@ class _CustomerDetailBody extends ConsumerWidget {
 
   /// Pull-to-refresh: sync first, then re-request the sections that are fetched live.
   ///
-  /// The customer, its sedi, its ticket history and its contacts come from the synced mirror, which
-  /// [refreshWithFeedback] already covers. The overview, contracts and prodotti have no Drift copy —
-  /// they are autoDispose providers that call the API once and then sit on that answer — so a sync
-  /// alone leaves them exactly as stale as they were, and invalidating them is the only thing that
-  /// makes the pull mean something for those three sections.
+  /// The customer, its sedi, its ticket history, its contacts, its contracts and its assets all
+  /// come from the synced mirror, which [refreshWithFeedback] already covers — but contracts and
+  /// assets still *prefer* the live answer while online, so invalidating them is what makes the
+  /// pull mean something there too. The overview has no Drift copy at all: it is an autoDispose
+  /// provider that calls the API once and sits on that answer.
   Future<void> _refresh(BuildContext context, WidgetRef ref) async {
     await refreshWithFeedback(context, ref);
     if (!context.mounted) return;
@@ -502,19 +503,53 @@ class _SediSection extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Contratti (Gap 7) — no local Drift mirror (like the cantiere's live-fetched sub-resources), so
-// this reads live via `AdminApiClient.fetchContracts(customerId: ...)`, server-side filtered.
-// Read-only list is the priority per the audit; "+" reuses the existing global create form
-// (`admin_contract_form_screen.dart`) rather than teaching it a pre-selected customer — cheap to
-// link, not cheap to also thread a new constructor param through a form that already resolves its
-// customer from a dropdown.
+// Contratti (Gap 7) — availability from the Drift mirror, freshness from the API.
+//
+// Offline the mirrored rows answer immediately; online the live answer wins (it is also the only
+// source that carries `price`, which the sync payload has no column for), and only its failure
+// falls back. Before this the section was a bare live call, so a technician standing in front of
+// the customer saw an error card where the contract list belongs.
+//
+// The mirror rows are mapped into the API's own JSON shape, so the section below — and the detail
+// screen it pushes via `extra` — never learn there are two sources.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Contracts for [customerId] — `GET /api/contracts?customerId=`.
+String? _iso(DateTime? value) => value?.toUtc().toIso8601String();
+
+/// Contracts for [customerId] — `GET /api/contracts?customerId=`, with the mirror behind it.
 final adminCustomerContractsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchContracts(customerId: customerId);
+      Future<List<Map<String, dynamic>>> mirrored() async {
+        // Inactive contracts included: the office's own list records them as "Inattivo", and the
+        // mirror is a record of what the customer has, not a picker.
+        final rows = await ref
+            .read(referenceCacheProvider)
+            .contractsForCustomer(customerId, includeInactive: true);
+        return [
+          for (final c in rows)
+            {
+              'id': c.id,
+              'name': c.name,
+              'isActive': c.isActive,
+              'numero': c.numero,
+              'codice': c.codice,
+              'tipo': c.tipo,
+              'externalId': c.externalId,
+              'startDate': _iso(c.startDate),
+              'endDate': _iso(c.endDate),
+            },
+        ];
+      }
+
+      // Availability: offline, the mirror answers at once — no call, no waiting.
+      if (!ref.watch(isOnlineProvider)) return mirrored();
+
+      try {
+        return await ref.watch(adminApiClientProvider).fetchContracts(customerId: customerId);
+      } catch (e) {
+        debugPrint('adminCustomerContracts: live fetch failed, using the mirror ($e)');
+        return mirrored();
+      }
     });
 
 class _ContrattiSection extends ConsumerWidget {
@@ -579,15 +614,44 @@ class _ContrattiSection extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Prodotti assistenza (Gap 8) — same treatment as Contratti: no Drift mirror, live-fetched and
-// server-filtered by customerId, read-only priority with a cheap "+" to the existing global form.
+// Prodotti assistenza (Gap 8) — same treatment as Contratti: the mirror answers offline, the API
+// stays authoritative online and on failure. Read-only list; the "+" still goes to the existing
+// global form.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Prodotti assistenza for [customerId] — `GET /api/prodottoassistenza?customerId=`.
+/// Prodotti assistenza for [customerId] — `GET /api/prodottoassistenza?customerId=`, with the
+/// mirror behind it.
 final adminCustomerProdottiProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchProdottiAssistenza(customerId: customerId);
+      Future<List<Map<String, dynamic>>> mirrored() async {
+        final rows = await ref
+            .read(referenceCacheProvider)
+            .prodottiForCustomer(customerId, includeInactive: true);
+        return [
+          for (final p in rows)
+            {
+              'id': p.id,
+              'name': p.name,
+              'isActive': p.isActive,
+              'codice': p.codice,
+              'serialNumber': p.serialNumber,
+              'categoria': p.categoria,
+              'marchio': p.marchio,
+              'externalId': p.externalId,
+            },
+        ];
+      }
+
+      if (!ref.watch(isOnlineProvider)) return mirrored();
+
+      try {
+        return await ref
+            .watch(adminApiClientProvider)
+            .fetchProdottiAssistenza(customerId: customerId);
+      } catch (e) {
+        debugPrint('adminCustomerProdotti: live fetch failed, using the mirror ($e)');
+        return mirrored();
+      }
     });
 
 class _ProdottiSection extends ConsumerWidget {
