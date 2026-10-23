@@ -10,6 +10,7 @@ import '../../core/notifications/notification_service.dart';
 import '../../core/router/app_router.dart';
 import '../../core/time/last_sync_label.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/sync/sync_service.dart' show lastSyncProvider;
 import '../../presentation/providers/auth_providers.dart';
 import 'biometric_setup.dart';
 import 'impostazioni_provider.dart';
@@ -172,14 +173,16 @@ class ImpostazioniScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
-                  // Same fix as "Tema scuro" below and "Autenticazione biometrica" in Account:
-                  // persisted, read nowhere. Now drives HomeShell's automatic background sync
-                  // (60s foreground poll + resume sync) via backgroundSyncPreferenceProvider,
-                  // bound in main.dart.
+                  // Bound in main.dart to offlineModeProvider. What it gates changed with owner
+                  // decision D7: it no longer stops background sync (freshness must never be
+                  // switchable off — a technician with the toggle on still gets current data the
+                  // moment the phone has signal), it only stops the speculative download of
+                  // attachments nobody has opened yet. The subtitle says what it now does; the
+                  // old one promised a behaviour that is deliberately gone.
                   _ToggleRow(
                     icon: LucideIcons.wifiOff,
                     title: 'Modalità offline',
-                    subtitle: 'Sincronizza dati in background',
+                    subtitle: 'Risparmia dati: nessun download anticipato',
                     value: settings.syncOffline,
                     onChanged: (_) => notifier.toggle(key: 'syncOffline'),
                   ),

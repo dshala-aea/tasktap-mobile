@@ -1,11 +1,12 @@
 // dart format width=100
 // WorkLogLiveRefresh: the no-push safety net around the dashboard and the timbra screen. Refreshes
-// on every appearance and on app resume, and polls every 15s ONLY while visible, foregrounded and
-// the "sync in background" preference allows it.
+// on every appearance and on app resume, and polls every 15s while visible and foregrounded —
+// including with Impostazioni → "Modalità offline" on (owner decision D7: that setting gates
+// speculative downloads, never freshness).
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart' show backgroundSyncPreferenceProvider;
+import 'package:tasktap_mobile/data/sync/sync_service.dart' show offlineModeProvider;
 import 'package:tasktap_mobile/data/timbratura/work_log_refresh_coordinator.dart';
 import 'package:tasktap_mobile/features/timbra/work_log_live_refresh.dart';
 
@@ -17,10 +18,10 @@ class _Fake extends WorkLogRefreshCoordinator {
   Future<void> refreshNow({bool sync = true}) async => immediate++;
 }
 
-Widget _host(_Fake fake, {bool background = true, bool visible = true}) => ProviderScope(
+Widget _host(_Fake fake, {bool offlineMode = false, bool visible = true}) => ProviderScope(
   overrides: [
     workLogRefreshCoordinatorProvider.overrideWithValue(fake),
-    backgroundSyncPreferenceProvider.overrideWithValue(background),
+    offlineModeProvider.overrideWithValue(offlineMode),
   ],
   child: MaterialApp(
     home: TickerMode(
@@ -47,12 +48,17 @@ void main() {
     expect(fake.immediate, 3);
   });
 
-  testWidgets('does not poll when background sync is off (still refreshes on appear)', (tester) async {
+  // D7: freshness is not a background convenience. A technician who switched "Modalità offline"
+  // on is asking the app to stop working around the network, not asking to be shown a stale timer
+  // while the phone has signal.
+  testWidgets('still polls with offline mode on', (tester) async {
     final fake = _Fake();
-    await tester.pumpWidget(_host(fake, background: false));
+    await tester.pumpWidget(_host(fake, offlineMode: true));
     await tester.pump();
-    await tester.pump(const Duration(seconds: 45));
-    expect(fake.immediate, 1);
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pump(const Duration(seconds: 15));
+    expect(fake.immediate, 4, reason: 'appear + three 15s ticks');
   });
 
   testWidgets('stops polling when the app is backgrounded, refreshes at once on resume', (tester) async {

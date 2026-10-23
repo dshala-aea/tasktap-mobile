@@ -27,10 +27,15 @@ final materialiCatalogProvider =
 /// offline" would have sent them to the phone instead. So this reads through, and the screen says
 /// so when it cannot.
 ///
+/// It watches [isOnlineProvider] — not for the value, but because that watch is what brings the
+/// list back on its own. Without it the provider kept its failure from the offline moment until
+/// the technician pulled to refresh, on a screen that was by then perfectly connected.
+///
 /// Autodisposed and family-keyed on the search term so switching filters does not hold a stale
 /// page alive behind the new one.
 final giacenzeProvider = FutureProvider.autoDispose
     .family<PagedResult<GiacenzaDto>, GiacenzeQuery>((ref, query) async {
+      if (!ref.watch(isOnlineProvider)) throw const MagazzinoOfflineException();
       final client = ref.watch(magazzinoApiClientProvider);
       return client.getGiacenze(
         q: query.q,
@@ -65,9 +70,11 @@ class GiacenzeQuery {
   int get hashCode => Object.hash(q, soloSottoScorta, pageSize);
 }
 
-/// Recent stock movements, most recent first. Same online-only reasoning as [giacenzeProvider].
+/// Recent stock movements, most recent first. Same online-only reasoning — and the same
+/// reconnect watch — as [giacenzeProvider].
 final movimentiProvider = FutureProvider.autoDispose<PagedResult<MovimentoDto>>(
   (ref) async {
+    if (!ref.watch(isOnlineProvider)) throw const MagazzinoOfflineException();
     final client = ref.watch(magazzinoApiClientProvider);
     return client.getMovimenti(pageSize: 30);
   },
@@ -148,6 +155,19 @@ final magazziniProvider = FutureProvider.autoDispose<List<MagazzinoDto>>((
   }
   return fromMirror();
 });
+
+/// Stock and movement reads refused locally because there is no backend to read them from.
+///
+/// Thrown before the request so an offline device does not queue a doomed call and report it as a
+/// transport error: the screen's own copy already says quantities are online-only, and this keeps
+/// the reason honest for anything that logs it. The list comes back by itself when
+/// [isOnlineProvider] flips — the providers watch it.
+class MagazzinoOfflineException implements Exception {
+  const MagazzinoOfflineException();
+
+  @override
+  String toString() => 'Magazzino offline: giacenze e movimenti si leggono solo online.';
+}
 
 /// The warehouses live on the server but this device has never downloaded them.
 ///

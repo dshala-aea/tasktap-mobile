@@ -57,4 +57,70 @@ void main() {
       );
     });
   });
+
+  // Same answer, said shorter: the offline banner is one status strip, not a settings row.
+  group('formatLastSyncCompact', () {
+    test('never synced reads "mai"', () {
+      expect(formatLastSyncCompact(null, now: now), 'mai');
+    });
+
+    test('today names the time', () {
+      expect(
+        formatLastSyncCompact(DateTime(2026, 10, 21, 14, 32), now: now),
+        'oggi 14:32',
+      );
+    });
+
+    test('yesterday names the time', () {
+      expect(
+        formatLastSyncCompact(DateTime(2026, 10, 20, 9, 10), now: now),
+        'ieri 09:10',
+      );
+    });
+
+    test('two to six days ago is a day count', () {
+      expect(
+        formatLastSyncCompact(DateTime(2026, 10, 18, 9, 10), now: now),
+        '3 gg fa',
+      );
+    });
+
+    test('a week or more is the date itself', () {
+      expect(
+        formatLastSyncCompact(DateTime(2026, 10, 12, 9, 10), now: now),
+        '12/10/26',
+      );
+    });
+
+    test('the day count stops at exactly seven days', () {
+      expect(
+        formatLastSyncCompact(DateTime(2026, 10, 15, 9, 10), now: now),
+        '6 gg fa',
+      );
+      expect(
+        formatLastSyncCompact(DateTime(2026, 10, 14, 9, 10), now: now),
+        '14/10/26',
+      );
+    });
+
+    test('names the same day as the long form', () {
+      // The compact form must never disagree with the settings row about the answer, only about
+      // how much room it takes to say it. The clock time is the part both forms share on the two
+      // days that name the day itself.
+      // DateTime has no const constructor, so this map cannot be const.
+      final cases = <String, (DateTime, String?)>{
+        'oggi 14:32': (DateTime(2026, 10, 21, 14, 32), '14:32'),
+        'ieri 09:10': (DateTime(2026, 10, 20, 9, 10), '09:10'),
+        '3 gg fa': (DateTime(2026, 10, 18, 9, 10), null),
+        '12/10/26': (DateTime(2026, 10, 12, 9, 10), null),
+      };
+      for (final entry in cases.entries) {
+        final (at, clock) = entry.value;
+        expect(formatLastSyncCompact(at, now: now), entry.key);
+        if (clock != null) {
+          expect(formatLastSyncLabel(at, now: now), contains(clock));
+        }
+      }
+    });
+  });
 }

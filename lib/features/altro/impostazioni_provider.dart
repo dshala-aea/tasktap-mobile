@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/notifications/notification_service.dart';
 import '../../data/settings/notification_settings_api_client.dart';
-import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../domain/auth/i_auth_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
 
@@ -422,11 +421,6 @@ final impostazioniProvider =
       ),
     );
 
-/// When this device last brought its mirror up to date — the cursor `sync_meta` holds.
-///
-/// A stream rather than a one-shot read: Impostazioni can stay open across a background sync, and
-/// a value that only refreshed on rebuild would keep claiming the data is older than it is.
-/// Null means no successful sync has happened on this device yet.
-final lastSyncProvider = StreamProvider.autoDispose<DateTime?>((ref) {
-  return ref.watch(appDatabaseProvider).watchLastSync();
-});
+// `lastSyncProvider` used to live here. It moved to data/sync/sync_service.dart, next to
+// `appDatabaseProvider`, because the offline banner reads it too and a core widget must not import
+// a feature (same layering rule as `gpsPreferenceProvider` and `offlineModeProvider`).

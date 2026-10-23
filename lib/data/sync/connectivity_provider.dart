@@ -7,40 +7,106 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 // ConnectivityProvider
 //
-// Exposes the current online/offline status via Riverpod.
-// Detects the offline→online transition and fires a callback so the
-// SubmissionQueue can be triggered automatically.
+// Exposes "the backend is reachable" via Riverpod — NOT "an interface is up". The interface is
+// only the trigger; the answer comes from [ReachabilityProbe], because a captive portal, a Wi-Fi
+// whose upstream is down and a hotel network nobody paid for all look like a working connection to
+// `connectivity_plus`, and every freshness and offline-fallback decision in the app hangs off this
+// one bool.
+//
+// Detects the offline→online transition and fires a callback so the SubmissionQueue can be
+// triggered automatically.
 // ══════════════════════════════════════════════════════════════════════════════
+
+import 'reachability.dart' show reachabilityProbeProvider;
 
 /// True when the device has at least one active non-none connectivity type.
 bool _isOnline(List<ConnectivityResult> results) {
   return results.any((r) => r != ConnectivityResult.none);
 }
 
-/// A StreamNotifier that emits [true] when online, [false] when offline.
+/// Emits [true] when the backend answers, [false] when it does not.
+///
+/// The radio is the trigger, not the verdict: every interface change re-asks the probe, and while
+/// the interface is up but the backend does not answer, the probe is retried on a timer so the app
+/// comes back online on its own once the portal clears or the upstream recovers — nobody should
+/// have to toggle Wi-Fi to make the app notice.
 class ConnectivityNotifier extends AsyncNotifier<bool> {
   StreamSubscription<List<ConnectivityResult>>? _sub;
+  Timer? _retry;
+  bool _interfaceUp = false;
+  bool _disposed = false;
+
+  /// The last verdict handed to listeners — see [_publish] for why this is not read from `state`.
+  bool _lastPublished = false;
+
+  /// Bumped for every evaluation so a slow probe that lands after a newer one cannot publish a
+  /// stale verdict.
+  int _generation = 0;
+
+  static const retryInterval = Duration(seconds: 20);
 
   @override
   Future<bool> build() async {
-    ref.onDispose(() => _sub?.cancel());
+    ref.onDispose(() {
+      _disposed = true;
+      _sub?.cancel();
+      _retry?.cancel();
+    });
 
     final connectivity = Connectivity();
     final initial = await connectivity.checkConnectivity();
-    final initialOnline = _isOnline(initial);
-
     _sub = connectivity.onConnectivityChanged.listen(_onResult);
 
-    return initialOnline;
+    _interfaceUp = _isOnline(initial);
+    if (!_interfaceUp) return false;
+    return _evaluate();
   }
 
   void _onResult(List<ConnectivityResult> results) {
-    final wasOnline = state.valueOrNull ?? false;
-    final nowOnline = _isOnline(results);
-    state = AsyncValue.data(nowOnline);
+    final up = _isOnline(results);
+    if (up == _interfaceUp) return;
+    _interfaceUp = up;
+    unawaited(_evaluate());
+  }
+
+  /// Asks the probe and publishes the combined answer. Never throws.
+  Future<bool> _evaluate() async {
+    final gen = ++_generation;
+    if (!_interfaceUp) {
+      // No interface: no need to ask anyone. Publish immediately, it is the one case where the
+      // radio's answer is the whole answer.
+      _retry?.cancel();
+      _retry = null;
+      _publish(false);
+      return false;
+    }
+
+    final reachable = await ref.read(reachabilityProbeProvider).isReachable();
+    if (_disposed || gen != _generation) return reachable;
+
+    _publish(reachable);
+    if (reachable) {
+      _retry?.cancel();
+      _retry = null;
+    } else {
+      // Retry until the backend answers again. `??=` rather than a null check: re-entering while a
+      // timer is already armed must not stack a second one.
+      _retry ??= Timer.periodic(retryInterval, (_) => unawaited(_evaluate()));
+    }
+    return reachable;
+  }
+
+  void _publish(bool online) {
+    if (_disposed) return;
+    // Tracked here rather than read back through `state`: the first verdict is published from
+    // inside `build` (after the probe's await), where the element's value is still the initial
+    // AsyncLoading and must not be treated as a previous "offline" answer.
+    final wasOnline = _lastPublished;
+    _lastPublished = online;
+    state = AsyncValue.data(online);
 
     // offline → online transition: trigger submission queue
-    if (!wasOnline && nowOnline) {
+    if (!wasOnline && online) {
       _onReconnect();
     }
   }

@@ -9,9 +9,9 @@
 // is the safety net for when that channel is down or has not been re-established yet:
 //  - refresh as soon as the screen appears (every time — including a tab being shown again),
 //  - refresh the moment the app returns to the foreground,
-//  - poll every 15s, ONLY while this screen is visible AND the app is foregrounded AND the
-//    "Sincronizza dati in background" preference (backgroundSyncPreferenceProvider) is on — the
-//    same switch that already governs the 60s HomeShell poll.
+//  - poll every 15s, ONLY while this screen is visible AND the app is foregrounded. The
+//    "Modalità offline" setting deliberately does NOT gate it (owner decision D7): freshness is
+//    the app's promise, not a background convenience the technician can switch off.
 //
 // Not covered here: a BACKGROUNDED app. That needs an FCM data-only push from the backend on
 // WorkLogChanged (backend follow-up); until then it converges on the next resume.
@@ -22,7 +22,6 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/sync/sync_service.dart' show backgroundSyncPreferenceProvider;
 import '../../data/timbratura/work_log_refresh_coordinator.dart';
 
 class WorkLogLiveRefresh extends ConsumerStatefulWidget {
@@ -86,7 +85,6 @@ class _WorkLogLiveRefreshState extends ConsumerState<WorkLogLiveRefresh>
   void _syncPoll() {
     _stopPoll();
     if (!_visible || !_foreground) return;
-    if (!ref.read(backgroundSyncPreferenceProvider)) return;
     _poll = Timer.periodic(WorkLogLiveRefresh.pollInterval, (_) => _refresh());
   }
 

@@ -4,11 +4,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/pending_sync_count_provider.dart';
+import '../../data/sync/sync_service.dart' show lastSyncProvider;
 import '../theme/app_palette.dart';
+import '../time/last_sync_label.dart' show formatLastSyncCompact;
 
 /// A slim, persistent top banner — offline, or N-pending/N-failed. Renders nothing when online
 /// and fully synced, matching this app's existing "silence is correct" convention. Purely
 /// additive: place via Stack over existing content, never restructure the content it sits above.
+///
+/// Offline, it also says when this phone last refreshed what it is showing ("aggiornato oggi
+/// 08:42", "mai"). That is the question the banner is already answering — "is this current?" — and
+/// the answer lived only in Impostazioni → Sistema, several taps away from every list where a
+/// technician actually asks it. Online the line is dropped: a connected phone is refreshing.
 class OfflineSyncBanner extends ConsumerWidget {
   const OfflineSyncBanner({super.key});
 
@@ -21,13 +28,16 @@ class OfflineSyncBanner extends ConsumerWidget {
     // count applies, instead of hiding it: offline is exactly the state where the queue grows.
     final String? label;
     if (!isOnline) {
-      if (counts.failed > 0) {
-        label = 'Offline · ${counts.failed} da riprovare';
-      } else if (counts.pending > 0) {
-        label = 'Offline · ${counts.pending} in coda';
-      } else {
-        label = 'Offline';
-      }
+      final lastSync = ref.watch(lastSyncProvider).valueOrNull;
+      final parts = <String>[
+        'Offline',
+        if (counts.failed > 0)
+          '${counts.failed} da riprovare'
+        else if (counts.pending > 0)
+          '${counts.pending} in coda',
+        'aggiornato ${formatLastSyncCompact(lastSync)}',
+      ];
+      label = parts.join(' · ');
     } else if (counts.failed > 0) {
       label = '${counts.failed} da riprovare';
     } else if (counts.pending > 0) {
