@@ -112,9 +112,14 @@ Future<bool> stopTicketTimer(WidgetRef ref, String ticketId) async {
     throw const TicketTimerNotOnDevice();
   }
   try {
-    await ref
+    final disagreement = await ref
         .read(ticketWorkflowApiClientProvider)
         .stopTimer(ticketId, deviceUtc: DateTime.now().toUtc());
+    // The close's answer carries the row's merged disagreement — same banner the start's answer
+    // raises, so a skew first seen at the start is not lost when the session ends online.
+    if (disagreement != null) {
+      ref.read(clockDisagreementProvider.notifier).record(ticketId, disagreement);
+    }
   } on TicketWorkflowFailure catch (e) {
     // The mirror is closed on every path where it holds the session: a technician who tapped
     // "Ferma" ends the clock they see, and the queued close re-sends it through the idempotent

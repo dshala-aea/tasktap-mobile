@@ -113,14 +113,23 @@ class TicketWorkflowApiClient {
   }
 
   /// POST /api/tickets/{ticketId}/worklogs/stop — same [deviceUtc] contract as [startTimer].
-  Future<void> stopTimer(String ticketId, {DateTime? deviceUtc}) async {
-    await _run(
+  ///
+  /// Returns the row's clock disagreement when the server flagged one, or null: ordinary drift, no
+  /// device clock and an older backend all answer the same way. The response carries the *merged*
+  /// value — a phone corrected between the two taps still hears about the skew it started with —
+  /// and the phone only relays it; it never compares the clocks itself.
+  Future<int?> stopTimer(String ticketId, {DateTime? deviceUtc}) async {
+    final response = await _run(
       () => _dio.post<dynamic>(
         '/api/tickets/$ticketId/worklogs/stop',
         queryParameters: _deviceQuery(deviceUtc),
       ),
       fallback: 'Impossibile fermare il timer.',
     );
+    final body = response.data;
+    return body is Map<String, dynamic>
+        ? (body['clockDisagreementSeconds'] as num?)?.toInt()
+        : null;
   }
 
   /// The endpoints bind `deviceUtc` from the query string, not a body: a null value must send no
