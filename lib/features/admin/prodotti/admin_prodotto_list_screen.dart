@@ -7,7 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../../core/widgets/widgets.dart';
+import '../../../data/reference/reference_cache_repository.dart';
+import '../../../data/sync/connectivity_provider.dart';
+import '../../../data/sync/sync_service.dart' show appDatabaseProvider;
+import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -15,17 +20,82 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// form screen can keep invalidating [adminProdottiAssistenzaProvider] without knowing the query.
 final adminProdottiQueryProvider = StateProvider.autoDispose<String>((ref) => '');
 
-/// Fetches prodotti assistenza from backend API; the search text is sent as `q`, so the server
-/// searches every row rather than the client filtering the first page.
-final adminProdottiAssistenzaProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
-  ref,
-) async {
-  final api = ref.watch(adminApiClientProvider);
+/// The Asset list's rows, plus where they came from.
+///
+/// [fromMirror] drives [MirrorNotice]: the sync payload is scoped, so a mirrored list is a partial
+/// one and its "N totali" must not read as the tenant's whole asset book.
+class ProdottoListRows {
+  const ProdottoListRows(this.rows, {required this.fromMirror});
+
+  final List<Map<String, dynamic>> rows;
+  final bool fromMirror;
+}
+
+/// Prodotti assistenza — server-first, mirror when it cannot be reached.
+///
+/// Online the search term is sent as `q` and the server searches every row. Offline the mirror is
+/// searched here with the same three fields the server matches on (name, codice, categoria), so a
+/// technician who types a serial-adjacent code on site still gets an answer instead of a spinner.
+///
+/// The mirror has no `prezzoVendita` (it is not in the sync payload), so mirrored rows show no
+/// price — absent, not zero.
+final adminProdottiAssistenzaProvider = FutureProvider.autoDispose<ProdottoListRows>((ref) async {
   final q = ref.watch(adminProdottiQueryProvider);
-  return api.fetchProdottiAssistenza(q: q);
+
+  Future<ProdottoListRows> fromMirror() async {
+    final db = ref.watch(appDatabaseProvider);
+    final rows = await ref.watch(referenceCacheProvider).allProdottiAssistenza();
+    if (rows.isEmpty && await db.getLastSync() == null) {
+      throw const TicketDetailOfflineException();
+    }
+    // The row shows the customer's *name*; the mirror carries only the id. Read every customer
+    // (inactive ones included — an asset can belong to a customer the office has since archived,
+    // and '—' there would claim the asset belongs to nobody).
+    final customers = {
+      for (final c in await db.select(db.customers).get()) c.id: c.companyName,
+    };
+    final needle = q.toLowerCase();
+    final matches = needle.isEmpty
+        ? rows
+        : rows
+              .where(
+                (p) =>
+                    p.name.toLowerCase().contains(needle) ||
+                    (p.codice ?? '').toLowerCase().contains(needle) ||
+                    (p.categoria ?? '').toLowerCase().contains(needle),
+              )
+              .toList();
+    return ProdottoListRows([
+      for (final p in matches)
+        {
+          'id': p.id,
+          'name': p.name,
+          'customerId': p.customerId,
+          'customerName': customers[p.customerId] ?? '—',
+          'isActive': p.isActive,
+          'codice': p.codice,
+          'categoria': p.categoria,
+          'serialNumber': p.serialNumber,
+          'marchio': p.marchio,
+          'externalId': p.externalId,
+        },
+    ], fromMirror: true);
+  }
+
+  if (ref.watch(isOnlineProvider)) {
+    try {
+      return ProdottoListRows(
+        await ref.watch(adminApiClientProvider).fetchProdottiAssistenza(q: q),
+        fromMirror: false,
+      );
+    } catch (e) {
+      if (!isTransportOrServerFault(e)) rethrow;
+    }
+  }
+  return fromMirror();
 });
 
-/// Admin prodotto assistenza list — online-only.
+/// Admin prodotto assistenza list — server-first, mirror when it cannot be reached.
 class AdminProdottoListScreen extends ConsumerWidget {
   const AdminProdottoListScreen({super.key});
 
@@ -41,9 +111,16 @@ class AdminProdottoListScreen extends ConsumerWidget {
           // focus and text, which live in the body) on screen instead of swapping in a spinner.
           skipLoadingOnReload: true,
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) =>
-              ErrorState(onRetry: () => ref.invalidate(adminProdottiAssistenzaProvider)),
-          data: (prodotti) => _ProdottoListBody(prodotti: prodotti),
+          error: (e, _) => e is TicketDetailOfflineException
+              ? const UnavailableState(
+                  icon: LucideIcons.wrench,
+                  titolo: 'Asset non disponibili offline',
+                  motivo:
+                      'Questo dispositivo non ha ancora scaricato gli asset. Apri questa lista '
+                      'con una connessione attiva per averli anche offline.',
+                )
+              : ErrorState(onRetry: () => ref.invalidate(adminProdottiAssistenzaProvider)),
+          data: (data) => _ProdottoListBody(rows: data),
         ),
       ),
       floatingActionButton: Padding(
@@ -60,9 +137,9 @@ class AdminProdottoListScreen extends ConsumerWidget {
 }
 
 class _ProdottoListBody extends ConsumerStatefulWidget {
-  const _ProdottoListBody({required this.prodotti});
+  const _ProdottoListBody({required this.rows});
 
-  final List<Map<String, dynamic>> prodotti;
+  final ProdottoListRows rows;
 
   @override
   ConsumerState<_ProdottoListBody> createState() => _ProdottoListBodyState();
@@ -88,7 +165,7 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = widget.prodotti;
+    final filtered = widget.rows.rows;
     final searching = ref.watch(adminProdottiQueryProvider).isNotEmpty;
 
     return RefreshIndicator(
@@ -109,6 +186,8 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
               onChanged: _onQueryChanged,
             ),
           ),
+          if (widget.rows.fromMirror && filtered.isNotEmpty)
+            const SliverToBoxAdapter(child: MirrorNotice(what: 'asset')),
           if (filtered.isEmpty)
             SliverToBoxAdapter(
               child: EmptyState(

@@ -5,8 +5,9 @@
 // CreateCantiereRequest nor UpdateCantiereRequest accepted it — a mobile field would have
 // silently no-opped, so it was deliberately left unbuilt until the backend fix landed (af9039c,
 // "Accept CommessaId on cantiere create/update"). This covers:
-//   - the Commessa picker is genuinely in the widget tree, fed by a live GET /api/commesse
-//     (there is no local Drift mirror for commesse, same as Squadre/ProdottoAssistenza);
+//   - the Commessa picker is genuinely in the widget tree, fed by a live GET /api/commesse, with
+//     the synced `commesse` mirror as the offline answer (the picker's own doc used to claim there
+//     was no mirror at all — SyncService does upsert commesse);
 //   - selecting a commessa and creating sends commessaId in the POST body;
 //   - editing prefills the picker from the cached Drift row's commessaId and re-sends it on save.
 
@@ -74,7 +75,7 @@ void main() {
 
   /// A GoRouter harness with a real page stack, so `context.pop(true)` in
   /// `AdminCantiereFormScreen._save` has something to pop back to.
-  Widget buildHarness({String? cantiereId}) {
+  Widget buildHarness({String? cantiereId, bool isOnline = true}) {
     final router = GoRouter(
       initialLocation: '/',
       routes: [
@@ -100,7 +101,7 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),
-        isOnlineProvider.overrideWithValue(true),
+        isOnlineProvider.overrideWithValue(isOnline),
       ],
       child: MaterialApp.router(routerConfig: router),
     );
@@ -111,9 +112,9 @@ void main() {
   /// 800×600 test surface and `tester.tap` can't find it — mirrors the same `setSurfaceSize`
   /// convention admin_cantiere_detail_screen_test.dart and
   /// test/features/ticket/ticket_detail_screen_test.dart already use for their own long screens.
-  Future<void> openForm(WidgetTester tester, {String? cantiereId}) async {
+  Future<void> openForm(WidgetTester tester, {String? cantiereId, bool isOnline = true}) async {
     await tester.binding.setSurfaceSize(const Size(800, 1400));
-    await tester.pumpWidget(buildHarness(cantiereId: cantiereId));
+    await tester.pumpWidget(buildHarness(cantiereId: cantiereId, isOnline: isOnline));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apri form'));
     await tester.pumpAndSettle();
@@ -242,6 +243,113 @@ void main() {
         ),
       ).captured.last as Map;
       expect(captured['customerId'], 'cust-1');
+      await teardown(tester);
+    });
+  });
+
+  // The picker used to be live-only on the stated grounds that commesse have "no local Drift
+  // mirror". They do — SyncService upserts them — so a cantiere can still be linked to an existing
+  // commessa on site with no signal. What the offline half must not do is pretend.
+  group('Commessa picker offline (mirror)', () {
+    Future<void> seedCustomer() => db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'cust-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            companyName: 'Acme Srl',
+          ),
+        );
+
+    Future<void> seedCommessa(String id, String codice, String customerId) => db
+        .into(db.commesse)
+        .insert(
+          CommesseCompanion.insert(
+            id: id,
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            codice: codice,
+            customerId: drift.Value(customerId),
+          ),
+        );
+
+    Future<void> selectClientAndOpenCommesse(WidgetTester tester) async {
+      await tester.tap(find.byKey(const ValueKey('cliente-null')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Acme Srl').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('commessa-null')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('lists only the selected client\'s mirrored commesse, without a request', (
+      tester,
+    ) async {
+      await seedCustomer();
+      await seedCommessa('commessa-m', 'COM-M01', 'cust-1');
+      // Another client's commessa: the mirror read is customer-scoped, exactly like the server's
+      // `customerId` filter, so offering it here would be a cross-client link.
+      await seedCommessa('commessa-x', 'COM-X99', 'cust-2');
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+      await openForm(tester, isOnline: false);
+      await selectClientAndOpenCommesse(tester);
+
+      expect(find.textContaining('COM-M01'), findsWidgets);
+      expect(find.textContaining('COM-X99'), findsNothing);
+      verifyNever(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/commesse',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      );
+      await teardown(tester);
+    });
+
+    testWidgets('a never-synced device says the commesse were never downloaded', (tester) async {
+      await seedCustomer();
+
+      await openForm(tester, isOnline: false);
+      await selectClientAndOpenCommesse(tester);
+
+      expect(find.text('Commesse non ancora scaricate sul dispositivo.'), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('a synced client with no commesse is a genuine empty answer', (tester) async {
+      await seedCustomer();
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+      await openForm(tester, isOnline: false);
+      await selectClientAndOpenCommesse(tester);
+
+      expect(find.text('Nessuna commessa trovata.'), findsOneWidget);
+      expect(find.text('Commesse non ancora scaricate sul dispositivo.'), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('a request that never arrived falls back to the mirror', (tester) async {
+      await seedCustomer();
+      await seedCommessa('commessa-m', 'COM-M01', 'cust-1');
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/commesse',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => throw DioException(
+          requestOptions: RequestOptions(path: '/api/commesse'),
+          type: DioExceptionType.connectionTimeout,
+        ),
+      );
+
+      await openForm(tester);
+      await selectClientAndOpenCommesse(tester);
+
+      expect(find.textContaining('COM-M01'), findsWidgets);
       await teardown(tester);
     });
   });

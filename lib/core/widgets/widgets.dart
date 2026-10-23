@@ -24,6 +24,7 @@ export 'key_val.dart';
 export 'list_row.dart';
 export 'live_dot.dart';
 export 'lookup_field.dart';
+export 'mirror_notice.dart';
 export 'offline_sync_banner.dart';
 export 'permission_purpose_card.dart';
 export 'permission_purpose_sheet.dart';

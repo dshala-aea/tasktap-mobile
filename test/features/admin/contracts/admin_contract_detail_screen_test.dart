@@ -140,6 +140,33 @@ void main() {
       await teardown(tester);
     });
 
+    testWidgets(
+      'a mirrored contract (unsynced fields absent) shows "—", never an invented frequency or renewal',
+      (tester) async {
+        // Exactly the map the list builds offline from `db.contracts`: the sync payload has no
+        // price/condizioni/frequency*/autoRenewal/scadenzaGiorni. Defaulting them would print
+        // "Frequenza 1 mesi" and "Rinnovo automatico No" as facts about the contract.
+        await openDetail(
+          tester,
+          contractOverride: const {
+            'id': 'contr-1',
+            'name': 'Manutenzione annuale',
+            'startDate': '2026-01-01T00:00:00Z',
+            'isActive': true,
+            'numero': 'CTR-2026-001',
+            'codice': 'C-001',
+            'externalId': 'EXT-1',
+          },
+        );
+
+        expect(find.textContaining('mesi'), findsNothing);
+        expect(find.text('No'), findsNothing);
+        // Tipo, Descrizione, Frequenza, Prezzo, Preavviso, Rinnovo, Condizioni and Note all read
+        // as absent rather than as defaults.
+        expect(find.text('—'), findsNWidgets(8));
+        await teardown(tester);
+      },
+    );
   });
 
   group('delete contract (Gap B)', () {

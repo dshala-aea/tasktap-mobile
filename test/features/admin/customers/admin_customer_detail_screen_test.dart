@@ -2,8 +2,8 @@
 //
 // Gaps 3/7/8 of the feature audit: the customer detail screen had no Sedi, Contratti, or
 // Prodotti assistenza sections at all. Sedi and Referenti read the local Drift mirror (locations
-// and the customer's contacts are both synced now); Contratti/Prodotti have no local mirror and
-// are fetched live, server-filtered by customerId.
+// and the customer's contacts are both synced now); Contratti/Prodotti are server-first,
+// server-filtered by customerId, and answer from the synced contracts/prodotti mirrors offline.
 //
 // CRITICAL: every test that pumps this screen (it watches several Drift streams) MUST end with
 // the `teardown` helper below — mirrors the same documented convention in
@@ -232,6 +232,79 @@ void main() {
 
       await teardown(tester);
     });
+
+    testWidgets('offline lists this customer\'s mirrored contracts, inactive included', (
+      tester,
+    ) async {
+      await seedCustomer('cust-1');
+      await db
+          .into(db.contracts)
+          .insert(
+            ContractsCompanion.insert(
+              id: 'contr-mirror',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Manutenzione annuale',
+              customerId: 'cust-1',
+              startDate: DateTime.utc(2026, 1, 1),
+            ),
+          );
+      // Archived contract: the server returns it too (with a pill), so the mirror half must not
+      // silently hide it and let the section claim "Nessun contratto".
+      await db
+          .into(db.contracts)
+          .insert(
+            ContractsCompanion.insert(
+              id: 'contr-old',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Contratto cessato',
+              customerId: 'cust-1',
+              startDate: DateTime.utc(2025, 1, 1),
+              isActive: const Value(false),
+            ),
+          );
+      // Another customer's contract — the read is customer-scoped.
+      await db
+          .into(db.contracts)
+          .insert(
+            ContractsCompanion.insert(
+              id: 'contr-other',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Contratto di un altro cliente',
+              customerId: 'cust-2',
+              startDate: DateTime.utc(2026, 1, 1),
+            ),
+          );
+
+      await pumpScreen(tester, online: false);
+
+      expect(find.text('Manutenzione annuale'), findsOneWidget);
+      expect(find.text('Contratto cessato'), findsOneWidget);
+      expect(find.text('Contratto di un altro cliente'), findsNothing);
+      verifyNever(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/contracts',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      );
+
+      await teardown(tester);
+    });
+
+    testWidgets('offline on a never-synced device says the contracts were not downloaded', (
+      tester,
+    ) async {
+      await seedCustomer('cust-1');
+
+      await pumpScreen(tester, online: false);
+
+      expect(find.text('Contratti non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun contratto'), findsNothing);
+
+      await teardown(tester);
+    });
   });
 
   group('Referenti section', () {
@@ -316,6 +389,64 @@ void main() {
       await pumpScreen(tester);
 
       expect(find.text('Nessun asset'), findsOneWidget);
+
+      await teardown(tester);
+    });
+
+    testWidgets('offline lists this customer\'s mirrored assets, without a request', (
+      tester,
+    ) async {
+      await seedCustomer('cust-1');
+      await db
+          .into(db.prodottiAssistenza)
+          .insert(
+            ProdottiAssistenzaCompanion.insert(
+              id: 'prod-mirror',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Caldaia condominio',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              serialNumber: const Value('SN-42'),
+            ),
+          );
+      await db
+          .into(db.prodottiAssistenza)
+          .insert(
+            ProdottiAssistenzaCompanion.insert(
+              id: 'prod-other',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Asset di un altro cliente',
+              customerId: 'cust-2',
+              locationId: 'loc-2',
+            ),
+          );
+
+      await pumpScreen(tester, online: false);
+
+      expect(find.text('Caldaia condominio'), findsOneWidget);
+      expect(find.text('SN-42'), findsOneWidget);
+      expect(find.text('Asset di un altro cliente'), findsNothing);
+      verifyNever(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      );
+
+      await teardown(tester);
+    });
+
+    testWidgets('offline on a never-synced device says the assets were not downloaded', (
+      tester,
+    ) async {
+      await seedCustomer('cust-1');
+
+      await pumpScreen(tester, online: false);
+
+      expect(find.text('Asset non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun asset'), findsNothing);
 
       await teardown(tester);
     });

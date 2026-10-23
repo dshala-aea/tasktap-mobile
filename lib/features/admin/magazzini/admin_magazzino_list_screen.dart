@@ -18,9 +18,10 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // `admin_materiale_*` — this manages the warehouses themselves (name, type, assigned technician,
 // address), which had no mobile screen at all before this.
 //
-// Read live, not from Drift: `Magazzino` has no local mirror (nothing syncs it), same as giacenze
-// and movimenti — see magazzino_api_client.dart's header comment for why that split is
-// deliberate for anything stock-adjacent.
+// The warehouse *catalogue* is mirrored: the sync payload carries `magazzini` (a whole-tenant
+// replace, not a technician-scoped slice) and `magazziniProvider` reads it offline, so this list
+// opens with no signal. What is deliberately live-only is anything stock-adjacent — giacenze and
+// movimenti — see magazzino_api_client.dart's header comment for why.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class AdminMagazzinoListScreen extends ConsumerWidget {
@@ -56,7 +57,17 @@ class AdminMagazzinoListScreen extends ConsumerWidget {
                   ),
                 ),
                 error: (e, _) => SliverToBoxAdapter(
-                  child: ErrorState(onRetry: () => ref.invalidate(magazziniProvider)),
+                  // A device that never synced has no mirror to fall back on — a retry button
+                  // there asks for something the user cannot do until they are back online.
+                  child: e is MagazziniOfflineException
+                      ? const UnavailableState(
+                          icon: LucideIcons.warehouse,
+                          titolo: 'Magazzini non disponibili offline',
+                          motivo:
+                              'Questo dispositivo non ha ancora scaricato i magazzini. Apri '
+                              'questa lista con una connessione attiva per averli anche offline.',
+                        )
+                      : ErrorState(onRetry: () => ref.invalidate(magazziniProvider)),
                 ),
                 data: (list) => list.isEmpty
                     ? const SliverToBoxAdapter(

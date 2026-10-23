@@ -8,13 +8,16 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../../core/widgets/widgets.dart';
 import '../../../data/clienti/cliente_overview_api_client.dart';
 import '../../../data/clienti/customer_contact_api_client.dart';
 import '../../../data/local/app_database.dart' show Customer, CustomerContactRow;
+import '../../../data/reference/reference_cache_repository.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../clienti/clienti_providers.dart';
+import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -502,19 +505,51 @@ class _SediSection extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Contratti (Gap 7) — no local Drift mirror (like the cantiere's live-fetched sub-resources), so
-// this reads live via `AdminApiClient.fetchContracts(customerId: ...)`, server-side filtered.
+// Contratti (Gap 7) — server-first via `AdminApiClient.fetchContracts(customerId: ...)`, with the
+// synced `contracts` mirror as the offline answer (the same rows the Contratti list uses).
 // Read-only list is the priority per the audit; "+" reuses the existing global create form
 // (`admin_contract_form_screen.dart`) rather than teaching it a pre-selected customer — cheap to
 // link, not cheap to also thread a new constructor param through a form that already resolves its
 // customer from a dropdown.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Contracts for [customerId] — `GET /api/contracts?customerId=`.
+/// Contracts for [customerId] — `GET /api/contracts?customerId=`, mirror on the way back.
+///
+/// Inactive contracts are included, because the server returns them too (they carry an "Inattivo"
+/// pill). The mirror has no price column, so a mirrored row's subtitle stays empty rather than
+/// printing a made-up €0,00.
 final adminCustomerContractsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchContracts(customerId: customerId);
+      Future<List<Map<String, dynamic>>> fromMirror() async {
+        final rows = await ref
+            .watch(referenceCacheProvider)
+            .contractsForCustomer(customerId, activeOnly: false);
+        if (rows.isEmpty && await ref.watch(appDatabaseProvider).getLastSync() == null) {
+          throw const TicketDetailOfflineException();
+        }
+        return [
+          for (final c in rows)
+            {
+              'id': c.id,
+              'name': c.name,
+              'customerId': c.customerId,
+              'locationId': c.locationId,
+              'isActive': c.isActive,
+              'numero': c.numero,
+              'codice': c.codice,
+              'externalId': c.externalId,
+            },
+        ];
+      }
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref.watch(adminApiClientProvider).fetchContracts(customerId: customerId);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
     });
 
 class _ContrattiSection extends ConsumerWidget {
@@ -541,9 +576,17 @@ class _ContrattiSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => AppSectionError(
-            onRetry: () => ref.invalidate(adminCustomerContractsProvider(customerId)),
-          ),
+          error: (e, _) => e is TicketDetailOfflineException
+              ? const UnavailableState(
+                  icon: LucideIcons.fileSignature,
+                  titolo: 'Contratti non disponibili offline',
+                  motivo:
+                      'Questo dispositivo non ha ancora scaricato i contratti. Apri questa '
+                      'scheda con una connessione attiva per averli anche offline.',
+                )
+              : AppSectionError(
+                  onRetry: () => ref.invalidate(adminCustomerContractsProvider(customerId)),
+                ),
           data: (contracts) {
             if (contracts.isEmpty) {
               return const EmptyState(
@@ -579,15 +622,51 @@ class _ContrattiSection extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Prodotti assistenza (Gap 8) — same treatment as Contratti: no Drift mirror, live-fetched and
-// server-filtered by customerId, read-only priority with a cheap "+" to the existing global form.
+// Prodotti assistenza (Gap 8) — same treatment as Contratti: server-first, customer-filtered, with
+// the synced `prodotti_assistenza` mirror behind it; read-only priority with a cheap "+" to the
+// existing global form.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Prodotti assistenza for [customerId] — `GET /api/prodottoassistenza?customerId=`.
+/// Prodotti assistenza for [customerId] — `GET /api/prodottoassistenza?customerId=`, mirror on
+/// the way back. Inactive assets included, same reasoning as
+/// [adminCustomerContractsProvider]; `customerName` is omitted because the section already knows
+/// whose assets these are.
 final adminCustomerProdottiProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchProdottiAssistenza(customerId: customerId);
+      Future<List<Map<String, dynamic>>> fromMirror() async {
+        final rows = await ref
+            .watch(referenceCacheProvider)
+            .prodottiForCustomer(customerId, activeOnly: false);
+        if (rows.isEmpty && await ref.watch(appDatabaseProvider).getLastSync() == null) {
+          throw const TicketDetailOfflineException();
+        }
+        return [
+          for (final p in rows)
+            {
+              'id': p.id,
+              'name': p.name,
+              'codice': p.codice,
+              'customerId': p.customerId,
+              'locationId': p.locationId,
+              'categoria': p.categoria,
+              'marchio': p.marchio,
+              'serialNumber': p.serialNumber,
+              'externalId': p.externalId,
+              'isActive': p.isActive,
+            },
+        ];
+      }
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref.watch(adminApiClientProvider).fetchProdottiAssistenza(
+            customerId: customerId,
+          );
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
     });
 
 class _ProdottiSection extends ConsumerWidget {
@@ -614,9 +693,17 @@ class _ProdottiSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => AppSectionError(
-            onRetry: () => ref.invalidate(adminCustomerProdottiProvider(customerId)),
-          ),
+          error: (e, _) => e is TicketDetailOfflineException
+              ? const UnavailableState(
+                  icon: LucideIcons.wrench,
+                  titolo: 'Asset non disponibili offline',
+                  motivo:
+                      'Questo dispositivo non ha ancora scaricato gli asset. Apri questa scheda '
+                      'con una connessione attiva per averli anche offline.',
+                )
+              : AppSectionError(
+                  onRetry: () => ref.invalidate(adminCustomerProdottiProvider(customerId)),
+                ),
           data: (prodotti) {
             if (prodotti.isEmpty) {
               return const EmptyState(
