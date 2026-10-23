@@ -176,7 +176,11 @@ final cantiereWorklogsProvider = FutureProvider.autoDispose
               customerId: '',
               ticketId: w.ticketId,
               userId: w.userId,
-              workDate: w.workDate,
+              // Drift hands a `dateTime()` column back as a LOCAL-kind DateTime for the same
+              // instant, while the DTO documents the UTC civil day `parseDateOnlyOrThrow` produced.
+              // Re-stamp at the boundary — the same fix the ticket-worklog reader makes — so the
+              // value is the same calendar day in Rome, Los Angeles and Auckland alike.
+              workDate: w.workDate.toUtc(),
               startTime: w.startUtc != null
                   ? businessTime.formatInZone(w.startUtc!, 'HH:mm:ss')
                   : _formatSeconds(w.startSeconds),

@@ -346,6 +346,9 @@ void main() {
       // under, and one still queued.
       await insertMirrorRow(id: 'w-known', clientId: 'punch-known');
 
+      // `customerId` is not decoration: `assembleCantiereIntervals` refuses to close an interval
+      // whose opener has no customer context, so a fixture without it silently produces no shift.
+      // A real clock-in always carries one.
       Future<void> punch(String id, String type, DateTime at) => db
           .into(db.cantierePunches)
           .insert(
@@ -354,6 +357,7 @@ void main() {
               eventTime: at,
               eventType: type,
               cantiereId: const Value('site-1'),
+              customerId: const Value('cust-1'),
             ),
           );
 
