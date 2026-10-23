@@ -34,7 +34,8 @@ class FeriePermessiListScreen extends ConsumerWidget {
         child: requestsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ErrorState(onRetry: () => ref.invalidate(myAbsenceRequestsProvider)),
-          data: (items) => _FeriePermessiListBody(items: items),
+          data: (result) =>
+              _FeriePermessiListBody(items: result.items, fromDevice: result.fromDevice),
         ),
       ),
       floatingActionButton: Padding(
@@ -51,15 +52,21 @@ class FeriePermessiListScreen extends ConsumerWidget {
 }
 
 class _FeriePermessiListBody extends ConsumerWidget {
-  const _FeriePermessiListBody({required this.items});
+  const _FeriePermessiListBody({required this.items, required this.fromDevice});
 
   final List<AbsenceRequestDto> items;
 
+  /// True when [items] came from the device's mirror rather than a live server answer.
+  final bool fromDevice;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // An empty list on a phone that has never synced is a missing download, not a fact about the
-    // technician: saying "Nessuna richiesta" there would tell them their history never existed.
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    // An empty list from the mirror on a phone that has never synced is a missing download, not a
+    // fact about the technician: saying "Nessuna richiesta" there would tell them their history
+    // never existed. An empty list from the SERVER is such a fact, and must not be dressed up as a
+    // download problem.
+    final neverSynced =
+        fromDevice && ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
 
     return RefreshIndicator(
       onRefresh: () => ref.refresh(myAbsenceRequestsProvider.future),

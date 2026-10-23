@@ -207,13 +207,26 @@ final absenceRequestApiClientProvider = Provider<AbsenceRequestApiClient>((ref) 
 /// A 4xx still throws. That is the server saying something about THIS request (a permission, a
 /// malformed query), not a statement about the technician's history, and swallowing it would show
 /// them a stale list as if it were current.
-final myAbsenceRequestsProvider = FutureProvider.autoDispose<List<AbsenceRequestDto>>((ref) async {
-  Future<List<AbsenceRequestDto>> fromDevice() => _readMirror(ref);
+/// The answer plus where it came from.
+///
+/// A bare list cannot tell "the server says you have filed nothing" from "this device has never
+/// downloaded your history", and the list screen must say different things in those two cases: an
+/// empty mirror is a missing download, never a fact about the technician. So the source travels
+/// with the rows instead of being guessed from the connectivity flag afterwards — a request that
+/// was attempted online and then fell back to the mirror is exactly the case a guess gets wrong.
+typedef MyAbsenceRequests = ({List<AbsenceRequestDto> items, bool fromDevice});
+
+final myAbsenceRequestsProvider = FutureProvider.autoDispose<MyAbsenceRequests>((ref) async {
+  Future<MyAbsenceRequests> fromDevice() async =>
+      (items: await _readMirror(ref), fromDevice: true);
 
   if (!ref.watch(isOnlineProvider)) return fromDevice();
 
   try {
-    return await ref.watch(absenceRequestApiClientProvider).fetchMine();
+    return (
+      items: await ref.watch(absenceRequestApiClientProvider).fetchMine(),
+      fromDevice: false,
+    );
   } catch (e) {
     if (!isTransportOrServerFault(e)) rethrow;
     return fromDevice();
