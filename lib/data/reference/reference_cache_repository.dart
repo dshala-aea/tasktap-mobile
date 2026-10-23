@@ -193,10 +193,18 @@ class ReferenceCacheRepository {
   // There is deliberately no pruneAgents: an agent absent from one payload may still be referenced
   // by a ticket already on this device, and deleting it would break that ticket.
 
-  Future<List<Contract>> contractsForCustomer(String customerId) =>
-      (_db.select(_db.contracts)
-            ..where((c) => c.customerId.equals(customerId) & c.isActive.equals(true))
-            ..orderBy([(c) => OrderingTerm.asc(c.name)]))
+  /// Contracts of [customerId].
+  ///
+  /// [activeOnly] defaults to true, which is what the pickers want (a ticket must not be opened
+  /// against an archived contract). The customer detail's Contratti section passes false: it
+  /// stands in for `GET /api/contracts?customerId=`, which returns inactive rows too, shown with
+  /// an "Inattivo" pill.
+  Future<List<Contract>> contractsForCustomer(String customerId, {bool activeOnly = true}) =>
+      (_db.select(_db.contracts)..where(
+            (c) => activeOnly
+                ? c.customerId.equals(customerId) & c.isActive.equals(true)
+                : c.customerId.equals(customerId),
+          )..orderBy([(c) => OrderingTerm.asc(c.name)]))
           .get();
 
   /// Every contract the sync put in scope — the Contratti list's own rows.
@@ -225,11 +233,16 @@ class ReferenceCacheRepository {
             ..orderBy([(p) => OrderingTerm.asc(p.name)]))
           .get();
 
-  Future<List<ProdottiAssistenzaData>> prodottiForCustomer(String customerId) =>
-      (_db.select(_db.prodottiAssistenza)
-            ..where((p) => p.customerId.equals(customerId) & p.isActive.equals(true))
-            ..orderBy([(p) => OrderingTerm.asc(p.name)]))
-          .get();
+  /// Assets of [customerId] — same [activeOnly] contract as [contractsForCustomer].
+  Future<List<ProdottiAssistenzaData>> prodottiForCustomer(
+    String customerId, {
+    bool activeOnly = true,
+  }) => (_db.select(_db.prodottiAssistenza)..where(
+          (p) => activeOnly
+              ? p.customerId.equals(customerId) & p.isActive.equals(true)
+              : p.customerId.equals(customerId),
+        )..orderBy([(p) => OrderingTerm.asc(p.name)]))
+      .get();
 
   Future<List<Agent>> activeAgents() =>
       (_db.select(_db.agents)
