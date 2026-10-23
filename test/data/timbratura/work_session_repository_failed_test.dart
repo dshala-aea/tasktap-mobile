@@ -46,4 +46,57 @@ void main() {
     final all = await db.select(db.workSessions).get();
     expect(all.map((s) => s.id), ['a']);
   });
+
+  // Hidden from the shift is not the same as hidden from the person whose hours they were.
+  test('watchSyncFailedSessions lists only refused punches, newest first', () async {
+    final now = DateTime.now().toUtc();
+    await repo.addEvent(id: 'ok', eventTime: now, eventType: 'fine');
+    await repo.addEvent(
+      id: 'old',
+      eventTime: now.subtract(const Duration(hours: 3)),
+      eventType: 'ingresso',
+    );
+    await repo.addEvent(
+      id: 'new',
+      eventTime: now.subtract(const Duration(hours: 1)),
+      eventType: 'pausa',
+    );
+    await repo.markSyncFailed('old');
+    await repo.markSyncFailed('new');
+
+    final rows = await repo.watchSyncFailedSessions().first;
+    expect(rows.map((r) => r.id), ['new', 'old']);
+  });
+
+  test('the reconciler marker is not a refusal', () async {
+    await repo.addEvent(id: 'a', eventTime: DateTime.now().toUtc(), eventType: 'ingresso');
+    await repo.markReconciledOrphan('a');
+
+    expect(await repo.watchSyncFailedSessions().first, isEmpty);
+  });
+
+  test('a refusal older than the window drops off the notice', () async {
+    final now = DateTime.utc(2026, 10, 23, 9);
+    final clockRepo = WorkSessionRepository(db, clock: () => now);
+    await clockRepo.addEvent(
+      id: 'recent',
+      eventTime: now.subtract(const Duration(days: 6)),
+      eventType: 'ingresso',
+    );
+    await clockRepo.addEvent(
+      id: 'stale',
+      eventTime: now.subtract(const Duration(days: 8)),
+      eventType: 'fine',
+    );
+    await clockRepo.markSyncFailed('recent');
+    await clockRepo.markSyncFailed('stale');
+
+    final rows = await clockRepo.watchSyncFailedSessions().first;
+    // The stale row is still in the table for support — only the notice stops showing it.
+    expect(rows.map((r) => r.id), ['recent']);
+    expect(
+      (await db.select(db.workSessions).get()).map((s) => s.id),
+      containsAll(['recent', 'stale']),
+    );
+  });
 }

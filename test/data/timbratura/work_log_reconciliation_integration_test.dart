@@ -256,6 +256,11 @@ void main() {
 // PunchNotifier's fire-and-forget syncNow() call happens to run during these tests.
 class _StubRepoForSync implements IWorkSessionRepository {
   @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({
+    Duration within = const Duration(days: 7),
+  }) => const Stream<List<WorkSession>>.empty();
+
+  @override
   Future<void> markSyncFailed(String id) async {}
 
   @override

@@ -24,6 +24,11 @@ import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 
 class _FakeRepo implements IWorkSessionRepository {
   @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({
+    Duration within = const Duration(days: 7),
+  }) => const Stream<List<WorkSession>>.empty();
+
+  @override
   Future<void> markSyncFailed(String id) async {}
 
   final List<WorkSession> sessions;

@@ -30,6 +30,11 @@ import 'package:tasktap_mobile/features/timbra/timbra_screen.dart';
 
 abstract class _StubRepo implements IWorkSessionRepository {
   @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({
+    Duration within = const Duration(days: 7),
+  }) => const Stream<List<WorkSession>>.empty();
+
+  @override
   Future<void> markSyncFailed(String id) async {}
 
   @override
@@ -183,6 +188,32 @@ void main() {
 
     // The amber sync dot has tooltip "Non sincronizzato".
     expect(find.byTooltip('Non sincronizzato'), findsOneWidget);
+    await _teardownTimer(tester);
+  });
+
+  // A punch the server permanently refused is hidden from every count on this screen on purpose
+  // (a rejected opener would double the day, and nothing will retry it), so before this notice
+  // existed the only trace was a toast that scrolled away. Seeded through the real repository so
+  // the test exercises the same marker and window the app uses.
+  testWidgets('a refused punch is named on screen and opens its details', (tester) async {
+    final repo = WorkSessionRepository(db);
+    await repo.addEvent(id: 'refused', eventTime: DateTime.now().toUtc(), eventType: 'ingresso');
+    await repo.markSyncFailed('refused');
+
+    await tester.pumpWidget(_buildApp(db));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('1 timbratura non registrata dal server'), findsOneWidget);
+    // Still hidden from "Sessioni di oggi" — the notice is the only place it shows.
+    expect(find.text('Ingresso'), findsNothing);
+
+    await tester.tap(find.text('1 timbratura non registrata dal server'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('Ingresso'), findsOneWidget);
+    expect(find.textContaining('segnalale all'), findsOneWidget);
+
     await _teardownTimer(tester);
   });
 

@@ -45,6 +45,17 @@ final hasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
   return sessions.any((s) => s.isPendingSync);
 });
 
+/// Punches the server permanently refused (`409 active_session_exists`), newest first.
+///
+/// Separate from [todaySessionsProvider] on purpose: those rows are hidden from the shift
+/// arithmetic (a rejected punch must not double a shift) and are no longer pending (nothing will
+/// ever retry them), so every existing count is right to leave them out. That is not the same as
+/// the technician never hearing about them again — the only trace used to be a toast that
+/// scrolled away. This is the list behind the Timbra screen's notice.
+final syncFailedSessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref) {
+  return ref.watch(workSessionRepositoryProvider).watchSyncFailedSessions();
+});
+
 // ── Shift state notifier ──────────────────────────────────────────────────────
 
 /// Current shift state derived from today's sessions.

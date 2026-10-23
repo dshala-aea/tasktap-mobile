@@ -60,6 +60,11 @@ class _Repo implements IWorkSessionRepository {
   @override
   Future<void> clearToday() async {}
   @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({
+    Duration within = const Duration(days: 7),
+  }) => const Stream<List<WorkSession>>.empty();
+
+  @override
   Future<void> markSyncFailed(String id) async {
     final i = sessions.indexWhere((s) => s.id == id);
     final s = sessions[i];

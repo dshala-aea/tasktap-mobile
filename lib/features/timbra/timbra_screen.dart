@@ -13,6 +13,7 @@ import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_toast.dart';
+import '../../core/widgets/compartment_sheet.dart';
 import '../../core/widgets/row_icon_tile.dart';
 import '../../core/widgets/screen_header.dart';
 import '../../data/entitlements/entitlement_providers.dart';
@@ -118,6 +119,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
   Widget _buildScreen(BuildContext context) {
     final shiftState = ref.watch(timbraStateProvider);
     final sessionsAsync = ref.watch(todaySessionsProvider);
+    final rejected = ref.watch(syncFailedSessionsProvider).valueOrNull ?? const <WorkSession>[];
     final punchState = ref.watch(punchNotifierProvider);
     final total = ref.watch(totalWorkedTodayProvider);
     final clockInMethod = ref.watch(effectiveClockInMethodProvider);
@@ -176,13 +178,23 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                 // _kFixedLayoutMinHeight.
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final fits = constraints.maxHeight >= _kFixedLayoutMinHeight;
+                    // A refusal notice adds height that `_kFixedLayoutMinHeight` does not know
+                    // about, so a screen that just fits would overflow the session card below it.
+                    // With rejections present the page scrolls instead — the notice is the one
+                    // thing here that must never be clipped.
+                    final fits = constraints.maxHeight >= _kFixedLayoutMinHeight && rejected.isEmpty;
                     final punchGuard = ref.watch(punchGuardProvider);
                     final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
                     final content = <Widget>[
                       _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
                       const SizedBox(height: 24),
+                      // Above the punch control, not below it: a punch the server refused is a
+                      // fact about the shift the technician is about to add to.
+                      if (rejected.isNotEmpty) ...[
+                        _RejectedPunchesBanner(sessions: rejected),
+                        const SizedBox(height: 16),
+                      ],
                       // The blocked reason used to be conditionally inserted into the Column
                       // outright — an abrupt pop. AnimatedSize gives it a height transition
                       // in/out instead, without needing to know its own content's height up
@@ -490,6 +502,152 @@ class _GuardBanner extends StatelessWidget {
                 color: v.statusWarn,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _RejectedPunchesBanner
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Says out loud what the app used to say once and then forget: the server refused N punches.
+///
+/// Those rows stay on the phone under `syncFailedMarker` and are hidden from the shift on purpose —
+/// a rejected opener would double the day. The consequence is that every number on this screen is
+/// correct while the technician still cannot see that part of their day never reached the office.
+/// The notice names the count and opens the list; it disappears when the rows fall out of the
+/// repository's 7-day window, not on a tap, because dismissing it would restore exactly the silence
+/// it exists to remove.
+class _RejectedPunchesBanner extends StatelessWidget {
+  const _RejectedPunchesBanner({required this.sessions});
+
+  final List<WorkSession> sessions;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = context.vetro;
+    final n = sessions.length;
+    final titolo = n == 1
+        ? '1 timbratura non registrata dal server'
+        : '$n timbrature non registrate dal server';
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => openCompartmentSheet(
+        context,
+        label: n == 1 ? 'Timbratura non registrata' : 'Timbrature non registrate',
+        content: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.sm,
+            AppSpacing.pagePadding,
+            AppSpacing.lg,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Il server le ha rifiutate perché un altro dispositivo aveva già un turno aperto. '
+                'Restano su questo telefono e non entrano nel totale: se le ore sono reali, '
+                'segnalale all\'ufficio.',
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 13,
+                  height: 1.4,
+                  color: context.colors.inkMuted,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              for (final s in sessions) _RejectedPunchRow(session: s),
+            ],
+          ),
+        ),
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: v.statusWarnBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: v.statusWarn.withAlpha(80)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.alertTriangle, size: 15, color: v.statusWarn),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    titolo,
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 12,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                      color: v.statusWarn,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tocca per i dettagli',
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 12,
+                      height: 1.35,
+                      color: v.statusWarn,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One refused punch, with the business day it belongs to and its time.
+class _RejectedPunchRow extends ConsumerWidget {
+  const _RejectedPunchRow({required this.session});
+
+  final WorkSession session;
+
+  String _label(String type) => switch (type) {
+    'ingresso' => 'Ingresso',
+    'fine' => 'Fine turno',
+    'pausa' => 'Pausa',
+    'ripresa' => 'Ripresa',
+    _ => type,
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final businessTime = ref.watch(businessTimeProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _label(session.eventType),
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: context.colors.ink.withAlpha(220),
+              ),
+            ),
+          ),
+          Text(
+            businessTime.formatInZone(session.eventTime, 'dd/MM HH:mm'),
+            style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
           ),
         ],
       ),
