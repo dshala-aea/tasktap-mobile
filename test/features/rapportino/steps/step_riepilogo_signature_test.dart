@@ -18,6 +18,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:signature/signature.dart';
@@ -28,8 +29,12 @@ import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/users/user_signature_api_client.dart';
+import 'package:tasktap_mobile/data/users/user_signature_cache.dart';
 import 'package:tasktap_mobile/features/rapportino/steps/step_riepilogo.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
+    show internalUserIdProvider;
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
 const _reportId = 'draft-1';
@@ -80,10 +85,18 @@ ProviderContainer _buildContainer(
   AppDatabase db, {
   UserSignatureApiClient? signatureClient,
   ILocationService? locationService,
+  // Defaults to online, which is what the pre-fill path did before it could also answer from the
+  // local cache: `isOnlineProvider` reads false while connectivity is unknown, and a harness that
+  // left it there would silently exercise the offline branch in every pre-fill test.
+  bool online = true,
+  String? internalUserId,
 }) {
   return ProviderContainer(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
+      isOnlineProvider.overrideWithValue(online),
+      if (internalUserId != null)
+        internalUserIdProvider.overrideWith((ref) async => internalUserId),
       userSignatureApiClientProvider.overrideWithValue(
         signatureClient ?? const _StubUserSignatureApiClient(),
       ),
@@ -640,6 +653,58 @@ void main() {
       expect(row.capturedLatitude, isNull);
       expect(row.capturedLongitude, isNull);
       expect(row.capturedAt, isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  // The whole point of a saved signature is writing the rapportino on site — which is also the
+  // case where there is no signal. Pre-filling used to be a network-only call, so offline the
+  // technician redrew it every time.
+  testWidgets(
+    'offline, the technician signature pre-fills from the copy this phone saved',
+    (tester) async {
+      const userId = 'user-1';
+      final savedBytes = Uint8List.fromList(List.generate(24, (i) => i + 1));
+      final cache = UserSignatureCache(rootLoader: getApplicationDocumentsDirectory);
+      await cache.write(userId, savedBytes);
+
+      final mockClient = _MockUserSignatureApiClient();
+      container = _buildContainer(
+        db,
+        signatureClient: mockClient,
+        online: false,
+        internalUserId: userId,
+      );
+      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(_buildStep(container));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await tester.pump();
+      });
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Firma acquisita'), findsOneWidget);
+
+      final state = container.read(reportEditorProvider(_reportId));
+      final onDisk = await tester.runAsync(
+        () => File(state.technicianSignatureLocalPath!).readAsBytes(),
+      );
+      expect(onDisk, savedBytes);
+      // Still a pre-filled signature, not a captured one: no live GPS, no "just signed" instant.
+      final repo = DraftReportRepository(db);
+      final allegati = await repo.getAllegati(_reportId);
+      final row = allegati.firstWhere((a) => a.id == state.technicianSignatureAllegatoId);
+      expect(row.capturedAt, isNull);
+
+      verifyNever(() => mockClient.fetchSavedSignatureContent());
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

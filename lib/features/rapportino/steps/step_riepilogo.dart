@@ -23,6 +23,8 @@ import '../../../data/sync/draft_submission_state.dart';
 import '../../../data/sync/submission_queue.dart' show isStaleSubmitConflictMessage;
 import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../data/users/user_signature_api_client.dart';
+import '../../../data/users/user_signature_cache.dart';
+import '../../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../../../domain/reports/draft_validation.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -151,13 +153,23 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   /// Never blocks the editor from opening: a fetch failure or a missing saved signature both
   /// no-op silently (see `UserSignatureApiClient.fetchSavedSignatureContent`'s own "never blocks"
   /// contract).
+  ///
+  /// Offline the server cannot be asked, so this reads the copy this phone last saw
+  /// (`UserSignatureCache`, via [signatureToPrefill]) — a rapportino written with no signal is
+  /// exactly the case the saved signature exists to spare the technician redrawing, and it used
+  /// to silently lose it.
   Future<void> _maybePrefillTechnicianSignature() async {
     final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
     await notifier.ready;
     if (!mounted) return;
     if (_technicianPrefillBlocked()) return;
 
-    final bytes = await ref.read(userSignatureApiClientProvider).fetchSavedSignatureContent();
+    final bytes = await signatureToPrefill(
+      online: ref.read(isOnlineProvider),
+      userId: await _internalUserId(ref),
+      api: ref.read(userSignatureApiClientProvider),
+      cache: ref.read(userSignatureCacheProvider),
+    );
     if (bytes == null || !mounted) return;
     // Re-check after the fetch: a resumed draft's hydration, a manual capture, or a deliberate
     // Cancella could all have completed while the network call was in flight.
@@ -849,6 +861,13 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
   Future<void> _uploadForReuse(Uint8List bytes, ScaffoldMessengerState? messenger) async {
     try {
       await ref.read(userSignatureApiClientProvider).uploadSignature(bytes);
+      // The server accepted it, so this phone may keep it for the next rapportino opened with no
+      // signal. Cached only after the upload succeeds: "saved" means saved on the server, and the
+      // cache is the offline stand-in for that record, not a substitute for it.
+      final userId = await _internalUserId(ref);
+      if (userId != null) {
+        await ref.read(userSignatureCacheProvider).write(userId, bytes);
+      }
     } catch (_) {
       messenger?.showSnackBar(
         const SnackBar(content: Text('Impossibile salvare la firma per il riutilizzo.')),
@@ -863,6 +882,20 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
     } else {
       await notifier.clearTechnicianSignature();
     }
+  }
+}
+
+/// The signed-in technician's internal id, or null when nothing knows it yet.
+///
+/// An unreadable store reads as "no user known" rather than as an error: the id is only the cache
+/// key, so losing it costs a pre-fill, and letting it throw would turn a convenience into a failure
+/// of the step that hosts it (the reuse upload would then report a save that did succeed as
+/// failed). Top-level because both the step and the signature block need it.
+Future<String?> _internalUserId(WidgetRef ref) async {
+  try {
+    return await ref.read(internalUserIdProvider.future);
+  } catch (_) {
+    return null;
   }
 }
 
