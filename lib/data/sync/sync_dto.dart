@@ -107,6 +107,19 @@ class SyncResultDto {
   /// ticket manifest, because the payload has no manifest of its own for them.
   final List<SyncTicketHistoryDto> ticketHistory;
 
+  /// The caller's OWN cantiere punches — the read mirror of site time. Re-sent in full on every
+  /// sync (the window plus anything still open), so the applier upserts and the manifest prunes;
+  /// a colleague's shift never travels here, the same rule as [ticketWorkLogs].
+  ///
+  /// Distinct from the local outbox (`cantiere_punches`), which holds punches this device still
+  /// owes the server. Merging the two would put unsent state into a mirror of the server.
+  final List<SyncCantiereWorkLogDto> cantiereWorkLogs;
+
+  /// False when the payload came from a backend that predates the cantiere-punch mirror. Without
+  /// it, an older server would look like "every shift was deleted" and the manifest prune would
+  /// empty the device's site history — see `SyncService._pruneToScope`.
+  final bool carriesCantiereWorkLogs;
+
   /// False when the payload came from a backend that predates the report aggregate. Without it an
   /// older backend would look like "every report lost its staff, materials and answers", and the
   /// per-report replace would delete children the device already holds.
@@ -274,6 +287,8 @@ class SyncResultDto {
     this.reportVersions = const [],
     this.ticketWorkLogs = const [],
     this.ticketHistory = const [],
+    this.cantiereWorkLogs = const [],
+    this.carriesCantiereWorkLogs = false,
     this.carriesReportAggregate = false,
     this.carriesAllegati = false,
     this.checklistTruncated = false,
@@ -369,6 +384,10 @@ class SyncResultDto {
         j['ticketHistory'],
         SyncTicketHistoryDto.fromJson,
       ),
+      cantiereWorkLogs: _list(
+        j['cantiereWorkLogs'],
+        SyncCantiereWorkLogDto.fromJson,
+      ),
       checklistTruncated: j['checklistTruncated'] as bool? ?? false,
       checklistOmittedTicketIds:
           ((j['checklistOmittedTicketIds'] as List<dynamic>?) ?? const [])
@@ -385,6 +404,7 @@ class SyncResultDto {
       carriesTicketMateriali: j.containsKey('ticketMateriali'),
       carriesCantiereCrewAssignments: j.containsKey('cantiereCrewAssignments'),
       carriesTicketHistory: j.containsKey('ticketHistory'),
+      carriesCantiereWorkLogs: j.containsKey('cantiereWorkLogs'),
       carriesMagazzini: j.containsKey('magazzini'),
       carriesExtensionFieldDefinitions: j.containsKey('extensionFieldDefinitions'),
       carriesContacts: j.containsKey('contacts'),
@@ -422,6 +442,7 @@ class SyncScopeDto {
     this.materialiBarcodes,
     this.strumenti,
     this.ticketWorkLogs,
+    this.cantiereWorkLogs,
   });
 
   final List<String>? schedules;
@@ -441,6 +462,11 @@ class SyncScopeDto {
   /// session, so this never says a colleague's rows were deleted.
   final List<String>? ticketWorkLogs;
 
+  /// The caller's own cantiere punches the server currently holds in scope (the window plus any
+  /// still-open shift). Null on an older backend → no prune, so a server that predates the member
+  /// cannot empty the device's site history. Never includes a colleague's punch.
+  final List<String>? cantiereWorkLogs;
+
   /// The exact keys `fromJson` reads — compared with the OpenAPI snapshot by the inbound
   /// contract gate.
   static const Set<String> wireKeys = {
@@ -456,6 +482,7 @@ class SyncScopeDto {
     'materialiBarcodes',
     'strumenti',
     'ticketWorkLogs',
+    'cantiereWorkLogs',
   };
 
   factory SyncScopeDto.fromJson(Map<String, dynamic> j) => SyncScopeDto(
@@ -471,6 +498,7 @@ class SyncScopeDto {
     materialiBarcodes: _idList(j['materialiBarcodes']),
     strumenti: _idList(j['strumenti']),
     ticketWorkLogs: _idList(j['ticketWorkLogs']),
+    cantiereWorkLogs: _idList(j['cantiereWorkLogs']),
   );
 
   /// Null stays null ("no authoritative set"); an empty array stays an empty list ("nothing in
@@ -2177,6 +2205,98 @@ class SyncTicketWorkLogDto {
         createdAt: DateTime.parse(j['createdAt'] as String),
         updatedAt: _dt(j['updatedAt']),
       );
+}
+
+/// One cantiere clock-in/clock-out of the signed-in technician, as the server holds it.
+///
+/// Mirrors `SyncCantiereWorkLogDto` on the backend. `workDate` + `startTime`/`endTime` are the
+/// Rome-local values the WorkLogs domain stores; `startUtc`/`endUtc` are the true instants and are
+/// null on legacy rows — prefer them for a duration, because subtracting a time-of-day pair across
+/// midnight is negative.
+///
+/// Only the caller's own punches ever arrive here. A lead's team hours stay an online read, the
+/// same rule `SyncTicketWorkLogDto` follows.
+class SyncCantiereWorkLogDto {
+  final String id;
+  final String tenantId;
+  final String cantiereId;
+  final String userId;
+  final String? ticketId;
+  final DateTime workDate;
+  final Duration startTime;
+  final Duration? endTime;
+  final DateTime? startUtc;
+  final DateTime? endUtc;
+
+  /// `CantiereWorkLogTypeEnum`: 0 Site, 1 Travel, 2 Setup.
+  final int workLogType;
+
+  /// `WorkLogApprovalStatusEnum`: 0 Draft, 1 Submitted, 2 Approved, 3 Rejected.
+  final int approvalStatus;
+  final String? description;
+
+  /// The device's own key for the punch, when it queued one — what lets the screen recognise the
+  /// server's row of a shift it is still holding in the outbox.
+  final String? clientId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'cantiereId',
+    'userId',
+    'ticketId',
+    'workDate',
+    'startTime',
+    'endTime',
+    'startUtc',
+    'endUtc',
+    'workLogType',
+    'approvalStatus',
+    'description',
+    'clientId',
+    'createdAt',
+    'updatedAt',
+  };
+
+  const SyncCantiereWorkLogDto({
+    required this.id,
+    required this.tenantId,
+    required this.cantiereId,
+    required this.userId,
+    this.ticketId,
+    required this.workDate,
+    required this.startTime,
+    this.endTime,
+    this.startUtc,
+    this.endUtc,
+    this.workLogType = 0,
+    this.approvalStatus = 0,
+    this.description,
+    this.clientId,
+    required this.createdAt,
+    this.updatedAt,
+  });
+
+  factory SyncCantiereWorkLogDto.fromJson(Map<String, dynamic> j) => SyncCantiereWorkLogDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    cantiereId: j['cantiereId'] as String,
+    userId: j['userId'] as String,
+    ticketId: j['ticketId'] as String?,
+    workDate: parseDateOnlyOrThrow(j['workDate']),
+    startTime: parseTimeSpan(j['startTime']) ?? Duration.zero,
+    endTime: j['endTime'] == null ? null : parseTimeSpan(j['endTime']),
+    startUtc: _dt(j['startUtc']),
+    endUtc: _dt(j['endUtc']),
+    workLogType: _intOrNull(j['workLogType']) ?? 0,
+    approvalStatus: _intOrNull(j['approvalStatus']) ?? 0,
+    description: j['description'] as String?,
+    clientId: j['clientId'] as String?,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+  );
 }
 
 /// One recorded change of one ticket, as the server holds it.

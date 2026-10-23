@@ -35,6 +35,28 @@ final cantiereByIdProvider = StreamProvider.autoDispose.family<CantieriData?, St
   return (db.select(db.cantieri)..where((c) => c.id.equals(id))).watchSingleOrNull();
 });
 
+/// This cantiere's mirrored punches of the signed-in technician, newest first — the cantiere
+/// detail's *Timbrature* section.
+///
+/// Reads `cantiere_work_logs` directly rather than through [cantiereWorklogsProvider], which is
+/// online-first and shaped for StepOre's hour suggestion: a history section must show what the
+/// device holds, never go blank because a request failed, and needs the approval state the
+/// suggestion DTO does not carry.
+///
+/// Only this technician's rows are stored, so "empty" here always means "this device has none of
+/// your shifts for this site", never "your colleagues did not work" — the screen says the former.
+final cantiereWorkLogMirrorProvider =
+    StreamProvider.autoDispose.family<List<CantiereWorkLogData>, String>((ref, cantiereId) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(db.cantiereWorkLogs)
+            ..where((w) => w.cantiereId.equals(cantiereId))
+            ..orderBy([
+              (w) => OrderingTerm.desc(w.workDate),
+              (w) => OrderingTerm.desc(w.startSeconds),
+            ]))
+          .watch();
+    });
+
 /// Tickets linked to the given cantiere (`Ticket.cantiereId == id`), for the "Tickets in questo
 /// cantiere" section on CantiereDetailScreen. Local-only, like every other list in this app —
 /// the technician's own ticket sync scope already determines what's available here.
@@ -96,52 +118,94 @@ final cantiereGeocodedLocationProvider = FutureProvider.autoDispose.family<Geoco
 });
 
 /// A user's CantiereWorkLog entries on one cantiere, most recent first — the cantiere-tier
-/// equivalent of `ticketWorklogsProvider` (features/ticket/ticket_providers.dart), same
-/// online-only posture and for the same reason: a live network call, not a locally-synced
-/// table, so there is nothing to cache-then-refresh here. Backs StepOre's cantiere-tier hours
-/// suggestion, which only applies when the report has no ticket (or the ticket tier found
-/// nothing) but does have a cantiereId.
+/// equivalent of `ticketWorklogsProvider` (features/ticket/ticket_providers.dart). Backs StepOre's
+/// cantiere-tier hours suggestion, which only applies when the report has no ticket (or the ticket
+/// tier found nothing) but does have a cantiereId — and the cantiere detail's own *Timbrature*
+/// section.
 ///
-/// While offline this answers from the phone's own punch log instead of returning nothing
-/// (P2-6): the cantiere work logs this device clocked are exactly the ones a technician drafting
-/// a rapportino on site needs, and they used to be invisible precisely when they mattered most —
-/// an empty list meant "no suggestion", so every offline rapportino's hours were typed by hand
-/// from memory. Only the signed-in user's own row is answered from local data (the device has
-/// nobody else's punches); a request for a teammate's hours still resolves to nothing while
-/// offline, which is the honest answer rather than borrowing this technician's hours.
+/// While offline this answers from the device instead of returning nothing (P2-6), and since the
+/// sync started carrying `cantiereWorkLogs` it answers from the SERVER'S OWN ROWS mirrored in
+/// `cantiere_work_logs`. That distinction is the whole point: this used to read `cantiere_punches`,
+/// which is an outbox — a punch leaves it the moment it is pushed, so a technician opening the
+/// screen after a sync saw nothing about yesterday. The mirror never drains; the outbox is now read
+/// only for punches the mirror does not know about yet (still queued), and those are merged in by
+/// `clientId` so one shift is never counted twice.
 ///
-/// A request that never arrived, or a server fault, answers from that same punch log rather than
-/// from nothing: the phone's own clocks are still the best evidence of the hours worked, and a 503
-/// is not a statement that the technician punched no time. A 4xx still throws, which every call
-/// site already renders as "no suggestion".
+/// Only the signed-in user's own rows are answered from local data (the device holds nobody else's
+/// punches); a request for a teammate's hours still resolves to nothing while offline, which is the
+/// honest answer rather than borrowing this technician's hours.
+///
+/// A request that never arrived, or a server fault, answers from that same local union rather than
+/// from nothing: the mirror and the phone's own clocks are still the best evidence of the hours
+/// worked, and a 503 is not a statement that the technician punched no time. A 4xx still throws,
+/// which every call site already renders as "no suggestion".
 final cantiereWorklogsProvider = FutureProvider.autoDispose
     .family<List<CantiereWorkLogDto>, ({String userId, String cantiereId})>((ref, key) async {
-      Future<List<CantiereWorkLogDto>> fromPunchLog() async {
+      Future<List<CantiereWorkLogDto>> fromDevice() async {
         final me = await ref.watch(internalUserIdProvider.future);
         if (me == null || me != key.userId) return const [];
         final businessTime = ref.watch(businessTimeProvider);
+        final db = ref.watch(appDatabaseProvider);
+
+        final mirrored =
+            await (db.select(db.cantiereWorkLogs)..where(
+                  (w) => w.cantiereId.equals(key.cantiereId) & w.userId.equals(key.userId),
+                ))
+                .get();
+        final knownClientIds = {
+          for (final w in mirrored)
+            if (w.clientId != null) w.clientId!,
+        };
+
+        // Punches still sitting in the outbox: the server has not seen them yet, so no mirrored row
+        // exists. A closed one is a shift already worked and must stay readable.
         final intervals = await ref
             .watch(cantiereSessionRepositoryProvider)
             .getClosedIntervalsFor(key.cantiereId);
+
         // Shaped like `CantiereWorkLogDto.fromJson` would read off the server: the Rome-local
         // wall clock (`startTime`/`endTime` are "HH:mm:ss" strings there) and the business date,
         // so the suggestion code downstream cannot tell a local entry from a server one.
         return [
-          for (final interval in intervals)
+          for (final w in mirrored)
             CantiereWorkLogDto(
-              id: interval.clientId,
-              cantiereId: interval.cantiereId,
-              customerId: interval.customerId,
-              ticketId: interval.ticketId,
-              userId: key.userId,
-              workDate: businessTime.businessDateOf(interval.startTime),
-              startTime: businessTime.formatInZone(interval.startTime, 'HH:mm:ss'),
-              endTime: interval.endTime == null
-                  ? null
-                  : businessTime.formatInZone(interval.endTime!, 'HH:mm:ss'),
-              description: interval.description,
-              duration: interval.endTime?.difference(interval.startTime),
+              id: w.id,
+              cantiereId: w.cantiereId,
+              // The mirror does not carry the cantiere's customer; only a suggestion and one list
+              // row read this DTO and neither uses it. Empty rather than invented.
+              customerId: '',
+              ticketId: w.ticketId,
+              userId: w.userId,
+              workDate: w.workDate,
+              startTime: w.startUtc != null
+                  ? businessTime.formatInZone(w.startUtc!, 'HH:mm:ss')
+                  : _formatSeconds(w.startSeconds),
+              endTime: w.endUtc != null
+                  ? businessTime.formatInZone(w.endUtc!, 'HH:mm:ss')
+                  : (w.endSeconds == null ? null : _formatSeconds(w.endSeconds!)),
+              description: w.description,
+              duration: w.startUtc != null && w.endUtc != null
+                  ? w.endUtc!.difference(w.startUtc!)
+                  : (w.endSeconds == null
+                        ? null
+                        : Duration(seconds: w.endSeconds! - w.startSeconds)),
             ),
+          for (final interval in intervals)
+            if (!knownClientIds.contains(interval.clientId))
+              CantiereWorkLogDto(
+                id: interval.clientId,
+                cantiereId: interval.cantiereId,
+                customerId: interval.customerId,
+                ticketId: interval.ticketId,
+                userId: key.userId,
+                workDate: businessTime.businessDateOf(interval.startTime),
+                startTime: businessTime.formatInZone(interval.startTime, 'HH:mm:ss'),
+                endTime: interval.endTime == null
+                    ? null
+                    : businessTime.formatInZone(interval.endTime!, 'HH:mm:ss'),
+                description: interval.description,
+                duration: interval.endTime?.difference(interval.startTime),
+              ),
         ];
       }
 
@@ -154,5 +218,14 @@ final cantiereWorklogsProvider = FutureProvider.autoDispose
           if (!isTransportOrServerFault(e)) rethrow;
         }
       }
-      return fromPunchLog();
+      return fromDevice();
     });
+
+/// `HH:mm:ss` for a seconds-into-the-day value — the wire shape `CantiereWorkLogDto.startTime`
+/// carries, for a mirrored row that predates the true instants (`startUtc`/`endUtc` null).
+String _formatSeconds(int seconds) {
+  final h = (seconds ~/ 3600).toString().padLeft(2, '0');
+  final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, '0');
+  final s = (seconds % 60).toString().padLeft(2, '0');
+  return '$h:$m:$s';
+}
