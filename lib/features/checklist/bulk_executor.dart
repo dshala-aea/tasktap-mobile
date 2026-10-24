@@ -20,6 +20,10 @@ class BulkExecutor {
     dateValue: a.dateValue,
     numberValue: a.numberValue,
     note: a.note,
+    // Same reason as the typed path: the answer carries its own name so the sent report can render
+    // itself without the ticket checklist.
+    controlLabel: c.label,
+    assetId: c.assetId,
   );
 
   Future<void> apply(BulkPlan plan) {
