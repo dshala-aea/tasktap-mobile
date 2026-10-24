@@ -90,6 +90,10 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
         dateValue: date,
         numberValue: number,
         note: note,
+        // The name and asset travel with the answer: the sent report reads them back by itself,
+        // long after this device may have lost the ticket's checklist.
+        controlLabel: _c.label,
+        assetId: _c.assetId,
       ),
     );
   }

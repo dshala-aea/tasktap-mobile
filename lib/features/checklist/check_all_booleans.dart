@@ -41,6 +41,10 @@ List<ControlloRow> planCheckAllBooleans(
         boolValue: true,
         // A note is not itself an answer, and ticking does not make it one.
         note: current?.hasNote == true ? current!.note : null,
+        // Ticking every control on an asset is the commonest way a report gets answered; the rows
+        // must still carry their own names, or the sent report is a list of GUIDs.
+        controlLabel: c.label,
+        assetId: c.assetId,
       ),
     );
   }
