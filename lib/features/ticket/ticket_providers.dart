@@ -77,6 +77,51 @@ final ticketStatusesProvider = StreamProvider.autoDispose<List<TicketStatuse>>((
   )..orderBy([(t) => OrderingTerm.asc(t.id)])).watch();
 });
 
+/// The ids of the tenant's closing statuses — the rows flagged `isClosed`.
+///
+/// The flag, not `Ticket.closedAt`, is what decides "closed" on this device. A status change made
+/// here writes the new `statusId` and nothing else, so a ticket closed from the phone still has a
+/// null `closedAt` until the next sync — and anything that only looked at `closedAt` kept offering
+/// to start new work on it. The server uses the same flag (it stamps `ClosedAt` when a ticket
+/// enters such a status), so the two agree; see [ticketIsClosed] for the combined rule.
+final closedTicketStatusIdsProvider = StreamProvider.autoDispose<Set<int>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(
+    db.ticketStatuses,
+  )..where((t) => t.isClosed.equals(true))).watch().map(
+    (rows) => {for (final r in rows) r.id},
+  );
+});
+
+/// Whether [ticket] is closed: it sits in one of the tenant's closing statuses, or the server
+/// stamped it closed.
+///
+/// Either fact alone is enough. The flag covers a closure this device just made (where `closedAt`
+/// is still null until the next sync); `closedAt` covers a ticket synced before its status list
+/// was cached, and a status the tenant has since re-flagged as open.
+bool ticketIsClosed(Ticket ticket, Set<int> closedStatusIds) =>
+    ticket.closedAt != null || closedStatusIds.contains(ticket.statusId);
+
+/// [ticketIsClosed] for action code that runs outside a build and holds no ticket row: reads the
+/// mirror for [ticketId] and the tenant's closing statuses, one query each.
+///
+/// An unmirrored ticket answers `false` rather than refusing — no evidence of closure is not
+/// evidence of closure, and a timer the mirror cannot even name is the queue's problem, not this
+/// rule's.
+Future<bool> mirroredTicketIsClosed(AppDatabase db, String ticketId) async {
+  final ticket = await (db.select(
+    db.tickets,
+  )..where((t) => t.id.equals(ticketId))).getSingleOrNull();
+  if (ticket == null) return false;
+  final closedStatusIds = {
+    for (final row in await (db.select(
+      db.ticketStatuses,
+    )..where((t) => t.isClosed.equals(true))).get())
+      row.id,
+  };
+  return ticketIsClosed(ticket, closedStatusIds);
+}
+
 /// Map of typeId → type name from cached TicketTypes table.
 final ticketTypeMapProvider = StreamProvider.autoDispose<Map<int, String>>((
   ref,

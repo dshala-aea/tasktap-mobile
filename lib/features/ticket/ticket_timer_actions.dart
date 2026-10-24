@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/sync/connectivity_provider.dart';
+import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../data/timbratura/ticket_timer_sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
+import 'ticket_providers.dart' show mirroredTicketIsClosed;
 import 'ticket_workflow_api_client.dart';
 
 /// Start/stop for a ticket's timer, in the one place both entry points use.
@@ -30,6 +32,15 @@ import 'ticket_workflow_api_client.dart';
 /// session is written to the device and queued.
 Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
   final repo = ref.read(ticketTimerRepositoryProvider);
+
+  // A closed ticket is finished work and may not acquire new hours. The server would still open
+  // the session — its in-progress marker deliberately leaves a closed ticket alone, so nothing
+  // upstream refuses this — which makes this the one place that can. Checked before anything is
+  // written to the mirror or queued, so a refusal leaves the device exactly as it was.
+  if (await mirroredTicketIsClosed(ref.read(appDatabaseProvider), ticketId)) {
+    throw const TicketTimerOnClosedTicket();
+  }
+
   // The key this tap owns, generated before the call: a reply that never arrives is then retried
   // onto the same server row instead of opening a second timer with the same hours.
   final clientId = const Uuid().v4();
@@ -131,6 +142,15 @@ class TicketTimerNotOnDevice extends TicketWorkflowFailure {
         'Senza connessione posso fermare solo un timer avviato da questo telefono con i dati '
         'disponibili. Riprova quando hai segnale.',
       );
+}
+
+/// The ticket is closed, so its clock cannot be started.
+///
+/// Its own sentence, not a generic failure: the way back is a status change, which is on the same
+/// screen the timer bar sits on.
+class TicketTimerOnClosedTicket extends TicketWorkflowFailure {
+  const TicketTimerOnClosedTicket()
+    : super('Intervento chiuso: riaprilo dal suo stato per avviare un timer.');
 }
 
 /// The session this tap's key names is already closed, so there is nothing to show running.
