@@ -20,14 +20,14 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// Chosen over a time-plotted agenda strip (the roll's own assigned structure) on direct
 /// feedback: a bucketed queue is explainable ("this is Da fare because nothing else is open yet
 /// today") where a rank is not, and it reads as the actual job — triage, then act — rather than a
-/// calendar the app already has a real one of (Calendario). Live and Da fare carry a visible next
-/// step; Programmato/In attesa/Fatto are compact rows, because the day's answer to "what matters
-/// now" only has one or two entries in it on an ordinary day.
+/// calendar the app already has a real one of (Calendario). Live and every one of today's open
+/// jobs carry a visible next step; In attesa and Fatto are compact rows, because the day's answer
+/// to "what matters now" only has one or two entries in it on an ordinary day.
 ///
 /// Two blocks, not one: today's tiers under the screen's "Oggi" heading, and the next seven days
-/// under their own "PROSSIMI 7 GIORNI" heading. They shared a single Programmato tier until a
-/// day with no schedules rendered future rows directly beneath the word "Oggi" — see
-/// [WorkQueueBuckets.restOfToday] for that history.
+/// under their own "PROSSIMI 7 GIORNI" heading. Programmato exists only in the second block —
+/// today's own jobs used to be demoted into it as well, which made the day's second job read as
+/// planned for later. See [WorkQueueBuckets.restOfToday] for that history.
 class WorkQueueSection extends ConsumerWidget {
   const WorkQueueSection({super.key});
 
@@ -69,17 +69,18 @@ class WorkQueueSection extends ConsumerWidget {
     for (final schedule in q.live) {
       todaySections.add(_FocusCard(schedule: schedule, tier: _Tier.live));
     }
-    if (q.daFare != null) {
-      todaySections.add(_FocusCard(schedule: q.daFare!, tier: _Tier.daFare));
+    // Every other job still ahead TODAY gets the same card as the next one, not a compact
+    // "PROGRAMMATO" list: today's second job is today's work, and the stat strip above the queue
+    // counts it as "Da fare". Demoting it to a tier named PROGRAMMATO made it read as planned for
+    // another day, so a day with two jobs looked like a day with one — the header said "2
+    // INTERVENTI OGGI · 2 DA FARE" over a single card. Order is time order; the first card is
+    // still the next thing to start.
+    for (final schedule in q.actionableToday) {
+      todaySections.add(_FocusCard(schedule: schedule, tier: _Tier.daFare));
     }
     if (q.inAttesa.isNotEmpty) {
       todaySections.add(
         _CompactTier(title: 'IN ATTESA', schedules: q.inAttesa, tier: _Tier.inAttesa),
-      );
-    }
-    if (q.restOfToday.isNotEmpty) {
-      todaySections.add(
-        _CompactTier(title: 'PROGRAMMATO', schedules: q.restOfToday, tier: _Tier.programmato),
       );
     }
     if (q.fatto.isNotEmpty) {

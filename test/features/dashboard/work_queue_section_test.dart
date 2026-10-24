@@ -67,12 +67,11 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('an all-day Programmato schedule does not render 00:00', (tester) async {
+    testWidgets('an all-day schedule today does not render 00:00', (tester) async {
       final today = DateTime.now().toUtc();
       final dayStart = DateTime.utc(today.year, today.month, today.day);
-      // Two schedules today: the first becomes "Da fare", pushing the second (all-day) into the
-      // compact "Programmato" tier, which renders through ListRow's `meta` slot instead of the
-      // focus card's badge row.
+      // Two schedules today: both are today's work, so both render as focus cards — the all-day
+      // one included, whose 0/0 placeholder minutes are not a real time of day.
       await db
           .into(db.schedules)
           .insert(
@@ -166,6 +165,27 @@ void main() {
       // And the future work sits under its own heading, not under the screen's "Oggi".
       expect(find.textContaining('PROSSIMI 7 GIORNI'), findsOneWidget);
       expect(find.text('Intervento di giovedì'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('every open job scheduled today shows as its own "Da fare" card', (tester) async {
+      final today = DateTime.now().toUtc();
+      final dayStart = DateTime.utc(today.year, today.month, today.day);
+      await insertSchedule(db, id: 'sched-1', activityDate: dayStart, title: 'Primo intervento');
+      await insertSchedule(db, id: 'sched-2', activityDate: dayStart, title: 'Secondo intervento');
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      // rh5w: the second job of the day used to be demoted to a compact tier labelled
+      // PROGRAMMATO, so the header's "2 DA FARE" stood over a single card and the second job read
+      // as planned for another day.
+      expect(find.text('Primo intervento'), findsOneWidget);
+      expect(find.text('Secondo intervento'), findsOneWidget);
+      expect(find.text('DA FARE'), findsNWidgets(2));
+      expect(find.textContaining('PROGRAMMATO'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
