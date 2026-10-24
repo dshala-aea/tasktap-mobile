@@ -387,6 +387,63 @@ class _RapportinoViewBody extends ConsumerWidget {
                       ),
                     ),
 
+                  // ── Diagnosi e soluzione ──────────────────────────────────────
+                  //
+                  // Two fields the technician fills in on site (step Dettagli) and that the
+                  // customer's PDF prints — but the read-only view, the only place a sent report
+                  // can be re-read, dropped them. They are not part of Descrizione: that is the
+                  // free-text account of the visit, while diagnosi names the cause and soluzione
+                  // the remedy, and the office searches on those two. One card, because they are
+                  // read together; each shown only when it has text, so a report with just a cause
+                  // does not print an empty "Soluzione".
+                  if ((draft.diagnosi ?? '').isNotEmpty || (draft.soluzione ?? '').isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.pagePadding,
+                          0,
+                          AppSpacing.pagePadding,
+                          AppSpacing.base,
+                        ),
+                        child: AppCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SectionTitle(title: 'Diagnosi e soluzione'),
+                              if ((draft.diagnosi ?? '').isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                _ReportFieldLabel(label: 'Diagnosi'),
+                                const SizedBox(height: 2),
+                                Text(
+                                  draft.diagnosi!,
+                                  style: TextStyle(
+                                    fontFamily: 'Archivo',
+                                    fontSize: 13,
+                                    color: context.colors.ink,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ],
+                              if ((draft.soluzione ?? '').isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                _ReportFieldLabel(label: 'Soluzione'),
+                                const SizedBox(height: 2),
+                                Text(
+                                  draft.soluzione!,
+                                  style: TextStyle(
+                                    fontFamily: 'Archivo',
+                                    fontSize: 13,
+                                    color: context.colors.ink,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
                   // ── Note tecnico ──────────────────────────────────────────────
                   //
                   // A separate field from Descrizione (DraftReports.details) — internal, not
@@ -1190,6 +1247,26 @@ class _AllegatiPhotoGrid extends ConsumerWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 // Controlli answers — one recorded checklist finding
 // ══════════════════════════════════════════════════════════════════════════════
+
+/// A small uppercase-ish heading inside a card that carries more than one field
+/// (Diagnosi e soluzione), so the two values are not read as one run-on paragraph.
+class _ReportFieldLabel extends StatelessWidget {
+  const _ReportFieldLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: context.colors.inkMuted,
+      ),
+    );
+  }
+}
 
 /// One recorded [ReportControlliData] row, read-only — the answer this report's own technician
 /// gave to one item of the ticket's checklist (ADR-0012 §B.4). Mirrors ticket_detail_screen.dart's
