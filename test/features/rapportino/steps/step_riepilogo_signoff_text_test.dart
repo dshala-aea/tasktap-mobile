@@ -78,6 +78,20 @@ Widget _buildStep(ProviderContainer container) {
   );
 }
 
+/// `AppFieldLabel` uppercases its text and renders it through `Text.rich`, so a plain
+/// `find.text('Osservazioni cliente')` matches nothing.
+Finder signoffLabel() => find.text('OSSERVAZIONI CLIENTE', findRichText: true);
+
+/// The signoff input. At rest it is the only `AppTextField` on the step — the typed-signature
+/// dialog's name field is only mounted once that dialog opens.
+Finder signoffInput() => find.descendant(
+  of: find.byType(AppTextField),
+  matching: find.byType(TextField),
+);
+
+AppTextField signoffField(WidgetTester tester) =>
+    tester.widget<AppTextField>(find.byType(AppTextField));
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   PathProviderPlatform.instance = _FakePathProviderPlatform();
@@ -97,13 +111,12 @@ void main() {
     await tester.pumpWidget(_buildStep(container));
     await tester.pumpAndSettle();
 
-    expect(find.text('Osservazioni cliente'), findsOneWidget);
+    // AppFieldLabel renders `Text.rich(text.toUpperCase())`, so the label matches only as rich
+    // text, and only in its uppercased form.
+    expect(signoffLabel(), findsOneWidget);
     // No asterisk: the customer's signature is optional to send, and so is what they are signing.
-    expect(find.text('Osservazioni cliente *'), findsNothing);
-    final field = tester.widget<AppTextField>(
-      find.widgetWithText(AppTextField, 'Osservazioni cliente'),
-    );
-    expect(field.controller?.text, isEmpty);
+    expect(find.text('OSSERVAZIONI CLIENTE *', findRichText: true), findsNothing);
+    expect(signoffField(tester).controller?.text, isEmpty);
 
     await tester.pumpWidget(const SizedBox.shrink());
     container.dispose();
@@ -116,9 +129,9 @@ void main() {
     await tester.pumpWidget(_buildStep(container));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Osservazioni cliente'));
+    await tester.ensureVisible(find.byType(AppTextField));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'Confermo l\'esecuzione dei lavori');
+    await tester.enterText(signoffInput(), 'Confermo l\'esecuzione dei lavori');
     await tester.pumpAndSettle();
 
     expect(
@@ -159,10 +172,8 @@ void main() {
     await tester.pumpWidget(_buildStep(container));
     await tester.pumpAndSettle();
 
-    final field = tester.widget<AppTextField>(
-      find.widgetWithText(AppTextField, 'Osservazioni cliente'),
-    );
-    expect(field.controller?.text, 'Il cliente accetta il lavoro.');
+    expect(signoffLabel(), findsOneWidget);
+    expect(signoffField(tester).controller?.text, 'Il cliente accetta il lavoro.');
 
     await tester.pumpWidget(const SizedBox.shrink());
     container.dispose();
