@@ -185,6 +185,15 @@ class _TicketDetailBody extends ConsumerWidget {
         ? DateFormat('dd/MM/yyyy', 'it').format(ticket.closedAt!.toLocal())
         : '—';
 
+    // A closed ticket is finished work: no report and no AI draft may be started on it. Decided
+    // from the tenant's own closing status flag (plus `closedAt`, for the sync-lag cases — see
+    // [ticketIsClosed]), not from `closedAt` alone: closing from this very screen writes the new
+    // `statusId`, and that is what the bar has to react to immediately.
+    final closed = ticketIsClosed(
+      ticket,
+      ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const {},
+    );
+
     final customerAsync = ref.watch(customerByIdProvider(ticket.customerId));
     final locationAsync = ref.watch(locationByIdProvider(ticket.locationId));
 
@@ -488,6 +497,12 @@ class _TicketDetailBody extends ConsumerWidget {
           // second place. Once assigned, "Crea rapportino" is what a technician does on a ticket
           // (see the status-row comment). "Timbra cantiere" no longer lives here at all — it
           // moved to CantiereDetailScreen, reached from this ticket's own cantiere chip above.
+          //
+          // Neither button survives a closure. Both mint a rapportino for this ticket, and a
+          // closed ticket is finished work: the server would take the submit and leave the ticket
+          // closed (deliberately — it never reopens one on its own), so the report would sit
+          // against a job nobody expects hours on. The bar says why and where the way back is
+          // (the status pill above reopens it) rather than just disappearing.
           if (ticket.assignedUserId != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -496,24 +511,33 @@ class _TicketDetailBody extends ConsumerWidget {
                 AppSpacing.pagePadding,
                 AppSpacing.base,
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: AppButton.secondary(
-                      label: 'AI Copilot',
-                      onPressed: () =>
-                          context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
+              child: closed
+                  ? InlineAlert(
+                      icon: LucideIcons.lock,
+                      color: context.colors.amber,
+                      message:
+                          'Intervento chiuso: per registrare ore o un nuovo rapporto riaprilo '
+                          'dallo stato qui sopra.',
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: AppButton.secondary(
+                            label: 'AI Copilot',
+                            onPressed: () =>
+                                context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: AppButton(
+                            label: 'Crea rapporto di lavoro',
+                            onPressed: () =>
+                                _createRapportino(context, ref, ticket, locationAddress),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton(
-                      label: 'Crea rapporto di lavoro',
-                      onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
-                    ),
-                  ),
-                ],
-              ),
             )
           else
             const SizedBox.shrink(),
@@ -528,6 +552,20 @@ class _TicketDetailBody extends ConsumerWidget {
     Ticket ticket,
     String locationAddress,
   ) async {
+    // Same rule the bar applies, re-checked at the point of use: a closure that lands between the
+    // rebuild and the tap must not slip a rapportino onto work the office considers finished.
+    if (ticketIsClosed(
+      ticket,
+      ref.read(closedTicketStatusIdsProvider).valueOrNull ?? const {},
+    )) {
+      showAppToast(
+        context,
+        message: 'Intervento chiuso: riaprilo dal suo stato per creare un rapporto.',
+        tone: ToastTone.warning,
+      );
+      return;
+    }
+
     // A ticket can already have a Bozza — this button used to mint a second one silently on every
     // press, leaving rows indistinguishable to the office and to the technician. Ask before
     // creating; a dismissed dialog creates nothing.
@@ -2135,21 +2173,31 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     }
   }
 
-  Future<void> _changeStatus(int statusId, String label) async {
+  Future<void> _changeStatus(TicketStatuse status) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
       await ref
           .read(ticketWorkflowApiClientProvider)
-          .updateStatus(ticketId: widget.ticket.id, statusId: statusId);
+          .updateStatus(ticketId: widget.ticket.id, statusId: status.id);
 
       // Safe to mirror: this is the value the server just accepted, not a value we invented.
+      // `closedAt` is part of what the server writes for that status (`TicketStatusTransition`'s
+      // own bookkeeping), so it is mirrored in the same write: without it, a ticket closed from
+      // this screen read back with no closing date until the next sync, and everything keyed on
+      // that date — the Dettagli "Chiusura" row, the closed-ticket notice in the bottom bar —
+      // waited a sync to agree with what the technician had just done.
+      final now = DateTime.now().toUtc();
       final db = ref.read(appDatabaseProvider);
       await (db.update(db.tickets)..where((t) => t.id.equals(widget.ticket.id))).write(
-        TicketsCompanion(statusId: Value(statusId), updatedAt: Value(DateTime.now().toUtc())),
+        TicketsCompanion(
+          statusId: Value(status.id),
+          closedAt: Value(status.isClosed ? now : null),
+          updatedAt: Value(now),
+        ),
       );
 
-      _report('Stato aggiornato: $label', ok: true);
+      _report('Stato aggiornato: ${status.name}', ok: true);
     } on TicketWorkflowFailure catch (e) {
       _report(e.message);
     } finally {
@@ -2158,17 +2206,17 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
   }
 
   Future<void> _openStatusSheet() async {
-    final statuses = ref.read(ticketStatusMapProvider).valueOrNull ?? {};
+    // The full rows, not `ticketStatusMapProvider`'s id→name map: changing status has to know
+    // whether the chosen one closes the ticket (see [_changeStatus]). The provider already orders
+    // by id, so the sheet lists statuses in a stable, predictable sequence instead of whatever
+    // order SQLite happens to return.
+    final statuses = ref.read(ticketStatusesProvider).valueOrNull ?? const <TicketStatuse>[];
     if (statuses.isEmpty) {
       _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
       return;
     }
-    // Map iteration order is whatever SQLite happens to return, not workflow
-    // order — sort by id so the sheet lists statuses in a stable, predictable
-    // sequence instead of shuffling on every reload.
-    final orderedStatuses = statuses.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
 
-    final chosen = await showModalBottomSheet<MapEntry<int, String>>(
+    final chosen = await showModalBottomSheet<TicketStatuse>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRack.cellRadius)),
@@ -2200,14 +2248,14 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
                 ],
               ),
             ),
-            for (final entry in orderedStatuses)
+            for (final status in statuses)
               ListRow(
-                title: entry.value,
-                strapped: entry.key == widget.ticket.statusId,
-                meta: entry.key == widget.ticket.statusId
+                title: status.name,
+                strapped: status.id == widget.ticket.statusId,
+                meta: status.id == widget.ticket.statusId
                     ? Icon(LucideIcons.check, size: 16, color: ctx.colors.ink)
                     : null,
-                onTap: () => Navigator.of(ctx).pop(entry),
+                onTap: () => Navigator.of(ctx).pop(status),
               ),
             const SizedBox(height: 8),
           ],
@@ -2215,8 +2263,8 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
       ),
     );
 
-    if (chosen == null || chosen.key == widget.ticket.statusId) return;
-    await _changeStatus(chosen.key, chosen.value);
+    if (chosen == null || chosen.id == widget.ticket.statusId) return;
+    await _changeStatus(chosen);
   }
 
   @override
