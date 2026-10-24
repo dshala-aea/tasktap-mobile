@@ -396,10 +396,7 @@ class _AdminScheduleListBody extends ConsumerWidget {
             SliverList(
               delegate: SliverChildBuilderDelegate((context, i) {
                 final schedule = filtered[i];
-                final dateLabel = DateFormat(
-                  'EEE d MMM HH:mm',
-                  'it',
-                ).format(schedule.activityDate.toLocal());
+                final dateLabel = _scheduleRowLabel(schedule);
                 return _AdminScheduleRow(
                   schedule: schedule,
                   dateLabel: dateLabel,
@@ -690,6 +687,19 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
       ),
     );
   }
+}
+
+/// "dom 21 giu · 08:00 – 10:00" — the day the office planned plus the hours they set.
+///
+/// The same reading as the ticket's Pianificazioni row: the clock comes from
+/// `timeStartMinutes`/`timeEndMinutes`, never from `activityDate`. That is a midnight stamp, so
+/// reading its time through `toLocal()` printed the device's UTC offset — a constant "02:00" in
+/// Italy whatever hours were planned. An all-day schedule carries placeholder bounds, so it shows
+/// the day alone, the gate Calendario's views and the dashboard already apply.
+String _scheduleRowLabel(Schedule s) {
+  final day = DateFormat('EEE d MMM', 'it').format(s.activityDate.toLocal());
+  if (s.allDay) return day;
+  return '$day · ${formatMinutes(s.timeStartMinutes)} – ${formatMinutes(s.timeEndMinutes)}';
 }
 
 class _AdminScheduleRow extends StatelessWidget {
