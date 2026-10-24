@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/location/geocoding_service.dart';
+import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 
@@ -12,11 +13,12 @@ final todaySchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
   ref,
 ) {
   final db = ref.watch(appDatabaseProvider);
-  // "Today" is the UTC calendar day — schedules' activityDate is stored as a
-  // UTC-midnight date, so the window must be UTC to bucket correctly across the
-  // local/UTC date boundary (a local-midnight window misbuckets near midnight).
-  final today = DateTime.now().toUtc();
-  final todayDate = DateTime.utc(today.year, today.month, today.day);
+  // "Today" is the tenant's business calendar day, carried the way the column stores it: an
+  // activityDate is a civil date pinned at UTC midnight, so the window is
+  // [UTC midnight of that civil date, +1 day). The day itself must come from the business zone —
+  // reading it off `DateTime.now().toUtc()` took the UTC date, which in Rome is still yesterday
+  // between 00:00 and 02:00 local, so the dashboard opened on yesterday's plan.
+  final todayDate = ref.watch(businessTimeProvider).businessToday();
   final tomorrowDate = todayDate.add(const Duration(days: 1));
 
   return (db.select(db.schedules)
@@ -32,8 +34,9 @@ final todaySchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
 /// Stream of schedules in [today, today+7d] from the local Drift DB.
 final weekSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  final today = DateTime.now().toUtc();
-  final start = DateTime.utc(today.year, today.month, today.day);
+  // Same business-zone day as [todaySchedulesProvider] — one definition of "today" on a screen
+  // whose two blocks are "today" and "the next seven days" is the whole point of the split.
+  final start = ref.watch(businessTimeProvider).businessToday();
   final end = start.add(const Duration(days: 8));
 
   return (db.select(db.schedules)

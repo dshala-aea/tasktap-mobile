@@ -21,13 +21,15 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// feedback: a bucketed queue is explainable ("this is Da fare because nothing else is open yet
 /// today") where a rank is not, and it reads as the actual job — triage, then act — rather than a
 /// calendar the app already has a real one of (Calendario). Live and Da fare carry a visible next
-/// step; Programmato/In attesa/Fatto are compact rows, because the day's answer to "what matters
+/// step; Resto di oggi/In attesa/Fatto are compact rows, because the day's answer to "what matters
 /// now" only has one or two entries in it on an ordinary day.
 ///
 /// Two blocks, not one: today's tiers under the screen's "Oggi" heading, and the next seven days
 /// under their own "PROSSIMI 7 GIORNI" heading. They shared a single Programmato tier until a
 /// day with no schedules rendered future rows directly beneath the word "Oggi" — see
-/// [WorkQueueBuckets.restOfToday] for that history.
+/// [WorkQueueBuckets.restOfToday] for that history. The heading is not the only thing that has to
+/// say which day a row belongs to: the tier *inside* the today block said PROGRAMMATO too, and
+/// that read as "not today" to the office technicians who triage from this screen.
 class WorkQueueSection extends ConsumerWidget {
   const WorkQueueSection({super.key});
 
@@ -78,8 +80,12 @@ class WorkQueueSection extends ConsumerWidget {
       );
     }
     if (q.restOfToday.isNotEmpty) {
+      // "RESTO DI OGGI", not "PROGRAMMATO": these rows are today's own work, queued behind the
+      // one Da fare card above. The tier used to be titled PROGRAMMATO — the same word this screen
+      // uses for the next seven days — and a technician reading it took jobs scheduled for this
+      // morning as future work, on the screen whose whole job is to say what today holds.
       todaySections.add(
-        _CompactTier(title: 'PROGRAMMATO', schedules: q.restOfToday, tier: _Tier.programmato),
+        _CompactTier(title: 'RESTO DI OGGI', schedules: q.restOfToday, tier: _Tier.programmato),
       );
     }
     if (q.fatto.isNotEmpty) {
