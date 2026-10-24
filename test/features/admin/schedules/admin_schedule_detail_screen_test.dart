@@ -103,6 +103,42 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('a long Note wraps instead of truncating to one line', (tester) async {
+    // rhdy: Note (and Titolo, Sede, Ticket collegato) are free text. They went through the
+    // horizontal KeyVal row, which right-aligns the value, pins it to `maxLines: 1` and ellipsizes
+    // — a note the office had written over four lines showed only its first one.
+    const note =
+        'Il tecnico deve accedere dal cancello laterale, chiedere del responsabile di '
+        'stabilimento e compilare il modulo di ingresso. Portare i dispositivi di protezione.'
+        ' Al termine lasciare copia del rapporto in portineria.';
+    await _seedSchedule(db);
+    await (db.update(db.schedules)..where((s) => s.id.equals('sched-1'))).write(
+      SchedulesCompanion(description: Value(note)),
+    );
+
+    await tester.pumpWidget(_buildView(db: db));
+    await tester.pumpAndSettle();
+
+    final noteText = find.text(note);
+    expect(noteText, findsOneWidget);
+    // Wraps rather than clipping. The vertical variant sets no `maxLines` — and it must not set
+    // `overflow: ellipsis` either: RenderParagraph hands that flag to the paragraph as an ellipsis
+    // string even when maxLines is null, and the engine then truncates at the first line wider than
+    // the constraint, i.e. it drops everything after line one.
+    final noteWidget = tester.widget<Text>(noteText);
+    expect(noteWidget.maxLines, null);
+    expect(noteWidget.overflow, isNot(TextOverflow.ellipsis));
+    // A 215-character note cannot fit the card's width on a single line, so any height past one
+    // line is proof it wrapped — no dependence on the test font's metrics.
+    expect(tester.getSize(noteText).height, greaterThan(30));
+
+    // The short facts keep the two-column shape — a value that always fits reads faster that way.
+    expect(tester.getSize(find.text('In corso')).height, lessThan(30));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('falls back to em-dash when assignee/sede/ticket are unresolved', (tester) async {
     // Schedule referencing ids the local mirror has never synced.
     await db
