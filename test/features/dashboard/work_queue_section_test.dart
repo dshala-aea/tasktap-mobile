@@ -309,7 +309,7 @@ void main() {
       // 22:30 UTC on 24 October is 00:30 in Rome on the 25th — the hour whose jobs the dashboard
       // used to miss, because it bucketed by the UTC date and called the 24th "today" for another
       // ninety minutes.
-      final clock = () => DateTime.utc(2026, 10, 24, 22, 30);
+      DateTime clock() => DateTime.utc(2026, 10, 24, 22, 30);
       await insertSchedule(
         db,
         id: 'sched-25',
