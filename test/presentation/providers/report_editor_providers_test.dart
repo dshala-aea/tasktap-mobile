@@ -188,6 +188,50 @@ void main() {
       expect(notifier.state.soluzione, 'S');
     });
 
+    test('setCustomerSignoffText persists verbatim; untouched stays null', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      // Untouched: an unrelated autosave must leave null as null (null = the submit body omits the
+      // field, so a server-side acceptance text is not wiped by a phone that never edited it).
+      await notifier.setTitle('Titolo');
+      var draft = await repo.getDraft('draft-1');
+      expect(draft!.customerSignoffText, isNull);
+
+      await notifier.setCustomerSignoffText('Confermo l\'esecuzione dei lavori');
+      draft = await repo.getDraft('draft-1');
+      expect(draft!.customerSignoffText, 'Confermo l\'esecuzione dei lavori');
+
+      // Clearing is an explicit empty string, not null.
+      await notifier.setCustomerSignoffText('');
+      draft = await repo.getDraft('draft-1');
+      expect(draft!.customerSignoffText, '');
+    });
+
+    test('hydrates customerSignoffText from the stored draft', () async {
+      // The text an AI-confirmed report resolved server-side, or one typed and saved on an earlier
+      // visit: a reopen must show it, and the next autosave must not null it out.
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'draft-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 21, 10),
+              title: 'init',
+              insertedUserId: 'user-1',
+              locationId: 'l1',
+              customerSignoffText: const Value('Il cliente accetta il lavoro.'),
+            ),
+          );
+      final (notifier, repo) = await _makeEditor(db);
+      expect(notifier.state.customerSignoffText, 'Il cliente accetta il lavoro.');
+
+      await notifier.setTitle('Ritoccato');
+      final draft = await repo.getDraft('draft-1');
+      expect(draft!.customerSignoffText, 'Il cliente accetta il lavoro.');
+    });
+
     test('setCustomerFromCache sets customerId and clears freeText', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = await _makeEditor(db);
