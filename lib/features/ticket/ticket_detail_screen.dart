@@ -2210,11 +2210,22 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     // whether the chosen one closes the ticket (see [_changeStatus]). The provider already orders
     // by id, so the sheet lists statuses in a stable, predictable sequence instead of whatever
     // order SQLite happens to return.
-    final statuses = ref.read(ticketStatusesProvider).valueOrNull ?? const <TicketStatuse>[];
+    //
+    // Awaited, not read: this provider is `autoDispose` and nothing in this subtree watches it, so
+    // a synchronous read answers `AsyncLoading` on the first tap — the sheet would claim the status
+    // list is unavailable on a device that has it.
+    final List<TicketStatuse> statuses;
+    try {
+      statuses = await ref.read(ticketStatusesProvider.future);
+    } catch (_) {
+      _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
+      return;
+    }
     if (statuses.isEmpty) {
       _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
       return;
     }
+    if (!mounted) return;
 
     final chosen = await showModalBottomSheet<TicketStatuse>(
       context: context,
