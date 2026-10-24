@@ -62,6 +62,8 @@ Future<void> _seedSubmittedDraft(
   String stato = 'Bozza',
   String? ticketId,
   String? technicianNotes,
+  String? diagnosi,
+  String? soluzione,
   String? customerSignoffText,
   bool isAiAssisted = false,
   bool richiedeSecondoIntervento = false,
@@ -88,6 +90,8 @@ Future<void> _seedSubmittedDraft(
           customerSignatureAllegatoId: const Value('sig-c-1'),
           technicianSignatureAllegatoId: const Value('sig-t-1'),
           technicianNotes: Value(technicianNotes),
+          diagnosi: Value(diagnosi),
+          soluzione: Value(soluzione),
           customerSignoffText: Value(customerSignoffText),
           isAiAssisted: Value(isAiAssisted),
           richiedeSecondoIntervento: Value(richiedeSecondoIntervento),
@@ -282,6 +286,53 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Manutenzione straordinaria'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — diagnosi e soluzione', () {
+    testWidgets('renders both fields of a sent report', (tester) async {
+      await _seedSubmittedDraft(
+        db,
+        diagnosi: 'Pressostato guasto, pressione a 0.4 bar',
+        soluzione: 'Sostituito pressostato e ricaricato impianto',
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Diagnosi e soluzione'), findsOneWidget);
+      expect(find.text('Diagnosi'), findsOneWidget);
+      expect(find.text('Soluzione'), findsOneWidget);
+      expect(find.textContaining('Pressostato guasto'), findsOneWidget);
+      expect(find.textContaining('Sostituito pressostato'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a report with only a diagnosis does not print an empty Soluzione', (tester) async {
+      await _seedSubmittedDraft(db, diagnosi: 'Guarnizione consumata');
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Diagnosi'), findsOneWidget);
+      expect(find.text('Soluzione'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a report with neither shows no Diagnosi section at all', (tester) async {
+      await _seedSubmittedDraft(db);
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Diagnosi e soluzione'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
