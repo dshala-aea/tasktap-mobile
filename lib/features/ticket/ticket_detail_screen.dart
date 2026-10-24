@@ -25,6 +25,7 @@ import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_deletion.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
+import '../calendario/widgets/schedule_info_sheet.dart';
 import '../cantiere/cantiere_providers.dart';
 import '../checklist/checklist_providers.dart';
 import '../checklist/ticket_asset_checklists_card.dart';
@@ -1728,6 +1729,12 @@ class _PianificazioniTab extends ConsumerWidget {
                     title: s.title.isNotEmpty ? s.title : 'Intervento',
                     subtitle: dateLabel,
                     showDivider: s != schedules.last,
+                    // The row was inert: the box listed a ticket's schedules and offered no way to
+                    // read one. Opens the same read-only card the calendar shows — not
+                    // `/altro/pianificazioni/:id`, which is the editable office screen behind
+                    // `pianificazione.schedule.write`, and reading your own day should not cost a
+                    // permission. Mirror-backed, so it opens with no signal.
+                    onTap: () => showScheduleInfoSheet(context, s),
                   );
                 }).toList(),
               ),

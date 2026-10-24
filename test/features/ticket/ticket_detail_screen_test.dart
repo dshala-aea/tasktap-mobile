@@ -30,6 +30,7 @@ import 'package:tasktap_mobile/data/sync/checklist_sync_dto.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/domain/checklist/control_type.dart';
+import 'package:tasktap_mobile/features/calendario/widgets/schedule_info_sheet.dart';
 import 'package:tasktap_mobile/features/checklist/checklist_providers.dart'
     show ticketMirrorKnownProvider;
 import 'package:tasktap_mobile/features/ticket/ticket_detail_screen.dart';
@@ -544,6 +545,63 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Sopralluogo'), findsOneWidget);
+      await tester.binding.setSurfaceSize(null); // reset
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a Pianificazioni row opens the schedule detail card', (tester) async {
+      // The box listed a ticket's schedules and offered no way to read one — the detail existed
+      // only from the calendar. Same read-only card, so a technician does not need
+      // `pianificazione.schedule.write` (the admin screen's gate) to read their own day, and the
+      // card comes from the mirror, so it opens offline too.
+      await seedBase(db);
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: const Value('ticket-1'),
+              activityDate: DateTime.utc(2026, 7, 10),
+              timeStartMinutes: 480,
+              timeEndMinutes: 1020,
+              userId: 'user-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Sopralluogo',
+              description: '',
+            ),
+          );
+
+      await pump(tester);
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pump();
+      await tester.ensureVisible(find.text('Pianificazioni'));
+      await tester.tap(find.text('Pianificazioni'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sopralluogo'));
+      await tester.pumpAndSettle();
+
+      // The card repeats the title and adds what the row never carried: the hours, the customer
+      // (through the schedule's ticket) and the site.
+      //
+      // Scoped to the sheet: the ticket detail underneath spells its own "CLIENTE" / "SEDE"
+      // KeyVal labels, so an unscoped `find.text` matched two widgets and failed the test on a
+      // collision that says nothing about the sheet.
+      final sheet = find.byType(ScheduleInfoSheet);
+      expect(sheet, findsOneWidget);
+      Finder inSheet(String text) => find.descendant(of: sheet, matching: find.text(text));
+
+      expect(find.text('Sopralluogo'), findsNWidgets(2));
+      expect(inSheet('08:00 – 17:00'), findsOneWidget);
+      expect(inSheet('CLIENTE'), findsOneWidget);
+      expect(inSheet('ACME Srl'), findsWidgets);
+      expect(inSheet('SEDE'), findsOneWidget);
+      expect(inSheet('Sede Milano'), findsOneWidget);
+
       await tester.binding.setSurfaceSize(null); // reset
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
