@@ -213,9 +213,12 @@ void main() {
     await tester.pumpAndSettle();
 
     // Placeholder 0/0 bounds are not a real range: "00:00 – 00:00" would claim the job starts at
-    // midnight and ends that same instant.
+    // midnight and ends that same instant. The subtitle is one Text per row, so the all-day row
+    // matches the bare day exactly while its timed neighbour on the same date reads the full
+    // "day · hours" string — both rows are accounted for below.
     expect(find.text('Intervento tutto il giorno'), findsOneWidget);
-    expect(find.text('dom 21 giu'), findsNWidgets(2));
+    expect(find.text('dom 21 giu'), findsOneWidget);
+    expect(find.text('dom 21 giu · 08:00 – 10:00'), findsOneWidget);
     expect(find.textContaining('00:00'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
