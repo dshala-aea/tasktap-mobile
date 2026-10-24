@@ -549,6 +549,55 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('a Pianificazioni row opens the schedule detail card', (tester) async {
+      // The box listed a ticket's schedules and offered no way to read one — the detail existed
+      // only from the calendar. Same read-only card, so a technician does not need
+      // `pianificazione.schedule.write` (the admin screen's gate) to read their own day, and the
+      // card comes from the mirror, so it opens offline too.
+      await seedBase(db);
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: const Value('ticket-1'),
+              activityDate: DateTime.utc(2026, 7, 10),
+              timeStartMinutes: 480,
+              timeEndMinutes: 1020,
+              userId: 'user-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Sopralluogo',
+              description: '',
+            ),
+          );
+
+      await pump(tester);
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pump();
+      await tester.ensureVisible(find.text('Pianificazioni'));
+      await tester.tap(find.text('Pianificazioni'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sopralluogo'));
+      await tester.pumpAndSettle();
+
+      // The card repeats the title and adds what the row never carried: the hours, the customer
+      // (through the schedule's ticket) and the site.
+      expect(find.text('Sopralluogo'), findsNWidgets(2));
+      expect(find.text('08:00 – 17:00'), findsOneWidget);
+      expect(find.text('CLIENTE'), findsOneWidget);
+      expect(find.text('ACME Srl'), findsWidgets);
+      expect(find.text('SEDE'), findsOneWidget);
+      expect(find.text('Sede Milano'), findsOneWidget);
+
+      await tester.binding.setSurfaceSize(null); // reset
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('the bottom bar holds a single leading doing-action', (tester) async {
       // Was four equal buttons in two rows: Assegna / Cliente / Crea rapportino / Timbra cantiere,
       // about 130dp of permanent chrome with no rank between them. What a technician does on a
