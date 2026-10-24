@@ -30,6 +30,7 @@ import 'package:tasktap_mobile/data/sync/checklist_sync_dto.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/domain/checklist/control_type.dart';
+import 'package:tasktap_mobile/features/calendario/widgets/schedule_info_sheet.dart';
 import 'package:tasktap_mobile/features/checklist/checklist_providers.dart'
     show ticketMirrorKnownProvider;
 import 'package:tasktap_mobile/features/ticket/ticket_detail_screen.dart';
@@ -586,12 +587,20 @@ void main() {
 
       // The card repeats the title and adds what the row never carried: the hours, the customer
       // (through the schedule's ticket) and the site.
+      //
+      // Scoped to the sheet: the ticket detail underneath spells its own "CLIENTE" / "SEDE"
+      // KeyVal labels, so an unscoped `find.text` matched two widgets and failed the test on a
+      // collision that says nothing about the sheet.
+      final sheet = find.byType(ScheduleInfoSheet);
+      expect(sheet, findsOneWidget);
+      Finder inSheet(String text) => find.descendant(of: sheet, matching: find.text(text));
+
       expect(find.text('Sopralluogo'), findsNWidgets(2));
-      expect(find.text('08:00 – 17:00'), findsOneWidget);
-      expect(find.text('CLIENTE'), findsOneWidget);
-      expect(find.text('ACME Srl'), findsWidgets);
-      expect(find.text('SEDE'), findsOneWidget);
-      expect(find.text('Sede Milano'), findsOneWidget);
+      expect(inSheet('08:00 – 17:00'), findsOneWidget);
+      expect(inSheet('CLIENTE'), findsOneWidget);
+      expect(inSheet('ACME Srl'), findsWidgets);
+      expect(inSheet('SEDE'), findsOneWidget);
+      expect(inSheet('Sede Milano'), findsOneWidget);
 
       await tester.binding.setSurfaceSize(null); // reset
       await tester.pumpWidget(const SizedBox.shrink());
