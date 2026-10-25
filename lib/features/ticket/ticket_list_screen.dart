@@ -518,7 +518,8 @@ Future<void> _confirmDeletePendingTicket(
 /// not what to do about it: title alone rarely says where to go or how urgent it is, and opening
 /// every row just to triage a list of thirty is the exact complaint that started this redesign.
 ///
-/// A priority stripe (real `Ticket.priority`, synced since schema 20 — see `app_database.dart`)
+/// A priority stripe (real `Ticket.priority`, read from the server's `priorita` key — schema 20
+/// declared the column long before the key name was right, see `TicketDto.readKeys`)
 /// replaces the old leading icon tile; description, cliente/località (resolved the same way
 /// `work_queue_section.dart` already does, not a new lookup) and due date fill out the row. No
 /// blur here on purpose: this list can run to hundreds of rows, and a per-row backdrop filter

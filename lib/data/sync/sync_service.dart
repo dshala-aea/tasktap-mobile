@@ -940,7 +940,6 @@ class SyncService {
               technicianNotes: Value(t.technicianNotes),
               internalNotes: Value(t.internalNotes),
               contractId: Value(t.contractId),
-              prodottoAssistenzaId: Value(t.prodottoAssistenzaId),
               commessaId: Value(t.commessaId),
               cantiereId: Value(t.cantiereId),
               priority: Value(t.priority),
@@ -1045,7 +1044,6 @@ class SyncService {
               locationId: r.locationId,
               startedAt: Value(r.startedAt),
               endedAt: Value(r.endedAt),
-              documentTemplateId: Value(r.documentTemplateId),
               customerSignatureAllegatoId: Value(r.customerSignatureAllegatoId),
               technicianSignatureAllegatoId: Value(
                 r.technicianSignatureAllegatoId,
@@ -1060,6 +1058,10 @@ class SyncService {
               materialiNotRequired: Value(r.materialiNotRequired),
               customerSignoffText: Value(r.customerSignoffText),
               customerSignoffAt: Value(r.customerSignoffAt),
+              // Omitting this from the companion is not neutral: an unlisted column gets its
+              // default on insert and is left untouched on conflict, so a server-arrived draft
+              // would lose the provenance marker the moment the row first existed locally.
+              isAiAssisted: Value(r.isAiAssisted),
               extensionValues: Value(r.extensionValues),
               // Synced-down reports are never local-only
               isLocalOnly: const Value(false),
