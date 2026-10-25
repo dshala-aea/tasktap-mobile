@@ -63,8 +63,14 @@ class _ScriptedWorkflowClient extends TicketWorkflowApiClient {
     return result!;
   }
 
+  /// The key the online close carried: the session being ended, when this device still knows it.
+  String? receivedStopClientId;
+
   @override
-  Future<int?> stopTimer(String ticketId, {DateTime? deviceUtc}) async => stopResult;
+  Future<int?> stopTimer(String ticketId, {String? clientId, DateTime? deviceUtc}) async {
+    receivedStopClientId = clientId;
+    return stopResult;
+  }
 }
 
 /// A sync service that only counts: the assertions here are about what the tap writes, not about
@@ -178,6 +184,36 @@ void main() {
     // The row's merged value, so a skew first seen at the start still reaches the technician when
     // the session ends online — the same banner the start's answer raises.
     expect(ref.read(clockDisagreementProvider)['t1'], 720);
+  });
+
+  testWidgets('an online stop names the session it closes, so a lost reply is not a failure', (
+    tester,
+  ) async {
+    final client = _ScriptedWorkflowClient(
+      result: const TicketTimerStart(id: 'server-1', isActive: true),
+    );
+    final ref = await pumpRef(tester, client: client, online: true);
+
+    await startTicketTimer(ref, 't1');
+    final key = client.receivedClientIds.single;
+    await stopTicketTimer(ref, 't1');
+
+    // The reply to the first close was lost. Without this key the retry reaches a server whose
+    // timer is already stopped, is answered 404, and the bar turns that into "could not stop the
+    // timer" over hours that are already booked — and queues a redundant close behind it.
+    expect(client.receivedStopClientId, key);
+    expect(client.receivedStopClientId, isNotNull);
+  });
+
+  testWidgets('a stop with no session on this device sends no key', (tester) async {
+    final client = _ScriptedWorkflowClient();
+    final ref = await pumpRef(tester, client: client, online: true);
+
+    // A session another device started leaves nothing here to name. Sending a fabricated key would
+    // claim a row this phone has never seen.
+    await stopTicketTimer(ref, 't1');
+
+    expect(client.receivedStopClientId, isNull);
   });
 
   testWidgets('a start written on the device is queued for the sweep', (tester) async {
