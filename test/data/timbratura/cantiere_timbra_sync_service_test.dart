@@ -130,10 +130,14 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   /// for the classification tests, which need a real server answer.
   Object? errorToThrow;
 
+  /// What the server would echo per session: the gap it judged a disagreement, or null.
+  int? clockDisagreementSeconds;
+
   @override
-  Future<void> endCantiere([EndCantiereRequest? request]) async {
+  Future<int?> endCantiere([EndCantiereRequest? request]) async {
     if (endErrorToThrow != null) throw endErrorToThrow!;
     endedCalls.add(request ?? const EndCantiereRequest());
+    return null;
   }
 
   @override
@@ -151,6 +155,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
             startTime: s.startTime,
             endTime: s.endTime,
             isActive: s.endTime == null,
+            clockDisagreementSeconds: clockDisagreementSeconds,
           ),
         )
         .toList();
@@ -228,6 +233,47 @@ void main() {
       expect(dtos[0].customerId, 'cust-1');
       expect(dtos[0].startTime, t1);
       expect(dtos[0].endTime, t2);
+    });
+
+    test('hands the server\'s clock-disagreement answer to the caller, once per batch', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+      final events = [
+        _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+        _cp('id-2', 'uscita', t2),
+      ];
+      final repo = _FakeRepo(events);
+      final api = _FakeApiClient()..clockDisagreementSeconds = 720;
+      final reported = <int>[];
+      final svc = CantiereTimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        onClockDisagreement: reported.add,
+      );
+
+      await svc.syncNow();
+
+      // One report, not one per session: every session carried the same send-time reading.
+      expect(reported, [720]);
+    });
+
+    test('says nothing when the server judged the drift ordinary', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final events = [_cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1')];
+      final repo = _FakeRepo(events);
+      // Null is what the server answers for ordinary drift, a client with no clock, and an older
+      // backend alike — the service must not invent a gap of its own.
+      final api = _FakeApiClient();
+      final reported = <int>[];
+      final svc = CantiereTimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        onClockDisagreement: reported.add,
+      );
+
+      await svc.syncNow();
+
+      expect(reported, isEmpty);
     });
 
     test('markSynced receives both event ids', () async {

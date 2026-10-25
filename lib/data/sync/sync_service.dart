@@ -74,6 +74,12 @@ class SyncService {
       await _applyReportAggregate(payload);
       // The caller's own ticket timer sessions, after the tickets they point at.
       await _applyTicketTimers(payload);
+      // The tickets' own change history — the Storico timeline the device used to lack entirely.
+      await _applyTicketHistory(payload);
+      // The caller's own cantiere site hours — the read mirror, not the outbox.
+      await _applyCantiereWorkLogs(payload);
+      // The caller's own ferie/permessi — what the "Ferie e Permessi" list reads with no signal.
+      await _applyAbsenceRequests(payload);
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
@@ -488,6 +494,13 @@ class SyncService {
         (t) => t.id.isNotIn(keep) & t.isPendingSync.equals(false),
       )).go();
     }
+    if (scope.cantiereWorkLogs != null) {
+      // No pins: this table only ever mirrors the server, so nothing local can be waiting in it.
+      // Null (an older backend) already skipped above — that is what keeps a server which
+      // predates the member from emptying the device's site history.
+      await _pruneIds(db.cantiereWorkLogs, db.cantiereWorkLogs.id, scope.cantiereWorkLogs!,
+          const <String>{});
+    }
   }
 
   /// Schedules and their assignments. `schedule_assignees` is the only real foreign key in the
@@ -517,12 +530,18 @@ class SyncService {
       await (db.delete(db.ticketAssets)..where((r) => r.ticketId.isIn(drop))).go();
       await (db.delete(db.cachedTicketControls)..where((r) => r.ticketId.isIn(drop))).go();
       await (db.delete(db.checklistOmittedTickets)..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(db.ticketHistory)..where((h) => h.ticketId.isIn(drop))).go();
       await (db.delete(db.tickets)..where((t) => t.id.isIn(drop))).go();
     }
     // Fabbisogno has no manifest of its own: it follows the ticket. This also clears rows that
     // arrived for a ticket the mirror never held at all.
     await db.customStatement(
       'DELETE FROM ticket_materiali WHERE ticket_id NOT IN (SELECT id FROM tickets)',
+    );
+    // Same rule for history: a ticket that left scope takes its timeline with it, and a row whose
+    // ticket the mirror never held has nothing to render against.
+    await db.customStatement(
+      'DELETE FROM ticket_history WHERE ticket_id NOT IN (SELECT id FROM tickets)',
     );
   }
 
@@ -1317,8 +1336,129 @@ class SyncService {
     }
   }
 
-  Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {
-    for (final s in list) {
+  /// A ticket's recorded field changes — the Storico timeline, which used to exist only online.
+  ///
+  /// UPSERT ONLY, never a per-ticket replace. History is append-only on the server and a full sync
+  /// carries just a window of it, so replacing a ticket's set from this payload would delete rows
+  /// the server deliberately withheld — the exact trap the report children close by re-sending
+  /// everything. Here the cutoff is exact instead, so nothing needs re-sending.
+  ///
+  /// Rows leave with their ticket: the ticket manifest prunes them (`_pruneTickets`).
+  Future<void> _applyTicketHistory(SyncResultDto payload) async {
+    if (!payload.carriesTicketHistory) return;
+    if (payload.ticketHistory.isEmpty) return;
+
+    // One statement per row rather than a `db.batch`: drift's `Batch` has no
+    // `insertOnConflictUpdate` (the method lives on the insert statement), and the volume here is a
+    // few hundred rows at most — the same shape `_applyTicketTimers` above uses.
+    for (final h in payload.ticketHistory) {
+      await db
+          .into(db.ticketHistory)
+          .insertOnConflictUpdate(
+            TicketHistoryCompanion.insert(
+              id: h.id,
+              ticketId: h.ticketId,
+              fieldName: h.fieldName,
+              oldValue: Value(h.oldValue),
+              newValue: Value(h.newValue),
+              changedByUserId: h.changedByUserId,
+              changedAt: h.changedAt,
+            ),
+          );
+    }
+  }
+
+  /// The caller's own cantiere punches — the offline record of site time.
+  ///
+  /// UPSERT ONLY, and nothing here ever reads or writes `cantiere_punches` (the outbox). A punch
+  /// this device still owes the server lives there until it is pushed; it is not, and must not
+  /// become, a row of this mirror.
+  ///
+  /// Rows leave through the `cantiereWorkLogs` manifest, which is the caller's whole in-scope set
+  /// re-sent every sync — so an absence there is a real signal (the shift aged past the window),
+  /// unlike the delta collections.
+  Future<void> _applyCantiereWorkLogs(SyncResultDto payload) async {
+    if (!payload.carriesCantiereWorkLogs) return;
+    if (payload.cantiereWorkLogs.isEmpty) return;
+
+    for (final w in payload.cantiereWorkLogs) {
+      await db
+          .into(db.cantiereWorkLogs)
+          .insertOnConflictUpdate(
+            CantiereWorkLogsCompanion.insert(
+              id: w.id,
+              cantiereId: w.cantiereId,
+              userId: w.userId,
+              ticketId: Value(w.ticketId),
+              workDate: w.workDate,
+              startSeconds: w.startTime.inSeconds,
+              endSeconds: Value(w.endTime?.inSeconds),
+              startUtc: Value(w.startUtc),
+              endUtc: Value(w.endUtc),
+              workLogType: Value(w.workLogType),
+              approvalStatus: Value(w.approvalStatus),
+              description: Value(w.description),
+              clientId: Value(w.clientId),
+              createdAt: w.createdAt,
+              updatedAt: Value(w.updatedAt),
+            ),
+          );
+    }
+  }
+
+  /// Replaces the ferie/permessi mirror from a payload that carries it.
+  ///
+  /// Unlike the cantiere mirror this collection has NO manifest member: the server re-sends the
+  /// caller's whole set every sync, so the list itself is the authoritative scope and the applier
+  /// deletes whatever the payload no longer lists — a request the office withdrew really does leave
+  /// the phone.
+  ///
+  /// A payload that does not carry the member at all (an older backend) leaves the table untouched.
+  /// An EMPTY list is different and meaningful: it says this caller has no requests, so the table is
+  /// emptied rather than kept.
+  ///
+  /// Dates go in as `yyyy-MM-dd` TEXT, not as a Drift DateTimeColumn: see
+  /// [AbsenceRequests.startDate] — a zone-converted civil date shows the previous day west of UTC.
+  Future<void> _applyAbsenceRequests(SyncResultDto payload) async {
+    if (!payload.carriesAbsenceRequests) return;
+
+    final incoming = {for (final a in payload.absenceRequests) a.id};
+
+    await db.transaction(() async {
+      final clear = db.delete(db.absenceRequests);
+      if (incoming.isEmpty) {
+        await clear.go();
+      } else {
+        await (clear..where((r) => r.id.isNotIn(incoming.toList()))).go();
+      }
+
+      for (final a in payload.absenceRequests) {
+        await db
+            .into(db.absenceRequests)
+            .insertOnConflictUpdate(
+              AbsenceRequestsCompanion.insert(
+                id: a.id,
+                requestedByUserId: a.requestedByUserId,
+                createdByUserId: a.createdByUserId,
+                type: a.type,
+                startDate: formatDateOnly(a.startDate)!,
+                endDate: formatDateOnly(a.endDate)!,
+                startTime: Value(a.startTime),
+                endTime: Value(a.endTime),
+                reason: Value(a.reason),
+                status: a.status,
+                decidedByUserId: Value(a.decidedByUserId),
+                decidedAt: Value(a.decidedAt),
+                decisionReason: Value(a.decisionReason),
+                createdAt: a.createdAt,
+                updatedAt: Value(a.updatedAt),
+              ),
+            );
+      }
+    });
+  }
+
+  Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {    for (final s in list) {
       await db
           .into(db.ticketStatuses)
           .insertOnConflictUpdate(

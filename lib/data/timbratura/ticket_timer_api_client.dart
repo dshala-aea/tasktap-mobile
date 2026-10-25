@@ -27,6 +27,7 @@ class TicketMobileSessionDto {
     required this.startTime,
     this.endTime,
     this.description,
+    this.deviceUtc,
   });
 
   final String clientId;
@@ -40,12 +41,21 @@ class TicketMobileSessionDto {
 
   final String? description;
 
+  /// This phone's own clock reading at the moment this batch was sent.
+  ///
+  /// Deliberately not [startTime]: a queued session can be hours old and the phone's clock may have
+  /// been corrected in between, so comparing the start with the server's receipt would measure how
+  /// long the queue sat rather than how far the clock was off (O-10 plan §2). The server records the
+  /// difference beside the row and never moves the recorded instants because of it.
+  final DateTime? deviceUtc;
+
   Map<String, dynamic> toJson() => {
     'clientId': clientId,
     'ticketId': ticketId,
     'startTime': startTime.toUtc().toIso8601String(),
     'endTime': endTime?.toUtc().toIso8601String(),
     if (description != null) 'description': description,
+    if (deviceUtc != null) 'deviceUtc': deviceUtc!.toUtc().toIso8601String(),
   };
 }
 
@@ -58,6 +68,7 @@ class TicketMobileSessionResult {
     required this.startTime,
     this.endTime,
     required this.isActive,
+    this.clockDisagreementSeconds,
   });
 
   final String clientId;
@@ -66,6 +77,16 @@ class TicketMobileSessionResult {
   final DateTime startTime;
   final DateTime? endTime;
   final bool isActive;
+
+  /// How far this phone's clock was from the server's at the moment this batch was sent, signed —
+  /// **only when the server judged it a disagreement** (its own ten-minute threshold). Null for
+  /// ordinary drift, for a batch sent without a device clock, and for a backend that predates the
+  /// field.
+  ///
+  /// This is the answer to a question the phone cannot answer itself: it never sees the server's
+  /// receipt instant. So it travels back with the session it concerns, and it is rendered rather
+  /// than re-judged — the threshold lives in exactly one place (`WorkLogClocks`).
+  final int? clockDisagreementSeconds;
 
   factory TicketMobileSessionResult.fromJson(Map<String, dynamic> json) =>
       TicketMobileSessionResult(
@@ -77,6 +98,8 @@ class TicketMobileSessionResult {
             ? DateTime.parse(json['endTime'] as String)
             : null,
         isActive: json['isActive'] as bool? ?? false,
+        clockDisagreementSeconds:
+            (json['clockDisagreementSeconds'] as num?)?.toInt(),
       );
 }
 

@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/import_server_report.dart' show controlRowId;
+import 'package:tasktap_mobile/domain/reports/strumenti_selection.dart' show strumentoRowId;
 import 'package:tasktap_mobile/features/rapportino/ai_draft_feed.dart';
 
 const _report = 'rep-1';
@@ -114,6 +115,7 @@ AiCopilotDraftDto _draft({
   List<AiDraftWorkerRef> workers = const [],
   List<AiDraftMaterialUsage> materials = const [],
   List<AiDraftControlAnswer> controlli = const [],
+  List<AiDraftStrumentoUsage> strumenti = const [],
   List<AiCandidateFact> openItems = const [],
   String? signoff,
 }) => AiCopilotDraftDto(
@@ -121,6 +123,7 @@ AiCopilotDraftDto _draft({
   workers: workers,
   materials: materials,
   controlli: controlli,
+  strumenti: strumenti,
   activities: const [],
   openItems: openItems,
 );
@@ -168,6 +171,7 @@ class _Harness {
   Future<List<ReportStaffTableData>> staff() => db.select(db.reportStaffTable).get();
   Future<List<ReportMaterialiData>> materials() => db.select(db.reportMateriali).get();
   Future<List<ReportControlliData>> controls() => db.select(db.reportControlli).get();
+  Future<List<ReportStrumentoRow>> strumenti() => db.select(db.reportStrumenti).get();
   Future<DraftReport> header() =>
       (db.select(db.draftReports)..where((r) => r.id.equals(_report))).getSingle();
 }
@@ -990,6 +994,75 @@ void main() {
         const AiConfirmedEdit(kind: 'worker', id: _me, property: 'hours', value: 3.0),
       ], reason: 'it is a hand edit against the server value, not a silently adopted baseline');
       expect((await h.store.load(_session))!.applying, isFalse);
+    });
+  });
+
+  group('instruments', () {
+    test('a turn that resolved an instrument writes the report line, once', () async {
+      final draft = _draft(
+        strumenti: const [
+          AiDraftStrumentoUsage(
+            strumentoId: 'st-1',
+            name: 'Calibro',
+            matricola: 'M-77',
+            usageDescription: 'misura',
+            state: AiResolutionState.operatorConfirmed,
+          ),
+        ],
+      );
+      await h.feed.apply(_session, draft);
+      await h.feed.apply(_session, draft);
+
+      final rows = await h.strumenti();
+      expect(rows, hasLength(1), reason: 'the row id is deterministic, so the second apply updates it');
+      expect(rows.single.id, strumentoRowId(_report, 'st-1'), reason: 'the Strumenti step\'s own id');
+      expect(rows.single.isLocal, isTrue);
+      expect(rows.single.usageDescription, 'misura');
+      expect((await h.header()).strumentiPrefilled, isTrue);
+    });
+
+    test('an instrument the technician has not accepted is not written', () async {
+      await h.feed.apply(
+        _session,
+        _draft(
+          strumenti: const [
+            AiDraftStrumentoUsage(
+              strumentoId: 'st-2',
+              name: 'Proposta',
+              state: AiResolutionState.needsConfirmation,
+            ),
+          ],
+        ),
+      );
+
+      expect(await h.strumenti(), isEmpty, reason: 'a proposal is not work that was done');
+    });
+
+    test("Confirm's expired verdict lands on the link and stays unacknowledged", () async {
+      final applied = await h.feed.applyConfirmResponse(
+        _session,
+        const AiConversationConfirmResponse(
+          title: 'Rapportino',
+          strumenti: [
+            AiResolvedStrumento(
+              strumentoId: 'st-3',
+              name: 'Manometro',
+              matricola: 'MN-1',
+              expiredAtUse: true,
+              expiredAcknowledged: false,
+            ),
+          ],
+        ),
+      );
+
+      expect(applied, isTrue);
+      final row = (await h.strumenti()).single;
+      expect(row.expiredAtUse, isTrue);
+      expect(
+        row.expiredAcknowledged,
+        isFalse,
+        reason: 'Confirm never acknowledges; the Strumenti step must ask',
+      );
     });
   });
 }

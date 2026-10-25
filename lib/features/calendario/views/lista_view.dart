@@ -133,7 +133,8 @@ class _ScheduleListRow extends ConsumerWidget {
         )
         .valueOrNull;
     // An all-day schedule has no meaningful time-of-day to show as a subtitle — see the same
-    // gate in `_ScheduleInfoSheet` (calendario_screen.dart) and `_EventBlock` (giorno_view.dart).
+    // gate in `ScheduleInfoSheet` (calendario/widgets/schedule_info_sheet.dart) and `_EventBlock`
+    // (giorno_view.dart).
     final timeRange = schedule.allDay
         ? null
         : '${formatMinutes(schedule.timeStartMinutes)} – ${formatMinutes(schedule.timeEndMinutes)}';

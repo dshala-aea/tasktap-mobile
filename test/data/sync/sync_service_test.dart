@@ -14,6 +14,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_dto.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -819,8 +820,7 @@ void main() {
   group('Riverpod providers — offline cache', () {
     test('todaySchedulesProvider emits schedules from Drift without network', () async {
       // Pre-seed DB directly (no network)
-      final today = DateTime.now().toUtc();
-      final todayDate = DateTime.utc(today.year, today.month, today.day);
+      final todayDate = BusinessTime.fallback().businessToday();
 
       await db
           .into(db.schedules)
@@ -850,8 +850,7 @@ void main() {
     });
 
     test('weekSchedulesProvider emits schedules for next 7 days', () async {
-      final now = DateTime.now().toUtc();
-      final day0 = DateTime.utc(now.year, now.month, now.day); // today
+      final day0 = BusinessTime.fallback().businessToday(); // today
       final day3 = day0.add(const Duration(days: 3)); // in window
       final day9 = day0.add(const Duration(days: 9)); // outside window
 
@@ -974,8 +973,7 @@ void main() {
 
   group('Oggi — today schedules from cache', () {
     test('shows only today schedules, not future ones', () async {
-      final today = DateTime.now().toUtc();
-      final todayDate = DateTime.utc(today.year, today.month, today.day);
+      final todayDate = BusinessTime.fallback().businessToday();
       final tomorrow = todayDate.add(const Duration(days: 1));
 
       await db
@@ -1023,8 +1021,7 @@ void main() {
     });
 
     test('today schedules are ordered by timeStartMinutes ASC', () async {
-      final today = DateTime.now().toUtc();
-      final todayDate = DateTime.utc(today.year, today.month, today.day);
+      final todayDate = BusinessTime.fallback().businessToday();
 
       await db
           .into(db.schedules)

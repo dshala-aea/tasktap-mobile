@@ -36,6 +36,7 @@ import '../../core/time/business_time_providers.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../cantiere/cantiere_providers.dart';
 import 'cantiere_timbra_screen.dart'
@@ -119,7 +120,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
 
     try {
       final client = ref.read(cantiereWorklogApiClientProvider);
-      await client.endCantiere(
+      final clockDisagreement = await client.endCantiere(
         EndCantiereRequest(
           description: description,
           departureLatitude: location?.lat,
@@ -129,6 +130,10 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
           deviceUtc: DateTime.now().toUtc(),
         ),
       );
+      // The row's final value (the stronger of its two halves), already filtered by the server.
+      if (clockDisagreement != null) {
+        ref.read(cantiereClockDisagreementProvider.notifier).record(clockDisagreement);
+      }
       _onEndedSuccessfully(offline: false);
     } on DioException catch (e) {
       if (isOfflineFailure(e)) {

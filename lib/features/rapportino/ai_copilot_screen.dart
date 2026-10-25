@@ -44,12 +44,13 @@ import 'draft_provenance_badge.dart';
 //
 // LIVE DRAFT (AI report builder MVP). Entered from a ticket, the screen RESUMES the technician's
 // durable server-side draft for that ticket (GET ?ticketId=) or starts one (POST), then shows the
-// seeded draft at once with a provenance badge per value. Voice: the mic records, the server
-// transcribes (`VoiceCaptureController` + `AiApiClient.transcribe`), the transcript appears next to
-// the draft and is posted as a `Voice` turn with a per-recording Idempotency-Key that is reused on
-// every retry. On-device dictation (DictateButton, ADR-0017) stays as before and is the no-signal
-// fallback. Leaving the screen never deletes the draft: it is durable and is resumed; only
-// "Abbandona bozza" deletes it.
+// seeded draft at once with a provenance badge per value. Voice: the mic records, the recording is
+// UPLOADED as-is (`VoiceCaptureController` + `AiApiClient.uploadVoiceCapture`, POST
+// /api/ai/voice-captures) and posted as a `Voice` turn carrying only its `audioRef`, so the model
+// hears the technician's own words — there is no transcription step on this path (ADR-0023). The
+// turn keeps the recording's own Idempotency-Key, reused on every retry. On-device dictation
+// (DictateButton, ADR-0017) stays as before and is the no-signal fallback. Leaving the screen never
+// deletes the draft: it is durable and is resumed; only "Abbandona bozza" deletes it.
 // ══════════════════════════════════════════════════════════════════════════════
 
 
@@ -60,17 +61,34 @@ class _ChatMessage {
     this.source = AiTurnSource.typed,
     this.turnId,
     this.audioRef,
-    this.rawTranscript,
+    this.durationSeconds,
   });
   final bool isOperator;
+
+  /// What the operator typed, or the corrected text of a voice turn. EMPTY for a voice turn taken
+  /// as recorded: the words are in the audio, never in a transcript this client produced.
   final String text;
   final AiTurnSource source;
 
   /// The server's id of this operator turn, once known (the POST response carries none, so it is
   /// read back from the conversation). A correction replaces this turn.
   String? turnId;
+
+  /// Set when this turn's input was a recording the model listened to.
   final String? audioRef;
-  final String? rawTranscript;
+
+  /// Length of that recording, when this client uploaded it (a turn resumed from the server only
+  /// says that it was spoken).
+  final int? durationSeconds;
+
+  /// What the bubble shows: the text, or the recording's own label when there is no text to show.
+  String get displayText {
+    if (isOperator && source == AiTurnSource.voice && text.trim().isEmpty) {
+      final d = durationSeconds;
+      return d == null ? 'Registrazione vocale' : 'Registrazione vocale · ${_mmss(d)}';
+    }
+    return text;
+  }
 
   /// Replaced by a later correction: shown struck through.
   bool superseded = false;
@@ -90,7 +108,7 @@ class _Outgoing {
     this.text,
     this.source = AiTurnSource.typed,
     this.audioRef,
-    this.rawTranscript,
+    this.durationSeconds,
     this.replacesTurnId,
     this.supersedes,
   });
@@ -99,15 +117,17 @@ class _Outgoing {
   /// stable across restarts of the upload.
   final String key;
 
-  /// Set while the audio still has to be transcribed; [text] is null until then.
+  /// Set while the recording still has to be uploaded; [text] is null until then.
   final PendingRecording? recording;
 
   /// The recorder that produced [recording]; used for its (retried) upload.
   final VoiceCaptureController? voice;
+
+  /// Empty (not null) once a recording became the input: the words travel in [audioRef].
   String? text;
   AiTurnSource source;
   String? audioRef;
-  String? rawTranscript;
+  int? durationSeconds;
   final String? replacesTurnId;
 
   /// The message a correction replaces (to strike it through once the correction lands).
@@ -135,6 +155,12 @@ const _maxTurnInProgressRetries = 5;
 
 /// A draft with less than this left before deletion shows the expiry warning.
 const _expiryWarningWindow = Duration(days: 3);
+
+/// `0:42` / `2:07` — the length of a recording, as the operator's bubble shows it.
+String _mmss(int seconds) {
+  final s = seconds < 0 ? 0 : seconds;
+  return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+}
 
 class AiCopilotScreen extends ConsumerStatefulWidget {
   const AiCopilotScreen({
@@ -173,7 +199,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   DateTime? _expiresAt;
   bool _expiryDismissed = false;
 
-  /// The server said voice capture is off for this company (404 on transcribe): no mic.
+  /// The server said voice capture is off for this company (404 on the capture upload): no mic.
   bool _voiceDisabled = false;
   bool _recording = false;
 
@@ -584,8 +610,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     await _run(o);
   }
 
-  /// Runs one outgoing turn to the end: transcribe if it is audio, show it, post it (with the
-  /// bounded 409 handling), apply the draft. Every failure leaves [o] intact for "Riprova invio".
+  /// Runs one outgoing turn to the end: upload the recording if it is audio, show it, post it (with
+  /// the bounded 409 handling), apply the draft. Every failure leaves [o] intact for "Riprova invio".
   Future<void> _run(_Outgoing o) async {
     final sessionId = _sessionId;
     if (sessionId == null || _sending) return;
@@ -601,14 +627,15 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     try {
       if (o.text == null) {
         final voice = o.voice!;
-        // `upload` reuses the recording's OWN key and deletes the local files only on success.
-        final AiTranscription t;
+        // `capture` stores the recording under its OWN key and keeps the local files: the turn
+        // carries only its `audioRef`, so the model hears the operator rather than a transcript.
+        final AiVoiceCapture capture;
         try {
-          t = await voice.transcribe(o.recording!);
+          capture = await voice.capture(o.recording!);
         } on AiQuotaExhaustedException {
-          // Transcription is what credits pay for: only the MICROPHONE stops. The recording stays
-          // on the phone; typed turns and on-device dictation go on (the live session is never
-          // refused a turn for credits).
+          // The upload is billed at the TURN, not here, so a 429 at this point means a server that
+          // still charges for the capture. Either way only the MICROPHONE stops: the recording
+          // stays on the phone; typed turns and on-device dictation go on.
           if (!mounted) return;
           _cancelThinkingTimers();
           setState(() {
@@ -622,19 +649,22 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           });
           return;
         }
-        o.text = t.transcript;
-        o.audioRef = t.audioRef;
-        o.rawTranscript = t.transcript;
+        // A voice turn IS its audio: empty text, which the server accepts whenever `audioRef` is set
+        // (`AiConversationTurnRequestValidator`). No transcript is produced or sent.
+        o.text = '';
+        o.audioRef = capture.audioRef;
+        o.durationSeconds = capture.durationSeconds;
         o.source = AiTurnSource.voice;
       }
-      if (o.text!.trim().isEmpty) {
-        // Nothing to send: the recording holds no speech, so it must not linger in the pending list.
+      if (o.audioRef == null && o.text!.trim().isEmpty) {
+        // Nothing to send: a turn with neither text nor audio, which the server would refuse as
+        // `turn_empty`. The screens never build one — this is the guard against a future caller.
         unawaited(_discardRecording(o));
         _finishRun();
         if (mounted) {
           showAppToast(
             context,
-            message: 'Non ho sentito nulla nella registrazione. Riprova.',
+            message: 'Non c\'è niente da inviare.',
             tone: ToastTone.warning,
           );
         }
@@ -659,7 +689,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           text: o.text!,
           source: o.source,
           audioRef: o.audioRef,
-          rawTranscript: o.rawTranscript,
+          durationSeconds: o.durationSeconds,
         )..accepted = false;
         o.message = m;
         if (mounted) setState(() => _messages.add(m));
@@ -689,10 +719,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       // The turn is accepted: only now is the local recording no longer needed.
       unawaited(_discardRecording(o));
       unawaited(_learnTurnIds());
-    } on AiTranscribeException catch (e) {
+    } on AiVoiceUploadException catch (e) {
       if (!mounted) return;
       _cancelThinkingTimers();
-      if (e.error == AiTranscribeError.voiceDisabled) {
+      if (e.error == AiVoiceUploadError.voiceDisabled) {
         // Retrying cannot help and the mic must not keep offering what the server refuses; the
         // file is deleted rather than offered again for a week.
         unawaited(_discardRecording(o));
@@ -797,7 +827,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
   }
 
-  /// Sends the held recordings one by one: transcribe (the server replays the stored key) and post
+  /// Sends the held recordings one by one: upload (the server replays the stored key) and post
   /// with the key derived from the recording's own, so nothing can apply twice.
   Future<void> _sendPending() async {
     final voice = _voiceCtl;
@@ -855,10 +885,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           text: o.text!,
           source: o.source,
           audioRef: o.audioRef,
-          // The unedited transcript is kept, capped at what the server stores for one turn.
-          rawTranscript: (o.rawTranscript?.length ?? 0) > maxTurnCharacters
-              ? o.rawTranscript!.substring(0, maxTurnCharacters)
-              : o.rawTranscript,
           replacesTurnId: o.replacesTurnId,
           confirmedEdits: (o.edits == null || o.edits!.isEmpty)
               ? null
@@ -925,7 +951,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         (m) => m.isOperator && !m.superseded,
         orElse: () => _ChatMessage(isOperator: false, text: ''),
       );
-      if (localLast.isOperator && localLast.turnId == null && localLast.text == lastServer.text) {
+      if (localLast.isOperator &&
+          localLast.turnId == null &&
+          localLast.accepted &&
+          localLast.text == lastServer.text) {
         setState(() {
           localLast.turnId = lastServer.turnId;
           _expiresAt = d.expiresAtUtc;
@@ -960,10 +989,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       _Outgoing(
         key: const Uuid().v4(),
         text: corrected.trim(),
-        // Keeps the audio and the unedited transcript beside the corrected text.
+        // The recording stays the turn's input: a correction of a voice turn is the text the
+        // technician types to say what it should have been, on top of the same audio.
         source: m.audioRef != null ? AiTurnSource.voice : AiTurnSource.typed,
         audioRef: m.audioRef,
-        rawTranscript: m.rawTranscript ?? (m.audioRef != null ? m.text : null),
+        durationSeconds: m.durationSeconds,
         replacesTurnId: replaces,
         supersedes: m,
       ),
@@ -1407,6 +1437,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                   _draft.workers.isNotEmpty ||
                   _draft.materials.isNotEmpty ||
                   _draft.controlli.isNotEmpty ||
+                  _draft.strumenti.isNotEmpty ||
                   _draft.diagnosi != null ||
                   _draft.soluzione != null ||
                   _draft.customerSignoffText != null ||
@@ -1672,7 +1703,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                     ],
                     Flexible(
                       child: Text(
-                        m.text,
+                        m.displayText,
                         style: TextStyle(
                           color: m.isOperator && !notSent ? Colors.white : context.colors.ink,
                           decoration: m.superseded ? TextDecoration.lineThrough : null,
@@ -1752,6 +1783,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
               ),
             for (final c in _draft.controlli)
               _draftRow(c.describe(), c.state, AiFactSource.operatorInput),
+            // An instrument with no id is one the model only heard the name of: it stays a line the
+            // technician still has to pick from the catalogue, so it is shown as such, never applied.
+            for (final s in _draft.strumenti)
+              _draftRow(
+                s.strumentoId.isEmpty ? '${s.name} — da scegliere' : s.name,
+                s.state,
+                s.source,
+              ),
             if (_draft.openItems.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 6),
