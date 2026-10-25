@@ -9,6 +9,7 @@ import '../../data/reports/import_server_report.dart' show controlRowId;
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider;
 import 'ai_draft_feed.dart' show AiFeedReportLockedException, aiDraftFeedProvider;
+import 'ai_strumenti_write.dart' show AiStrumentoLine, writeAiStrumenti;
 import 'create_draft.dart';
 
 const _uuid = Uuid();
@@ -137,6 +138,15 @@ Future<String?> applyConfirmedDraft(
         ),
     ]);
   }
+
+  // Instruments: the server resolved each id against the tenant and computed the calibration
+  // verdict for the job's date; the rows themselves are ours to write. Written with the editor's
+  // own row ids, so the Strumenti step shows them as selected and can ask about an expired one.
+  await writeAiStrumenti(
+    repo,
+    reportId: id,
+    lines: response.strumenti.map(AiStrumentoLine.fromResolved),
+  );
 
   // materialiNotRequired and customerSignoffText are header fields the confirm response corrects
   // for us; carry them or the editor shows a report that contradicts what the server resolved.

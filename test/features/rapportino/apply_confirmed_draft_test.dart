@@ -18,6 +18,7 @@ import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/import_server_report.dart' show controlRowId;
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
+import 'package:tasktap_mobile/domain/reports/strumenti_selection.dart' show strumentoRowId;
 import 'package:tasktap_mobile/features/rapportino/apply_confirmed_draft.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
@@ -78,21 +79,31 @@ void main() {
     final id = await _callApply(
       tester,
       container,
-      const AiConversationConfirmResponse(
+      AiConversationConfirmResponse(
         title: 'Sostituzione valvola',
         details: 'Valvola bloccata',
         customerSignoffText: 'accettato',
         ticketId: 'tkt-1',
         locationId: null,
-        staff: [AiResolvedStaff(userId: 'u-1', hoursWorked: 6.5, kmTraveled: 12)],
-        materials: [
+        staff: const [AiResolvedStaff(userId: 'u-1', hoursWorked: 6.5, kmTraveled: 12)],
+        materials: const [
           AiResolvedMaterial(
             freeTextName: 'Guarnizione',
             quantity: 2,
             notes: 'Da verificare: materiale non trovato a catalogo.',
           ),
         ],
-        controlli: [AiResolvedControl(ticketControlId: 'tc-1', boolValue: true)],
+        controlli: const [AiResolvedControl(ticketControlId: 'tc-1', boolValue: true)],
+        strumenti: [
+          AiResolvedStrumento(
+            strumentoId: 'st-1',
+            name: 'Calibro',
+            matricola: 'M-77',
+            calibrationExpiry: DateTime.utc(2026, 10, 7),
+            usageDescription: 'misura della valvola',
+            outcome: '25.4 mm',
+          ),
+        ],
       ),
       ticketId: 'tkt-1',
     );
@@ -130,6 +141,26 @@ void main() {
       ctrl.id,
       controlRowId(id!, 'tc-1'),
       reason: 'the Controlli step looks rows up by this id; any other scheme inserts a second row',
+    );
+
+    final str = await db.select(db.reportStrumenti).getSingle();
+    expect(str.strumentoId, 'st-1');
+    expect(str.name, 'Calibro');
+    expect(str.matricola, 'M-77');
+    expect(
+      str.id,
+      strumentoRowId(id, 'st-1'),
+      reason: 'the Strumenti step addresses the row by this id; any other scheme duplicates it',
+    );
+    expect(str.isLocal, isTrue, reason: 'the phone owns this selection, not the sync payload');
+    expect(str.calibrationExpiry, '2026-10-07');
+    expect(str.usageDescription, 'misura della valvola');
+    expect(str.outcome, '25.4 mm');
+    expect(str.expiredAtUse, isFalse);
+    expect(
+      row.strumentiPrefilled,
+      isTrue,
+      reason: 'otherwise the step pre-fills the whole kit over the instruments just resolved',
     );
   });
 

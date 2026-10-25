@@ -108,7 +108,7 @@ void main() {
   late _FakePermissions perms;
 
   VoiceCaptureController controller({
-    Future<AiTranscription> Function(File, String)? upload,
+    Future<AiVoiceCapture> Function(File, String)? upload,
     Future<bool> Function()? consent,
     String? user,
   }) => VoiceCaptureController(
@@ -117,7 +117,7 @@ void main() {
     permissions: perms,
     store: store,
     consentAccepted: consent ?? () async => true,
-    upload: upload ?? (f, k) async => const AiTranscription(transcript: 't', audioRef: 'r'),
+    upload: upload ?? (f, k) async => const AiVoiceCapture(audioRef: 'r', durationSeconds: 3),
   );
 
   setUp(() async {
@@ -139,7 +139,7 @@ void main() {
       upload: (f, k) async {
         keys.add(k);
         if (fail) throw const AiFailure('offline');
-        return const AiTranscription(transcript: 'ciao', audioRef: 'abc');
+        return const AiVoiceCapture(audioRef: 'abc', durationSeconds: 8);
       },
     );
     await c.start(ticketId: 'T1');
@@ -390,28 +390,28 @@ void main() {
     expect(zoneReset, isTrue);
   });
 
-  group('AiApiClient.transcribe', () {
+  group('AiApiClient.uploadVoiceCapture', () {
     late File audio;
     setUp(() async {
       audio = File('${tmp.path}/a.m4a')..writeAsBytesSync(List.filled(64, 7));
     });
 
-    test('transcribe_sends_the_idempotency_key_header_and_audio_part', () async {
+    test('uploadVoiceCapture_sends_the_idempotency_key_header_and_audio_part', () async {
       late RequestOptions seen;
       final client = _client((o, body) async {
         seen = o;
-        return _json(200, {'transcript': 'ciao mondo', 'audioRef': 'ref-1'});
+        return _json(200, {'audioRef': 'ref-1', 'durationSeconds': 42});
       });
 
-      final r = await client.transcribe(audio, idempotencyKey: 'key-123');
+      final r = await client.uploadVoiceCapture(audio, idempotencyKey: 'key-123');
 
-      expect(r.transcript, 'ciao mondo');
       expect(r.audioRef, 'ref-1');
-      expect(seen.path, '/api/ai/transcribe');
+      expect(r.durationSeconds, 42);
+      expect(seen.path, '/api/ai/voice-captures');
       expect(seen.method, 'POST');
       expect(seen.headers['Idempotency-Key'], 'key-123');
-      expect(seen.sendTimeout, transcribeSendTimeout);
-      expect(seen.receiveTimeout, transcribeReceiveTimeout);
+      expect(seen.sendTimeout, voiceUploadSendTimeout);
+      expect(seen.receiveTimeout, voiceUploadReceiveTimeout);
       expect(seen.headers['content-type'] ?? seen.contentType, startsWith('multipart/form-data'));
       expect(seen.headers['content-type'] ?? seen.contentType, contains('boundary='));
       final form = seen.data as FormData;
@@ -419,75 +419,75 @@ void main() {
       expect(form.files.single.value.contentType.toString(), 'audio/mp4');
     });
 
-    test('transcribe_maps_server_error_codes_to_typed_exceptions', () async {
+    test('uploadVoiceCapture_maps_server_error_codes_to_typed_exceptions', () async {
       Future<Object?> run(int status, Object body) async {
         final client = _client((o, b) async => _json(status, body));
         try {
-          await client.transcribe(audio, idempotencyKey: 'k');
+          await client.uploadVoiceCapture(audio, idempotencyKey: 'k');
         } catch (e) {
           return e;
         }
         return null;
       }
 
-      AiTranscribeError reason(Object? e) => (e as AiTranscribeException).error;
+      AiVoiceUploadError reason(Object? e) => (e as AiVoiceUploadException).error;
 
       expect(
         reason(await run(400, {'error': 'audio_type_mismatch', 'message': 'x'})),
-        AiTranscribeError.audioTypeMismatch,
+        AiVoiceUploadError.audioTypeMismatch,
       );
       expect(
         reason(await run(400, {'error': 'audio_unrecognised', 'message': 'x'})),
-        AiTranscribeError.audioUnrecognised,
+        AiVoiceUploadError.audioUnrecognised,
       );
       expect(
         reason(await run(400, {'error': 'audio_too_long', 'message': 'x'})),
-        AiTranscribeError.audioTooLong,
+        AiVoiceUploadError.audioTooLong,
       );
       expect(
         reason(await run(400, {'error': 'audio_too_short', 'message': 'x'})),
-        AiTranscribeError.audioTooShort,
+        AiVoiceUploadError.audioTooShort,
       );
       expect(
         reason(await run(400, {'error': 'audio_too_large', 'message': 'x'})),
-        AiTranscribeError.audioTooLarge,
+        AiVoiceUploadError.audioTooLarge,
       );
-      expect(reason(await run(404, {})), AiTranscribeError.voiceDisabled);
+      expect(reason(await run(404, {})), AiVoiceUploadError.voiceDisabled);
       expect(
         reason(
           await run(403, {
             'error': 'La generazione di bozze con AI è disattivata per questa azienda.',
           }),
         ),
-        AiTranscribeError.aiDisabled,
+        AiVoiceUploadError.aiDisabled,
       );
-      expect(reason(await run(403, {'error': 'Forbidden'})), AiTranscribeError.forbidden);
-      expect(reason(await run(403, {})), AiTranscribeError.forbidden);
-      expect(reason(await run(413, {})), AiTranscribeError.audioTooLarge);
-      expect(reason(await run(400, {'error': 'weird'})), AiTranscribeError.badRequest);
-      expect(reason(await run(400, 'bare string')), AiTranscribeError.badRequest);
+      expect(reason(await run(403, {'error': 'Forbidden'})), AiVoiceUploadError.forbidden);
+      expect(reason(await run(403, {})), AiVoiceUploadError.forbidden);
+      expect(reason(await run(413, {})), AiVoiceUploadError.audioTooLarge);
+      expect(reason(await run(400, {'error': 'weird'})), AiVoiceUploadError.badRequest);
+      expect(reason(await run(400, 'bare string')), AiVoiceUploadError.badRequest);
       for (final e in [
-        AiTranscribeError.audioTooLarge,
-        AiTranscribeError.badRequest,
-        AiTranscribeError.forbidden,
-        AiTranscribeError.aiDisabled,
-        AiTranscribeError.voiceDisabled,
+        AiVoiceUploadError.audioTooLarge,
+        AiVoiceUploadError.badRequest,
+        AiVoiceUploadError.forbidden,
+        AiVoiceUploadError.aiDisabled,
+        AiVoiceUploadError.voiceDisabled,
       ]) {
-        expect(AiTranscribeException(e, '').retryable, isFalse, reason: '$e');
+        expect(AiVoiceUploadException(e, '').retryable, isFalse, reason: '$e');
       }
-      expect(reason(await run(500, {})), AiTranscribeError.unavailable);
+      expect(reason(await run(500, {})), AiVoiceUploadError.unavailable);
       expect(await run(429, {'error': 'QuotaExceeded'}), isA<AiQuotaExhaustedException>());
 
       for (final t in [DioExceptionType.receiveTimeout, DioExceptionType.sendTimeout]) {
         final slow = _client((o, b) async => throw DioException(requestOptions: o, type: t));
         Object? err;
         try {
-          await slow.transcribe(audio, idempotencyKey: 'k');
+          await slow.uploadVoiceCapture(audio, idempotencyKey: 'k');
         } catch (e) {
           err = e;
         }
-        expect(reason(err), AiTranscribeError.timeout, reason: '$t');
-        expect((err as AiTranscribeException).retryable, isTrue);
+        expect(reason(err), AiVoiceUploadError.timeout, reason: '$t');
+        expect((err as AiVoiceUploadException).retryable, isTrue);
       }
 
       final offline = _client(
@@ -497,12 +497,12 @@ void main() {
         ),
       );
       await expectLater(
-        offline.transcribe(audio, idempotencyKey: 'k'),
+        offline.uploadVoiceCapture(audio, idempotencyKey: 'k'),
         throwsA(
-          isA<AiTranscribeException>().having(
+          isA<AiVoiceUploadException>().having(
             (e) => e.error,
             'error',
-            AiTranscribeError.offline,
+            AiVoiceUploadError.offline,
           ),
         ),
       );
