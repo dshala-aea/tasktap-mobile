@@ -474,6 +474,13 @@ class TicketStatuses extends Table {
   BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
   BoolColumn get isClosed => boolean().withDefault(const Constant(false))();
 
+  /// The tenant's own "work has started" flag — seeded as "In corso".
+  ///
+  /// Mirrored so the dashboard can tell that a ticket is being worked on even when no timer is
+  /// running and its schedule row still says "da fare". Read through the flag, never the name:
+  /// a tenant may rename the status, and `TicketStatus` itself says the flag is the contract.
+  BoolColumn get isInProgress => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1641,7 +1648,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 55;
+  int get schemaVersion => 56;
 
   @override
   MigrationStrategy get migration {
@@ -2285,6 +2292,22 @@ class AppDatabase extends _$AppDatabase {
           }
           if (!await _columnExists(m.database, 'report_controlli', 'asset_id')) {
             await m.addColumn(reportControlli, reportControlli.assetId);
+          }
+        }
+        if (from < 56) {
+          // The tenant's own "work has started" flag on a ticket status (`isInProgress`, seeded as
+          // "In corso"). The server has always sent it — the sync serializes the `TicketStatus`
+          // entity — but the device dropped it, so the dashboard could only tell that work had
+          // started by finding a running timer. A ticket moved to "In corso" by the office, or by a
+          // timer that has since been stopped, fell back to "da fare" on the home queue.
+          //
+          // Nothing to backfill: `ticketStatuses` is replaced wholesale from the payload on every
+          // sync, so the first sync after the upgrade fills the flag.
+          //
+          // Same `PRAGMA table_info` guard as 50, 51 and 55: a re-created table or a half-applied
+          // step must not kill the app on `duplicate column name` before it opens.
+          if (!await _columnExists(m.database, 'ticket_statuses', 'is_in_progress')) {
+            await m.addColumn(ticketStatuses, ticketStatuses.isInProgress);
           }
         }
       },

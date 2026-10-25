@@ -1273,6 +1273,7 @@ class TicketStatusDto {
   final String name;
   final bool isDefault;
   final bool isClosed;
+  final bool isInProgress;
 
   const TicketStatusDto({
     required this.id,
@@ -1280,6 +1281,7 @@ class TicketStatusDto {
     required this.name,
     required this.isDefault,
     required this.isClosed,
+    required this.isInProgress,
   });
 
   factory TicketStatusDto.fromJson(Map<String, dynamic> j) => TicketStatusDto(
@@ -1288,6 +1290,9 @@ class TicketStatusDto {
     name: j['name'] as String,
     isDefault: j['isDefault'] as bool? ?? false,
     isClosed: j['isClosed'] as bool? ?? false,
+    // Absent from a payload an older server sends: false is the safe default — the dashboard then
+    // keeps falling back to a running timer as its only "work has started" signal, as before.
+    isInProgress: j['isInProgress'] as bool? ?? false,
   );
 }
 
