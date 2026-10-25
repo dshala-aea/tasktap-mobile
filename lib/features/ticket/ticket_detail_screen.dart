@@ -26,6 +26,7 @@ import '../../data/tickets/ticket_deletion.dart';
 import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
+import '../calendario/calendario_providers.dart' show formatMinutes;
 import '../calendario/widgets/schedule_info_sheet.dart';
 import '../cantiere/cantiere_providers.dart';
 import '../checklist/checklist_providers.dart';
@@ -1755,10 +1756,7 @@ class _PianificazioniTab extends ConsumerWidget {
               ),
               child: Column(
                 children: schedules.map((s) {
-                  final dateLabel = DateFormat(
-                    'EEE d MMM HH:mm',
-                    'it',
-                  ).format(s.activityDate.toLocal());
+                  final dateLabel = _scheduleRowLabel(s);
                   return ListRow(
                     leading: Icon(
                       LucideIcons.calendarDays,
@@ -1780,6 +1778,18 @@ class _PianificazioniTab extends ConsumerWidget {
             ),
     );
   }
+}
+
+/// "ven 10 lug · 08:00 – 17:00" — the day the office planned plus the hours they set.
+///
+/// The clock comes from `timeStartMinutes`/`timeEndMinutes`, never from `activityDate`: that is a
+/// midnight stamp, so reading its time through `toLocal()` printed the device's UTC offset —
+/// "02:00" every time, whatever hours were planned. An all-day schedule carries placeholder
+/// bounds, so it shows the day alone, the same gate Calendario's views and the dashboard apply.
+String _scheduleRowLabel(Schedule s) {
+  final day = DateFormat('EEE d MMM', 'it').format(s.activityDate.toLocal());
+  if (s.allDay) return day;
+  return '$day · ${formatMinutes(s.timeStartMinutes)} – ${formatMinutes(s.timeEndMinutes)}';
 }
 
 class _AssignSheet extends ConsumerStatefulWidget {

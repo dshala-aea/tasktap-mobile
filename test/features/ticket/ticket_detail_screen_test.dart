@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/files/capture_store.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
@@ -545,6 +546,50 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Sopralluogo'), findsOneWidget);
+      // The clock is the hours the office planned (480→1020 = 08:00–17:00), not the stored
+      // activity date's midnight stamp read through the device zone — which printed 02:00 in
+      // Italy whatever the schedule said.
+      final day = DateFormat('EEE d MMM', 'it').format(DateTime.utc(2026, 7, 10).toLocal());
+      expect(find.text('$day · 08:00 – 17:00'), findsOneWidget);
+      await tester.binding.setSurfaceSize(null); // reset
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an all-day schedule shows the day, not a placeholder clock', (tester) async {
+      // All-day rows carry 0/0 bounds; formatting them unconditionally reads "00:00 – 00:00",
+      // which says "starts at midnight" instead of "no time today".
+      await seedBase(db);
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-allday',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: const Value('ticket-1'),
+              activityDate: DateTime.utc(2026, 7, 10),
+              timeStartMinutes: 0,
+              timeEndMinutes: 0,
+              userId: 'user-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Giornata intera',
+              description: '',
+              allDay: const Value(true),
+            ),
+          );
+      await pump(tester);
+
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pump();
+      await tester.ensureVisible(find.text('Pianificazioni'));
+      await tester.tap(find.text('Pianificazioni'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Giornata intera'), findsOneWidget);
+      final day = DateFormat('EEE d MMM', 'it').format(DateTime.utc(2026, 7, 10).toLocal());
+      expect(find.text(day), findsOneWidget);
       await tester.binding.setSurfaceSize(null); // reset
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
