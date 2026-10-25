@@ -103,7 +103,10 @@ class _Api extends WorklogApiClient {
   }
 
   @override
-  Future<void> endWork({DateTime? deviceUtc}) => _rest('end');
+  Future<int?> endWork({DateTime? deviceUtc}) async {
+    await _rest('end');
+    return null;
+  }
   @override
   Future<void> startBreak() => _rest('break/start');
   @override

@@ -10,13 +10,17 @@ import '../../core/theme/app_rack.dart';
 import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ferie/absence_request_api_client.dart';
+import '../../data/sync/sync_freshness_provider.dart' show hasSyncedAtLeastOnceProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 const Set<int> _kCancellable = {0, 1}; // Pending, Approved
 
-/// Self-service AbsenceRequest history. Online-only, no-Drift-cache architecture (see
-/// AbsenceRequestApiClient's own file doc).
+/// Self-service AbsenceRequest history.
+///
+/// Reads the server when it can and the device's synced mirror when it cannot — "was my request
+/// approved" was answered days ago and does not need a radio. Filing and cancelling stay online
+/// (see AbsenceRequestApiClient's own file doc).
 class FeriePermessiListScreen extends ConsumerWidget {
   const FeriePermessiListScreen({super.key});
 
@@ -29,25 +33,9 @@ class FeriePermessiListScreen extends ConsumerWidget {
       body: SafeArea(
         child: requestsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          // Offline is not a failure: nothing was attempted and retrying cannot help until the
-          // radio is back. Naming it as online-only (like Giacenze) beats the red "Impossibile
-          // caricare i dati" card, which reads as "your requests may be gone".
-          error: (e, _) => e is AbsenceRequestsOfflineException
-              ? UnavailableState(
-                  icon: LucideIcons.wifiOff,
-                  titolo: 'Ferie e permessi non disponibili offline',
-                  motivo:
-                      'Le tue richieste si leggono con la connessione. Una richiesta già '
-                      'inviata resta registrata sul server.',
-                  action: AppButton(
-                    label: 'Riprova',
-                    size: AppButtonSize.sm,
-                    fullWidth: false,
-                    onPressed: () => ref.invalidate(myAbsenceRequestsProvider),
-                  ),
-                )
-              : ErrorState(onRetry: () => ref.invalidate(myAbsenceRequestsProvider)),
-          data: (items) => _FeriePermessiListBody(items: items),
+          error: (e, _) => ErrorState(onRetry: () => ref.invalidate(myAbsenceRequestsProvider)),
+          data: (result) =>
+              _FeriePermessiListBody(items: result.items, fromDevice: result.fromDevice),
         ),
       ),
       floatingActionButton: Padding(
@@ -64,12 +52,22 @@ class FeriePermessiListScreen extends ConsumerWidget {
 }
 
 class _FeriePermessiListBody extends ConsumerWidget {
-  const _FeriePermessiListBody({required this.items});
+  const _FeriePermessiListBody({required this.items, required this.fromDevice});
 
   final List<AbsenceRequestDto> items;
 
+  /// True when [items] came from the device's mirror rather than a live server answer.
+  final bool fromDevice;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // An empty list from the mirror on a phone that has never synced is a missing download, not a
+    // fact about the technician: saying "Nessuna richiesta" there would tell them their history
+    // never existed. An empty list from the SERVER is such a fact, and must not be dressed up as a
+    // download problem.
+    final neverSynced =
+        fromDevice && ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+
     return RefreshIndicator(
       onRefresh: () => ref.refresh(myAbsenceRequestsProvider.future),
       child: CustomScrollView(
@@ -81,7 +79,23 @@ class _FeriePermessiListBody extends ConsumerWidget {
               showBack: true,
             ),
           ),
-          if (items.isEmpty)
+          if (items.isEmpty && neverSynced)
+            SliverToBoxAdapter(
+              child: UnavailableState(
+                icon: LucideIcons.wifiOff,
+                titolo: 'Richieste non ancora scaricate',
+                motivo:
+                    'Nessuna copia delle tue richieste su questo dispositivo. Verrà scaricata '
+                    'alla prossima sincronizzazione.',
+                action: AppButton(
+                  label: 'Riprova',
+                  size: AppButtonSize.sm,
+                  fullWidth: false,
+                  onPressed: () => ref.invalidate(myAbsenceRequestsProvider),
+                ),
+              ),
+            )
+          else if (items.isEmpty)
             SliverToBoxAdapter(
               child: EmptyState(
                 icon: LucideIcons.calendarX,

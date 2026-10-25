@@ -35,6 +35,13 @@ String? _civil(String? v) {
   return m?.group(0);
 }
 
+/// The local row id of one instrument's selection on [reportId].
+///
+/// Deterministic on purpose: the editor's Strumenti step, the AI apply and the pre-fill all address
+/// the same row, so a second selection for the same catalogue instrument can never appear as a
+/// duplicate line in the submit body. The one place that spelling lives.
+String strumentoRowId(String reportId, String strumentoId) => 'str-$reportId-$strumentoId';
+
 /// One selected instrument as the submit builder sees it.
 class StrumentoSelectionInput {
   const StrumentoSelectionInput({

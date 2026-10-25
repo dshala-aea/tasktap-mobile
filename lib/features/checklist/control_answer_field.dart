@@ -176,6 +176,7 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
           child: AppCheckbox(
             value: shown.boolValue == true,
             label: _c.label,
+            isRequired: _c.isRequired,
             // Unticking writes `false`, matching the web editor: false is an answer (and the
             // exception the checklist reports upstream), not "not yet answered".
             onChanged: (v) => _commit(_answer(boolValue: v)),

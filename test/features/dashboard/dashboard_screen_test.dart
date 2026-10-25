@@ -11,6 +11,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/features/dashboard/id_plate_hero_comp.dart';
@@ -316,8 +317,7 @@ void main() {
     testWidgets('an in-progress schedule is not a running clock, and does not appear', (
       tester,
     ) async {
-      final today = DateTime.now().toUtc();
-      final dayStart = DateTime.utc(today.year, today.month, today.day);
+      final dayStart = BusinessTime.fallback().businessToday();
       await db
           .into(db.schedules)
           .insert(

@@ -275,6 +275,20 @@ class ReferenceCacheRepository {
   Future<ProdottiAssistenzaData?> prodottoAssistenzaById(String id) =>
       (_db.select(_db.prodottiAssistenza)..where((p) => p.id.equals(id)))
           .getSingleOrNull();
+
+  /// A ticket's mirrored change history, newest first — the Storico tab's offline source.
+  ///
+  /// Rows come back raw: `fieldName` and the two values are column names and stored forms, and the
+  /// screen is what turns them into Italian and resolves status/type ids through its own maps. A
+  /// repository that resolved them would be a second copy of that mapping.
+  ///
+  /// Empty means the device has never received this ticket's history — not that nothing happened
+  /// to it — so callers must say which of the two they are showing.
+  Future<List<TicketHistoryData>> ticketHistoryFor(String ticketId) =>
+      (_db.select(_db.ticketHistory)
+            ..where((h) => h.ticketId.equals(ticketId))
+            ..orderBy([(h) => OrderingTerm.desc(h.changedAt)]))
+          .get();
 }
 
 final referenceCacheProvider = Provider<ReferenceCacheRepository>(

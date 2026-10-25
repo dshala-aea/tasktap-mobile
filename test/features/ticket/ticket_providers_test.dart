@@ -79,6 +79,106 @@ void main() {
     expect(result, isEmpty);
   });
 
+  test('closedTicketStatusIdsProvider lists only the statuses flagged isClosed', () async {
+    await db
+        .into(db.ticketStatuses)
+        .insert(TicketStatusesCompanion.insert(id: Value(1), tenantId: 'tenant-1', name: 'Aperto'));
+    await db
+        .into(db.ticketStatuses)
+        .insert(
+          TicketStatusesCompanion.insert(
+            id: Value(2),
+            tenantId: 'tenant-1',
+            name: 'Completato',
+            isClosed: Value(true),
+          ),
+        );
+
+    final result = await container.read(closedTicketStatusIdsProvider.future);
+    expect(result, {2});
+  });
+
+  /// The bug this pair was written for: closing a ticket from the phone wrote the new `statusId`
+  /// and no `closedAt` (that bookkeeping was the server's alone), so a rule that only read
+  /// `closedAt` kept offering new work on a ticket the technician had just closed.
+  test('mirroredTicketIsClosed reads closure from the status flag, not only from closedAt', () async {
+    await db
+        .into(db.ticketStatuses)
+        .insert(
+          TicketStatusesCompanion.insert(
+            id: Value(2),
+            tenantId: 'tenant-1',
+            name: 'Chiuso',
+            isClosed: Value(true),
+          ),
+        );
+    await db
+        .into(db.tickets)
+        .insert(
+          TicketsCompanion.insert(
+            id: 'ticket-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 6, 1),
+            title: 'Perdita idrica',
+            customerId: 'cust-1',
+            locationId: 'loc-1',
+            statusId: 2,
+            typeId: 1,
+          ),
+        );
+
+    expect(await mirroredTicketIsClosed(db, 'ticket-1'), isTrue);
+  });
+
+  test('mirroredTicketIsClosed honours a server-stamped closedAt', () async {
+    // The status is not flagged closed — the closure was recorded while the status list on this
+    // device was stale. `closedAt` alone still has to answer true.
+    await db
+        .into(db.ticketStatuses)
+        .insert(TicketStatusesCompanion.insert(id: Value(1), tenantId: 'tenant-1', name: 'Aperto'));
+    await db
+        .into(db.tickets)
+        .insert(
+          TicketsCompanion.insert(
+            id: 'ticket-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 6, 1),
+            title: 'Perdita idrica',
+            customerId: 'cust-1',
+            locationId: 'loc-1',
+            statusId: 1,
+            typeId: 1,
+            closedAt: Value(DateTime.utc(2026, 6, 2)),
+          ),
+        );
+
+    expect(await mirroredTicketIsClosed(db, 'ticket-1'), isTrue);
+  });
+
+  test('mirroredTicketIsClosed is false for an open ticket and for an unmirrored one', () async {
+    await db
+        .into(db.ticketStatuses)
+        .insert(TicketStatusesCompanion.insert(id: Value(1), tenantId: 'tenant-1', name: 'Aperto'));
+    await db
+        .into(db.tickets)
+        .insert(
+          TicketsCompanion.insert(
+            id: 'ticket-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 6, 1),
+            title: 'Perdita idrica',
+            customerId: 'cust-1',
+            locationId: 'loc-1',
+            statusId: 1,
+            typeId: 1,
+          ),
+        );
+
+    expect(await mirroredTicketIsClosed(db, 'ticket-1'), isFalse);
+    // No evidence of closure is not evidence of closure — an unknown id is not refused here.
+    expect(await mirroredTicketIsClosed(db, 'ticket-unknown'), isFalse);
+  });
+
   test('schedulesForTicketProvider returns schedules for matching ticketId', () async {
     await db
         .into(db.schedules)

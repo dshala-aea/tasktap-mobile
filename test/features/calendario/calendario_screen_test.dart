@@ -371,6 +371,119 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('shows the customer and the site address inside the block', (tester) async {
+      // The box used to name the job and its hours only: the technician had to open the ticket to
+      // find out whose site it was and where it is, which is the one thing they need before
+      // getting in the van. Both come from the mirror, so this holds with no signal at all.
+      await seedSchedules(db);
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-1',
+              tenantId: 'tenant-1',
+              createdAt: now,
+              companyName: 'Condominio Aurora',
+            ),
+          );
+      // The schedule's ticket is not mirrored here, so the customer resolves through the location
+      // (Schedule.ticketId → no ticket → Location.customerId), the same fallback the Lista row uses.
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-1',
+              tenantId: 'tenant-1',
+              createdAt: now,
+              customerId: 'cust-1',
+              name: 'Sede centrale',
+              address: const Value('Via Roma 12'),
+              postalCode: const Value('20100'),
+              city: const Value('Milano'),
+            ),
+          );
+
+      final today = DateTime.now();
+      await pump(
+        tester,
+        view: CalendarioView.giorno,
+        date: DateTime(today.year, today.month, today.day),
+      );
+
+      expect(find.text('Intervento mattina'), findsOneWidget);
+      expect(find.text('Condominio Aurora'), findsOneWidget);
+      expect(find.text('Via Roma 12, 20100 Milano'), findsOneWidget);
+      expect(tester.takeException(), null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a block too short for them drops customer and site instead of overflowing', (
+      tester,
+    ) async {
+      // A quarter-hour job is floored to 44dp, which fits a title, an hour range and nothing else.
+      // The block is absolutely positioned, so a line that does not fit does not get clipped — it
+      // paints the overflow stripes. Better to show neither line here: the info sheet and the
+      // Lista row both still carry them.
+      final today = DateTime.now();
+      final todayUtc = DateTime(today.year, today.month, today.day).toUtc();
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-short',
+              tenantId: 'tenant-1',
+              createdAt: todayUtc,
+              activityDate: todayUtc,
+              timeStartMinutes: 780, // 13:00
+              timeEndMinutes: 795, // 13:15
+              userId: 'u1',
+              statusId: 2,
+              locationId: 'loc-short',
+              title: 'Sopralluogo breve',
+              description: '',
+            ),
+          );
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-short',
+              tenantId: 'tenant-1',
+              createdAt: now,
+              companyName: 'Studio Bianchi',
+            ),
+          );
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-short',
+              tenantId: 'tenant-1',
+              createdAt: now,
+              customerId: 'cust-short',
+              name: 'Sede sud',
+              address: const Value('Via Verdi 3'),
+              city: const Value('Torino'),
+            ),
+          );
+
+      await pump(
+        tester,
+        view: CalendarioView.giorno,
+        date: DateTime(today.year, today.month, today.day),
+      );
+
+      expect(find.text('Sopralluogo breve'), findsOneWidget);
+      expect(find.text('Studio Bianchi'), findsNothing);
+      expect(find.text('Via Verdi 3, Torino'), findsNothing);
+      expect(tester.takeException(), null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('shows empty grid with no events', (tester) async {
       await pump(tester, view: CalendarioView.giorno);
       // GiornoView renders even with no events (just the hour labels)

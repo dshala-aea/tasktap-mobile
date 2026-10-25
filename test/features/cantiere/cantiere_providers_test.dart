@@ -12,9 +12,14 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
+import 'package:tasktap_mobile/core/time/business_time_providers.dart' show businessTimeProvider;
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart' show isOnlineProvider;
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_providers.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
+    show internalUserIdProvider;
 
 /// Records every address it was asked to geocode, and returns [pointToReturn] (default: a fixed
 /// point) — or null when [failNextLookup] is set, to exercise the "geocode failed" path without a
@@ -249,6 +254,143 @@ void main() {
 
       expect(result, isNull);
       expect(fakeGeocoder.geocodedAddresses, isEmpty);
+    });
+  });
+
+  group('offline site hours (cantiere_work_logs mirror)', () {
+    late ProviderContainer offlineContainer;
+
+    setUp(() {
+      offlineContainer = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          isOnlineProvider.overrideWithValue(false),
+          internalUserIdProvider.overrideWith((ref) async => 'user-1'),
+          // Pinned so the mirror's instants render as a fixed Rome wall clock — the same shape the
+          // server sends, which is what lets the suggestion code not care where a row came from.
+          businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
+        ],
+      );
+    });
+
+    tearDown(() => offlineContainer.dispose());
+
+    Future<void> insertMirrorRow({
+      String id = 'w1',
+      String cantiereId = 'site-1',
+      String userId = 'user-1',
+      DateTime? workDate,
+      int startSeconds = 8 * 3600,
+      int? endSeconds = 12 * 3600,
+      DateTime? startUtc,
+      DateTime? endUtc,
+      String? clientId,
+    }) => db
+        .into(db.cantiereWorkLogs)
+        .insert(
+          CantiereWorkLogsCompanion.insert(
+            id: id,
+            cantiereId: cantiereId,
+            userId: userId,
+            workDate: workDate ?? DateTime.utc(2026, 10, 22),
+            startSeconds: startSeconds,
+            endSeconds: Value(endSeconds),
+            startUtc: Value(startUtc),
+            endUtc: Value(endUtc),
+            approvalStatus: const Value(2),
+            clientId: Value(clientId),
+            createdAt: DateTime.utc(2026, 10, 22, 6),
+          ),
+        );
+
+    test('the mirror provider returns one site\'s shifts, newest first', () async {
+      await insertMirrorRow(id: 'w-old', workDate: DateTime.utc(2026, 10, 20));
+      await insertMirrorRow(id: 'w-new', workDate: DateTime.utc(2026, 10, 22));
+      await insertMirrorRow(id: 'w-other-site', cantiereId: 'site-2');
+
+      final rows = await offlineContainer.read(
+        cantiereWorkLogMirrorProvider('site-1').future,
+      );
+
+      expect(
+        rows.map((r) => r.id),
+        ['w-new', 'w-old'],
+        reason: 'the detail screen lists the newest shift first',
+      );
+    });
+
+    test('answers from the mirror while offline, shaped like the server DTO', () async {
+      await insertMirrorRow(
+        startUtc: DateTime.utc(2026, 10, 22, 6),
+        endUtc: DateTime.utc(2026, 10, 22, 10, 30),
+        clientId: 'device-key-1',
+      );
+
+      final logs = await offlineContainer.read(
+        cantiereWorklogsProvider((userId: 'user-1', cantiereId: 'site-1')).future,
+      );
+
+      expect(logs, hasLength(1));
+      expect(logs.single.workDate, DateTime.utc(2026, 10, 22));
+      expect(
+        logs.single.startTime,
+        '08:00:00',
+        reason: 'the true instant wins over the stored time-of-day',
+      );
+      expect(logs.single.endTime, '12:30:00');
+      expect(logs.single.duration, const Duration(hours: 4, minutes: 30));
+    });
+
+    test('a shift only in the outbox is still readable, and a mirrored one is not doubled', () async {
+      // One shift the server already knows (mirror), identified by the device key it was queued
+      // under, and one still queued.
+      await insertMirrorRow(id: 'w-known', clientId: 'punch-known');
+
+      // `customerId` is not decoration: `assembleCantiereIntervals` refuses to close an interval
+      // whose opener has no customer context, so a fixture without it silently produces no shift.
+      // A real clock-in always carries one.
+      Future<void> punch(String id, String type, DateTime at) => db
+          .into(db.cantierePunches)
+          .insert(
+            CantierePunchesCompanion.insert(
+              id: id,
+              eventTime: at,
+              eventType: type,
+              cantiereId: const Value('site-1'),
+              customerId: const Value('cust-1'),
+            ),
+          );
+
+      await punch('punch-known', 'ingresso', DateTime.utc(2026, 10, 21, 6));
+      await punch('punch-known-out', 'uscita', DateTime.utc(2026, 10, 21, 10));
+      await punch('punch-queued', 'ingresso', DateTime.utc(2026, 10, 23, 6));
+      await punch('punch-queued-out', 'uscita', DateTime.utc(2026, 10, 23, 9));
+
+      final logs = await offlineContainer.read(
+        cantiereWorklogsProvider((userId: 'user-1', cantiereId: 'site-1')).future,
+      );
+
+      expect(
+        logs.map((l) => l.id),
+        unorderedEquals(['w-known', 'punch-queued']),
+        reason: 'the synced shift is not counted twice, and the unsent one is not lost',
+      );
+      final queued = logs.firstWhere((l) => l.id == 'punch-queued');
+      expect(queued.duration, const Duration(hours: 3));
+    });
+
+    test('a teammate\'s hours are not answered from this device', () async {
+      await insertMirrorRow();
+
+      final logs = await offlineContainer.read(
+        cantiereWorklogsProvider((userId: 'user-2', cantiereId: 'site-1')).future,
+      );
+
+      expect(
+        logs,
+        isEmpty,
+        reason: 'the device holds only its own punches; borrowing them would be a false answer',
+      );
     });
   });
 }

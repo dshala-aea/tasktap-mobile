@@ -113,14 +113,23 @@ class TicketWorkflowApiClient {
   }
 
   /// POST /api/tickets/{ticketId}/worklogs/stop — same [deviceUtc] contract as [startTimer].
-  Future<void> stopTimer(String ticketId, {DateTime? deviceUtc}) async {
-    await _run(
+  ///
+  /// Returns the row's clock disagreement when the server flagged one, or null: ordinary drift, no
+  /// device clock and an older backend all answer the same way. The response carries the *merged*
+  /// value — a phone corrected between the two taps still hears about the skew it started with —
+  /// and the phone only relays it; it never compares the clocks itself.
+  Future<int?> stopTimer(String ticketId, {DateTime? deviceUtc}) async {
+    final response = await _run(
       () => _dio.post<dynamic>(
         '/api/tickets/$ticketId/worklogs/stop',
         queryParameters: _deviceQuery(deviceUtc),
       ),
       fallback: 'Impossibile fermare il timer.',
     );
+    final body = response.data;
+    return body is Map<String, dynamic>
+        ? (body['clockDisagreementSeconds'] as num?)?.toInt()
+        : null;
   }
 
   /// The endpoints bind `deviceUtc` from the query string, not a body: a null value must send no
@@ -284,7 +293,11 @@ class TicketWorkflowFailure implements Exception {
 
 /// The row the server holds after a ticket timer start.
 class TicketTimerStart {
-  const TicketTimerStart({required this.id, required this.isActive});
+  const TicketTimerStart({
+    required this.id,
+    required this.isActive,
+    this.clockDisagreementSeconds,
+  });
 
   /// The server's id for the session — what the mirror row is keyed on so "Ferma" works without a
   /// round trip.
@@ -294,12 +307,22 @@ class TicketTimerStart {
   /// this retry.
   final bool isActive;
 
+  /// How far this phone's clock was from the server's, in seconds, signed — **only when the server
+  /// already judged it a disagreement** (over its own ten-minute threshold). Null for ordinary drift,
+  /// for a start that sent no device clock, and for a backend that predates the field.
+  ///
+  /// The number is rendered, never re-judged: the threshold is defined once, server-side, and a
+  /// client that compared it against its own copy would drift from the office's Correzioni list.
+  /// It is advice — the recorded start is this device's instant regardless.
+  final int? clockDisagreementSeconds;
+
   /// A server that does not know the `clientId` key yet answers with a bare `{id}`, and a row that
   /// call just created is running — so the absent flag defaults to true rather than to a stopped
   /// timer that never started.
   factory TicketTimerStart.fromJson(Map<String, dynamic> json) => TicketTimerStart(
     id: json['id'] as String,
     isActive: json['isActive'] as bool? ?? true,
+    clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)?.toInt(),
   );
 }
 

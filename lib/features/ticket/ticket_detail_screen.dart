@@ -23,8 +23,11 @@ import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_attachment_state.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_deletion.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
+import '../calendario/calendario_providers.dart' show formatMinutes;
+import '../calendario/widgets/schedule_info_sheet.dart';
 import '../cantiere/cantiere_providers.dart';
 import '../checklist/checklist_providers.dart';
 import '../checklist/ticket_asset_checklists_card.dart';
@@ -184,6 +187,15 @@ class _TicketDetailBody extends ConsumerWidget {
     final closedLabel = ticket.closedAt != null
         ? DateFormat('dd/MM/yyyy', 'it').format(ticket.closedAt!.toLocal())
         : '—';
+
+    // A closed ticket is finished work: no report and no AI draft may be started on it. Decided
+    // from the tenant's own closing status flag (plus `closedAt`, for the sync-lag cases — see
+    // [ticketIsClosed]), not from `closedAt` alone: closing from this very screen writes the new
+    // `statusId`, and that is what the bar has to react to immediately.
+    final closed = ticketIsClosed(
+      ticket,
+      ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const {},
+    );
 
     final customerAsync = ref.watch(customerByIdProvider(ticket.customerId));
     final locationAsync = ref.watch(locationByIdProvider(ticket.locationId));
@@ -488,6 +500,12 @@ class _TicketDetailBody extends ConsumerWidget {
           // second place. Once assigned, "Crea rapportino" is what a technician does on a ticket
           // (see the status-row comment). "Timbra cantiere" no longer lives here at all — it
           // moved to CantiereDetailScreen, reached from this ticket's own cantiere chip above.
+          //
+          // Neither button survives a closure. Both mint a rapportino for this ticket, and a
+          // closed ticket is finished work: the server would take the submit and leave the ticket
+          // closed (deliberately — it never reopens one on its own), so the report would sit
+          // against a job nobody expects hours on. The bar says why and where the way back is
+          // (the status pill above reopens it) rather than just disappearing.
           if (ticket.assignedUserId != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -496,24 +514,33 @@ class _TicketDetailBody extends ConsumerWidget {
                 AppSpacing.pagePadding,
                 AppSpacing.base,
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: AppButton.secondary(
-                      label: 'AI Copilot',
-                      onPressed: () =>
-                          context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
+              child: closed
+                  ? InlineAlert(
+                      icon: LucideIcons.lock,
+                      color: context.colors.amber,
+                      message:
+                          'Intervento chiuso: per registrare ore o un nuovo rapporto riaprilo '
+                          'dallo stato qui sopra.',
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: AppButton.secondary(
+                            label: 'AI Copilot',
+                            onPressed: () =>
+                                context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: AppButton(
+                            label: 'Crea rapporto di lavoro',
+                            onPressed: () =>
+                                _createRapportino(context, ref, ticket, locationAddress),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton(
-                      label: 'Crea rapporto di lavoro',
-                      onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
-                    ),
-                  ),
-                ],
-              ),
             )
           else
             const SizedBox.shrink(),
@@ -528,6 +555,20 @@ class _TicketDetailBody extends ConsumerWidget {
     Ticket ticket,
     String locationAddress,
   ) async {
+    // Same rule the bar applies, re-checked at the point of use: a closure that lands between the
+    // rebuild and the tap must not slip a rapportino onto work the office considers finished.
+    if (ticketIsClosed(
+      ticket,
+      ref.read(closedTicketStatusIdsProvider).valueOrNull ?? const {},
+    )) {
+      showAppToast(
+        context,
+        message: 'Intervento chiuso: riaprilo dal suo stato per creare un rapporto.',
+        tone: ToastTone.warning,
+      );
+      return;
+    }
+
     // A ticket can already have a Bozza — this button used to mint a second one silently on every
     // press, leaving rows indistinguishable to the office and to the technician. Ask before
     // creating; a dismissed dialog creates nothing.
@@ -1715,10 +1756,7 @@ class _PianificazioniTab extends ConsumerWidget {
               ),
               child: Column(
                 children: schedules.map((s) {
-                  final dateLabel = DateFormat(
-                    'EEE d MMM HH:mm',
-                    'it',
-                  ).format(s.activityDate.toLocal());
+                  final dateLabel = _scheduleRowLabel(s);
                   return ListRow(
                     leading: Icon(
                       LucideIcons.calendarDays,
@@ -1728,12 +1766,30 @@ class _PianificazioniTab extends ConsumerWidget {
                     title: s.title.isNotEmpty ? s.title : 'Intervento',
                     subtitle: dateLabel,
                     showDivider: s != schedules.last,
+                    // The row was inert: the box listed a ticket's schedules and offered no way to
+                    // read one. Opens the same read-only card the calendar shows — not
+                    // `/altro/pianificazioni/:id`, which is the editable office screen behind
+                    // `pianificazione.schedule.write`, and reading your own day should not cost a
+                    // permission. Mirror-backed, so it opens with no signal.
+                    onTap: () => showScheduleInfoSheet(context, s),
                   );
                 }).toList(),
               ),
             ),
     );
   }
+}
+
+/// "ven 10 lug · 08:00 – 17:00" — the day the office planned plus the hours they set.
+///
+/// The clock comes from `timeStartMinutes`/`timeEndMinutes`, never from `activityDate`: that is a
+/// midnight stamp, so reading its time through `toLocal()` printed the device's UTC offset —
+/// "02:00" every time, whatever hours were planned. An all-day schedule carries placeholder
+/// bounds, so it shows the day alone, the same gate Calendario's views and the dashboard apply.
+String _scheduleRowLabel(Schedule s) {
+  final day = DateFormat('EEE d MMM', 'it').format(s.activityDate.toLocal());
+  if (s.allDay) return day;
+  return '$day · ${formatMinutes(s.timeStartMinutes)} – ${formatMinutes(s.timeEndMinutes)}';
 }
 
 class _AssignSheet extends ConsumerStatefulWidget {
@@ -1969,6 +2025,11 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
         async.hasError && async.error is TicketDetailOfflineException;
     final offline = !ref.watch(isOnlineProvider);
 
+    // Only ever set from the server's answer: this phone cannot see a receipt instant, so it can
+    // never conclude that its own clock was off. Null covers ordinary drift, a backend that predates
+    // the field, and the overwhelming majority of sessions, where nothing is shown at all.
+    final disagreement = ref.watch(clockDisagreementProvider)[widget.ticketId];
+
     final running = ref.watch(runningTicketWorklogProvider(widget.ticketId));
     final isRunning = running != null;
 
@@ -2050,29 +2111,63 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
       ],
     );
 
-    if (!mirrorEmpty && !offline) return AppCard(child: bar);
+    if (!mirrorEmpty && !offline && disagreement == null) {
+      return AppCard(child: bar);
+    }
 
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           bar,
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(LucideIcons.cloudOff, size: 14, color: c.inkMuted),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  mirrorEmpty
-                      ? 'Ore di questo ticket non ancora sincronizzate. Il timer funziona: '
-                            'verrà inviato appena torni online.'
-                      : 'Offline: il timer funziona e verrà inviato appena torni online.',
-                  style: TextStyle(fontSize: 11, color: c.inkMuted),
+          if (disagreement != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(LucideIcons.alertTriangle, size: 14, color: c.amber),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'L\'orologio del telefono non coincideva con il server: segnava '
+                    '${describeClockDisagreement(disagreement)}. Le ore sono registrate '
+                    'con l\'ora del telefono: se non tornano, segnalale all\'ufficio.',
+                    style: TextStyle(fontSize: 11, color: c.ink),
+                  ),
                 ),
-              ),
-            ],
-          ),
+                // Dismissible: it is advice about one session, and a technician who has already
+                // corrected the phone's clock should not carry the warning for the rest of the day.
+                // The server keeps the record either way — this only hides the reminder.
+                IconButton(
+                  icon: Icon(LucideIcons.x, size: 14, color: c.inkMuted),
+                  tooltip: 'Nascondi avviso orologio',
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.only(left: 6),
+                  onPressed: () => ref
+                      .read(clockDisagreementProvider.notifier)
+                      .dismiss(widget.ticketId),
+                ),
+              ],
+            ),
+          ],
+          if (mirrorEmpty || offline) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(LucideIcons.cloudOff, size: 14, color: c.inkMuted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    mirrorEmpty
+                        ? 'Ore di questo ticket non ancora sincronizzate. Il timer funziona: '
+                              'verrà inviato appena torni online.'
+                        : 'Offline: il timer funziona e verrà inviato appena torni online.',
+                    style: TextStyle(fontSize: 11, color: c.inkMuted),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -2135,21 +2230,31 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     }
   }
 
-  Future<void> _changeStatus(int statusId, String label) async {
+  Future<void> _changeStatus(TicketStatuse status) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
       await ref
           .read(ticketWorkflowApiClientProvider)
-          .updateStatus(ticketId: widget.ticket.id, statusId: statusId);
+          .updateStatus(ticketId: widget.ticket.id, statusId: status.id);
 
       // Safe to mirror: this is the value the server just accepted, not a value we invented.
+      // `closedAt` is part of what the server writes for that status (`TicketStatusTransition`'s
+      // own bookkeeping), so it is mirrored in the same write: without it, a ticket closed from
+      // this screen read back with no closing date until the next sync, and everything keyed on
+      // that date — the Dettagli "Chiusura" row, the closed-ticket notice in the bottom bar —
+      // waited a sync to agree with what the technician had just done.
+      final now = DateTime.now().toUtc();
       final db = ref.read(appDatabaseProvider);
       await (db.update(db.tickets)..where((t) => t.id.equals(widget.ticket.id))).write(
-        TicketsCompanion(statusId: Value(statusId), updatedAt: Value(DateTime.now().toUtc())),
+        TicketsCompanion(
+          statusId: Value(status.id),
+          closedAt: Value(status.isClosed ? now : null),
+          updatedAt: Value(now),
+        ),
       );
 
-      _report('Stato aggiornato: $label', ok: true);
+      _report('Stato aggiornato: ${status.name}', ok: true);
     } on TicketWorkflowFailure catch (e) {
       _report(e.message);
     } finally {
@@ -2158,17 +2263,28 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
   }
 
   Future<void> _openStatusSheet() async {
-    final statuses = ref.read(ticketStatusMapProvider).valueOrNull ?? {};
+    // The full rows, not `ticketStatusMapProvider`'s id→name map: changing status has to know
+    // whether the chosen one closes the ticket (see [_changeStatus]). The provider already orders
+    // by id, so the sheet lists statuses in a stable, predictable sequence instead of whatever
+    // order SQLite happens to return.
+    //
+    // Awaited, not read: this provider is `autoDispose` and nothing in this subtree watches it, so
+    // a synchronous read answers `AsyncLoading` on the first tap — the sheet would claim the status
+    // list is unavailable on a device that has it.
+    final List<TicketStatuse> statuses;
+    try {
+      statuses = await ref.read(ticketStatusesProvider.future);
+    } catch (_) {
+      _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
+      return;
+    }
     if (statuses.isEmpty) {
       _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
       return;
     }
-    // Map iteration order is whatever SQLite happens to return, not workflow
-    // order — sort by id so the sheet lists statuses in a stable, predictable
-    // sequence instead of shuffling on every reload.
-    final orderedStatuses = statuses.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    if (!mounted) return;
 
-    final chosen = await showModalBottomSheet<MapEntry<int, String>>(
+    final chosen = await showModalBottomSheet<TicketStatuse>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRack.cellRadius)),
@@ -2200,14 +2316,14 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
                 ],
               ),
             ),
-            for (final entry in orderedStatuses)
+            for (final status in statuses)
               ListRow(
-                title: entry.value,
-                strapped: entry.key == widget.ticket.statusId,
-                meta: entry.key == widget.ticket.statusId
+                title: status.name,
+                strapped: status.id == widget.ticket.statusId,
+                meta: status.id == widget.ticket.statusId
                     ? Icon(LucideIcons.check, size: 16, color: ctx.colors.ink)
                     : null,
-                onTap: () => Navigator.of(ctx).pop(entry),
+                onTap: () => Navigator.of(ctx).pop(status),
               ),
             const SizedBox(height: 8),
           ],
@@ -2215,8 +2331,8 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
       ),
     );
 
-    if (chosen == null || chosen.key == widget.ticket.statusId) return;
-    await _changeStatus(chosen.key, chosen.value);
+    if (chosen == null || chosen.id == widget.ticket.statusId) return;
+    await _changeStatus(chosen);
   }
 
   @override
@@ -2475,11 +2591,14 @@ class _StoricoTab extends ConsumerWidget {
       error: (e, _) => UnavailableState.forFetchError(
         icon: LucideIcons.history,
         offline: e is TicketDetailOfflineException,
-        offlineTitle: 'Storico non disponibile offline',
-        // G3: state it explicitly. An empty history is indistinguishable from a ticket that was
-        // never touched, and the audit trail is the one thing on this screen a technician might
-        // need to prove a change happened.
-        offlineBody: 'Storico disponibile solo con connessione.',
+        offlineTitle: 'Storico non ancora disponibile',
+        // G3: state it explicitly. The mirror answers offline now, so reaching this branch means
+        // this device has never received this ticket's timeline — which is not the same claim as
+        // "nothing ever changed", and the audit trail is the one thing here a technician might need
+        // to prove a change happened.
+        offlineBody:
+            'Nessuna copia dello storico su questo dispositivo. '
+            'Verrà scaricato alla prossima sincronizzazione.',
         errorTitle: 'Impossibile caricare lo storico',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),

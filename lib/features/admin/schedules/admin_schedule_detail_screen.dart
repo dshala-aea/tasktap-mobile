@@ -132,19 +132,34 @@ class _ScheduleDetailBody extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
               child: Column(
                 children: [
-                  KeyVal(label: 'Titolo', value: schedule.title.isNotEmpty ? schedule.title : '—'),
+                  // Titolo, Sede, Ticket collegato and Note are free text of unknown length, so
+                  // they stack label-over-value and wrap: the horizontal row right-aligns the value
+                  // on a single line and ellipsizes it, which hid the rest of a note the office had
+                  // written over four lines. The short facts (date, hours, assignee, status) stay
+                  // horizontal — a two-column pair reads faster for a value that always fits.
+                  KeyVal(
+                    label: 'Titolo',
+                    value: schedule.title.isNotEmpty ? schedule.title : '—',
+                    vertical: true,
+                  ),
                   KeyVal(label: 'Data', value: dateLabel),
                   KeyVal(label: 'Orario', value: timeLabel),
                   KeyVal(label: 'Assegnato a', value: assigneeName ?? '—'),
-                  KeyVal(label: 'Sede', value: sedeName ?? '—'),
+                  KeyVal(label: 'Sede', value: sedeName ?? '—', vertical: true),
                   KeyVal(label: 'Stato', value: statusName),
                   KeyVal(
                     label: 'Ticket collegato',
                     value: linkedTicketTitle ?? '—',
+                    vertical: true,
                     showDivider: schedule.description.isNotEmpty,
                   ),
                   if (schedule.description.isNotEmpty)
-                    KeyVal(label: 'Note', value: schedule.description, showDivider: false),
+                    KeyVal(
+                      label: 'Note',
+                      value: schedule.description,
+                      vertical: true,
+                      showDivider: false,
+                    ),
                 ],
               ),
             ),

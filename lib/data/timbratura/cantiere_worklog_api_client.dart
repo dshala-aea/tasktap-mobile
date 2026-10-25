@@ -125,6 +125,7 @@ class CantiereMobileSessionResult {
     required this.startTime,
     this.endTime,
     required this.isActive,
+    this.clockDisagreementSeconds,
   });
 
   final String clientId;
@@ -133,6 +134,12 @@ class CantiereMobileSessionResult {
   final DateTime? endTime;
   final bool isActive;
 
+  /// Signed seconds this device's clock was off by, when the server judged it a disagreement
+  /// (more than ten minutes). Null for ordinary drift, for a client that sent no clock, and from
+  /// an older backend — the server applies the threshold before answering, so the phone never
+  /// compares anything itself.
+  final int? clockDisagreementSeconds;
+
   factory CantiereMobileSessionResult.fromJson(Map<String, dynamic> json) =>
       CantiereMobileSessionResult(
         clientId: json['clientId'] as String,
@@ -140,6 +147,7 @@ class CantiereMobileSessionResult {
         startTime: DateTime.parse(json['startTime'] as String),
         endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
         isActive: json['isActive'] as bool? ?? false,
+        clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)?.toInt(),
       );
 }
 
@@ -423,17 +431,27 @@ class CantiereWorklogApiClient {
   ///
   /// Creates an open cantiere session. Throws [DioException] on error (including
   /// 400 when a session is already active — the caller should surface this).
-  Future<void> startCantiere(StartCantiereRequest request) async {
-    await _dio.post<dynamic>('/api/cantiereworklog/start', data: request.toJson());
+  Future<int?> startCantiere(StartCantiereRequest request) async {
+    final response = await _dio.post<dynamic>('/api/cantiereworklog/start', data: request.toJson());
+    return _clockDisagreementEcho(response.data);
   }
 
   /// POST /api/cantiereworklog/end
   ///
   /// Closes the current user's open cantiere session.
   /// Throws [DioException] on error (404 = no active session).
-  Future<void> endCantiere([EndCantiereRequest? request]) async {
-    await _dio.post<dynamic>('/api/cantiereworklog/end', data: request?.toJson() ?? {});
+  Future<int?> endCantiere([EndCantiereRequest? request]) async {
+    final response =
+        await _dio.post<dynamic>('/api/cantiereworklog/end', data: request?.toJson() ?? {});
+    return _clockDisagreementEcho(response.data);
   }
+
+  /// The already-filtered disagreement an online punch answers with, or null.
+  ///
+  /// The server applies `WorkLogClocks.IsFlagged` before answering, so there is nothing to compare
+  /// here: absent, null, an older backend and ordinary drift all read the same way — "no advice".
+  static int? _clockDisagreementEcho(Object? data) =>
+      data is Map<String, dynamic> ? (data['clockDisagreementSeconds'] as num?)?.toInt() : null;
 
   /// POST /api/cantiereworklog/mobile/sessions
   ///

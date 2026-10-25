@@ -47,7 +47,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   Future<List<CantiereWorkLogDto>> getActive() async => [];
 
   @override
-  Future<void> endCantiere([EndCantiereRequest? request]) async {
+  Future<int?> endCantiere([EndCantiereRequest? request]) async {
     if (endShouldThrow) {
       throw DioException(
         requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
@@ -63,6 +63,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
       );
     }
     endRequests.add(request);
+    return null;
   }
 
   @override

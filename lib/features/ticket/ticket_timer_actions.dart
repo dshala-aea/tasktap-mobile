@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/sync/connectivity_provider.dart';
+import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../data/timbratura/ticket_timer_sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
+import 'ticket_providers.dart' show mirroredTicketIsClosed;
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import 'ticket_workflow_api_client.dart';
 
 /// Start/stop for a ticket's timer, in the one place both entry points use.
@@ -30,6 +33,15 @@ import 'ticket_workflow_api_client.dart';
 /// session is written to the device and queued.
 Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
   final repo = ref.read(ticketTimerRepositoryProvider);
+
+  // A closed ticket is finished work and may not acquire new hours. The server would still open
+  // the session — its in-progress marker deliberately leaves a closed ticket alone, so nothing
+  // upstream refuses this — which makes this the one place that can. Checked before anything is
+  // written to the mirror or queued, so a refusal leaves the device exactly as it was.
+  if (await mirroredTicketIsClosed(ref.read(appDatabaseProvider), ticketId)) {
+    throw const TicketTimerOnClosedTicket();
+  }
+
   // The key this tap owns, generated before the call: a reply that never arrives is then retried
   // onto the same server row instead of opening a second timer with the same hours.
   final clientId = const Uuid().v4();
@@ -64,6 +76,14 @@ Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
   // attempt was lost long enough for the office to end the session. Queuing a local start here
   // would show a clock that is not running, so the technician is told instead.
   if (!started.isActive) throw const TicketTimerAlreadyClosed();
+
+  // The server measured this phone's clock against its own receipt and, when the two were far
+  // enough apart to matter, says so here. Recorded before the mirror write: the technician should
+  // hear about a wrong clock on the same turn the hours are booked, not at the next sync.
+  final disagreement = started.clockDisagreementSeconds;
+  if (disagreement != null) {
+    ref.read(clockDisagreementProvider.notifier).record(ticketId, disagreement);
+  }
 
   // Mirror the running clock now, from the id the reply carries — not from the next delta sync.
   // Without this row, a technician who started the clock in the office and lost signal on the way
@@ -103,9 +123,14 @@ Future<bool> stopTicketTimer(WidgetRef ref, String ticketId) async {
     throw const TicketTimerNotOnDevice();
   }
   try {
-    await ref
+    final disagreement = await ref
         .read(ticketWorkflowApiClientProvider)
         .stopTimer(ticketId, deviceUtc: DateTime.now().toUtc());
+    // The close's answer carries the row's merged disagreement — same banner the start's answer
+    // raises, so a skew first seen at the start is not lost when the session ends online.
+    if (disagreement != null) {
+      ref.read(clockDisagreementProvider.notifier).record(ticketId, disagreement);
+    }
   } on TicketWorkflowFailure catch (e) {
     // The mirror is closed on every path where it holds the session: a technician who tapped
     // "Ferma" ends the clock they see, and the queued close re-sends it through the idempotent
@@ -131,6 +156,15 @@ class TicketTimerNotOnDevice extends TicketWorkflowFailure {
         'Senza connessione posso fermare solo un timer avviato da questo telefono con i dati '
         'disponibili. Riprova quando hai segnale.',
       );
+}
+
+/// The ticket is closed, so its clock cannot be started.
+///
+/// Its own sentence, not a generic failure: the way back is a status change, which is on the same
+/// screen the timer bar sits on.
+class TicketTimerOnClosedTicket extends TicketWorkflowFailure {
+  const TicketTimerOnClosedTicket()
+    : super('Intervento chiuso: riaprilo dal suo stato per avviare un timer.');
 }
 
 /// The session this tap's key names is already closed, so there is nothing to show running.
