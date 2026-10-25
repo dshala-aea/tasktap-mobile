@@ -85,19 +85,105 @@ final upcomingSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
       .watch();
 });
 
-/// Computed 2×2 stats from the three stream providers above + todaySchedulesProvider.
+/// Ids of the tickets that are closed on this device.
+///
+/// The tenant's status flag decides, with `closedAt` as the second signal: a status change made on
+/// the phone writes the new `statusId` and nothing else, so a ticket the office closed still
+/// carries a null `closedAt` until the next sync. A closed ticket is finished work even when its
+/// linked schedule was never moved out of "da fare" — the office closes the ticket and nothing
+/// rewrites the schedule afterwards.
+final closedTicketIdsProvider = StreamProvider.autoDispose<Set<String>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final closedStatusIds = db.selectOnly(db.ticketStatuses)
+    ..addColumns([db.ticketStatuses.id])
+    ..where(db.ticketStatuses.isClosed.equals(true));
+  return (db.select(db.tickets)..where(
+        (t) => t.closedAt.isNotNull() | t.statusId.isInQuery(closedStatusIds),
+      ))
+      .watch()
+      .map((rows) => {for (final row in rows) row.id});
+});
+
+/// Whether a schedule belongs to a closed ticket. Takes the set, not the ref, so the same rule is
+/// usable from a pure predicate in tests.
+bool scheduleTicketIsClosed(Schedule schedule, Set<String> closedTicketIds) =>
+    schedule.ticketId != null && closedTicketIds.contains(schedule.ticketId);
+
+/// Ids of the tickets this device is holding a running timer for.
+///
+/// The tenant has no synced "in corso" flag on a ticket — the status mirror carries only
+/// `isClosed`/`isDefault` — so the ticket's own status cannot tell the dashboard that work has
+/// started. A running timer can, and it is the truest signal there is: the technician tapped
+/// start. A pending start counts too, the same way [TicketTimerRepository.running] counts it.
+final runningTicketTimerIdsProvider = StreamProvider.autoDispose<Set<String>>((
+  ref,
+) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(db.ticketTimers)
+        ..where((t) => t.endUtc.isNull() & t.endSeconds.isNull()))
+      .watch()
+      .map((rows) => {for (final row in rows) row.ticketId});
+});
+
+/// The single bucket a schedule lands in, decided once so the queue, the counters and the tests
+/// cannot disagree about a row.
+///
+/// Order matters. A closed ticket outranks everything (no badge may invite work on it); a
+/// cancelled schedule outranks a running timer (a cancelled job is not work in any bucket); and a
+/// running timer outranks the schedule's own status, because the technician is standing on the job
+/// while the office's schedule still says "da fare".
+enum ScheduleBucket { live, waiting, done, actionable, cancelled }
+
+ScheduleBucket bucketOfSchedule(
+  Schedule schedule, {
+  required Set<String> closedTicketIds,
+  required Set<String> runningTicketIds,
+}) {
+  if (scheduleTicketIsClosed(schedule, closedTicketIds)) {
+    return ScheduleBucket.done;
+  }
+  if (schedule.statusId == _kStatusCancelled) return ScheduleBucket.cancelled;
+  if (schedule.statusId == _kStatusInProgress) return ScheduleBucket.live;
+  if (schedule.ticketId != null && runningTicketIds.contains(schedule.ticketId)) {
+    return ScheduleBucket.live;
+  }
+  if (schedule.statusId == _kStatusCompleted ||
+      schedule.statusId == _kStatusClosed) {
+    return ScheduleBucket.done;
+  }
+  if (schedule.statusId == _kStatusWaiting) return ScheduleBucket.waiting;
+  return ScheduleBucket.actionable;
+}
+
+/// Computed 2×2 stats from the providers above.
 /// Uses [AsyncValue.valueOrNull] so it reads synchronously without blocking.
 final dashboardStatsProvider = Provider.autoDispose<DashboardStats>((ref) {
   final today = ref.watch(todaySchedulesProvider).valueOrNull ?? [];
-  final inProgress = ref.watch(inProgressSchedulesProvider).valueOrNull ?? [];
-  final completed =
-      ref.watch(completedTodaySchedulesProvider).valueOrNull ?? [];
   final upcoming = ref.watch(upcomingSchedulesProvider).valueOrNull ?? [];
+  final closedTickets =
+      ref.watch(closedTicketIdsProvider).valueOrNull ?? const <String>{};
+  final runningTickets =
+      ref.watch(runningTicketTimerIdsProvider).valueOrNull ?? const <String>{};
+
+  ScheduleBucket bucket(Schedule s) => bucketOfSchedule(
+    s,
+    closedTicketIds: closedTickets,
+    runningTicketIds: runningTickets,
+  );
+
+  // Counted through the same buckets the queue uses, so the hero's "DA FARE" remainder cannot
+  // disagree with what the queue below it shows.
   return DashboardStats(
     todayCount: today.length,
-    inProgressCount: inProgress.length,
-    completedCount: completed.length,
-    upcomingCount: upcoming.length,
+    inProgressCount: today.where((s) => bucket(s) == ScheduleBucket.live).length,
+    completedCount: today.where((s) => bucket(s) == ScheduleBucket.done).length,
+    upcomingCount: upcoming
+        .where(
+          (s) =>
+              bucket(s) != ScheduleBucket.cancelled &&
+              !scheduleTicketIsClosed(s, closedTickets),
+        )
+        .length,
   );
 });
 
@@ -150,7 +236,9 @@ class WorkQueueBuckets {
   /// statusId == 4 (In attesa) today — blocked on something outside the technician's control.
   final List<Schedule> inAttesa;
 
-  /// statusId == 5 or 6 (Completato/Chiuso) today.
+  /// Today's finished work: statusId == 5 or 6 (Completato/Chiuso), plus anything on a ticket the
+  /// tenant considers closed. The second group is the point — the office closes the ticket and
+  /// leaves the schedule in "da fare", so status alone would keep calling it outstanding work.
   final List<Schedule> fatto;
 
   /// Whether today itself has anything in it, in any state. False means the day is genuinely
@@ -163,23 +251,35 @@ class WorkQueueBuckets {
 final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
   final today = ref.watch(todaySchedulesProvider).valueOrNull ?? [];
   final upcoming = ref.watch(upcomingSchedulesProvider).valueOrNull ?? [];
+  final closedTickets =
+      ref.watch(closedTicketIdsProvider).valueOrNull ?? const <String>{};
+  final runningTickets =
+      ref.watch(runningTicketTimerIdsProvider).valueOrNull ?? const <String>{};
 
-  final live = today.where((s) => s.statusId == _kStatusInProgress).toList();
-  final inAttesa = today.where((s) => s.statusId == _kStatusWaiting).toList();
-  final fatto = today
-      .where(
-        (s) => s.statusId == _kStatusCompleted || s.statusId == _kStatusClosed,
-      )
-      .toList();
+  ScheduleBucket bucket(Schedule s) => bucketOfSchedule(
+    s,
+    closedTicketIds: closedTickets,
+    runningTicketIds: runningTickets,
+  );
 
-  // Neither live, waiting, nor done: an open job still ahead today, in time order.
-  final actionableToday = today.where((s) {
-    return s.statusId != _kStatusInProgress &&
-        s.statusId != _kStatusWaiting &&
-        s.statusId != _kStatusCompleted &&
-        s.statusId != _kStatusClosed &&
-        s.statusId != _kStatusCancelled;
-  }).toList();
+  final live = <Schedule>[];
+  final inAttesa = <Schedule>[];
+  final fatto = <Schedule>[];
+  final actionableToday = <Schedule>[];
+  for (final schedule in today) {
+    switch (bucket(schedule)) {
+      case ScheduleBucket.live:
+        live.add(schedule);
+      case ScheduleBucket.waiting:
+        inAttesa.add(schedule);
+      case ScheduleBucket.done:
+        fatto.add(schedule);
+      case ScheduleBucket.actionable:
+        actionableToday.add(schedule);
+      case ScheduleBucket.cancelled:
+        break;
+    }
+  }
 
   final daFare = actionableToday.isEmpty ? null : actionableToday.first;
   final restOfToday = actionableToday.isEmpty
@@ -190,7 +290,15 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
     live: live,
     daFare: daFare,
     restOfToday: restOfToday,
-    upcoming: upcoming.where((s) => s.statusId != _kStatusCancelled).toList(),
+    // Tomorrow's rows run through the same buckets: a closed ticket's job tomorrow is not work
+    // ahead, for the same reason a cancelled one is not, and the hero's count agrees.
+    upcoming: upcoming
+        .where(
+          (s) =>
+              bucket(s) != ScheduleBucket.cancelled &&
+              !scheduleTicketIsClosed(s, closedTickets),
+        )
+        .toList(),
     inAttesa: inAttesa,
     fatto: fatto,
   );
