@@ -28046,7 +28046,7 @@
               "null",
               "string"
             ],
-            "description": "The ticket\u0027s creation date. Ticket carries no dedicated \u0022scheduled/expected intervention date\u0022\nfield distinct from DateTime? InterventoDettaglioDto.DataScadenza (its due date) \u2014 \u0060CreatedAt\u0060 is the closest\navailable fact and is what this maps to. A future revision may prefer the earliest linked\nschedule\u0027s date instead; flagged as an open question, not resolved here (see the W7 Task 4\nledger entry).",
+            "description": "The planned intervention date \u2014 what the detail screen labels \u0022Data prevista intervento\u0022: the\nearliest of the linked schedules\u0027 dates once the ticket is planned, and until then its due date\n(\u0060DataScadenza\u0060, the deadline the office set). Never \u0060CreatedAt\u0060: that is the row\u0027s\naudit stamp, carried as its own field, and showing it under a \u0022prevista\u0022 label told every office\nuser that all their tickets were planned the day they were opened.",
             "format": "date-time"
           },
           "dataScadenza": {
@@ -28315,13 +28315,16 @@
             "format": "uuid"
           },
           "data": {
-            "type": "string",
-            "description": "The ticket\u0027s creation date (matches the detail DTO\u0027s \u0060Data\u0060 \u2014 see its doc for why \u0060CreatedAt\u0060 stands in for the \u0022intervention date\u0022).",
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The ticket\u0027s due date (\u0060Ticket.DueDate\u0060) \u2014 the date the list\u0027s date column (labelled \u0022Scadenza\u0022) shows, i.e. the deadline the office set, the same fact the detail DTO carries as \u0060DataScadenza\u0060. Deliberately not \u0060CreatedAt\u0060: that is audit metadata and has its own field. Null when the ticket has no deadline. Sort it with \u0060dueDate\u0060 so the header and the ordering agree.",
             "format": "date-time"
           },
           "createdAt": {
             "type": "string",
-            "description": "Row creation timestamp (\u0060Ticket.CreatedAt\u0060) \u2014 audit metadata, same value as \u0060Data\u0060 today but a distinct contract field.",
+            "description": "Row creation timestamp (\u0060Ticket.CreatedAt\u0060) \u2014 audit metadata, a distinct contract field from \u0060Data\u0060.",
             "format": "date-time"
           },
           "updatedAt": {
