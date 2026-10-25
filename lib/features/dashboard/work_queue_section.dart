@@ -159,7 +159,8 @@ class _RowContent {
   /// `_resolveRow`'s own doc comment), so the badge/meta row omits the time entirely rather
   /// than formatting the placeholder minute values into a literal "00:00". Same gate
   /// `giorno_view.dart`'s `_EventBlock`, `lista_view.dart`'s `_ScheduleListRow` and
-  /// `calendario_screen.dart`'s `_ScheduleInfoSheet` already use for the same reason.
+  /// `calendario/widgets/schedule_info_sheet.dart`'s `ScheduleInfoSheet` already use for the same
+  /// reason.
   final String? timeLabel;
 }
 
