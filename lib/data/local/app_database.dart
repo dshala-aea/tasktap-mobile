@@ -885,6 +885,23 @@ class ReportControlli extends Table {
   /// an answer; a blank/omitted note never erases a stored one server-side.
   TextColumn get note => text().nullable()();
 
+  /// What this row was called when it was answered, and which asset it answered against.
+  ///
+  /// A sent report is a document: it has to render itself on any device, offline, forever. The wire
+  /// carries only `ticketControlId`, so before these columns the view resolved the label from the
+  /// *ticket's* checklist — and printed raw GUIDs ("Controllo 3046f4c0-…") whenever that checklist
+  /// was not on the device: a report drafted on another phone, a ticket whose checklist the sync
+  /// payload omitted, a template the office has since replaced. Those GUIDs reached the view of the
+  /// job the customer is billed for.
+  ///
+  /// Null on rows that never went through the checklist UI (server mirror, AI draft) — the view
+  /// still falls back to the ticket checklist for those, then to the id.
+  TextColumn get controlLabel => text().nullable()();
+
+  /// `TicketControl.ProdottoAssistenzaId` at answer time — the asset this answer belongs to, which
+  /// is what a maintenance report is read by. Null means a ticket-level row.
+  TextColumn get assetId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1624,7 +1641,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 54;
+  int get schemaVersion => 55;
 
   @override
   MigrationStrategy get migration {
@@ -2248,6 +2265,27 @@ class AppDatabase extends _$AppDatabase {
           // in full on every sync, so the first sync after the upgrade fills it.
           await m.createTable(absenceRequests);
           await _createAbsenceRequestIndexes();
+        }
+        if (from < 55) {
+          // An answered control remembers its own label and asset, so a sent report renders itself
+          // instead of printing raw control GUIDs whenever the ticket's checklist is not on this
+          // device (see `ReportControlli.controlLabel`).
+          //
+          // Nothing to backfill and no cursor bump: the columns are filled by the next answer typed
+          // on this phone. Rows already stored — mirrored server reports, older device drafts —
+          // stay null and keep resolving through the checklist fallback the view already had.
+          //
+          // Same `PRAGMA table_info` guard as 50 and 51, for the same reason: a re-created table or
+          // a half-applied step must not kill the app on `duplicate column name` before it opens.
+          //
+          // Numbered 55, not 52: main shipped 52 (ticketHistory), 53 (cantiereWorkLogs) and 54
+          // (absenceRequests) while this branch was open, and the ladder is linear.
+          if (!await _columnExists(m.database, 'report_controlli', 'control_label')) {
+            await m.addColumn(reportControlli, reportControlli.controlLabel);
+          }
+          if (!await _columnExists(m.database, 'report_controlli', 'asset_id')) {
+            await m.addColumn(reportControlli, reportControlli.assetId);
+          }
         }
       },
     );

@@ -1164,6 +1164,10 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
         boolValue: boolValue,
         dateValue: dateValue,
         numberValue: numberValue,
+        // Same as the asset-checklist path: the answer keeps its own name and asset so the sent
+        // report renders without the ticket checklist.
+        controlLabel: widget.flat.control.label,
+        assetId: widget.flat.control.prodottoAssistenzaId,
       ),
     );
   }

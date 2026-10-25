@@ -166,6 +166,8 @@ class ControlloRow {
     this.dateValue,
     this.numberValue,
     this.note,
+    this.controlLabel,
+    this.assetId,
   });
 
   final String id;
@@ -180,6 +182,14 @@ class ControlloRow {
   /// answer; a blank/omitted note never erases a stored one server-side.
   final String? note;
 
+  /// The control's label and asset as the checklist showed them when this answer was typed.
+  ///
+  /// Persisted with the answer (see `ReportControlli.controlLabel`) because the server's copy of a
+  /// report holds only the control id: without a snapshot, the sent report could only be read back
+  /// on a device that still had the ticket's checklist, and printed GUIDs everywhere else.
+  final String? controlLabel;
+  final String? assetId;
+
   ControlloRow copyWith({
     String? stringValue,
     bool? boolValue,
@@ -187,6 +197,8 @@ class ControlloRow {
     double? numberValue,
     String? note,
     bool clearNote = false,
+    String? controlLabel,
+    String? assetId,
   }) {
     return ControlloRow(
       id: id,
@@ -197,6 +209,8 @@ class ControlloRow {
       dateValue: dateValue ?? this.dateValue,
       numberValue: numberValue ?? this.numberValue,
       note: clearNote ? null : (note ?? this.note),
+      controlLabel: controlLabel ?? this.controlLabel,
+      assetId: assetId ?? this.assetId,
     );
   }
 }
@@ -670,6 +684,10 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
             dateValue: c.dateValue,
             numberValue: c.numberValue,
             note: c.note,
+            // Carried through, not re-derived: editing an existing answer must not silently drop
+            // the name the report was saved with.
+            controlLabel: c.controlLabel,
+            assetId: c.assetId,
           ),
       ],
       allegatoRows: [
@@ -1289,6 +1307,10 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       dateValue: Value(row.dateValue),
       numberValue: Value(row.numberValue),
       note: Value(row.note),
+      // The row's own name and asset, captured while the checklist that names it is still in hand.
+      // A sent report has to render itself later, and the server's copy carries only the control id.
+      controlLabel: Value(row.controlLabel),
+      assetId: Value(row.assetId),
     );
   }
 }

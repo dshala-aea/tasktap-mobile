@@ -117,4 +117,51 @@ void main() {
     await BulkExecutor(notifier, 'r1').apply(plan);
     expect(notifier.state.controlloRows, isEmpty);
   });
+
+  test("a written answer keeps its control's name and asset, so the report can name it later", () async {
+    final tree = TicketChecklist(
+      ticketId: 't1',
+      standalone: [
+        AssetChecklist(
+          assetId: 'a1',
+          name: 'Caldaia',
+          templated: true,
+          groups: [
+            ChecklistGroup(
+              id: 'g',
+              name: 'G',
+              controls: [
+                ChecklistControl(
+                  id: 'c1',
+                  ticketId: 't1',
+                  assetId: 'a1',
+                  templateControlId: 'tc',
+                  lineageId: 'l1',
+                  groupId: 'g',
+                  label: 'Pressione impianto',
+                  type: ControlType.checkbox,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    final plan = planBulk(
+      request: const BulkRequest(assetIds: {'a1'}, lineageIds: {'l1'}, boolValue: true),
+      tree: tree,
+      existing: const {},
+    );
+
+    await BulkExecutor(notifier, 'r1').apply(plan);
+
+    // The sent report reads these back instead of resolving the control id against a ticket
+    // checklist that may not be on this device — without them it printed raw GUIDs.
+    final row = (await db.select(db.reportControlli).get()).single;
+    expect(row.controlLabel, 'Pressione impianto');
+    expect(row.assetId, 'a1');
+    final inState = notifier.state.controlloRows.single;
+    expect(inState.controlLabel, 'Pressione impianto');
+    expect(inState.assetId, 'a1');
+  });
 }

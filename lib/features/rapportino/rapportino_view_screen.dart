@@ -557,15 +557,22 @@ class _RapportinoViewBody extends ConsumerWidget {
                                 ),
                                 child: SectionTitle(title: 'Controlli'),
                               ),
-                              ...controlli.map(
-                                (c) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 10),
-                                  child: _ControlloAnswerRow(
-                                    controllo: c,
-                                    flat: controlLabels[c.controlId],
-                                  ),
-                                ),
-                              ),
+                              ...groupControlliByAsset(controlli, controlLabels).expand((group) {
+                                return <Widget>[
+                                  if (group.assetId != null) ...[
+                                    _AssetGroupHeader(assetId: group.assetId!),
+                                    const SizedBox(height: 6),
+                                  ],
+                                  for (final c in group.rows)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 10),
+                                      child: _ControlloAnswerRow(
+                                        controllo: c,
+                                        flat: controlLabels[c.controlId],
+                                      ),
+                                    ),
+                                ];
+                              }),
                             ],
                           ),
                         ),
@@ -1248,6 +1255,80 @@ class _AllegatiPhotoGrid extends ConsumerWidget {
 // Controlli answers — one recorded checklist finding
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// The Controlli answers of a report, grouped by the asset they were recorded against.
+class ControlloAssetGroup {
+  const ControlloAssetGroup({required this.assetId, required this.rows});
+
+  /// Null for the ticket-level rows — the answers that belong to no asset.
+  final String? assetId;
+  final List<ReportControlliData> rows;
+}
+
+/// Groups recorded answers by asset, ticket-level rows first.
+///
+/// The asset comes from the answer's own snapshot when it has one, and from the ticket checklist
+/// otherwise — the same two sources the label uses, so a report whose checklist is gone still groups
+/// correctly instead of collapsing into one anonymous list. Order inside a group is the order the
+/// answers were recorded in, which is the order the technician filled them in.
+List<ControlloAssetGroup> groupControlliByAsset(
+  List<ReportControlliData> rows,
+  Map<String, FlatTicketControl> labels,
+) {
+  final order = <String?>[];
+  final byAsset = <String?, List<ReportControlliData>>{};
+  for (final row in rows) {
+    final assetId = row.assetId ?? labels[row.controlId]?.control.prodottoAssistenzaId;
+    if (!byAsset.containsKey(assetId)) {
+      order.add(assetId);
+      byAsset[assetId] = <ReportControlliData>[];
+    }
+    byAsset[assetId]!.add(row);
+  }
+  // Ticket-level answers have no asset of their own to be filed under; leading with them keeps the
+  // report's own general findings above the per-asset detail, and stops a report with no assets at
+  // all from starting with an empty-headed group. Filtered rather than sorted: `List.sort` is not
+  // stable, and the order within each block is the technician's own.
+  final ticketLevel = [
+    for (final assetId in order)
+      if (assetId == null) ControlloAssetGroup(assetId: null, rows: byAsset[assetId]!),
+  ];
+  final perAsset = [
+    for (final assetId in order)
+      if (assetId != null) ControlloAssetGroup(assetId: assetId, rows: byAsset[assetId]!),
+  ];
+  return [...ticketLevel, ...perAsset];
+}
+
+/// The heading above one asset's block of answers: the asset's name, from the synced mirror.
+class _AssetGroupHeader extends ConsumerWidget {
+  const _AssetGroupHeader({required this.assetId});
+
+  final String assetId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final name = ref.watch(assetNameProvider(assetId)).valueOrNull;
+    return Row(
+      children: [
+        Icon(LucideIcons.wrench, size: 14, color: context.colors.inkMuted),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            // A device that never synced this asset still names the block honestly rather than
+            // dropping the grouping or repeating the GUID.
+            name ?? 'Attrezzatura',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.colors.inkMuted,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// A small uppercase-ish heading inside a card that carries more than one field
 /// (Diagnosi e soluzione), so the two values are not read as one run-on paragraph.
 class _ReportFieldLabel extends StatelessWidget {
@@ -1271,9 +1352,12 @@ class _ReportFieldLabel extends StatelessWidget {
 /// One recorded [ReportControlliData] row, read-only — the answer this report's own technician
 /// gave to one item of the ticket's checklist (ADR-0012 §B.4). Mirrors ticket_detail_screen.dart's
 /// `_TicketControlStatusCard` shape (icon + group path + label + value), but reads a report's own
-/// recorded answer instead of the ticket's live/current one, and tolerates [flat] being null (the
-/// checklist hasn't been cached on this device) by falling back to the raw control id rather than
-/// hiding the row — the answer itself is still real, recorded data worth showing.
+/// recorded answer instead of the ticket's live/current one.
+///
+/// The label comes from the answer itself first: a sent report is a document, and it has to name its
+/// own rows on a device that has never seen this ticket's checklist — otherwise the customer-facing
+/// view of the job lists raw GUIDs (the bug this row used to have). The checklist resolution is
+/// still the second source, for rows mirrored from the server, which carry only a control id.
 class _ControlloAnswerRow extends StatelessWidget {
   const _ControlloAnswerRow({required this.controllo, required this.flat});
 
@@ -1283,7 +1367,10 @@ class _ControlloAnswerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final control = flat?.control;
-    final label = control?.label ?? 'Controllo ${controllo.controlId}';
+    final label =
+        controllo.controlLabel ??
+        control?.label ??
+        'Controllo ${controllo.controlId}';
     final groupPath = flat?.groupPath;
     final valueLabel = _valueLabel(control?.type);
 

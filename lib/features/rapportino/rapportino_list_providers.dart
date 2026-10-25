@@ -2,6 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/local/app_database.dart';
+import '../../data/reference/reference_cache_repository.dart' show referenceCacheProvider;
 import '../../data/sync/draft_submission_state.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 
@@ -66,6 +67,20 @@ final rapportinoControlliProvider = StreamProvider.autoDispose
       final repo = ref.watch(draftReportRepositoryProvider);
       return repo.watchControlli(reportId);
     });
+
+/// The asset's name, from the synced `prodottiAssistenza` mirror — the header a report's Controlli
+/// answers are grouped under.
+///
+/// Mirror only, never a request: the view is the record of a finished visit, opened on site with no
+/// signal as often as at the office. A device that has never seen the asset gets `null`, and the
+/// section says "Attrezzatura" rather than inventing or fetching a name.
+final assetNameProvider = FutureProvider.autoDispose.family<String?, String>((
+  ref,
+  assetId,
+) async {
+  final row = await ref.watch(referenceCacheProvider).prodottoAssistenzaById(assetId);
+  return row?.name;
+});
 
 /// Sums the hours actually worked across staff rows, in minutes.
 ///
