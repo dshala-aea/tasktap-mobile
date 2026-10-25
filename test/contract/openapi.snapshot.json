@@ -29689,6 +29689,13 @@
             },
             "description": "The recorded changes of every ticket in scope \u2014 the Storico tab\u0027s timeline, which until now\nwas online-only because the device held nothing to render."
           },
+          "cantiereWorkLogs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncCantiereWorkLogDto"
+            },
+            "description": "The caller\u0027s OWN cantiere clock-in/clock-out rows: the 90-day window, plus any still open.\nRe-sent in full on every sync rather than delta-filtered, for the same reason as\nIReadOnlyList\u0026lt;SyncTicketWorkLogDto\u0026gt; MobileUserSyncResult.TicketWorkLogs \u2014 a punch the device queued and the server accepted has no\nmarker the phone can observe beyond the row appearing."
+          },
           "checklistTruncated": {
             "type": "boolean",
             "description": "True when the per-sync cap on asset-level checklist rows (int MobileUserSyncService.MaxAssetControlRowsPerSync)\nleft tickets out, or when the first ticket alone exceeds it (it is still sent whole)."
@@ -35543,6 +35550,124 @@
         },
         "description": "One person\u0027s place on a cantiere\u0027s crew, mirrored so the phone can answer \u0022who is with me on\nthis site\u0022 offline \u2014 the lead\u0027s batch clock-in picker and the teammate list both come from here."
       },
+      "SyncCantiereWorkLogDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "cantiereId",
+          "userId",
+          "ticketId",
+          "workDate",
+          "startTime",
+          "endTime",
+          "startUtc",
+          "endUtc",
+          "workLogType",
+          "approvalStatus",
+          "description",
+          "clientId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cantiereId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ticketId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "workDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startTime": {
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string"
+          },
+          "endTime": {
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "workLogType": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "\u0060CantiereWorkLogTypeEnum\u0060 ordinal: 0 Site, 1 Travel, 2 Setup.",
+            "format": "int32"
+          },
+          "approvalStatus": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "\u0060WorkLogApprovalStatusEnum\u0060 ordinal: 0 Draft, 1 Submitted, 2 Approved, 3 Rejected.",
+            "format": "int32"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clientId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The device\u0027s own key for the punch it queued; null for a row written online or in the office.\nLets the phone recognise the server\u0027s row of a punch it is still holding in its outbox."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "One cantiere clock-in / clock-out the authenticated technician owns, as the device mirrors it."
+      },
       "SyncColleagueDto": {
         "required": [
           "id",
@@ -36816,6 +36941,17 @@
               "format": "uuid"
             },
             "description": "The caller\u0027s own ticket timer sessions inside the window, plus any still running. Lets the device drop\nrows that aged out; a row absent from the payload but present here is a deletion, not a truncation."
+          },
+          "cantiereWorkLogs": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The caller\u0027s own cantiere punches inside the window, plus any still open \u2014 the same rule as\nIReadOnlyList\u0026lt;Guid\u0026gt;? SyncScopeDto.TicketWorkLogs. Scoped to the caller, never to a cantiere, so a punch on a site\nthat has since left the manifest is not pruned."
           }
         },
         "description": "The server\u0027s complete in-scope id set for each collection this payload delivers \u2014 the\nauthoritative scope, not the delta. The device keeps what is listed and prunes what is absent,\nso a row that left scope (a schedule rolled out of the \u00B17-day window, a ticket reassigned to a\ncolleague, a report aged past the 90-day window, a material deactivated, a customer deleted)\nfinally leaves the phone too.\n\nThis is deliberately distinct from the row lists it travels with: on a delta those carry only\nthe rows changed after the cursor, while this carries everything still in scope. Sending the\ndelta set here would tell the device to delete every unchanged row it holds.\n\nA null member means \u0022no authoritative set \u2014 do not prune\u0022. That is only ever the case for a\ncollection this caller is not delivered at all (today: \u0060strumenti\u0060 without\n\u0060team.strumento.read\u0060), and it is also what an older server produces by omitting\n\u0060scope\u0060 entirely. An empty list is different and meaningful: \u0060[]\u0060 says nothing is in\nscope, so the device may prune everything it holds for that collection.\n\nThere is deliberately no manifest for the checklist collections (IReadOnlyList\u0026lt;SyncControlGroupDto\u0026gt; MobileUserSyncResult.ControlGroups,\nIReadOnlyList\u0026lt;SyncTicketControlDto\u0026gt; MobileUserSyncResult.TicketControls, IReadOnlyList\u0026lt;SyncTicketAssetDto\u0026gt; MobileUserSyncResult.TicketAssets,\nIReadOnlyList\u0026lt;SyncAssetDto\u0026gt; MobileUserSyncResult.Assets) nor for IReadOnlyList\u0026lt;TicketMateriale\u0026gt; MobileUserSyncResult.TicketMateriali.\nThe checklist set is truncated per sync (int MobileUserSyncService.MaxAssetControlRowsPerSync /\nIReadOnlyList\u0026lt;Guid\u0026gt; MobileUserSyncResult.ChecklistOmittedTicketIds), so a manifest there would prune rows the\nserver deliberately withheld; the device prunes checklist rows by the ticket manifest instead.\nTicketMateriali rows are keyed by ticket, so they follow the ticket manifest.\n\nThe report aggregate added in O-8a \u2014 IReadOnlyList\u0026lt;SyncReportStaffDto\u0026gt; MobileUserSyncResult.ReportStaff,\nIReadOnlyList\u0026lt;SyncReportMaterialeDto\u0026gt; MobileUserSyncResult.ReportMateriali, IReadOnlyList\u0026lt;SyncReportControlloDto\u0026gt; MobileUserSyncResult.ReportControlli,\nIReadOnlyList\u0026lt;SyncReportAllegatoDto\u0026gt; MobileUserSyncResult.Allegati and IReadOnlyList\u0026lt;SyncReportVersionDto\u0026gt; MobileUserSyncResult.ReportVersions \u2014\nhas no manifest of its own either, for the same shape of reason: a child (or an attachment)\nbelongs to exactly one parent report or ticket, so it follows that parent\u0027s manifest, and the\ndevice replaces a parent\u0027s children wholesale from the full set this payload re-sends every\nsync. A per-child id set would be a second definition of the same scope."

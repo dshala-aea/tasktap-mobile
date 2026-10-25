@@ -115,6 +115,9 @@ void main() {
     // The Storico timeline: raw, invariant field changes per ticket. It has no manifest of its
     // own — it is pruned through the ticket manifest — so only the row shape is pinned here.
     'SyncTicketHistoryDto': SyncTicketHistoryDto.wireKeys,
+    // The caller's own cantiere site hours: the mirror the detail screen reads offline. It has a
+    // manifest of its own (`SyncScopeDto.cantiereWorkLogs`), pinned with the scope above.
+    'SyncCantiereWorkLogDto': SyncCantiereWorkLogDto.wireKeys,
     'SyncCantiereCrewAssignmentDto': SyncCantiereCrewAssignmentDto.wireKeys,
     // P2-7: the tenant's custom-field definitions ("campi aggiuntivi"), mirrored so the section
     // renders offline instead of silently disappearing.
@@ -282,6 +285,21 @@ void main() {
     expect(th.changedAt, DateTime.utc(2026, 10, 7, 8));
     expect(th.oldValue, isA<String>());
     expect(th.newValue, isA<String>());
+
+    final cw = SyncCantiereWorkLogDto.fromJson(
+      instance('SyncCantiereWorkLogDto'),
+    );
+    expect(cw.id, isNotEmpty);
+    expect(cw.cantiereId, isNotEmpty);
+    expect(cw.userId, isNotEmpty);
+    expect(
+      cw.workDate,
+      DateTime.utc(2026, 10, 7),
+      reason: 'a calendar label: the time part of the wire value is ignored, never shifted',
+    );
+    expect(cw.startTime, isA<Duration>());
+    expect(cw.workLogType, 1, reason: 'Travel — the enum travels as its ordinal');
+    expect(cw.createdAt, DateTime.utc(2026, 10, 7, 8));
   });
 
   test(

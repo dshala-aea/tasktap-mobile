@@ -76,6 +76,8 @@ class SyncService {
       await _applyTicketTimers(payload);
       // The tickets' own change history — the Storico timeline the device used to lack entirely.
       await _applyTicketHistory(payload);
+      // The caller's own cantiere site hours — the read mirror, not the outbox.
+      await _applyCantiereWorkLogs(payload);
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
@@ -489,6 +491,13 @@ class SyncService {
       await (db.delete(db.ticketTimers)..where(
         (t) => t.id.isNotIn(keep) & t.isPendingSync.equals(false),
       )).go();
+    }
+    if (scope.cantiereWorkLogs != null) {
+      // No pins: this table only ever mirrors the server, so nothing local can be waiting in it.
+      // Null (an older backend) already skipped above — that is what keeps a server which
+      // predates the member from emptying the device's site history.
+      await _pruneIds(db.cantiereWorkLogs, db.cantiereWorkLogs.id, scope.cantiereWorkLogs!,
+          const <String>{});
     }
   }
 
@@ -1352,6 +1361,44 @@ class SyncService {
               newValue: Value(h.newValue),
               changedByUserId: h.changedByUserId,
               changedAt: h.changedAt,
+            ),
+          );
+    }
+  }
+
+  /// The caller's own cantiere punches — the offline record of site time.
+  ///
+  /// UPSERT ONLY, and nothing here ever reads or writes `cantiere_punches` (the outbox). A punch
+  /// this device still owes the server lives there until it is pushed; it is not, and must not
+  /// become, a row of this mirror.
+  ///
+  /// Rows leave through the `cantiereWorkLogs` manifest, which is the caller's whole in-scope set
+  /// re-sent every sync — so an absence there is a real signal (the shift aged past the window),
+  /// unlike the delta collections.
+  Future<void> _applyCantiereWorkLogs(SyncResultDto payload) async {
+    if (!payload.carriesCantiereWorkLogs) return;
+    if (payload.cantiereWorkLogs.isEmpty) return;
+
+    for (final w in payload.cantiereWorkLogs) {
+      await db
+          .into(db.cantiereWorkLogs)
+          .insertOnConflictUpdate(
+            CantiereWorkLogsCompanion.insert(
+              id: w.id,
+              cantiereId: w.cantiereId,
+              userId: w.userId,
+              ticketId: Value(w.ticketId),
+              workDate: w.workDate,
+              startSeconds: w.startTime.inSeconds,
+              endSeconds: Value(w.endTime?.inSeconds),
+              startUtc: Value(w.startUtc),
+              endUtc: Value(w.endUtc),
+              workLogType: Value(w.workLogType),
+              approvalStatus: Value(w.approvalStatus),
+              description: Value(w.description),
+              clientId: Value(w.clientId),
+              createdAt: w.createdAt,
+              updatedAt: Value(w.updatedAt),
             ),
           );
     }

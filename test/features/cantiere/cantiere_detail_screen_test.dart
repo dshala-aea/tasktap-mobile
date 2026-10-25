@@ -608,4 +608,82 @@ void main() {
       },
     );
   });
+
+  group('Le tue timbrature (mirror)', () {
+    Future<void> pumpOffline(WidgetTester tester, AppDatabase db) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+            cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+            isOnlineProvider.overrideWithValue(false),
+          ],
+          child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<AppDatabase> dbWithCantiere() async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'c1',
+              tenantId: 'tenant1',
+              createdAt: DateTime.utc(2026, 8, 31),
+              name: 'Cantiere Alpha',
+            ),
+          );
+      return db;
+    }
+
+    testWidgets('lists this technician\'s shifts with no signal', (tester) async {
+      final db = await dbWithCantiere();
+      await db
+          .into(db.cantiereWorkLogs)
+          .insert(
+            CantiereWorkLogsCompanion.insert(
+              id: 'w1',
+              cantiereId: 'c1',
+              userId: 'user-1',
+              workDate: DateTime.utc(2026, 10, 22),
+              startSeconds: 8 * 3600,
+              endSeconds: const Value((12 * 3600) + (30 * 60)),
+              approvalStatus: const Value(2),
+              createdAt: DateTime.utc(2026, 10, 22, 6),
+            ),
+          );
+
+      await pumpOffline(tester, db);
+
+      expect(find.text('Le tue timbrature'), findsOneWidget);
+      expect(
+        find.text('22/10/2026'),
+        findsOneWidget,
+        reason: 'a calendar label — a UTC-midnight value must not slide a day west of UTC',
+      );
+      expect(find.text('08:00 – 12:30  ·  4h 30m'), findsOneWidget);
+      expect(find.text('Approvato'), findsOneWidget);
+
+      await db.close();
+    });
+
+    testWidgets(
+      'says the shifts were never downloaded, not that none were worked',
+      (tester) async {
+        final db = await dbWithCantiere();
+
+        // A fresh device that has never completed a sync: the empty mirror is "we don't know".
+        await pumpOffline(tester, db);
+
+        expect(find.text('Timbrature non ancora scaricate'), findsOneWidget);
+        expect(find.text('Nessuna timbratura registrata'), findsNothing);
+
+        await db.close();
+      },
+    );
+  });
 }
