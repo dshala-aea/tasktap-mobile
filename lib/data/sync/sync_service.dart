@@ -78,6 +78,8 @@ class SyncService {
       await _applyTicketHistory(payload);
       // The caller's own cantiere site hours — the read mirror, not the outbox.
       await _applyCantiereWorkLogs(payload);
+      // The caller's own ferie/permessi — what the "Ferie e Permessi" list reads with no signal.
+      await _applyAbsenceRequests(payload);
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
@@ -1404,8 +1406,59 @@ class SyncService {
     }
   }
 
-  Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {
-    for (final s in list) {
+  /// Replaces the ferie/permessi mirror from a payload that carries it.
+  ///
+  /// Unlike the cantiere mirror this collection has NO manifest member: the server re-sends the
+  /// caller's whole set every sync, so the list itself is the authoritative scope and the applier
+  /// deletes whatever the payload no longer lists — a request the office withdrew really does leave
+  /// the phone.
+  ///
+  /// A payload that does not carry the member at all (an older backend) leaves the table untouched.
+  /// An EMPTY list is different and meaningful: it says this caller has no requests, so the table is
+  /// emptied rather than kept.
+  ///
+  /// Dates go in as `yyyy-MM-dd` TEXT, not as a Drift DateTimeColumn: see
+  /// [AbsenceRequests.startDate] — a zone-converted civil date shows the previous day west of UTC.
+  Future<void> _applyAbsenceRequests(SyncResultDto payload) async {
+    if (!payload.carriesAbsenceRequests) return;
+
+    final incoming = {for (final a in payload.absenceRequests) a.id};
+
+    await db.transaction(() async {
+      final clear = db.delete(db.absenceRequests);
+      if (incoming.isEmpty) {
+        await clear.go();
+      } else {
+        await (clear..where((r) => r.id.isNotIn(incoming.toList()))).go();
+      }
+
+      for (final a in payload.absenceRequests) {
+        await db
+            .into(db.absenceRequests)
+            .insertOnConflictUpdate(
+              AbsenceRequestsCompanion.insert(
+                id: a.id,
+                requestedByUserId: a.requestedByUserId,
+                createdByUserId: a.createdByUserId,
+                type: a.type,
+                startDate: formatDateOnly(a.startDate)!,
+                endDate: formatDateOnly(a.endDate)!,
+                startTime: Value(a.startTime),
+                endTime: Value(a.endTime),
+                reason: Value(a.reason),
+                status: a.status,
+                decidedByUserId: Value(a.decidedByUserId),
+                decidedAt: Value(a.decidedAt),
+                decisionReason: Value(a.decisionReason),
+                createdAt: a.createdAt,
+                updatedAt: Value(a.updatedAt),
+              ),
+            );
+      }
+    });
+  }
+
+  Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {    for (final s in list) {
       await db
           .into(db.ticketStatuses)
           .insertOnConflictUpdate(

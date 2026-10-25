@@ -118,6 +118,9 @@ void main() {
     // The caller's own cantiere site hours: the mirror the detail screen reads offline. It has a
     // manifest of its own (`SyncScopeDto.cantiereWorkLogs`), pinned with the scope above.
     'SyncCantiereWorkLogDto': SyncCantiereWorkLogDto.wireKeys,
+    // The caller's own ferie/permessi: the list's offline mirror. It has NO manifest — the payload
+    // re-sends the whole set and the applier replaces from it — so only the row shape is pinned.
+    'SyncAbsenceRequestDto': SyncAbsenceRequestDto.wireKeys,
     'SyncCantiereCrewAssignmentDto': SyncCantiereCrewAssignmentDto.wireKeys,
     // P2-7: the tenant's custom-field definitions ("campi aggiuntivi"), mirrored so the section
     // renders offline instead of silently disappearing.
@@ -300,6 +303,18 @@ void main() {
     expect(cw.startTime, isA<Duration>());
     expect(cw.workLogType, 1, reason: 'Travel — the enum travels as its ordinal');
     expect(cw.createdAt, DateTime.utc(2026, 10, 7, 8));
+
+    final ab = SyncAbsenceRequestDto.fromJson(instance('SyncAbsenceRequestDto'));
+    expect(ab.id, isNotEmpty);
+    expect(ab.requestedByUserId, isNotEmpty);
+    expect(
+      ab.startDate,
+      DateTime.utc(2026, 10, 7),
+      reason: 'a civil day from a DateOnly wire value — never shifted by a zone',
+    );
+    expect(ab.endDate, isA<DateTime>());
+    expect(ab.status, 1, reason: 'Approved — the enum travels as its ordinal');
+    expect(ab.createdAt, DateTime.utc(2026, 10, 7, 8));
   });
 
   test(
