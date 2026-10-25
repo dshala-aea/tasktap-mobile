@@ -93,4 +93,58 @@ void main() {
 
     expect(find.text('Impossibile inviare la richiesta. Riprova.'), findsOneWidget);
   });
+
+  testWidgets('offers the nine current types and not the legacy Permesso', (tester) async {
+    final fake = _FakeAbsenceRequestApiClient();
+
+    await tester.pumpWidget(_buildScreen(fake));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+
+    for (final label in ['ROL', 'Ex festività', 'Permesso retribuito', 'Legge 104']) {
+      expect(
+        find.text(label),
+        findsWidgets,
+        reason: 'a type the client asked for must be fileable from the phone',
+      );
+    }
+    expect(
+      find.text('Permesso'),
+      findsNothing,
+      reason: 'legacy value 1 still renders on old rows but must not be offered for new ones',
+    );
+  });
+
+  testWidgets('Altri congedi/permessi cannot be sent without the note the server requires', (
+    tester,
+  ) async {
+    final fake = _FakeAbsenceRequestApiClient();
+
+    await tester.pumpWidget(_buildScreen(fake));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Altri congedi/permessi').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('MOTIVO (OBBLIGATORIO)', findRichText: true), findsOneWidget);
+    await tester.tap(find.text('Invia richiesta'));
+    await tester.pumpAndSettle();
+    expect(
+      fake.lastCreate,
+      isNull,
+      reason: 'the server answers reason_required_for_altri; the form must not send it blind',
+    );
+
+    await tester.enterText(find.byType(TextField).last, 'Assistenza a un familiare');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Invia richiesta'));
+    await tester.pumpAndSettle();
+
+    expect(fake.lastCreate!['type'], kAltriCongediPermessiType);
+    expect(fake.lastCreate!['reason'], 'Assistenza a un familiare');
+  });
 }

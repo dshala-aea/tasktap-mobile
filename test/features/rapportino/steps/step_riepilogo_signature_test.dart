@@ -151,7 +151,7 @@ void main() {
     // cliente" below that fold, so tap() misses it entirely (a harness bug, not an app one).
     // A tall, narrow surface matches a real phone and keeps everything reachable without needing
     // ensureVisible() dances for widgets inside a SingleChildScrollView.
-    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.physicalSize = const Size(400, 1800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -223,7 +223,7 @@ void main() {
     (tester) async {
       final gps = Completer<GpsCoords?>();
       container = _buildContainer(db, locationService: _SlowLocationService(gps));
-      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.physicalSize = const Size(400, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -306,7 +306,7 @@ void main() {
     tester,
   ) async {
     container = _buildContainer(db);
-    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.physicalSize = const Size(400, 1800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -349,7 +349,7 @@ void main() {
 
   testWidgets('signature dialog forces landscape open, releases it on close', (tester) async {
     container = _buildContainer(db);
-    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.physicalSize = const Size(400, 1800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -403,7 +403,7 @@ void main() {
   testWidgets('typed ("Digita") signature requires name + checkbox, then saves like the drawn '
       'path', (tester) async {
     container = _buildContainer(db);
-    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.physicalSize = const Size(400, 1800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -430,7 +430,14 @@ void main() {
       await tester.tap(find.text('Digita'));
       await tester.pump();
 
-      expect(find.byType(TextFormField), findsOneWidget, reason: 'name field should be visible');
+      // Scoped to the dialog: the Riepilogo step underneath carries its own "Osservazioni
+      // cliente" field, so a bare `find.byType(TextFormField)` matches two.
+      final nameField = find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextFormField),
+      );
+
+      expect(nameField, findsOneWidget, reason: 'name field should be visible');
       expect(
         find.byType(Checkbox),
         findsOneWidget,
@@ -443,7 +450,7 @@ void main() {
       // Neither a name nor a ticked checkbox alone is enough — Conferma starts disabled.
       expect(confermaButton().onPressed, isNull, reason: 'empty name, unchecked box');
 
-      await tester.enterText(find.byType(TextFormField), 'Mario Rossi');
+      await tester.enterText(nameField, 'Mario Rossi');
       await tester.pump();
       expect(confermaButton().onPressed, isNull, reason: 'name alone, still unchecked');
 
@@ -485,7 +492,7 @@ void main() {
       );
 
       container = _buildContainer(db, signatureClient: mockClient);
-      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.physicalSize = const Size(400, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -555,7 +562,7 @@ void main() {
       when(() => mockClient.fetchSavedSignatureContent()).thenAnswer((_) async => null);
 
       container = _buildContainer(db, signatureClient: mockClient);
-      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.physicalSize = const Size(400, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -570,7 +577,10 @@ void main() {
         await tester.tap(find.text('Digita'));
         await tester.pump();
 
-        await tester.enterText(find.byType(TextFormField), 'Mario Rossi');
+        await tester.enterText(
+          find.descendant(of: find.byType(Dialog), matching: find.byType(TextFormField)),
+          'Mario Rossi',
+        );
         await tester.pump();
         await tester.tap(find.byType(Checkbox));
         await tester.pump();
@@ -615,7 +625,7 @@ void main() {
         signatureClient: mockClient,
         locationService: locationService,
       );
-      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.physicalSize = const Size(400, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -684,7 +694,7 @@ void main() {
         online: false,
         internalUserId: userId,
       );
-      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.physicalSize = const Size(400, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -729,7 +739,7 @@ void main() {
       // First "open": container #1 pre-fills the technician signature, same as any other new
       // rapportino, then the technician explicitly clears it via Cancella.
       final firstContainer = _buildContainer(db, signatureClient: firstMockClient);
-      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.physicalSize = const Size(400, 1800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);

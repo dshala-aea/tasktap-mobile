@@ -603,14 +603,46 @@ final runningTicketWorklogProvider = Provider.autoDispose
       return null;
     });
 
-/// A ticket's field-by-field audit trail.
+/// A ticket's field-by-field audit trail — the Storico tab.
+///
+/// Online the server answers, because it is the only place that knows about an edit made in the
+/// office a minute ago. When the request never arrived (the radio says online but nothing responds)
+/// or the server answered with its own fault, the synced mirror answers instead, and offline it is
+/// the mirror from the start. A 4xx is never second-guessed: a 404 means the ticket is gone, and
+/// showing a mirrored timeline would state otherwise.
+///
+/// An empty mirror is thrown as [TicketDetailOfflineException] rather than returned as an empty
+/// list: "this device never received the timeline" and "nothing ever changed on this ticket" look
+/// identical to the reader, and the second one is a claim the device cannot make.
 final ticketHistoryProvider = FutureProvider.autoDispose
     .family<List<TicketHistoryEntryDto>, String>((ref, ticketId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref
+              .watch(ticketWorkflowApiClientProvider)
+              .fetchHistory(ticketId);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
       }
-      final api = ref.watch(ticketWorkflowApiClientProvider);
-      return api.fetchHistory(ticketId);
+      final rows = await ref
+          .watch(referenceCacheProvider)
+          .ticketHistoryFor(ticketId);
+      if (rows.isEmpty) throw const TicketDetailOfflineException();
+      return [
+        for (final r in rows)
+          TicketHistoryEntryDto(
+            id: r.id,
+            ticketId: r.ticketId,
+            fieldName: r.fieldName,
+            changedByUserId: r.changedByUserId,
+            // Re-stamped to UTC: Drift hands a `DateTimeColumn` back as a LOCAL-kind instant, and
+            // the tab's `.toLocal()` must land on the same wall clock the server's copy does.
+            changedAt: r.changedAt.toUtc(),
+            oldValue: r.oldValue,
+            newValue: r.newValue,
+          ),
+      ];
     });
 
 /// The contract a ticket is tied to (feature audit module #11, Gap D) — keyed by `contractId`,

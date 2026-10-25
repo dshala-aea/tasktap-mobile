@@ -1068,11 +1068,12 @@ void main() {
           'AiApiClient.confirmConversation sends no JSON body at all — the request carries only '
           'an Idempotency-Key header (AiConversationsController.Confirm reads nothing else off '
           'the request) — there is no schema to compare a body against.',
-      'POST /api/ai/transcribe':
-          'AiApiClient.transcribe sends multipart/form-data (one `audio` file part plus an '
-          'Idempotency-Key header), not a JSON body, so there are no body keys to compare with the '
-          'snapshot schema. The part name and header are pinned by ai_api_client / '
-          'audio_recorder_service_test (transcribe_sends_the_idempotency_key_header_and_audio_part).',
+      'POST /api/ai/voice-captures':
+          'AiApiClient.uploadVoiceCapture sends multipart/form-data (one `audio` file part plus '
+          'an Idempotency-Key header), not a JSON body, so there are no body keys to compare with '
+          'the snapshot schema. The part name and header are pinned by audio_recorder_service_test '
+          '(uploadVoiceCapture_sends_the_idempotency_key_header_and_audio_part). The client never '
+          'calls POST /api/ai/transcribe: a recording reaches the model as audio (ADR-0023).',
       'DELETE /api/ai/conversations/{}':
           'AiApiClient.abandonConversation is a bodyless DELETE — nothing to check against a '
           'request-body schema.',

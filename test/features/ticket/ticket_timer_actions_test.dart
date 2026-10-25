@@ -32,6 +32,8 @@ import 'package:tasktap_mobile/features/ticket/ticket_timer_actions.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_workflow_api_client.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
     show internalUserIdProvider;
+import 'package:tasktap_mobile/presentation/providers/clock_disagreement_provider.dart'
+    show clockDisagreementProvider;
 
 /// Stands in for the online start route: records the key it was handed and answers with whatever
 /// the test scripted.
@@ -40,6 +42,9 @@ class _ScriptedWorkflowClient extends TicketWorkflowApiClient {
 
   final TicketTimerStart? result;
   final TicketWorkflowFailure? failure;
+
+  /// What the online stop route answers with: the row's merged clock disagreement, or null.
+  int? stopResult;
   final List<String?> receivedClientIds = <String?>[];
 
   /// The device reading the online tap carried — O-10: absent means the server stamped its own
@@ -57,6 +62,9 @@ class _ScriptedWorkflowClient extends TicketWorkflowApiClient {
     if (failure != null) throw failure!;
     return result!;
   }
+
+  @override
+  Future<int?> stopTimer(String ticketId, {DateTime? deviceUtc}) async => stopResult;
 }
 
 /// A sync service that only counts: the assertions here are about what the tap writes, not about
@@ -159,6 +167,17 @@ void main() {
     expect(row.isPendingSync, isFalse, reason: 'the server already holds the start');
     expect(row.endSeconds, isNull, reason: 'the clock is running, so "Ferma" has something to close');
     expect(sync.syncs, 0, reason: 'nothing is owed to the server');
+  });
+
+  testWidgets('an online stop records the disagreement the answer carries', (tester) async {
+    final client = _ScriptedWorkflowClient()..stopResult = 720;
+    final ref = await pumpRef(tester, client: client, online: true);
+
+    await stopTicketTimer(ref, 't1');
+
+    // The row's merged value, so a skew first seen at the start still reaches the technician when
+    // the session ends online — the same banner the start's answer raises.
+    expect(ref.read(clockDisagreementProvider)['t1'], 720);
   });
 
   testWidgets('a start written on the device is queued for the sweep', (tester) async {

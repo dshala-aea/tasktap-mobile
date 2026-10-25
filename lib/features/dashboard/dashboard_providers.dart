@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/schedule_providers.dart';
@@ -31,8 +32,10 @@ final inProgressSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
   ref,
 ) {
   final db = ref.watch(appDatabaseProvider);
-  final today = DateTime.now().toUtc();
-  final start = DateTime.utc(today.year, today.month, today.day);
+  // The tenant's business calendar day, carried as the column stores it (a civil date pinned at
+  // UTC midnight). `DateTime.now().toUtc()` gave the UTC date instead, so in Rome between 00:00
+  // and 02:00 local this window covered yesterday and every counter here was a day off.
+  final start = ref.watch(businessTimeProvider).businessToday();
   final end = start.add(const Duration(days: 1));
   return (db.select(db.schedules)
         ..where(
@@ -49,8 +52,7 @@ final inProgressSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
 final completedTodaySchedulesProvider =
     StreamProvider.autoDispose<List<Schedule>>((ref) {
       final db = ref.watch(appDatabaseProvider);
-      final today = DateTime.now().toUtc();
-      final start = DateTime.utc(today.year, today.month, today.day);
+      final start = ref.watch(businessTimeProvider).businessToday();
       final end = start.add(const Duration(days: 1));
       return (db.select(db.schedules)..where(
             (s) =>
@@ -66,10 +68,10 @@ final upcomingSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
   ref,
 ) {
   final db = ref.watch(appDatabaseProvider);
-  final today = DateTime.now().toUtc();
-  final base = DateTime.utc(today.year, today.month, today.day);
-  final start = base.add(const Duration(days: 1));
-  final end = base.add(const Duration(days: 8));
+  // Same business-zone day as the two counters above: "today" cannot mean one thing in the
+  // card that counts it and another in the block that holds what follows it.
+  final start = ref.watch(businessTimeProvider).businessToday().add(const Duration(days: 1));
+  final end = start.add(const Duration(days: 7));
   return (db.select(db.schedules)
         ..where(
           (s) =>

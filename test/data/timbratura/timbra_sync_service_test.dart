@@ -86,6 +86,9 @@ class _FakeApiClient extends WorklogApiClient {
   final List<List<MobileSessionDto>> calls = [];
   bool shouldThrow = false;
 
+  /// What the server would echo per session: the gap it judged a disagreement, or null.
+  int? clockDisagreementSeconds;
+
   @override
   Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
     if (shouldThrow) throw Exception('Network error');
@@ -98,6 +101,7 @@ class _FakeApiClient extends WorklogApiClient {
             startTime: s.startTime,
             endTime: s.endTime,
             isActive: s.endTime == null,
+            clockDisagreementSeconds: clockDisagreementSeconds,
           ),
         )
         .toList();
@@ -157,6 +161,42 @@ void main() {
       expect(dtos[0].endTime, t2);
       expect(dtos[0].latitude, isNull);
       expect(dtos[0].longitude, isNull);
+    });
+
+    test('hands the server\'s clock-disagreement answer to the caller, once per batch', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+      final repo = _FakeRepo([_ws('id-1', 'ingresso', t1), _ws('id-2', 'fine', t2)]);
+      final api = _FakeApiClient()..clockDisagreementSeconds = 720;
+      final reported = <int>[];
+      final svc = TimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        onClockDisagreement: reported.add,
+      );
+
+      await svc.syncNow();
+
+      // One report, not one per session: every session carried the same send-time reading.
+      expect(reported, [720]);
+    });
+
+    test('says nothing when the server judged the drift ordinary', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final repo = _FakeRepo([_ws('id-1', 'ingresso', t1)]);
+      // Null is what the server answers for ordinary drift, a client with no clock, and an older
+      // backend alike — the service must not invent a gap of its own.
+      final api = _FakeApiClient();
+      final reported = <int>[];
+      final svc = TimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        onClockDisagreement: reported.add,
+      );
+
+      await svc.syncNow();
+
+      expect(reported, isEmpty);
     });
 
     test('markSynced receives all event ids', () async {
