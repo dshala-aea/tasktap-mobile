@@ -622,6 +622,39 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('offers no report entry once the ticket sits in a closing status', (
+      tester,
+    ) async {
+      // Filed bug: the bar offered "Crea rapporto di lavoro" on a ticket the office had already
+      // closed, and the submit was accepted — the server never reopens a closed ticket on its
+      // own, so a rapportino landed on finished work. The tenant's status flag is what decides,
+      // and it is set here with `closedAt` deliberately left null: that is exactly the state a
+      // ticket closed from this very screen has until the next sync.
+      await seedBase(db);
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(2),
+              tenantId: 'tenant-1',
+              name: 'Completato',
+              isClosed: const Value(true),
+            ),
+          );
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
+        const TicketsCompanion(statusId: Value(2)),
+      );
+
+      await pump(tester);
+
+      expect(find.text('Crea rapporto di lavoro'), findsNothing);
+      expect(find.text('AI Copilot'), findsNothing);
+      // Not silence: the bar says the ticket is closed and where the way back is.
+      expect(find.textContaining('Intervento chiuso'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('assegna stays in the header; customer nav lives on the Cliente row', (
       tester,
     ) async {

@@ -248,6 +248,12 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  // A closed ticket's bottom bar: nothing more may be recorded on it.
+  static const IconData lock = IconData(
+    0xf3ae,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData logIn = IconData(
     0xf3af,
     fontFamily: 'Lucide',
