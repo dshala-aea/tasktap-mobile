@@ -253,6 +253,7 @@ class ReportEditorState {
     this.technicianSignatureLocalPath,
     this.technicianSignatureAllegatoId,
     this.technicianSignaturePrefillSuppressed = false,
+    this.customerSignoffText,
     this.allegatoRows = const [],
     this.isSaving = false,
     this.saveError,
@@ -319,6 +320,13 @@ class ReportEditorState {
   /// survives `StepRiepilogo`/this notifier being recreated on sheet close+reopen.
   final bool technicianSignaturePrefillSuppressed;
 
+  /// What the customer is signing off on, captured on the same step as the signatures — the field
+  /// the web calls "Dichiarazione cliente" and the office calls "Osservazioni cliente"
+  /// (`Report.CustomerSignoffText`). Tri-state like [diagnosi]: null = never touched (a draft whose
+  /// text came from an AI-confirmed report keeps it — the submit body omits null), '' = the
+  /// technician cleared it.
+  final String? customerSignoffText;
+
   // Step 6 — Allegati (photos)
   final List<AllegatoRow> allegatoRows;
 
@@ -380,7 +388,7 @@ class ReportEditorState {
     controllatoDa: null,
     fatturatoAt: null,
     materialiNotRequired: materialiNotRequired,
-    customerSignoffText: null,
+    customerSignoffText: customerSignoffText,
     customerSignoffAt: null,
     richiedeSecondoIntervento: richiedeSecondoIntervento,
     isLocalOnly: true,
@@ -421,6 +429,7 @@ class ReportEditorState {
     String? technicianSignatureLocalPath,
     String? technicianSignatureAllegatoId,
     bool? technicianSignaturePrefillSuppressed,
+    String? customerSignoffText,
     List<AllegatoRow>? allegatoRows,
     bool? isSaving,
     String? saveError,
@@ -479,6 +488,7 @@ class ReportEditorState {
           : (technicianSignatureAllegatoId ?? this.technicianSignatureAllegatoId),
       technicianSignaturePrefillSuppressed:
           technicianSignaturePrefillSuppressed ?? this.technicianSignaturePrefillSuppressed,
+      customerSignoffText: customerSignoffText ?? this.customerSignoffText,
       allegatoRows: allegatoRows ?? this.allegatoRows,
       isSaving: isSaving ?? this.isSaving,
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
@@ -681,6 +691,11 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
       technicianSignatureLocalPath: technicianSignatureLocalPath,
       technicianSignaturePrefillSuppressed: draft.technicianSignaturePrefillSuppressed,
+      // Hydrated like every other column, and for two reasons: the field must show the text a
+      // reopened draft already holds (an AI-confirmed report's acceptance sentence included), and
+      // the very next autosave — `_buildHeaderCompanion` writes every column from `state` — would
+      // otherwise null the stored value out from under it.
+      customerSignoffText: draft.customerSignoffText,
       tenantId: draft.tenantId,
       insertedUserId: draft.insertedUserId,
       isLoading: false,
@@ -893,6 +908,13 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// ticket-linked rapportino, but harmless (and simply ignored server-side) otherwise.
   Future<void> setRichiedeSecondoIntervento(bool value) async {
     state = state.copyWith(richiedeSecondoIntervento: value);
+    await _autosave();
+  }
+
+  /// The customer's signoff text, typed on the same step as the signatures. See
+  /// [ReportEditorState.customerSignoffText] for the null/''/text contract the submit body relies on.
+  Future<void> setCustomerSignoffText(String value) async {
+    state = state.copyWith(customerSignoffText: value);
     await _autosave();
   }
 
@@ -1175,6 +1197,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       customerSignatureAllegatoId: Value(state.customerSignatureAllegatoId),
       technicianSignatureAllegatoId: Value(state.technicianSignatureAllegatoId),
       technicianSignaturePrefillSuppressed: Value(state.technicianSignaturePrefillSuppressed),
+      customerSignoffText: Value(state.customerSignoffText),
       stato: const Value('Bozza'),
       isLocalOnly: const Value(true),
     );

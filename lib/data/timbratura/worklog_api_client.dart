@@ -67,6 +67,7 @@ class UpsertSessionResponse {
     this.endTime,
     this.tipoOra,
     required this.isActive,
+    this.clockDisagreementSeconds,
   });
 
   final String clientId;
@@ -76,6 +77,12 @@ class UpsertSessionResponse {
   final String? tipoOra;
   final bool isActive;
 
+  /// Present only when this phone's clock and the server's disagreed by more than the server's own
+  /// threshold: the device reading minus the server receipt, signed. Null for ordinary drift, for a
+  /// client that sent no clock, and from a backend that predates the field — which is exactly why
+  /// the phone renders "show advice if present" instead of computing its own comparison.
+  final int? clockDisagreementSeconds;
+
   factory UpsertSessionResponse.fromJson(Map<String, dynamic> json) => UpsertSessionResponse(
     clientId: json['clientId'] as String,
     workLogId: json['workLogId'] as String,
@@ -83,6 +90,7 @@ class UpsertSessionResponse {
     endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
     tipoOra: json['tipoOra'] as String?,
     isActive: json['isActive'] as bool? ?? false,
+    clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)?.toInt(),
   );
 }
 
@@ -347,11 +355,17 @@ class WorklogApiClient {
   /// becomes the row's end instant and the gap from the server's receipt time is recorded as the
   /// clock disagreement. Omitted by callers with no clock to offer, which leaves the server
   /// stamping its own clock exactly as before.
-  Future<void> endWork({DateTime? deviceUtc}) async {
-    await _dio.post<dynamic>(
+  ///
+  /// Returns the server's already-filtered disagreement for the closed row, or null: ordinary
+  /// drift, no device clock and an older backend all answer the same way. The phone relays it; it
+  /// never compares anything itself.
+  Future<int?> endWork({DateTime? deviceUtc}) async {
+    final response = await _dio.post<dynamic>(
       '/api/worklog/end',
       data: deviceUtc == null ? null : {'deviceUtc': deviceUtc.toUtc().toIso8601String()},
     );
+    final data = response.data;
+    return data is Map<String, dynamic> ? (data['clockDisagreementSeconds'] as num?)?.toInt() : null;
   }
 
   /// POST /api/worklog/break/start — 400 unless an ordinary (non-break) row is open.

@@ -115,7 +115,9 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
   /// Resolves once the initial load (and the one-time pre-fill) finished or gave up.
   late final Future<void> ready;
 
-  static String rowId(String reportId, String strumentoId) => 'str-$reportId-$strumentoId';
+  /// One definition lives in the domain module: the AI apply writes rows with the same id, so the
+  /// two paths can never address different rows for the same catalogue instrument.
+  static String rowId(String reportId, String strumentoId) => strumentoRowId(reportId, strumentoId);
 
   Future<void> _hydrate() async {
     try {

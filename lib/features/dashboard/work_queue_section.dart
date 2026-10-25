@@ -27,7 +27,9 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// Two blocks, not one: today's tiers under the screen's "Oggi" heading, and the next seven days
 /// under their own "PROSSIMI 7 GIORNI" heading. Programmato exists only in the second block —
 /// today's own jobs used to be demoted into it as well, which made the day's second job read as
-/// planned for later. See [WorkQueueBuckets.restOfToday] for that history.
+/// planned for later, and the tier *inside* the today block carried the same word PROGRAMMATO,
+/// so the office technicians who triage from this screen took this morning's jobs as future work.
+/// See [WorkQueueBuckets.restOfToday] for that history.
 class WorkQueueSection extends ConsumerWidget {
   const WorkQueueSection({super.key});
 
@@ -154,7 +156,8 @@ class _RowContent {
   /// `_resolveRow`'s own doc comment), so the badge/meta row omits the time entirely rather
   /// than formatting the placeholder minute values into a literal "00:00". Same gate
   /// `giorno_view.dart`'s `_EventBlock`, `lista_view.dart`'s `_ScheduleListRow` and
-  /// `calendario_screen.dart`'s `_ScheduleInfoSheet` already use for the same reason.
+  /// `calendario/widgets/schedule_info_sheet.dart`'s `ScheduleInfoSheet` already use for the same
+  /// reason.
   final String? timeLabel;
 }
 

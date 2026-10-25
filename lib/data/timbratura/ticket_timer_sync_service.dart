@@ -26,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/utils/error_message.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../local/app_database.dart' show TicketTimer;
 import '../sync/sync_service.dart' show appDatabaseProvider;
 import 'ticket_timer_api_client.dart';
@@ -45,6 +46,11 @@ final ticketTimerSyncServiceProvider = Provider<TicketTimerSyncService>((ref) {
     repo: ref.watch(ticketTimerRepositoryProvider),
     apiClient: ref.watch(ticketTimerApiClientProvider),
     businessTime: ref.watch(businessTimeProvider),
+    // The server is the only party that can say "this phone's clock was off" — it alone sees the
+    // receipt instant. The answer comes back on the upsert, minutes or hours after the tap, so it
+    // is handed to the screen that shows the clock rather than dropped with the response.
+    onClockDisagreement: (ticketId, seconds) =>
+        ref.read(clockDisagreementProvider.notifier).record(ticketId, seconds),
   );
 });
 
@@ -59,15 +65,21 @@ class TicketTimerSyncService {
     required TicketTimerApiClient apiClient,
     DateTime Function()? clock,
     BusinessTime? businessTime,
+    void Function(String ticketId, int seconds)? onClockDisagreement,
   }) : _repo = repo,
        _apiClient = apiClient,
        _clock = clock ?? DateTime.now,
-       _businessTime = businessTime ?? BusinessTime.fallback(clock: clock);
+       _businessTime = businessTime ?? BusinessTime.fallback(clock: clock),
+       _onClockDisagreement = onClockDisagreement;
 
   final TicketTimerRepository _repo;
   final TicketTimerApiClient _apiClient;
   final DateTime Function() _clock;
   final BusinessTime _businessTime;
+
+  /// Called with the gap the server reported for a session whose clock it judged to be off. Already
+  /// flagged server-side, so this is never a number the client has to weigh.
+  final void Function(String ticketId, int seconds)? _onClockDisagreement;
 
   static const _maxBatchAttempts = 5;
   int _batchFailures = 0;
@@ -90,7 +102,11 @@ class TicketTimerSyncService {
         .toList();
     if (rows.isEmpty) return;
 
-    final dtos = rows.map(_toDto).toList();
+    // One reading for the whole batch: this is the moment the request leaves the phone, which is
+    // the only thing the server can honestly compare with its own receipt. Stamping each row with
+    // its tap time would measure how long the queue sat, not how far the clock was off (O-10 §2).
+    final deviceUtc = _clock().toUtc();
+    final dtos = rows.map((row) => _toDto(row, deviceUtc)).toList();
     try {
       final results = await _apiClient.upsertSessions(dtos);
       _batchFailures = 0;
@@ -99,6 +115,8 @@ class TicketTimerSyncService {
       // guessing that it landed would risk logging the hours twice.
       for (final result in results) {
         await _repo.markSynced(result.clientId, result.ticketWorkLogId);
+        final seconds = result.clockDisagreementSeconds;
+        if (seconds != null) _onClockDisagreement?.call(result.ticketId, seconds);
       }
     } catch (e) {
       if (_isPermanent(e)) {
@@ -118,7 +136,7 @@ class TicketTimerSyncService {
   /// A row as the batch endpoint takes it. The instants are preferred and the Rome-local frame is
   /// the fallback for a legacy server row that never carried them — the same precedence every
   /// worklog reader applies.
-  TicketMobileSessionDto _toDto(TicketTimer row) {
+  TicketMobileSessionDto _toDto(TicketTimer row, DateTime deviceUtc) {
     final workDate = row.workDate;
     final startSeconds = row.startSeconds;
     final start =
@@ -148,6 +166,7 @@ class TicketTimerSyncService {
       startTime: start,
       endTime: end,
       description: row.description,
+      deviceUtc: deviceUtc,
     );
   }
 

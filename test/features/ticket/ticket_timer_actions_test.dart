@@ -15,7 +15,7 @@
 // ticket_timer_sync_service_test.dart, and running it here would only race the assertions.
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +32,8 @@ import 'package:tasktap_mobile/features/ticket/ticket_timer_actions.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_workflow_api_client.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
     show internalUserIdProvider;
+import 'package:tasktap_mobile/presentation/providers/clock_disagreement_provider.dart'
+    show clockDisagreementProvider;
 
 /// Stands in for the online start route: records the key it was handed and answers with whatever
 /// the test scripted.
@@ -40,6 +42,9 @@ class _ScriptedWorkflowClient extends TicketWorkflowApiClient {
 
   final TicketTimerStart? result;
   final TicketWorkflowFailure? failure;
+
+  /// What the online stop route answers with: the row's merged clock disagreement, or null.
+  int? stopResult;
   final List<String?> receivedClientIds = <String?>[];
 
   /// The device reading the online tap carried — O-10: absent means the server stamped its own
@@ -57,6 +62,9 @@ class _ScriptedWorkflowClient extends TicketWorkflowApiClient {
     if (failure != null) throw failure!;
     return result!;
   }
+
+  @override
+  Future<int?> stopTimer(String ticketId, {DateTime? deviceUtc}) async => stopResult;
 }
 
 /// A sync service that only counts: the assertions here are about what the tap writes, not about
@@ -161,6 +169,17 @@ void main() {
     expect(sync.syncs, 0, reason: 'nothing is owed to the server');
   });
 
+  testWidgets('an online stop records the disagreement the answer carries', (tester) async {
+    final client = _ScriptedWorkflowClient()..stopResult = 720;
+    final ref = await pumpRef(tester, client: client, online: true);
+
+    await stopTicketTimer(ref, 't1');
+
+    // The row's merged value, so a skew first seen at the start still reaches the technician when
+    // the session ends online — the same banner the start's answer raises.
+    expect(ref.read(clockDisagreementProvider)['t1'], 720);
+  });
+
   testWidgets('a start written on the device is queued for the sweep', (tester) async {
     final client = _ScriptedWorkflowClient(
       result: const TicketTimerStart(id: 'server-1', isActive: true),
@@ -222,5 +241,52 @@ void main() {
       isEmpty,
       reason: 'a mirrored row with no end would render a clock that is not counting',
     );
+  });
+
+  testWidgets('a closed ticket never gets a running clock', (tester) async {
+    // The closure lives in the STATUS FLAG here, with no `closedAt`: exactly the shape a ticket
+    // closed from the detail screen has until the next sync. That is the case the detail bar used
+    // to miss, and the same one that let a rapportino start on finished work.
+    await db
+        .into(db.ticketStatuses)
+        .insert(
+          TicketStatusesCompanion.insert(
+            id: const Value(1),
+            tenantId: 'tenant-1',
+            name: 'Completato',
+            isClosed: const Value(true),
+          ),
+        );
+    await db
+        .into(db.tickets)
+        .insert(
+          TicketsCompanion.insert(
+            id: 't1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 6, 1),
+            title: 'Perdita idrica',
+            customerId: 'cust-1',
+            locationId: 'loc-1',
+            statusId: 1,
+            typeId: 1,
+          ),
+        );
+    final client = _ScriptedWorkflowClient(
+      result: const TicketTimerStart(id: 'server-1', isActive: true),
+    );
+    final ref = await pumpRef(tester, client: client, online: true);
+
+    await expectLater(
+      () => startTicketTimer(ref, 't1'),
+      throwsA(isA<TicketTimerOnClosedTicket>()),
+    );
+
+    expect(client.receivedClientIds, isEmpty, reason: 'nothing left the device');
+    expect(
+      await repo.forTicket('t1'),
+      isEmpty,
+      reason: 'a refused start must not leave a clock behind, queued or running',
+    );
+    expect(sync.syncs, 0);
   });
 }

@@ -20,6 +20,8 @@ import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider;
 import '../../data/timbratura/remote_shift.dart' show OfflineRemoteShiftException;
+import '../../presentation/providers/clock_disagreement_provider.dart';
+import 'clock_disagreement_note.dart';
 import 'timbra_providers.dart';
 import 'work_log_live_refresh.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -184,11 +186,25 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                     // thing here that must never be clipped.
                     final fits = constraints.maxHeight >= _kFixedLayoutMinHeight && rejected.isEmpty;
                     final punchGuard = ref.watch(punchGuardProvider);
+                    final clockDisagreement = ref.watch(timbraClockDisagreementProvider);
                     final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
                     final content = <Widget>[
                       _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
                       const SizedBox(height: 24),
+                      // The server compared this phone's clock with its own receipt instant and
+                      // found them far apart. Only the server can make that comparison — the device
+                      // never sees a receipt instant — so this banner exists precisely to say what
+                      // the technician could not otherwise discover. Advisory: the hours are
+                      // already recorded, and the office reads the same flag in Correzioni.
+                      if (clockDisagreement != null) ...[
+                        ClockDisagreementNote(
+                          seconds: clockDisagreement,
+                          onDismiss: () =>
+                              ref.read(timbraClockDisagreementProvider.notifier).dismiss(),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       // Above the punch control, not below it: a punch the server refused is a
                       // fact about the shift the technician is about to add to.
                       if (rejected.isNotEmpty) ...[

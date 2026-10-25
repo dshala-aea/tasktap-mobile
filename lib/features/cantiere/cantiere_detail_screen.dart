@@ -16,6 +16,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/time/business_time.dart' show formatWorkDate;
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
@@ -168,6 +169,13 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
 
                           // ── Squadra assegnata ─────────────────────────────────────
                           _SquadraSection(cantiereId: cantiere.id),
+
+                          // ── Timbrature ────────────────────────────────────────────
+                          //
+                          // After Squadra: "who is on this site", then "what I have worked here".
+                          // This is the read mirror — it answers with no signal, which is exactly
+                          // where the question gets asked.
+                          _TimbratureSection(cantiereId: cantiere.id),
 
                           // ── Map ────────────────────────────────────────────────────
                           //
@@ -436,6 +444,119 @@ class _DettagliSection extends ConsumerWidget {
 // screen's primary Timbra/Crea-rapportino flows depend on, so it must not clutter the page while
 // it resolves.
 // ══════════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Timbrature — the signed-in technician's own clock-ins on this site, read from the
+// `cantiere_work_logs` mirror the sync fills.
+//
+// Before this section the screen said nothing about hours at all, and the only local record was
+// `cantiere_punches` — an outbox that empties itself as it pushes. So a shift worked yesterday was
+// invisible today, offline or not.
+//
+// Three states, deliberately distinct (the same contract _SquadraSection follows): loading/error
+// collapse to nothing; empty says "not downloaded yet" when the device has never completed a sync
+// and "no punches" only when that can be trusted; non-empty is the list.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _TimbratureSection extends ConsumerWidget {
+  const _TimbratureSection({required this.cantiereId});
+
+  final String cantiereId;
+
+  /// `WorkLogApprovalStatusEnum`, as the server stores it.
+  static String _approvalLabel(int status) => switch (status) {
+    1 => 'Inviato',
+    2 => 'Approvato',
+    3 => 'Respinto',
+    _ => 'Bozza',
+  };
+
+  /// `HH:mm` for a seconds-into-the-day value — the form a legacy row carries.
+  static String _hm(int seconds) {
+    final h = (seconds ~/ 3600).toString().padLeft(2, '0');
+    final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  /// The shift length. True instants when the row has them — the only safe way across midnight —
+  /// otherwise the time-of-day pair, which on an overnight shift reads negative and is shown as
+  /// the domain's own overnight correction rather than a nonsense duration.
+  static String _duration(CantiereWorkLog w) {
+    Duration d;
+    if (w.startUtc != null && w.endUtc != null) {
+      d = w.endUtc!.difference(w.startUtc!);
+    } else if (w.endSeconds != null) {
+      d = Duration(seconds: w.endSeconds! - w.startSeconds);
+      if (d.isNegative) d += const Duration(hours: 24);
+    } else {
+      return 'in corso';
+    }
+    return '${d.inHours}h ${d.inMinutes.remainder(60).toString().padLeft(2, '0')}m';
+  }
+
+  /// The shift's wall clock. Always the business-zone time of day the server stored, never the
+  /// phone's own zone: a technician whose handset is set to another timezone (or travelling) must
+  /// read the same hours the office prices the job from.
+  static String _window(CantiereWorkLog w) {
+    final start = _hm(w.startSeconds);
+    final end = w.endSeconds == null ? null : _hm(w.endSeconds!);
+    return end == null ? '$start – in corso' : '$start – $end';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final logsAsync = ref.watch(cantiereWorkLogMirrorProvider(cantiereId));
+    // Offline with a mirror that has never been filled is "we don't know", not "you never punched".
+    final unknown =
+        !ref.watch(isOnlineProvider) &&
+        ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+
+    return logsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      // Genuinely unavailable (the local read failed) — say nothing rather than claim "none".
+      error: (e, _) => const SizedBox.shrink(),
+      data: (logs) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionTitle(title: 'Le tue timbrature'),
+            AppCard(
+              padding: logs.isEmpty
+                  ? const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.base,
+                      vertical: AppSpacing.md,
+                    )
+                  : EdgeInsets.zero,
+              child: logs.isEmpty
+                  ? Text(
+                      unknown ? 'Timbrature non ancora scaricate' : 'Nessuna timbratura registrata',
+                      style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+                    )
+                  : Column(
+                      children: logs.asMap().entries.map((entry) {
+                        final i = entry.key;
+                        final w = entry.value;
+                        return ListRow(
+                          leading: const Icon(LucideIcons.clock, size: 18),
+                          // A calendar label, not an instant: formatting its y/m/d fields with no
+                          // zone conversion is what keeps the day right west of UTC.
+                          title: formatWorkDate(w.workDate, 'dd/MM/yyyy'),
+                          subtitle: '${_window(w)}  ·  ${_duration(w)}',
+                          meta: AppBadge(
+                            label: _approvalLabel(w.approvalStatus),
+                            small: true,
+                          ),
+                          showDivider: i != logs.length - 1,
+                        );
+                      }).toList(),
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
 
 class _SquadraSection extends ConsumerWidget {
   const _SquadraSection({required this.cantiereId});

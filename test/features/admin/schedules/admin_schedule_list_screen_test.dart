@@ -163,6 +163,68 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('elenco rows show the planned hours, not midnight\'s offset', (tester) async {
+    // Same defect the ticket's Pianificazioni row had: the subtitle formatted `activityDate`
+    // (a civil day landing as UTC midnight), so the clock it printed was the device's offset from
+    // UTC — "02:00" in CEST whatever hours the office set. Seeded 480→600, so the exact subtitle
+    // is asserted and a regression fails in every device zone the CI runs.
+    await _seedSchedules(db);
+    await tester.pumpWidget(_buildView(db: db, initialSquadraId: 'sq-1'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('dom 21 giu · 08:00 – 10:00'), findsOneWidget);
+    expect(find.textContaining('02:00'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('an all-day elenco row shows the day alone', (tester) async {
+    await _seedSchedules(db);
+    await db
+        .into(db.schedules)
+        .insert(
+          SchedulesCompanion.insert(
+            id: 'sched-allday',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            activityDate: DateTime.utc(2026, 6, 21),
+            timeStartMinutes: 0,
+            timeEndMinutes: 0,
+            userId: '00000000-0000-0000-0000-000000000000',
+            statusId: 1,
+            locationId: 'loc-1',
+            allDay: const Value(true),
+            title: 'Intervento tutto il giorno',
+            description: '',
+          ),
+        );
+    await db
+        .into(db.scheduleAssignees)
+        .insert(
+          ScheduleAssigneesCompanion.insert(
+            scheduleId: 'sched-allday',
+            userId: 'user-1',
+            isTeam: const Value(true),
+          ),
+        );
+
+    await tester.pumpWidget(_buildView(db: db, initialSquadraId: 'sq-1'));
+    await tester.pumpAndSettle();
+
+    // Placeholder 0/0 bounds are not a real range: "00:00 – 00:00" would claim the job starts at
+    // midnight and ends that same instant. The subtitle is one Text per row, so the all-day row
+    // matches the bare day exactly while its timed neighbour on the same date reads the full
+    // "day · hours" string — both rows are accounted for below.
+    expect(find.text('Intervento tutto il giorno'), findsOneWidget);
+    expect(find.text('dom 21 giu'), findsOneWidget);
+    expect(find.text('dom 21 giu · 08:00 – 10:00'), findsOneWidget);
+    expect(find.textContaining('00:00'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
   // The elenco tab's empty state distinguishes three cases; the mirror-empty one is not a fact
   // about the tenant until a sync has landed.
   testWidgets('never-synced empty mirror says pianificazioni were not downloaded', (tester) async {

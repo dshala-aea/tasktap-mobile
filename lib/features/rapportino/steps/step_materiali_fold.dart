@@ -1185,38 +1185,44 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
               style: TextStyle(color: context.colors.inkMuted, fontSize: 11),
             ),
           const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  c.label,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: context.colors.ink,
-                  ),
-                ),
-              ),
-              if (c.isRequired)
-                Padding(
-                  padding: EdgeInsets.only(left: AppSpacing.xs),
+          // A checkbox draws its own label beside the box (`AppCheckbox`); printing it here too
+          // would show the control's name twice and leave the box under a caption.
+          if (c.type != ControlType.checkbox)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
                   child: Text(
-                    '*',
-                    style: TextStyle(color: context.colors.red, fontWeight: FontWeight.bold),
+                    c.label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: context.colors.ink,
+                    ),
                   ),
                 ),
-            ],
-          ),
+                if (c.isRequired)
+                  Padding(
+                    padding: EdgeInsets.only(left: AppSpacing.xs),
+                    child: Text(
+                      '*',
+                      style: TextStyle(color: context.colors.red, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
+            ),
           if (c.description != null && c.description!.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 2, bottom: AppSpacing.xs),
+              padding: EdgeInsets.only(
+                top: c.type == ControlType.checkbox ? 0 : 2,
+                bottom: AppSpacing.xs,
+              ),
               child: Text(
                 c.description!,
                 style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
               ),
             ),
-          const SizedBox(height: 8),
+          if (c.type != ControlType.checkbox) const SizedBox(height: 8),
           _buildInput(c, existing),
         ],
       ),
@@ -1234,6 +1240,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
           child: AppCheckbox(
             value: existing?.boolValue ?? c.boolValue ?? false,
             label: c.label,
+            isRequired: c.isRequired,
             onChanged: (v) => _save(boolValue: v),
           ),
         );

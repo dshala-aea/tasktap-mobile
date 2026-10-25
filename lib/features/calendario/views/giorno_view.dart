@@ -24,6 +24,31 @@ const double _kHourHeight = 64.0;
 /// Width reserved for the hour labels column.
 const double _kLabelWidth = 48.0;
 
+// Line heights the block can actually afford, matching the font sizes used below. A block is
+// absolutely positioned by its time slot, so nothing inside it can shrink: whatever does not fit
+// overflows with the yellow-and-black stripes rather than being clipped.
+const double _kTitleLineHeight = 15;
+const double _kMetaLineHeight = 13;
+const double _kBlockPadding = AppSpacing.xs * 2; // vertical padding, both sides
+
+/// The customer/site lines a block of [height] can hold, or none.
+///
+/// A 30-minute job is 44dp tall and a two-hour one 128dp, so these lines are shown only when they
+/// fit, and folded onto one line when only one fits — rather than drawn always and clipped. A
+/// block too short for even one line still has both in `_ScheduleInfoSheet` and in the Lista row.
+List<String> _placeLines(ScheduleWhere? where, double height, {required bool withTime}) {
+  final customer = where?.customerName;
+  final address = where?.address;
+  final lines = <String>[?customer, ?address];
+  if (lines.isEmpty) return const [];
+
+  final budget =
+      height - _kBlockPadding - _kTitleLineHeight - (withTime ? _kMetaLineHeight : 0);
+  if (budget >= _kMetaLineHeight * lines.length) return lines;
+  if (budget >= _kMetaLineHeight) return [lines.join(' · ')];
+  return const [];
+}
+
 /// Calendario → Giorno view: vertical hour grid with coloured event blocks
 /// positioned by timeStartMinutes / timeEndMinutes.
 ///
@@ -128,7 +153,7 @@ class GiornoView extends ConsumerWidget {
   }
 }
 
-class _EventBlock extends StatelessWidget {
+class _EventBlock extends ConsumerWidget {
   const _EventBlock({
     required this.schedule,
     this.onTapTicket,
@@ -145,7 +170,14 @@ class _EventBlock extends StatelessWidget {
   final bool isTeam;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Who the job is for and where it is, resolved from the mirror by the same provider the Lista
+    // row and the detail sheet use — no wire field, nothing to fetch, so it works with no signal.
+    final where = ref
+        .watch(
+          scheduleWhereProvider((ticketId: schedule.ticketId, locationId: schedule.locationId)),
+        )
+        .valueOrNull;
     final startMin = schedule.timeStartMinutes;
     final endMin = schedule.timeEndMinutes;
     final clampedStart = startMin
@@ -171,6 +203,7 @@ class _EventBlock extends StatelessWidget {
 
     final statusName = scheduleStatusName(schedule.statusId);
     final pair = statusColor(context, statusName);
+    final placeLines = _placeLines(where, height, withTime: !schedule.allDay);
 
     return Positioned(
       top: top,
@@ -244,7 +277,23 @@ class _EventBlock extends StatelessWidget {
                   color: pair.foreground.withAlpha(179),
                 ),
               ),
-            if (schedule.ticketId != null && height > 52)
+            // Customer, then site address — the two things a technician needs before driving off,
+            // where the box has the height to show them (see _placeLines).
+            for (final line in placeLines)
+              Text(
+                line,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: pair.foreground.withAlpha(179),
+                ),
+              ),
+            // The link icon only ever had room at the bottom of a tall block; once the customer
+            // and address are using that space the icon would be the line that overflows.
+            if (placeLines.isEmpty && schedule.ticketId != null && height > 52)
               Icon(
                 LucideIcons.link,
                 size: 10,
