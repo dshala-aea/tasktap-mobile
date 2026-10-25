@@ -81,9 +81,18 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   bool _hasHandledSubmitSuccess = false;
   bool _sawNonSubmittedState = false;
 
+  /// The customer's signoff text ("Osservazioni cliente"). Seeded from the hydrated editor state:
+  /// this step only mounts once the draft has finished loading (see `rapportino_form_screen`'s
+  /// `editorState.isLoading` gate), and a reopened draft's text is a column on
+  /// `DraftReports.customerSignoffText`.
+  late final TextEditingController _signoffCtrl;
+
   @override
   void initState() {
     super.initState();
+    _signoffCtrl = TextEditingController(
+      text: ref.read(reportEditorProvider(widget.reportId)).customerSignoffText ?? '',
+    );
     unawaited(_maybePrefillTechnicianSignature());
     _submitCompletionSub = _draftStream.listen(_handleDraftUpdateForNavigation);
   }
@@ -91,6 +100,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   @override
   void dispose() {
     _submitCompletionSub?.cancel();
+    _signoffCtrl.dispose();
     super.dispose();
   }
 
@@ -394,6 +404,23 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
             ),
             const SizedBox(height: 20),
           ],
+
+          // ── Osservazioni cliente (facoltative) ─────────────────────────────
+          // What the customer is signing off on, captured on the signing step itself — the field
+          // the web editor carries above its two signature pads ("Dichiarazione cliente",
+          // `Report.CustomerSignoffText`). The office asked for it as "Osservazioni cliente", so
+          // that is the label here. Optional, like the customer's own signature: sending never
+          // requires it.
+          AppTextField.multiline(
+            controller: _signoffCtrl,
+            label: 'Osservazioni cliente',
+            hint: 'Confermo l\'esecuzione dei lavori e la presa visione del rapporto di lavoro.',
+            maxLines: 3,
+            onChanged: (v) => ref
+                .read(reportEditorProvider(widget.reportId).notifier)
+                .setCustomerSignoffText(v),
+          ),
+          const SizedBox(height: 20),
 
           // ── Firma cliente (facoltativa) ────────────────────────────────────
           // No asterisk: the customer's signature is collected when the customer is there to sign,
