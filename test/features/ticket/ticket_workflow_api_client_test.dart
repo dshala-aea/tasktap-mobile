@@ -261,6 +261,24 @@ void main() {
       );
     });
 
+    test('a stopped timer relays the merged clock disagreement the server echoes', () async {
+      final adapter = _StubAdapter(
+        '{"message":"Timer stopped","clockDisagreementSeconds":-900}',
+        status: 200,
+      );
+
+      final seconds = await _clientThatAnswers(adapter).stopTimer('t1');
+
+      expect(seconds, -900);
+      expect(adapter.captured?.path, '/api/tickets/t1/worklogs/stop');
+    });
+
+    test('a stopped timer answers null when the server judged the clocks close enough', () async {
+      final adapter = _StubAdapter('{"message":"Timer stopped"}', status: 200);
+
+      expect(await _clientThatAnswers(adapter).stopTimer('t1'), isNull);
+    });
+
     test('no connection is reported as no connection, not as a server error', () async {
       final client = _clientThatThrows(_err(type: DioExceptionType.connectionError));
 
