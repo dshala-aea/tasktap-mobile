@@ -1979,8 +1979,25 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Created cantiere work log entry."
+          "201": {
+            "description": "Created cantiere work log entry, plus its clock disagreement if it has one.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchEchoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchEchoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchEchoResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -2136,7 +2153,24 @@
         },
         "responses": {
           "200": {
-            "description": "Success message."
+            "description": "Success message, plus the row\u0027s clock disagreement if it has one.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCloseEchoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCloseEchoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCloseEchoResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -18448,7 +18482,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketTimerStartResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketTimerStartResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketTimerStartResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -18458,6 +18509,7 @@
         "tags": [
           "TicketWorkLog"
         ],
+        "summary": "Stop the caller\u0027s running timer on this ticket.",
         "parameters": [
           {
             "name": "ticketId",
@@ -18466,6 +18518,14 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "description": "Optional idempotency key from the device, naming the session it is closing. A phone whose\nstop reply was lost re-sends the same value and gets the closed row\u0027s answer instead of\n\u0022no active timer found\u0022 \u2014 a 404 the phone cannot tell apart from a close that never landed,\nso it used to report a failure for hours that were already booked. Omitted by clients that\ndo not track the key, which then get exactly the previous behaviour.",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -18479,7 +18539,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "Success message, plus the row\u0027s clock disagreement if it has one \u2014 the merged value, not\njust this close\u0027s, so a phone corrected mid-session still hears about the skew it started\nwith. The start route already answers the same way.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCloseEchoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCloseEchoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCloseEchoResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -18664,7 +18741,7 @@
           "TicketWorkLogMobile"
         ],
         "summary": "Idempotent upsert of ticket timer sessions captured on a device.",
-        "description": "The phone records start and stop locally, queues the session and sends the identical payload\n\u2014 including a client-generated \u0060clientId\u0060 \u2014 on every attempt until one succeeds. The\nupsert keys on (tenant, user, clientId), so a retry after a timeout updates the row it\nalready created rather than logging the same hours twice.\n\nA re-send may only CLOSE an open session, never move its start: the start already happened,\nand letting a stale queued copy rewrite it would undo a correction made in the office. Same\nrule as \u0060CantiereWorkLogController.MobileSessions\u0060.\n\nAll-or-nothing: one transaction for the whole batch, so a rejection on item N does not leave\nitems 1..N-1 committed while the client believes the batch failed.",
+        "description": "The phone records start and stop locally, queues the session and sends the identical payload\n\u2014 including a client-generated \u0060clientId\u0060 \u2014 on every attempt until one succeeds. The\nupsert keys on (tenant, user, clientId), so a retry after a timeout updates the row it\nalready created rather than logging the same hours twice.\n\nA re-send may only CLOSE an open session, never move its start: the start already happened,\nand letting a stale queued copy rewrite it would undo a correction made in the office. Same\nrule as \u0060CantiereWorkLogController.MobileSessions\u0060.\n\nAll-or-nothing: one transaction for the whole batch, so a rejection on item N does not leave\nitems 1..N-1 committed while the client believes the batch failed.\n\nA session the server has never seen is work starting on that ticket, so the ticket is moved\nonto the tenant\u0027s in-progress status \u2014 the same implicit move \u0060WorkLogService\u0060 makes for\nan online start. It happens after the commit and best-effort, so a tenant without the flag\nstill gets the hours.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -19987,8 +20064,25 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Created work log entry."
+          "201": {
+            "description": "Created work log entry.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchEchoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchEchoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchEchoResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -20042,7 +20136,24 @@
         },
         "responses": {
           "200": {
-            "description": "Success message."
+            "description": "Success message, plus the row\u0027s clock disagreement if it has one.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCloseEchoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCloseEchoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PunchCloseEchoResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -20778,7 +20889,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileSessionsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileSessionsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileSessionsResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -24230,6 +24358,16 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "clockDisagreementSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Present only when this device\u0027s clock and the server\u0027s disagreed by more than\n\u0060WorkLogClocks.DisagreementThresholdSeconds\u0060: the device reading minus the server receipt,\nsigned. Null for ordinary drift and for a client that sent no clock. The phone never sees a\nreceipt instant, so this is the only way it can hear that its clock was off \u2014 and it arrives\nalready filtered, so no client holds a second copy of the threshold.",
+            "format": "int32"
           }
         },
         "description": "What the server holds for one punch after the upsert."
@@ -24702,6 +24840,21 @@
               "null",
               "string"
             ]
+          },
+          "billingCustomerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The bill-to customer this one\u0027s invoices are addressed to (\u0060Customer.BillingCustomerId\u0060,\nthe legacy \u0060idClienteFatturazione\u0060), or null when the customer bills for itself.",
+            "format": "uuid"
+          },
+          "billingCustomerName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "That customer\u0027s company name, resolved server-side so the detail screen can link to it without\na second request."
           }
         },
         "description": "Ready-to-render payload for the customer overview screen (\u0060GET /api/app/clienti/{id}/overview\u0060).\nApplication-tier contract (\u0060docs/patterns/application-api.md\u0060): Italian property names,\nno \u0060[JsonPropertyName]\u0060 (the existing camelCase policy already produces \u0060ragioneSociale\u0060,\n\u0060codiceFiscale\u0060, etc. from these PascalCase names), owned by the web app, no external\ncompatibility promise. Replaces the previous Italian-shaped hand-mocked customer detail with\na composed header plus computed counts; the three detail tabs stay canonical endpoints."
@@ -29407,6 +29560,65 @@
         },
         "description": "One offline session record from the mobile app.\nClientId is a client-generated dedup key (e.g. UUID).\nStartTime and EndTime are UTC timestamps from the device."
       },
+      "MobileSessionResult": {
+        "required": [
+          "clientId",
+          "workLogId",
+          "startTime",
+          "endTime",
+          "tipoOra",
+          "isActive"
+        ],
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The session\u0027s client-generated dedup key."
+          },
+          "workLogId": {
+            "type": "string",
+            "description": "The created/updated work-log entry\u0027s ID.",
+            "format": "uuid"
+          },
+          "startTime": {
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string",
+            "description": "The entry\u0027s start time-of-day."
+          },
+          "endTime": {
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The entry\u0027s end time-of-day (null while open)."
+          },
+          "tipoOra": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Classification code (int cast of \u0060TipoOraEnum\u0060).",
+            "format": "int32"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the entry is still open."
+          },
+          "clockDisagreementSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Present only when this device\u0027s clock and the server\u0027s disagreed by more than\n\u0060WorkLogClocks.DisagreementThresholdSeconds\u0060: the device reading minus the server receipt,\nsigned. Null for ordinary drift and for a client that sent no clock. The phone cannot compute\nthis itself \u2014 it never sees a receipt instant \u2014 so the answer to \u0022was my clock off?\u0022 travels\nback with the session it concerns, already filtered so the client holds no copy of the threshold.",
+            "format": "int32"
+          }
+        },
+        "description": "One row of Task\u0026lt;IReadOnlyList\u0026lt;MobileSessionResult\u0026gt;\u0026gt; IWorkLogMobileSyncService.UpsertMobileSessionsAsync(MobileSessionsRequest request, Guid tenantId, Guid userId, CancellationToken ct = default(CancellationToken))\u0027s result\n(one per request session, in request order). Serializes identically to the\n\u0060WorkLogController\u0060\u0027s former anonymous-object response shape."
+      },
       "MobileSessionsRequest": {
         "type": "object",
         "properties": {
@@ -29419,6 +29631,21 @@
           }
         },
         "description": "Request body for Task\u0026lt;IReadOnlyList\u0026lt;MobileSessionResult\u0026gt;\u0026gt; IWorkLogMobileSyncService.UpsertMobileSessionsAsync(MobileSessionsRequest request, Guid tenantId, Guid userId, CancellationToken ct = default(CancellationToken))\n(offline-first mobile batch session sync). Moved from \u0060WorkLogController\u0060 so the\nmobile-session upsert lives entirely in the WorkLogs module (ADR-005)."
+      },
+      "MobileSessionsResponse": {
+        "required": [
+          "sessions"
+        ],
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MobileSessionResult"
+            }
+          }
+        },
+        "description": "The batch answer: one MobileSessionResult per request session, in request order."
       },
       "MobileUserSyncResult": {
         "type": "object",
@@ -31405,6 +31632,51 @@
           }
         },
         "description": "Distinct Modello values in use across the tenant\u0027s active prodotti, sorted."
+      },
+      "PunchCloseEchoResponse": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "clockDisagreementSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "The answer to an online punch close: the confirmation message, plus the disagreement the row now\ncarries (the stronger of its open and close halves), filtered the same way as\nint? PunchEchoResponse.ClockDisagreementSeconds."
+      },
+      "PunchEchoResponse": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The row\u0027s primary key \u2014 what BasicPkResponse carried before.",
+            "format": "uuid"
+          },
+          "clockDisagreementSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Signed seconds, device reading minus server receipt, already filtered: null for ordinary drift,\nfor a client that sent no clock, and for an older app build. The phone never sees a receipt\ninstant, so this echo is the only way it can learn its own clock was off (plan\ndocs/superpowers/plans/2026-10-23-worklog-clock-disagreement.md \u00A72).",
+            "format": "int32"
+          }
+        },
+        "description": "The answer to an online punch write: the row it created, plus the clock disagreement the server\nmeasured on that request when the two clocks disagreed by more than\n\u0060WorkLogClocks.DisagreementThresholdSeconds\u0060."
       },
       "QueueSummaryDto": {
         "required": [
@@ -38471,6 +38743,14 @@
               "null",
               "string"
             ]
+          },
+          "deviceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The device\u0027s own clock reading at the moment it sent this batch, or null when the client has no\nclock to offer (web, kiosk, app versions before this contract). It is deliberately NOT the\nsession\u0027s start instant: a queued start can be hours old and may predate a phone clock\ncorrection, so comparing it with the receipt would measure queue latency and call it skew\n(plan \u00A72). The server derives the stored disagreement from it and never moves the recorded\ninstants because of it.",
+            "format": "date-time"
           }
         },
         "description": "One ticket timer session as a device recorded it."
@@ -38510,6 +38790,16 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "clockDisagreementSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "     Present only when this device\u0027s clock and the server\u0027s disagreed by more than\n     \u0060WorkLogClocks.DisagreementThresholdSeconds\u0060, and it is the device reading minus the\n     server receipt, signed. Null for ordinary drift and for a client that sent no clock.\n\n     The phone cannot compute this itself \u2014 it never sees the server\u0027s receipt instant \u2014 so the answer\nto \u0022was this phone\u0027s clock off?\u0022 travels back with the session it concerns. The threshold is\napplied server-side on purpose: WorkLogClocks is the single definition, and a client that\nre-implemented it would drift from the office\u0027s Correzioni list.",
+            "format": "int32"
           }
         },
         "description": "What the server holds for one session after the upsert."
@@ -38592,6 +38882,10 @@
           "requiresFollowUp": {
             "type": "boolean",
             "description": "Marks this status as the tenant\u0027s \u0022needs a follow-up visit\u0022 state (CSC requirement:\n\u0022Da Tornare\u0022) \u2014 a technician finishing an intervento in the field but flagging a second\nvisit is required lands the ticket here instead of a normal closed status."
+          },
+          "isInProgress": {
+            "type": "boolean",
+            "description": "Marks this status as the tenant\u0027s \u0022work has started\u0022 state (seeded as \u0022In corso\u0022) \u2014 the\nticket a technician moved from planned to being worked on, whether they started a work log\nor opened a rapportino on it."
           }
         },
         "description": "Represents a ticket status (StatoIntervento)."
@@ -38616,8 +38910,44 @@
           },
           "requiresFollowUp": {
             "type": "boolean"
+          },
+          "isInProgress": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Marks this status as the one a ticket moves to automatically when work starts on it\n(first work log or rapportino). At most one per tenant; setting it here clears any other."
           }
         }
+      },
+      "TicketTimerStartResponse": {
+        "required": [
+          "id",
+          "isActive"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The row the server holds (new, or the one the replayed clientId already named).",
+            "format": "uuid"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether that row is still running. A device that lost its reply and replayed the start after the\noffice closed the session gets \u0060false\u0060 and must not show a running clock."
+          },
+          "clockDisagreementSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "     Present only when this device\u0027s clock and the server\u0027s disagreed by more than\n     \u0060WorkLogClocks.DisagreementThresholdSeconds\u0060 at the moment of the request, and it is\n     the device reading minus the server receipt, signed. Null otherwise, including when the caller\n     sent no clock at all.\n\n     The threshold is applied here, server-side, and never on the phone: WorkLogClocks is\nthe single definition of what counts as a disagreement, and a client that re-implemented it would\ndrift from the office\u0027s Correzioni list. It is advice \u2014 the recorded instants are the device\u0027s,\nunmoved.",
+            "format": "int32"
+          }
+        },
+        "description": "What the device needs back from a start to mirror the session locally."
       },
       "TicketType": {
         "type": "object",
@@ -38728,7 +39058,8 @@
           "cliente",
           "priorita",
           "stato",
-          "richiedeSecondoIntervento"
+          "richiedeSecondoIntervento",
+          "dataScadenza"
         ],
         "type": "object",
         "properties": {
@@ -38762,6 +39093,14 @@
           },
           "richiedeSecondoIntervento": {
             "type": "boolean"
+          },
+          "dataScadenza": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The ticket\u0027s due date (\u0060Ticket.DueDate\u0060), or null when it has none. The backlog carries no\nordering of its own, so this is what tells the office which of two unplanned tickets is the\nmore urgent before opening either.",
+            "format": "date-time"
           }
         },
         "description": "One open ticket needing office attention: not yet scheduled, or flagged \u0022Da tornare\u0022\n(bool UnscheduledInterventoDto.RichiedeSecondoIntervento) \u2014 a technician finished the visit in the field but\na second one is needed."
