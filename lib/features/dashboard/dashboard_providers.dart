@@ -246,6 +246,13 @@ class WorkQueueBuckets {
   /// rows stand in for today's work.
   bool get hasTodayWork =>
       live.isNotEmpty || daFare != null || inAttesa.isNotEmpty || fatto.isNotEmpty;
+
+  /// Every open job still ahead today, in time order — [daFare] first, then [restOfToday].
+  ///
+  /// The dashboard renders all of these as full "Da fare" cards, which is what the header's own
+  /// "N DA FARE" count means. Only the first one used to get a card; the rest were demoted to a
+  /// compact tier labelled PROGRAMMATO, so on a day with two jobs the screen showed one.
+  List<Schedule> get actionableToday => [?daFare, ...restOfToday];
 }
 
 final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {

@@ -76,11 +76,10 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('an all-day Programmato schedule does not render 00:00', (tester) async {
+    testWidgets('an all-day schedule today does not render 00:00', (tester) async {
       final dayStart = _today();
-      // Two schedules today: the first becomes "Da fare", pushing the second (all-day) into the
-      // compact "Programmato" tier, which renders through ListRow's `meta` slot instead of the
-      // focus card's badge row.
+      // Two schedules today: both are today's work, so both render as focus cards — the all-day
+      // one included, whose 0/0 placeholder minutes are not a real time of day.
       await db
           .into(db.schedules)
           .insert(
@@ -178,6 +177,27 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('every open job scheduled today shows as its own "Da fare" card', (tester) async {
+      final today = DateTime.now().toUtc();
+      final dayStart = DateTime.utc(today.year, today.month, today.day);
+      await insertSchedule(db, id: 'sched-1', activityDate: dayStart, title: 'Primo intervento');
+      await insertSchedule(db, id: 'sched-2', activityDate: dayStart, title: 'Secondo intervento');
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      // rh5w: the second job of the day used to be demoted to a compact tier labelled
+      // PROGRAMMATO, so the header's "2 DA FARE" stood over a single card and the second job read
+      // as planned for another day.
+      expect(find.text('Primo intervento'), findsOneWidget);
+      expect(find.text('Secondo intervento'), findsOneWidget);
+      expect(find.text('DA FARE'), findsNWidgets(2));
+      expect(find.textContaining('PROGRAMMATO'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('a booked today shows its own rows and does not claim the day is empty', (
       tester,
     ) async {
@@ -267,12 +287,13 @@ void main() {
           );
     }
 
-    testWidgets('jobs still ahead today are headed RESTO DI OGGI, never PROGRAMMATO', (
+    testWidgets("every one of today's jobs is its own card, never a PROGRAMMATO tier", (
       tester,
     ) async {
-      // Two jobs today: the earlier one is the single Da fare card, the later one is queued behind
-      // it. That second tier used to carry the same heading as the next-seven-days block, so the
-      // technician read this morning's second job as future work.
+      // Two jobs today. Both belong to today, so both get a focus card. The second one used to be
+      // queued into a compact tier — titled RESTO DI OGGI, and before that PROGRAMMATO, the same
+      // word the next-seven-days block uses — so a technician reading the screen took this
+      // morning's second job as future work.
       final dayStart = _today();
       await insertSchedule(
         db,
@@ -292,9 +313,9 @@ void main() {
       await tester.pumpWidget(_buildSection(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('RESTO DI OGGI'), findsOneWidget);
+      expect(find.textContaining('RESTO DI OGGI'), findsNothing);
       expect(find.textContaining('PROGRAMMATO'), findsNothing);
-      // Both of today's jobs are on the screen under the today block, neither under the week.
+      // Both of today's jobs are focus cards under the today block, neither under the week.
       expect(find.text('Manutenzione ordinaria trimestrale'), findsOneWidget);
       expect(find.text('Manutenzione ordinaria semestrale'), findsOneWidget);
       expect(find.textContaining('PROSSIMI 7 GIORNI'), findsNothing);
