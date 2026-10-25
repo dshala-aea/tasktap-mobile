@@ -74,6 +74,8 @@ class SyncService {
       await _applyReportAggregate(payload);
       // The caller's own ticket timer sessions, after the tickets they point at.
       await _applyTicketTimers(payload);
+      // The tickets' own change history — the Storico timeline the device used to lack entirely.
+      await _applyTicketHistory(payload);
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
@@ -517,12 +519,18 @@ class SyncService {
       await (db.delete(db.ticketAssets)..where((r) => r.ticketId.isIn(drop))).go();
       await (db.delete(db.cachedTicketControls)..where((r) => r.ticketId.isIn(drop))).go();
       await (db.delete(db.checklistOmittedTickets)..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(db.ticketHistory)..where((h) => h.ticketId.isIn(drop))).go();
       await (db.delete(db.tickets)..where((t) => t.id.isIn(drop))).go();
     }
     // Fabbisogno has no manifest of its own: it follows the ticket. This also clears rows that
     // arrived for a ticket the mirror never held at all.
     await db.customStatement(
       'DELETE FROM ticket_materiali WHERE ticket_id NOT IN (SELECT id FROM tickets)',
+    );
+    // Same rule for history: a ticket that left scope takes its timeline with it, and a row whose
+    // ticket the mirror never held has nothing to render against.
+    await db.customStatement(
+      'DELETE FROM ticket_history WHERE ticket_id NOT IN (SELECT id FROM tickets)',
     );
   }
 
@@ -1312,6 +1320,38 @@ class SyncService {
               isPendingSync: const Value(false),
               syncError: const Value(null),
               updatedAt: Value(w.updatedAt),
+            ),
+          );
+    }
+  }
+
+  /// A ticket's recorded field changes — the Storico timeline, which used to exist only online.
+  ///
+  /// UPSERT ONLY, never a per-ticket replace. History is append-only on the server and a full sync
+  /// carries just a window of it, so replacing a ticket's set from this payload would delete rows
+  /// the server deliberately withheld — the exact trap the report children close by re-sending
+  /// everything. Here the cutoff is exact instead, so nothing needs re-sending.
+  ///
+  /// Rows leave with their ticket: the ticket manifest prunes them (`_pruneTickets`).
+  Future<void> _applyTicketHistory(SyncResultDto payload) async {
+    if (!payload.carriesTicketHistory) return;
+    if (payload.ticketHistory.isEmpty) return;
+
+    // One statement per row rather than a `db.batch`: drift's `Batch` has no
+    // `insertOnConflictUpdate` (the method lives on the insert statement), and the volume here is a
+    // few hundred rows at most — the same shape `_applyTicketTimers` above uses.
+    for (final h in payload.ticketHistory) {
+      await db
+          .into(db.ticketHistory)
+          .insertOnConflictUpdate(
+            TicketHistoryCompanion.insert(
+              id: h.id,
+              ticketId: h.ticketId,
+              fieldName: h.fieldName,
+              oldValue: Value(h.oldValue),
+              newValue: Value(h.newValue),
+              changedByUserId: h.changedByUserId,
+              changedAt: h.changedAt,
             ),
           );
     }

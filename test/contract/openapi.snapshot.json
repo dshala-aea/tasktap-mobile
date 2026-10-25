@@ -29682,6 +29682,13 @@
             },
             "description": "The caller\u0027s OWN ticket timer sessions: the 90-day window, plus any still running. Re-sent in full on\nevery sync rather than delta-filtered \u2014 a session the device queued and the server accepted has no\nmarker the phone can observe beyond the row appearing. Other users\u0027 sessions never travel here; a\nsupervisor reads those online."
           },
+          "ticketHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncTicketHistoryDto"
+            },
+            "description": "The recorded changes of every ticket in scope \u2014 the Storico tab\u0027s timeline, which until now\nwas online-only because the device held nothing to render."
+          },
           "checklistTruncated": {
             "type": "boolean",
             "description": "True when the per-sync cap on asset-level checklist rows (int MobileUserSyncService.MaxAssetControlRowsPerSync)\nleft tickets out, or when the first ticket alone exceeds it (it is still sent whole)."
@@ -37021,6 +37028,58 @@
           }
         },
         "description": "One materialised checklist row with its PINNED definition (label, type, options, required, group) and its current answer.\nGuid? SyncTicketControlDto.ProdottoAssistenzaId is null for a ticket-level row."
+      },
+      "SyncTicketHistoryDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "ticketId",
+          "fieldName",
+          "oldValue",
+          "newValue",
+          "changedByUserId",
+          "changedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ticketId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fieldName": {
+            "type": "string"
+          },
+          "oldValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "newValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "changedByUserId": {
+            "type": "string",
+            "description": "Who made the change. Guid Guid.Empty means no person \u2014 a background job or the customer\nportal \u2014 and the phone renders it as a system change rather than inventing a name.",
+            "format": "uuid"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "One recorded change of one ticket, as the device mirrors it for the offline Storico tab."
       },
       "SyncTicketWorkLogDto": {
         "required": [
