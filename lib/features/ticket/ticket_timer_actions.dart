@@ -123,9 +123,21 @@ Future<bool> stopTicketTimer(WidgetRef ref, String ticketId) async {
     throw const TicketTimerNotOnDevice();
   }
   try {
+    // The key of the session being closed, when this device holds it. A close whose reply is lost
+    // arrives at a server that already stopped the timer, and a keyless retry is answered "no active
+    // timer" — indistinguishable, here, from a close that never landed, so the bar reported a failure
+    // over hours that were already booked. Sent as null when the mirror has no key (a session another
+    // device started), which is exactly the previous behaviour.
+    final open = (await repo.forTicket(ticketId))
+        .where((t) => t.endUtc == null && t.endSeconds == null)
+        .toList();
     final disagreement = await ref
         .read(ticketWorkflowApiClientProvider)
-        .stopTimer(ticketId, deviceUtc: DateTime.now().toUtc());
+        .stopTimer(
+          ticketId,
+          clientId: open.isEmpty ? null : open.first.clientId,
+          deviceUtc: DateTime.now().toUtc(),
+        );
     // The close's answer carries the row's merged disagreement — same banner the start's answer
     // raises, so a skew first seen at the start is not lost when the session ends online.
     if (disagreement != null) {

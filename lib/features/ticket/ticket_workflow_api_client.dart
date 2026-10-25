@@ -114,15 +114,24 @@ class TicketWorkflowApiClient {
 
   /// POST /api/tickets/{ticketId}/worklogs/stop — same [deviceUtc] contract as [startTimer].
   ///
+  /// [clientId] names the session being closed, when the mirror still knows it. A reply lost on the
+  /// way back leaves the server with the timer already stopped, so a blind retry used to be answered
+  /// "no active timer found" — a 404 this client cannot tell apart from a close that never landed,
+  /// which told the technician the clock could not be stopped while the hours were already booked.
+  /// The same key turns that retry into the answer the first attempt would have given.
+  ///
   /// Returns the row's clock disagreement when the server flagged one, or null: ordinary drift, no
   /// device clock and an older backend all answer the same way. The response carries the *merged*
   /// value — a phone corrected between the two taps still hears about the skew it started with —
   /// and the phone only relays it; it never compares the clocks itself.
-  Future<int?> stopTimer(String ticketId, {DateTime? deviceUtc}) async {
+  Future<int?> stopTimer(String ticketId, {String? clientId, DateTime? deviceUtc}) async {
     final response = await _run(
       () => _dio.post<dynamic>(
         '/api/tickets/$ticketId/worklogs/stop',
-        queryParameters: _deviceQuery(deviceUtc),
+        queryParameters: {
+          'clientId': ?clientId,
+          ...?_deviceQuery(deviceUtc),
+        },
       ),
       fallback: 'Impossibile fermare il timer.',
     );

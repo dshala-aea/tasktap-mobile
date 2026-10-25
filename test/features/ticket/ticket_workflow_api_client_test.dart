@@ -279,6 +279,26 @@ void main() {
       expect(await _clientThatAnswers(adapter).stopTimer('t1'), isNull);
     });
 
+    test('a stop carries the key of the session it closes', () async {
+      final adapter = _StubAdapter('{"message":"Timer stopped"}', status: 200);
+
+      await _clientThatAnswers(adapter).stopTimer('t1', clientId: 'tap-close');
+
+      // The server answers a repeated key with the closed row instead of "no active timer", which
+      // is what turns a lost reply into a retry that succeeds.
+      expect(adapter.captured?.queryParameters['clientId'], 'tap-close');
+    });
+
+    test('a stop with no key sends none, exactly as before the parameter existed', () async {
+      final adapter = _StubAdapter('{"message":"Timer stopped"}', status: 200);
+
+      await _clientThatAnswers(adapter).stopTimer('t1');
+
+      // An older backend and a session this device never named both depend on the absent key, not
+      // on an empty one: the bind is `string? clientId`, and "" is not the same request.
+      expect(adapter.captured?.queryParameters.containsKey('clientId'), isFalse);
+    });
+
     test('no connection is reported as no connection, not as a server error', () async {
       final client = _clientThatThrows(_err(type: DioExceptionType.connectionError));
 
