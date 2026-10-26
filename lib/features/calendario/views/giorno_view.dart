@@ -201,7 +201,9 @@ class _EventBlock extends ConsumerWidget {
       double.infinity,
     );
 
-    final statusName = scheduleStatusName(schedule.statusId);
+    // Absence-owned rows read as "Assenza": their own status is the tenant's default work status,
+    // which would paint a block of Ferie in the "Pianificato" colour of a job to start.
+    final statusName = scheduleDisplayStatus(schedule);
     final pair = statusColor(context, statusName);
     final placeLines = _placeLines(where, height, withTime: !schedule.allDay);
 

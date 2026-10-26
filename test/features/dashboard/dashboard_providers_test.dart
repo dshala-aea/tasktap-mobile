@@ -80,6 +80,7 @@ void main() {
     required String? ticketId,
     required DateTime day,
     int statusId = _daFare,
+    bool isAssenza = false,
   }) => db
       .into(db.schedules)
       .insert(
@@ -96,6 +97,7 @@ void main() {
           locationId: 'loc-1',
           title: 'Intervento $id',
           description: '',
+          isAssenza: Value(isAssenza),
         ),
       );
 
@@ -312,5 +314,90 @@ void main() {
 
     expect(queue.live, isEmpty);
     expect(queue.fatto.map((s) => s.id), ['s-1']);
+  });
+
+  // ── Absences ───────────────────────────────────────────────────────────────
+  //
+  // An approved Ferie/Permesso/Malattia is written server-side as a completely ordinary Schedule
+  // row and keeps the tenant's default work status, so nothing in the row itself says "do not
+  // work this". Without the flag the day of leave counted in "INTERVENTI OGGI" and, worse, became
+  // the dashboard's next job to start.
+
+  test('an absence today is not queued as work, and is not counted', () async {
+    await seedStatus(id: 1, name: 'Aperto');
+    await seedTicket(id: 't-1', statusId: 1);
+    await seedSchedule(id: 's-job', ticketId: 't-1', day: today);
+    // No ticket, the default "Pianificato" status: exactly what the server sends for an absence.
+    await seedSchedule(id: 's-ferie', ticketId: null, day: today, isAssenza: true);
+
+    final queue = await readQueue();
+    final stats = container.read(dashboardStatsProvider);
+
+    expect(queue.absences.map((s) => s.id), ['s-ferie']);
+    expect(queue.daFare?.id, 's-job', reason: 'the absence must not take the "next job" slot');
+    expect(queue.restOfToday, isEmpty);
+    expect(queue.fatto, isEmpty);
+    expect(stats.todayCount, 1, reason: '"INTERVENTI OGGI" counts jobs, not leave');
+  });
+
+  test('a day that is only leave says so instead of looking empty', () async {
+    await seedSchedule(id: 's-ferie', ticketId: null, day: today, isAssenza: true);
+
+    final queue = await readQueue();
+    final stats = container.read(dashboardStatsProvider);
+
+    expect(queue.hasTodayWork, isFalse);
+    expect(queue.absences, hasLength(1));
+    expect(stats.todayCount, 0);
+  });
+
+  test("tomorrow's absence is not work ahead, and not counted as such", () async {
+    await seedStatus(id: 1, name: 'Aperto');
+    await seedTicket(id: 't-1', statusId: 1);
+    await seedSchedule(
+      id: 's-job-tomorrow',
+      ticketId: 't-1',
+      day: today.add(const Duration(days: 1)),
+    );
+    await seedSchedule(
+      id: 's-ferie-tomorrow',
+      ticketId: null,
+      day: today.add(const Duration(days: 1)),
+      isAssenza: true,
+    );
+
+    final queue = await readQueue();
+    final stats = container.read(dashboardStatsProvider);
+
+    expect(queue.upcoming.map((s) => s.id), ['s-job-tomorrow']);
+    expect(stats.upcomingCount, 1);
+  });
+
+  test('an absence outranks a cancelled status, a timer and a closed ticket', () async {
+    // A cancelled-but-absent row is still an absence: the flag describes what owns the row, and the
+    // queue must never resurrect it as work through any of the other signals.
+    await seedStatus(id: 1, name: 'Aperto');
+    await seedStatus(id: 6, name: 'Chiuso', isClosed: true);
+    await seedTicket(id: 't-closed', statusId: 6);
+    await seedRunningTimer('t-closed');
+    await seedSchedule(id: 's-x', ticketId: 't-closed', day: today, isAssenza: true);
+    await seedSchedule(
+      id: 's-y',
+      ticketId: null,
+      day: today,
+      statusId: _annullato,
+      isAssenza: true,
+    );
+
+    final queue = await readQueue();
+
+    // Both rows carry the same start time, so their relative order is unspecified — assert the
+    // membership, not a list order the query never promised.
+    expect(queue.absences.map((s) => s.id), containsAll(['s-x', 's-y']));
+    expect(queue.absences, hasLength(2));
+    expect(queue.live, isEmpty);
+    expect(queue.fatto, isEmpty);
+    expect(queue.daFare, null);
+    expect(queue.inAttesa, isEmpty);
   });
 }

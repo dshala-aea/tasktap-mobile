@@ -57,7 +57,9 @@ class ScheduleInfoSheet extends ConsumerWidget {
     final timeRange = schedule.allDay
         ? null
         : '${formatMinutes(schedule.timeStartMinutes)} – ${formatMinutes(schedule.timeEndMinutes)}';
-    final statusName = scheduleStatusName(schedule.statusId);
+    // "Assenza" for an absence-owned row — see `scheduleDisplayStatus`. Its raw status is the
+    // tenant's default work status, the same one a fresh appointment carries.
+    final statusName = scheduleDisplayStatus(schedule);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(

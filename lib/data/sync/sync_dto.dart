@@ -1385,6 +1385,12 @@ class ScheduleDto {
   /// fourth at all: a job assigned to a squadra named nobody the device could see.
   final List<ScheduleAssigneeDto> assignees;
 
+  /// True when this row exists because an approved absence owns it, not because anyone scheduled
+  /// work. The server writes an absence as an ordinary `Schedule`, so this flag is the only thing
+  /// that tells the two apart; every write to such a row is rejected with
+  /// `absence_schedule_read_only`.
+  final bool isAssenza;
+
   const ScheduleDto({
     required this.id,
     required this.tenantId,
@@ -1401,6 +1407,7 @@ class ScheduleDto {
     required this.title,
     required this.description,
     this.assignees = const [],
+    this.isAssenza = false,
   });
 
   factory ScheduleDto.fromJson(Map<String, dynamic> j) {
@@ -1426,8 +1433,31 @@ class ScheduleDto {
       assignees: (j['assignees'] as List<dynamic>? ?? const [])
           .map((e) => ScheduleAssigneeDto.fromJson(e as Map<String, dynamic>))
           .toList(growable: false),
+      isAssenza: j['isAssenza'] as bool? ?? false,
     );
   }
+
+  /// Every key this DTO reads off the wire, pinned against the server schema by
+  /// `sync_inbound_contract_test.dart`. Entity-graph DTOs are compared one way only — the app may
+  /// leave a server key unread, but it must never read one the server does not declare.
+  static const Set<String> readKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'ticketId',
+    'activityDate',
+    'timeStart',
+    'timeEnd',
+    'userId',
+    'statusId',
+    'locationId',
+    'allDay',
+    'title',
+    'description',
+    'assignees',
+    'isAssenza',
+  };
 
   /// The directly assigned technician, or null when the job is only assigned to a squadra.
   ///

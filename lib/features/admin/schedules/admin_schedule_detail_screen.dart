@@ -10,7 +10,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
-import '../../../features/calendario/calendario_providers.dart' show scheduleStatusName;
+import '../../../features/calendario/calendario_providers.dart' show scheduleDisplayStatus;
 import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -30,19 +30,25 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheduleAsync = ref.watch(adminScheduleDetailProvider(scheduleId));
+    // An absence-owned row (approved Ferie/Permesso/Malattia) is read-only by construction: the
+    // backend rejects every write to it with `absence_schedule_read_only`. Offering "Modifica"
+    // would open a form whose save can only fail, so the action is absent rather than broken.
+    final isAbsence = scheduleAsync.valueOrNull?.isAssenza ?? false;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-        child: AppFab(
-          icon: LucideIcons.pencil,
-          tooltip: 'Modifica',
-          onPressed: () async {
-            await context.push<bool>('/altro/pianificazioni/$scheduleId/modifica');
-          },
-        ),
-      ),
+      floatingActionButton: isAbsence
+          ? null
+          : Padding(
+              padding: EdgeInsets.only(bottom: context.fabSafeBottom),
+              child: AppFab(
+                icon: LucideIcons.pencil,
+                tooltip: 'Modifica',
+                onPressed: () async {
+                  await context.push<bool>('/altro/pianificazioni/$scheduleId/modifica');
+                },
+              ),
+            ),
       body: SafeArea(
         child: scheduleAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -110,7 +116,9 @@ class _ScheduleDetailBody extends ConsumerWidget {
         (teamMemberNames.isEmpty ? null : 'Squadra: ${teamMemberNames.join(', ')}');
     final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
     final sedeName = _findLocationName(locations, schedule.locationId);
-    final statusName = scheduleStatusName(schedule.statusId);
+    // "Assenza" when an approved absence owns this row — its raw status is the tenant's default
+    // work status, the same one a fresh appointment carries.
+    final statusName = scheduleDisplayStatus(schedule);
     final tickets = ref.watch(allTicketsProvider).valueOrNull ?? const [];
     final linkedTicketTitle = schedule.ticketId == null
         ? null

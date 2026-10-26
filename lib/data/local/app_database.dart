@@ -371,6 +371,17 @@ class Schedules extends Table {
   TextColumn get title => text()();
   TextColumn get description => text()();
 
+  /// True when this row exists because an absence request (Ferie/Permesso/Malattia) was approved,
+  /// not because anyone scheduled work. Mirrors `SyncScheduleDto.isAssenza` (schema 57).
+  ///
+  /// The server writes an approved absence as a completely ordinary `Schedule` row — same shape,
+  /// same assignment writer as a real appointment — so without this flag the device cannot tell
+  /// the two apart and reads a week of Ferie as a week of jobs: counted in "interventi oggi",
+  /// queued under "Da fare" as the next thing to start. The row is read-only by construction: the
+  /// backend rejects every write to an absence-owned schedule with
+  /// `DomainRuleException("absence_schedule_read_only")`.
+  BoolColumn get isAssenza => boolean().withDefault(const Constant(false))();
+
   // Who is on this schedule lives in [ScheduleAssignees]. teamLeadId, staffIds and squadraId
   // were dropped server-side (backend ADR-0009) and stopped arriving; keeping them here would
   // have left three columns that are null forever and a staffIds blob that never parses to
@@ -1648,7 +1659,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 56;
+  int get schemaVersion => 58;
 
   @override
   MigrationStrategy get migration {
@@ -2310,6 +2321,27 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(ticketStatuses, ticketStatuses.isInProgress);
           }
         }
+        if (from < 58) {
+          // `schedules.isAssenza` — an approved Ferie/Permesso/Malattia is an ordinary Schedule row
+          // server-side, so the flag in `SyncScheduleDto.isAssenza` is the only thing that tells
+          // the device an absence-owned row apart from a real appointment. Without it a whole week
+          // of leave counted as "interventi oggi" and sat in the work queue as the next job.
+          //
+          // Nothing to backfill locally, but `syncCursorGeneration` is bumped to v17 alongside
+          // this: the flag was already on the wire, and a delta sync only re-sends schedules that
+          // changed, so an absence approved before the upgrade would keep reporting `false` on
+          // every device that never touched it — i.e. on every absence, which nobody edits.
+          //
+          // Numbered 58, not 56: this branch was open when 56 (`ticket_statuses.isInProgress`) and
+          // 57 (`tickets.prodottoAssistenzaIdsJson`, `draft_reports.numero`) landed on main, and the
+          // ladder is linear.
+          //
+          // Same `PRAGMA table_info` guard as 50, 51, 55, 56 and 57, for the same reason: a
+          // re-created table or a half-applied step must not kill the app on `duplicate column name`.
+          if (!await _columnExists(m.database, 'schedules', 'is_assenza')) {
+            await m.addColumn(schedules, schedules.isAssenza);
+          }
+        }
       },
     );
   }
@@ -2432,7 +2464,18 @@ class AppDatabase extends _$AppDatabase {
   ///      priority stripe would stay blank until somebody happened to edit the job. Same reasoning as
   ///      v3/v4/v6/v8. The `draft_reports.is_ai_assisted` fix in the same release needs no bump of its
   ///      own: the mobile payload carries every Bozza the user authored, in full, on each sync.
-  static const String syncCursorGeneration = 'v15';
+  /// v17 — 2026-10-26, schema 58 added `schedules.isAssenza`. Same reasoning as v10/v13: the flag
+  ///      was already on the wire inside `SyncScheduleDto`, and a delta sync only re-sends
+  ///      schedules that changed, so an absence approved before the upgrade would keep reporting
+  ///      "not an absence" on every device whose cursor is already past it — and an absence is
+  ///      exactly a row nobody edits. Only a full sync can refill them.
+  ///
+  ///      The step is 58 and this entry is v17 because the field-parity slice (schema 57 / cursor
+  ///      v16, `tickets.prodottoAssistenzaIdsJson` + `draft_reports.numero`) was open on the same
+  ///      base: the ladder is linear, and whichever branch lands second moves up. The two bumps are
+  ///      independent, so a device that upgrades across both releases pays one extra full download
+  ///      at most, never a wrong read.
+  static const String syncCursorGeneration = 'v17';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

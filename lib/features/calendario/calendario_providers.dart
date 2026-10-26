@@ -88,6 +88,15 @@ String scheduleStatusName(int statusId) {
   };
 }
 
+/// What a schedule reads as, to a person looking at it.
+///
+/// An absence-owned row (approved Ferie/Permesso/Malattia) is an ordinary `Schedule` server-side
+/// and carries the tenant's default work status — the same "Pianificato" a fresh appointment has.
+/// Printing that on a week of leave says it is a job waiting to be started, which is exactly the
+/// misreading `SyncScheduleDto.isAssenza` exists to prevent. Those rows read as what they are.
+String scheduleDisplayStatus(Schedule schedule) =>
+    schedule.isAssenza ? 'Assenza' : scheduleStatusName(schedule.statusId);
+
 // ── Group helpers ──────────────────────────────────────────────────────────────
 
 /// Groups a list of [Schedule]s by their local-date (year/month/day).

@@ -469,4 +469,34 @@ void main() {
       expect(c.numberValue, 2.5);
     },
   );
+
+  // ── Entity-graph DTOs: one-way key comparison ──────────────────────────────
+  //
+  // The reference DTOs above publish `wireKeys`, a deliberate declaration of a whole wire shape,
+  // so they are compared with the snapshot in both directions. An entity-graph DTO like
+  // `ScheduleDto` reads a subset of a server entity, so the assertion is one-way: every key the
+  // app reads must exist on the server schema. Reading a key the server never sends is the failure
+  // this catches — `TicketDto` read `priority` for months while the server sent `priorita`, and
+  // every mirrored ticket held a null nobody could see.
+  test('ScheduleDto: every key the app reads exists on the server', () {
+    expect(
+      ScheduleDto.readKeys.difference(props('SyncScheduleDto')),
+      isEmpty,
+      reason: 'the app reads keys the server does not declare',
+    );
+  });
+
+  test('ScheduleDto reads the absence flag off the key the server sends', () {
+    final sample = instance('SyncScheduleDto');
+    expect(sample['isAssenza'], isA<bool>(), reason: 'the snapshot declares it required');
+
+    final ferie = ScheduleDto.fromJson(sample..['isAssenza'] = true);
+    expect(ferie.isAssenza, isTrue);
+    // Both directions: a real appointment must not read as an absence, or the dashboard would
+    // filter every job out of the work queue instead of every absence.
+    expect(
+      ScheduleDto.fromJson(sample..['isAssenza'] = false).isAssenza,
+      isFalse,
+    );
+  });
 }

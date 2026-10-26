@@ -38,7 +38,7 @@ class WorkQueueSection extends ConsumerWidget {
     final q = ref.watch(workQueueProvider);
 
     // Nothing anywhere: one empty state for the whole queue.
-    if (!q.hasTodayWork && q.upcoming.isEmpty) {
+    if (!q.hasTodayWork && q.upcoming.isEmpty && q.absences.isEmpty) {
       // The queue is built from the mirror, so "nothing anywhere" is only the technician's day
       // once a sync has landed on this phone. On a device that has never synced it is the phone
       // that has nothing — wishing them a good day on the strength of a missing download is the
@@ -68,6 +68,15 @@ class WorkQueueSection extends ConsumerWidget {
 
     final todaySections = <Widget>[];
 
+    // An approved absence is not work, but it is also not a free day — it is the reason the queue
+    // below is short. Stated first and once, never as a job card: an absence-owned schedule is
+    // read-only (the backend rejects every write to it), so a card offering "Apri" would promise
+    // an action that cannot exist.
+    if (q.absences.isNotEmpty) {
+      todaySections.add(
+        _CompactTier(title: 'ASSENZA', schedules: q.absences, tier: _Tier.assenza),
+      );
+    }
     for (final schedule in q.live) {
       todaySections.add(_FocusCard(schedule: schedule, tier: _Tier.live));
     }
@@ -98,7 +107,7 @@ class WorkQueueSection extends ConsumerWidget {
           // directly above rows dated tomorrow and later whenever the day itself was empty, and
           // a technician reading it could not tell "nothing today, but Thursday is booked" from
           // "nothing today" — the two look identical and mean different things.
-          if (q.hasTodayWork)
+          if (q.hasTodayWork || q.absences.isNotEmpty)
             ...todaySections
           else
             const Padding(
@@ -124,7 +133,7 @@ class WorkQueueSection extends ConsumerWidget {
   }
 }
 
-enum _Tier { live, daFare, programmato, inAttesa, fatto }
+enum _Tier { live, daFare, programmato, inAttesa, fatto, assenza }
 
 extension on _Tier {
   /// Icon + text together, always — see the signage grammar's own rule: a status is never color
@@ -141,6 +150,9 @@ extension on _Tier {
     // second icon for the same idea.
     _Tier.inAttesa => (LucideIcons.coffee, 'IN ATTESA'),
     _Tier.fatto => (LucideIcons.check, 'FATTO'),
+    // The Ferie e Permessi list's own leading glyph, so an approved absence reads the same on the
+    // dashboard as on the screen that lists it.
+    _Tier.assenza => (LucideIcons.calendarDays, 'ASSENZA'),
   };
 }
 

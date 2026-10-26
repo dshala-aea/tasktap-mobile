@@ -163,7 +163,9 @@ class _WeekEventChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final statusName = scheduleStatusName(schedule.statusId);
+    // Same rule as the Giorno block: absence-owned rows read as "Assenza", never as the tenant's
+    // default work status their server row happens to carry.
+    final statusName = scheduleDisplayStatus(schedule);
     final pair = statusColor(context, statusName);
 
     return Container(

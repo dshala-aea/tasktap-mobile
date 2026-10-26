@@ -971,6 +971,9 @@ class SyncService {
               allDay: Value(s.allDay),
               title: s.title,
               description: s.description,
+              // A column left out of the companion is not neutral: it takes its default on insert
+              // and is untouched on conflict, so every absence would be written as a job.
+              isAssenza: Value(s.isAssenza),
             ),
           );
 

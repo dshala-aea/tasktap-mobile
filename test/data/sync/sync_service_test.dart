@@ -119,6 +119,7 @@ Map<String, dynamic> _scheduleJson({
   String? updatedAt,
   String activityDate = '2026-06-21T00:00:00Z',
   List<Map<String, dynamic>>? assignees,
+  bool isAssenza = false,
 }) => {
   'id': id,
   'tenantId': 'tenant-1',
@@ -134,6 +135,9 @@ Map<String, dynamic> _scheduleJson({
   'allDay': false,
   'title': title,
   'description': 'Descrizione intervento',
+  // Required on `SyncScheduleDto`: the server always sends it. Omitting it from the fixture would
+  // make every test pass through the DTO's own `?? false` fallback instead of the wire value.
+  'isAssenza': isAssenza,
   'assignees':
       assignees ??
       [
@@ -348,6 +352,29 @@ void main() {
       // 08:00 → 480 minutes; 17:00 → 1020 minutes
       expect(s.timeStartMinutes, 480);
       expect(s.timeEndMinutes, 1020);
+    });
+
+    // An approved Ferie/Permesso/Malattia arrives as a completely ordinary schedule; the flag is
+    // the only thing that keeps the dashboard from queuing a week of leave as work.
+    test('an absence-owned schedule keeps its flag', () async {
+      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson(title: 'Ferie', isAssenza: true)]));
+
+      await svc.sync();
+
+      final row = await (db.select(db.schedules)..where((s) => s.id.equals('sched-1'))).getSingle();
+      expect(row.title, 'Ferie');
+      expect(row.isAssenza, isTrue);
+    });
+
+    // Not merely "the absence row is true": a real appointment must stay false, or every job on
+    // the dashboard would be filtered out of the queue instead of every absence.
+    test('a real appointment stores isAssenza false', () async {
+      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson()]));
+
+      await svc.sync();
+
+      final row = await (db.select(db.schedules)..where((s) => s.id.equals('sched-1'))).getSingle();
+      expect(row.isAssenza, isFalse);
     });
 
     test('stores who is on a schedule', () async {

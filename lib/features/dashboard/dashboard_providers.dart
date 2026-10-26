@@ -148,12 +148,14 @@ final runningTicketTimerIdsProvider = StreamProvider.autoDispose<Set<String>>((
 /// The single bucket a schedule lands in, decided once so the queue, the counters and the tests
 /// cannot disagree about a row.
 ///
-/// Order matters. A closed ticket outranks everything (no badge may invite work on it); a
-/// cancelled schedule outranks a running timer (a cancelled job is not work in any bucket); and
-/// "work has started" outranks the schedule's own status, because both the technician's timer and
-/// the ticket's own "In corso" flag say the job is under way while the office's schedule row still
-/// says "da fare".
-enum ScheduleBucket { live, waiting, done, actionable, cancelled }
+/// Order matters. An absence outranks everything — Ferie is not work in any bucket, whatever the
+/// row's own status says (the server writes an absence with the tenant's default status, the same
+/// "Pianificato" a fresh appointment carries). A closed ticket outranks the rest (no badge may
+/// invite work on it); a cancelled schedule outranks a running timer (a cancelled job is not work
+/// in any bucket); and "work has started" outranks the schedule's own status, because both the
+/// technician's timer and the ticket's own "In corso" flag say the job is under way while the
+/// office's schedule row still says "da fare".
+enum ScheduleBucket { absence, live, waiting, done, actionable, cancelled }
 
 ScheduleBucket bucketOfSchedule(
   Schedule schedule, {
@@ -161,6 +163,9 @@ ScheduleBucket bucketOfSchedule(
   required Set<String> runningTicketIds,
   required Set<String> inProgressTicketIds,
 }) {
+  if (schedule.isAssenza) {
+    return ScheduleBucket.absence;
+  }
   if (scheduleTicketIsClosed(schedule, closedTicketIds)) {
     return ScheduleBucket.done;
   }
@@ -205,14 +210,18 @@ final dashboardStatsProvider = Provider.autoDispose<DashboardStats>((ref) {
 
   // Counted through the same buckets the queue uses, so the hero's "DA FARE" remainder cannot
   // disagree with what the queue below it shows.
+  //
+  // Absences are excluded from every count: "INTERVENTI OGGI" says interventi, and an approved
+  // Ferie row is not one. Leaving them in read as a day of jobs that had all silently started.
   return DashboardStats(
-    todayCount: today.length,
+    todayCount: today.where((s) => bucket(s) != ScheduleBucket.absence).length,
     inProgressCount: today.where((s) => bucket(s) == ScheduleBucket.live).length,
     completedCount: today.where((s) => bucket(s) == ScheduleBucket.done).length,
     upcomingCount: upcoming
         .where(
           (s) =>
               bucket(s) != ScheduleBucket.cancelled &&
+              bucket(s) != ScheduleBucket.absence &&
               !scheduleTicketIsClosed(s, closedTickets),
         )
         .length,
@@ -244,6 +253,7 @@ class WorkQueueBuckets {
     required this.upcoming,
     required this.inAttesa,
     required this.fatto,
+    this.absences = const [],
   });
 
   /// statusId == 2 (In corso) today. Usually the same job(s) a running clock names in the hero's
@@ -272,6 +282,14 @@ class WorkQueueBuckets {
   /// tenant considers closed. The second group is the point — the office closes the ticket and
   /// leaves the schedule in "da fare", so status alone would keep calling it outstanding work.
   final List<Schedule> fatto;
+
+  /// Today's approved absences (Ferie/Permesso/Malattia), kept apart from the work tiers.
+  ///
+  /// They are neither work nor an empty day: a technician on Ferie has nothing to start, but
+  /// telling them "Nessun intervento oggi" while the office approved their leave hides the one
+  /// fact that explains the empty queue. The dashboard states it; it never enters a work tier, a
+  /// count, or the "PROSSIMI 7 GIORNI" list.
+  final List<Schedule> absences;
 
   /// Whether today itself has anything in it, in any state. False means the day is genuinely
   /// empty, whatever [upcoming] holds — the dashboard states that rather than letting future
@@ -307,9 +325,12 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
   final live = <Schedule>[];
   final inAttesa = <Schedule>[];
   final fatto = <Schedule>[];
+  final absences = <Schedule>[];
   final actionableToday = <Schedule>[];
   for (final schedule in today) {
     switch (bucket(schedule)) {
+      case ScheduleBucket.absence:
+        absences.add(schedule);
       case ScheduleBucket.live:
         live.add(schedule);
       case ScheduleBucket.waiting:
@@ -333,15 +354,19 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
     daFare: daFare,
     restOfToday: restOfToday,
     // Tomorrow's rows run through the same buckets: a closed ticket's job tomorrow is not work
-    // ahead, for the same reason a cancelled one is not, and the hero's count agrees.
+    // ahead, for the same reason a cancelled one is not, and the hero's count agrees. Neither is
+    // tomorrow's Ferie — planned leave is not a job waiting to be started, and the count in the
+    // hero says the same thing because it reads this same predicate.
     upcoming: upcoming
         .where(
           (s) =>
               bucket(s) != ScheduleBucket.cancelled &&
+              bucket(s) != ScheduleBucket.absence &&
               !scheduleTicketIsClosed(s, closedTickets),
         )
         .toList(),
     inAttesa: inAttesa,
     fatto: fatto,
+    absences: absences,
   );
 });

@@ -138,7 +138,9 @@ class _ScheduleListRow extends ConsumerWidget {
     final timeRange = schedule.allDay
         ? null
         : '${formatMinutes(schedule.timeStartMinutes)} – ${formatMinutes(schedule.timeEndMinutes)}';
-    final statusName = scheduleStatusName(schedule.statusId);
+    // `scheduleDisplayStatus`, not the raw status id: an approved absence carries the tenant's
+    // default work status and would otherwise be listed as a job waiting to start.
+    final statusName = scheduleDisplayStatus(schedule);
     final statusPair = statusColor(context, statusName);
 
     return ListRow(

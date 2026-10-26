@@ -360,4 +360,78 @@ void main() {
       await tester.pumpAndSettle();
     });
   });
+
+  group('WorkQueueSection absences', () {
+    Future<void> insertAbsence(AppDatabase db, DateTime day, {String title = 'Ferie'}) {
+      return db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-assenza',
+              tenantId: 'tenant-1',
+              createdAt: day,
+              activityDate: day,
+              timeStartMinutes: 0,
+              timeEndMinutes: 1439,
+              userId: 'u1',
+              statusId: 1, // the tenant's default work status — what the server sends for an absence
+              locationId: '00000000-0000-0000-0000-000000000000',
+              allDay: const Value(true),
+              title: title,
+              description: '',
+              isAssenza: const Value(true),
+            ),
+          );
+    }
+
+    testWidgets('a day of leave is stated as ASSENZA, not as an empty day', (tester) async {
+      await insertAbsence(db, _today());
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      // The name the server puts on the row, and the tier that says what it is: a technician on
+      // Ferie must not read "Nessun intervento oggi" as "the office forgot to schedule me".
+      expect(find.text('Ferie'), findsOneWidget);
+      expect(find.textContaining('ASSENZA'), findsOneWidget);
+      expect(find.text('Nessun lavoro assegnato per la giornata di oggi.'), findsNothing);
+      // Not work: no "Da fare" badge, no card inviting the technician to start it.
+      expect(find.text('DA FARE'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an absence does not take the next-job slot from real work', (tester) async {
+      final dayStart = _today();
+      await insertAbsence(db, dayStart);
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-job',
+              tenantId: 'tenant-1',
+              createdAt: dayStart,
+              activityDate: dayStart,
+              timeStartMinutes: 540,
+              timeEndMinutes: 660,
+              userId: 'u1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Caldaia',
+              description: '',
+            ),
+          );
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Caldaia'), findsOneWidget);
+      expect(find.text('DA FARE'), findsOneWidget);
+      expect(find.textContaining('ASSENZA'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
 }
