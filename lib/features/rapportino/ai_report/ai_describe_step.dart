@@ -334,6 +334,11 @@ class _MicOrbState extends State<_MicOrb> with SingleTickerProviderStateMixin {
                 );
               },
             ),
+            // Bare GestureDetector, not AppTappable, for the same reason timbra's disc has none:
+            // this is a 120 dp solid saturated disc sitting inside two pulsing halos, and ink over
+            // that glow reads as a smudge rather than as a press. The orb answers a tap by itself
+            // within the frame — the rings speed up and the mic becomes a stop square — so the
+            // press is not silent.
             GestureDetector(
               onTap: widget.onTap,
               child: Opacity(

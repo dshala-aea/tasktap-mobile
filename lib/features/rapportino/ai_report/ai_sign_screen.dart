@@ -277,9 +277,10 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
                                 ),
                               ),
                             ] else ...[
-                              GestureDetector(
+                              AppTappable(
                                 key: const ValueKey('ai-sign-capture'),
                                 onTap: _capturing || _sending ? null : () => _capture(notifier),
+                                borderRadius: BorderRadius.circular(16),
                                 child: AiCard(
                                   todo: true,
                                   padding: EdgeInsets.zero,

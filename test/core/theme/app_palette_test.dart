@@ -237,8 +237,13 @@ void main() {
     // moment a technician started entering data.
     //
     // The signature dialog keeps its AppBar on purpose: it is a full-screen modal dismissed with
-    // an X, and ScreenHeader draws a back chevron.
-    const allowed = {'lib/features/rapportino/steps/step_riepilogo.dart'};
+    // an X, and ScreenHeader draws a back chevron. There are two of them because the rapportino
+    // has two signature surfaces — the editor's own step, and the AI wizard's `ai_sign_screen`,
+    // which the Firma step opens over the wizard.
+    const allowed = {
+      'lib/features/rapportino/steps/step_riepilogo.dart',
+      'lib/features/rapportino/ai_report/ai_sign_screen.dart',
+    };
 
     final offenders = <String>[];
     for (final entity in Directory('lib').listSync(recursive: true)) {
