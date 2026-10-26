@@ -846,7 +846,13 @@ void main() {
       expect(find.text('Apri impostazioni'), findsOneWidget);
       expect(find.byKey(const ValueKey('mic-open-settings')), findsOneWidget);
       // Writing is untouched — the banner says so and the toggle is still there.
-      expect(find.byKey(const ValueKey('ai-toggle-writing')), findsOneWidget);
+      //
+      // The banner is inserted above the list, which pushes the toggle past the fold; the list does
+      // not mount what it cannot show, so it is revealed the way a thumb would reach it rather than
+      // asserted on an element that was never built.
+      final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
+      await _reveal(tester, toggle);
+      expect(toggle, findsOneWidget);
       await _unmount(tester);
     });
   });
@@ -1170,7 +1176,14 @@ void main() {
       ai.turnGate!.complete();
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('ai-retry')), findsOneWidget);
-      expect(confirmOn(), isFalse, reason: 'a turn has failed');
+      // Not "a disabled Conferma": while a turn sits unsent the footer's one action IS the retry, so
+      // the Modifica/Conferma row is not built at all. A disabled primary beside a live retry would
+      // read as the retry being the secondary action (see `_buildFooter`).
+      expect(
+        find.widgetWithText(AppButton, 'Conferma'),
+        findsNothing,
+        reason: 'a turn has failed',
+      );
 
       // Retrying the failed turn clears it, and Conferma comes back.
       await tester.tap(find.byKey(const ValueKey('ai-retry')));
