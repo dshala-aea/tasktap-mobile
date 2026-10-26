@@ -1356,7 +1356,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
               // re-recording.
               onPressed: busy || _usedDraftMessage != null
                   ? null
-                  : () => setState(() => _step = _AiStep.describe),
+                  : () => setState(() {
+                      _step = _AiStep.describe;
+                      // A compiled turn switches to the keyboard off (step 1 shows the mic orb), so
+                      // coming back here would land the technician on an orb while the sentence they
+                      // wrote sits hidden behind "Preferisci scrivere?". Bring the field back with the
+                      // text still in it: that is what "the description is kept" has to mean on screen.
+                      _writing = _inputCtrl.text.trim().isNotEmpty;
+                    }),
               style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
               child: Text(
                 'Descrivi di nuovo',
