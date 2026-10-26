@@ -26,6 +26,20 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
+		<!-- App Store Connect asks every upload whether the app uses non-exempt encryption. With
+		     this key absent the build sits at "Missing Compliance" in App Store Connect and cannot
+		     go to testers or be submitted until somebody answers the questionnaire by hand, for
+		     every build. Declaring the answer here makes it a property of the build instead.
+
+		     "false" is the accurate answer, not a shortcut. The app's own cryptography is SHA-256
+		     hashing (PKCE code-verifier, kiosk credential digest) and TLS through dart:io. Hashing
+		     is not encryption, and Apple exempts the OS-provided transport stack.
+
+		     It stops being accurate the moment the offline database is encrypted at rest or an
+		     app-level crypto library is added. test/platform/permission_declarations_test.dart
+		     fails on both, so the answer cannot quietly become a lie. -->
+		<key>ITSAppUsesNonExemptEncryption</key>
+		<false/>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>

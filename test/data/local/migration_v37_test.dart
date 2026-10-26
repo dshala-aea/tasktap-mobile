@@ -129,8 +129,12 @@ void main() {
   /// the old numbers, and a deleted contact has no tombstone to correct them. The sixth is v15: no
   /// schema change at all, just the `priorita` key — the column was filled from `priority`, which
   /// the server never sends, so every mirrored ticket held a null and only a full sync can refill
-  /// the ones nobody edits. This test is the record that no release moved the generation silently.
+  /// the ones nobody edits. The seventh is v16 (schema 59): the ticket's covered-product ids and the
+  /// rapportino's `numero`. Both are filled for every row only by a full sync, and a rapportino is
+  /// delta-filtered on `UpdatedAt` exactly like a ticket, so a draft nobody edits would otherwise
+  /// keep a null number forever. This test is the record that no release moved the generation
+  /// silently.
   test('the sync cursor generation is the one the current release set', () {
-    expect(AppDatabase.syncCursorGeneration, 'v15');
+    expect(AppDatabase.syncCursorGeneration, 'v16');
   });
 }
