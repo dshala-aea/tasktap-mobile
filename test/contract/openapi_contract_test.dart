@@ -89,6 +89,14 @@ void main() {
   group('rapportino submission matches the API schema', () {
     /// Every optional field populated — an all-nulls payload would assert nothing, because
     /// `toJson` drops what it has no value for and the unknown-key check would see an empty map.
+    ///
+    /// `customerSignatureAbsenceReason` / `...Note` are deliberately absent here: they ship on a
+    /// backend branch (`feat/report-signature-absence`) that has not merged, so
+    /// `openapi.snapshot.json` has no schema entry for them yet and `expectNoUnknownKeys` would
+    /// reject keys the server in fact accepts. Their wire shape is pinned by
+    /// `test/data/reports/submit_report_wire_shape_test.dart` in the meantime — that test asserts
+    /// the integer reason and the note are sent *only* when there is no signature allegato. Add
+    /// them to `fullRequest` when the snapshot is next refreshed from a master that has them.
     final fullRequest = SubmitReportRequest(
       id: '00000000-0000-0000-0000-000000000001',
       scheduleId: '00000000-0000-0000-0000-000000000002',

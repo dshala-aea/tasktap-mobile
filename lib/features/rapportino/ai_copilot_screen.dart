@@ -1366,6 +1366,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                   // editable, the same editor the technician already knows — and keeps the session
                   // alive, so what they change by hand survives the next turn. "Descrivi di nuovo"
                   // (the link above) is the cheaper route when the assistant got the story wrong.
+                  //
+                  // SPEC §4 asks for the cards to become editable in place, the footer turning into
+                  // Annulla/Salva. This opens the real editor instead: same fields, same validation,
+                  // and no second editing implementation to drift from the first. Conferma after
+                  // that is not a second draft — it confirms INTO the report the editor created
+                  // (applyConfirmedDraft is matched by identity), so neither path duplicates a line.
                   child: AppButton.secondary(
                     label: 'Modifica',
                     isLoading: _opening,
