@@ -36,10 +36,14 @@ class AiReviewStep extends StatelessWidget {
   final void Function(AiConfirmedEdit) onAccept;
   final void Function(AiCandidateFact item, {required bool reAdd}) onResolveHeld;
 
-  static String _hours(double h) {
-    final rounded = h == h.roundToDouble() ? h.round().toString() : h.toString().replaceAll('.', ',');
-    return '$rounded h';
-  }
+  /// Italian decimal comma, integer when the value is whole.
+  ///
+  /// Ore already obeyed this rule while Materiali printed the raw `double`, so the same screen
+  /// read `1.5 pz` beside `1,5 h`. One screen, one number convention; the caller appends the unit.
+  static String _number(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString().replaceAll('.', ',');
+
+  static String _hours(double h) => '${_number(h)} h';
 
   @override
   Widget build(BuildContext context) {
@@ -280,8 +284,7 @@ class AiReviewStep extends StatelessWidget {
     return AiKvRow(
       first: first,
       label: m.name.isEmpty ? '—' : m.name,
-      value: '${m.quantity == m.quantity.roundToDouble() ? m.quantity.round() : m.quantity}'
-          '${unit.isEmpty ? '' : ' $unit'}',
+      value: '${_number(m.quantity)}${unit.isEmpty ? '' : ' $unit'}',
       note: m.isFreeText || m.materialId.isEmpty ? "Non in anagrafica · scegli l'articolo" : null,
       noteIsError: m.isFreeText || m.materialId.isEmpty,
       trailing: accept != null

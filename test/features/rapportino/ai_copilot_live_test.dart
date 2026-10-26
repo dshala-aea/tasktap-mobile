@@ -309,7 +309,10 @@ AiCopilotDraftDto _seededDraft() => const AiCopilotDraftDto(
     AiDraftMaterialUsage(
       materialId: 'm-1',
       name: 'Filtro olio',
-      quantity: 1,
+      unit: 'pz',
+      // Deliberately fractional: the row must print an Italian decimal comma, the same
+      // convention Ore already uses a few pixels to its right.
+      quantity: 1.5,
       state: AiResolutionState.needsConfirmation,
       source: AiFactSource.planned,
     ),
@@ -659,6 +662,9 @@ void main() {
       // no card), and its needsConfirmation state turns the badge into the 'Accetta' action below.
       expect(find.text('Filtro olio'), findsOneWidget);
       expect(find.text('Accetta'), findsOneWidget);
+      // Italian decimal comma: the row used to print the raw double ('1.5 pz') while the Ore line
+      // right below it already read '1,5 h'.
+      expect(find.text('1,5 pz'), findsOneWidget);
       // The ticket's own activity is shown with the 3 h the ticket already had, beside its text.
       expect(find.text('Manutenzione compressore · 3 h'), findsOneWidget);
       await _unmount(tester);
