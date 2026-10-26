@@ -152,7 +152,7 @@ class _NewRapportinoFabState extends ConsumerState<_NewRapportinoFab> {
       child: Opacity(
         opacity: _busy ? 0.6 : 1,
         child: AppFab(
-          tooltip: 'Nuovo rapporto di lavoro',
+          tooltip: 'Nuovo rapporto di intervento',
           onPressed: () => _createNewDraft(context, ref),
         ),
       ),
@@ -163,13 +163,13 @@ class _NewRapportinoFabState extends ConsumerState<_NewRapportinoFab> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final id = await createLocalDraft(ref, title: 'Nuovo rapporto di lavoro');
+      final id = await createLocalDraft(ref, title: 'Nuovo rapporto di intervento');
       if (!context.mounted) return;
       if (id == null) {
         // Refused rather than authored by a placeholder. See createLocalDraft.
         showAppToast(
           context,
-          message: 'Accedi per creare un rapporto di lavoro.',
+          message: 'Accedi per creare un rapporto di intervento.',
           tone: ToastTone.warning,
         );
         return;
@@ -231,12 +231,12 @@ class _RapportiniListBody extends ConsumerWidget {
           // The filter chips below already do the filtering — this used to carry a second,
           // dead filter icon (`onTap: () {}`) doing nothing beside them. Same fix as the ticket
           // list: a control that looks tappable and isn't teaches distrust of the one that works.
-          child: ScreenHeader(title: 'Rapporti di lavoro', subtitle: '${allDrafts.length} totali'),
+          child: ScreenHeader(title: 'Rapporti', subtitle: '${allDrafts.length} totali'),
         ),
         SliverToBoxAdapter(
           child: AppSearchBar(
             controller: searchCtrl,
-            hint: 'Cerca rapporto di lavoro…',
+            hint: 'Cerca rapporto di intervento…',
             onChanged: onQueryChanged,
           ),
         ),
@@ -280,7 +280,7 @@ class _RapportiniListBody extends ConsumerWidget {
           SliverToBoxAdapter(
             child: EmptyState(
               icon: LucideIcons.wifiOff,
-              title: 'Impossibile caricare i rapporti di lavoro',
+              title: 'Impossibile caricare i rapporti di intervento',
               body: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
             ),
           )
@@ -288,8 +288,8 @@ class _RapportiniListBody extends ConsumerWidget {
           SliverToBoxAdapter(
             child: EmptyState(
               icon: LucideIcons.fileText,
-              title: 'Nessun rapporto di lavoro',
-              body: 'I rapporti di lavoro appariranno qui.',
+              title: 'Nessun rapporto di intervento',
+              body: 'I rapporti di intervento appariranno qui.',
             ),
           )
         else
@@ -389,7 +389,7 @@ class _RapportinoRow extends ConsumerWidget {
               unawaited(ref.read(syncProvider.notifier).performSync());
               showAppToast(
                 context,
-                message: 'Questo rapporto di lavoro non è più modificabile.',
+                message: 'Questo rapporto di intervento non è più modificabile.',
                 tone: ToastTone.warning,
               );
               return;
@@ -398,7 +398,7 @@ class _RapportinoRow extends ConsumerWidget {
               showAppToast(
                 context,
                 message:
-                    'Per aprire questo rapporto di lavoro serve la connessione: i dati '
+                    'Per aprire questo rapporto di intervento serve la connessione: i dati '
                     'completi vanno scaricati sul telefono. Riprova più tardi.',
                 tone: ToastTone.error,
               );
@@ -542,7 +542,7 @@ class _RapportinoRow extends ConsumerWidget {
 Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftReport draft) async {
   final confirmed = await confirmDeleteDialog(
     context,
-    title: 'Eliminare il rapporto di lavoro?',
+    title: 'Eliminare il rapporto di intervento?',
     message: '"${draft.title}" verrà eliminato definitivamente.',
   );
   if (!confirmed) return false;
@@ -570,9 +570,9 @@ Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftRepor
           context,
           message: e.response == null
               // No response at all: nothing was reached, nothing changed anywhere.
-              ? 'Per eliminare questo rapporto di lavoro serve la connessione: riprova quando sei '
-                    'online. Il rapporto di lavoro non è stato eliminato.'
-              : humanErrorMessage(e, azione: 'eliminare il rapporto di lavoro'),
+              ? 'Per eliminare questo rapporto di intervento serve la connessione: riprova quando sei '
+                    'online. Il rapporto di intervento non è stato eliminato.'
+              : humanErrorMessage(e, azione: 'eliminare il rapporto di intervento'),
           tone: ToastTone.error,
         );
         return false;
@@ -581,7 +581,7 @@ Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftRepor
       if (!context.mounted) return false;
       showAppToast(
         context,
-        message: humanErrorMessage(e, azione: 'eliminare il rapporto di lavoro'),
+        message: humanErrorMessage(e, azione: 'eliminare il rapporto di intervento'),
         tone: ToastTone.error,
       );
       return false;

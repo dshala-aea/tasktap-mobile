@@ -144,7 +144,7 @@ class _Outgoing {
 // "elaborando" label for that whole span reads as frozen, not working. Purely a client-side
 // staged message swap + spinner, no backend streaming involved.
 const _thinkingStageMessages = [
-  'Il copilot sta elaborando…',
+  'L\'assistente AI sta elaborando…',
   'Sto verificando i dati con TaskTap…',
   'Quasi fatto…',
 ];
@@ -364,7 +364,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     if (e is AiConversationException && e.offline) {
       return 'La bozza AI richiede la connessione e ora non c\'è segnale. '
-          'La dettatura sul telefono funziona anche offline: puoi compilare il rapporto di lavoro '
+          'La dettatura sul telefono funziona anche offline: puoi compilare il rapporto di intervento '
           'a mano e dettare nei campi.';
     }
     return e.toString();
@@ -437,8 +437,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   void _markDraftUsed(String reason) {
     _linkedReportId = null;
     _usedDraftMessage =
-        'Questa bozza è già stata usata per un rapporto di lavoro inviato. $reason '
-        'Per un nuovo rapporto di lavoro abbandonala e ricomincia.';
+        'Questa bozza è già stata usata per un rapporto di intervento inviato. $reason '
+        'Per un nuovo rapporto di intervento abbandonala e ricomincia.';
   }
 
   /// On entry (and before Compila): a linked report that is no longer an editable draft means
@@ -537,7 +537,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           if (mounted) {
             showAppToast(
               context,
-              message: 'Accedi per creare un rapporto di lavoro.',
+              message: 'Accedi per creare un rapporto di intervento.',
               tone: ToastTone.warning,
             );
           }
@@ -1163,7 +1163,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         setState(() => _confirming = false);
         showAppToast(
           context,
-          message: 'Non riesco a creare il rapporto di lavoro su questo telefono. Riprova.',
+          message: 'Non riesco a creare il rapporto di intervento su questo telefono. Riprova.',
           tone: ToastTone.error,
         );
         return;
@@ -1333,7 +1333,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     if (id == null) {
       showAppToast(
         context,
-        message: 'Accedi per creare un rapporto di lavoro.',
+        message: 'Accedi per creare un rapporto di intervento.',
         tone: ToastTone.warning,
       );
       return;
@@ -1356,7 +1356,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     final id = await createLocalDraft(
       ref,
-      title: ticket != null ? 'Rapporto di lavoro — ${ticket.title}' : 'Nuovo rapporto di lavoro',
+      title: ticket != null
+          ? 'Rapporto di intervento — ${ticket.title}'
+          : 'Nuovo rapporto di intervento',
       locationId: ticket?.locationId ?? '',
       ticketId: ticketId,
       cantiereId: widget.cantiereId,
@@ -1407,7 +1409,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         child: Column(
           children: [
             ScreenHeader(
-              title: 'Rapporto di lavoro con AI Copilot',
+              title: 'Rapporto con Assistente AI',
               showBack: true,
               onBack: _leave,
             ),
@@ -1467,8 +1469,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                 ),
                 child: AppButton.secondary(
                   label: _linkedReportId != null
-                      ? 'Apri il rapporto di lavoro collegato'
-                      : 'Compila nel rapporto di lavoro',
+                      ? 'Apri il rapporto di intervento collegato'
+                      : 'Compila nel rapporto di intervento',
                   isLoading: _opening,
                   // Never while a turn, an edit or an apply is in flight: the editor would hydrate
                   // rows that are about to change underneath it.
@@ -1505,8 +1507,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                       // rapportino looks filed and is not.
                       child: AppButton(
                         label: _confirming
-                            ? 'Preparo il rapporto di lavoro…'
-                            : 'Conferma e apri il rapporto di lavoro',
+                            ? 'Preparo il rapporto di intervento…'
+                            : 'Conferma e apri il rapporto di intervento',
                         onPressed: !sessionReady ||
                                 _messages.isEmpty ||
                                 blocked ||
@@ -1619,7 +1621,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         child: Center(
           child: Text(
-            'Racconta cosa hai fatto, a voce o per iscritto — il copilot verifica persone, ore, '
+            'Racconta cosa hai fatto, a voce o per iscritto — l\'assistente AI verifica persone, ore, '
             'materiali e checklist con i dati reali di TaskTap prima di proporre una bozza.',
             textAlign: TextAlign.center,
             style: TextStyle(color: context.colors.inkMuted),

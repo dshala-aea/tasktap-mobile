@@ -1054,7 +1054,7 @@ class AiFeedStatus {
   String get notice => unsendable.isEmpty
       ? ''
       : '${unsendable.length} ${unsendable.length == 1 ? 'modifica non sincronizzabile' : 'modifiche non sincronizzabili'}: '
-            '${unsendable.join('; ')}. Correggile nel rapporto di lavoro.';
+            '${unsendable.join('; ')}. Correggile nel rapporto di intervento.';
 }
 
 /// A stable identity for an edit (what the server refused is never sent again).
@@ -1118,14 +1118,14 @@ String describeUnsendable(AiConfirmedEdit e, String reason) {
 /// Editable means: a Bozza, never handed to the submission queue (`draft`: not ready, uploading,
 /// submitting, submitted or failed-in-queue), and not signed by the customer.
 String? feedWriteRefusal(DraftReport? r) {
-  if (r == null) return 'Il rapporto di lavoro collegato non è più su questo telefono.';
+  if (r == null) return 'Il rapporto di intervento collegato non è più su questo telefono.';
   final submission = DraftSubmissionState.fromString(r.submissionState);
   if (r.stato != 'Bozza' || submission != DraftSubmissionState.draft) {
-    return 'Il rapporto di lavoro collegato è già stato inviato o è in coda di invio: '
+    return 'Il rapporto di intervento collegato è già stato inviato o è in coda di invio: '
         'la bozza AI non lo modifica più.';
   }
   if (r.customerSignatureAllegatoId != null) {
-    return 'Il rapporto di lavoro collegato è già firmato dal cliente: '
+    return 'Il rapporto di intervento collegato è già firmato dal cliente: '
         'la bozza AI non lo modifica più.';
   }
   return null;
@@ -1145,7 +1145,7 @@ class AiFeedSessionGoneException implements Exception {
   const AiFeedSessionGoneException();
   String get message =>
       'La bozza AI non esiste più sul server (scaduta o chiusa): le modifiche restano nel '
-      'rapporto di lavoro, ma non arrivano più all\'AI.';
+      'rapporto di intervento, ma non arrivano più all\'AI.';
   @override
   String toString() => message;
 }
@@ -1174,7 +1174,7 @@ class AiEditSyncBlockedException implements Exception {
 
 const _blockedMessage =
     'La bozza AI ha raggiunto il limite di modifiche sincronizzabili: le tue modifiche restano nel '
-    'rapporto di lavoro, ma l\'AI non le vedrà più.';
+    'rapporto di intervento, ma l\'AI non le vedrà più.';
 
 /// Delivers hand edits to the server: in a turn's `confirmedEdits`, or as edits-only batches of
 /// at most [AiConfirmedEdit.maxPerRequest], each persisted with its Idempotency-Key until

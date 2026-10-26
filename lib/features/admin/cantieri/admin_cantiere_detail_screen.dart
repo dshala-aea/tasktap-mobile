@@ -246,7 +246,7 @@ class _CantiereDetailBody extends ConsumerWidget {
               AppSpacing.pagePadding,
             ),
             child: AppButton(
-              label: 'Crea rapporto di lavoro',
+              label: 'Crea rapporto di intervento',
               icon: const Icon(LucideIcons.fileText),
               onPressed: () => _createRapportino(context, ref, cantiere),
             ),
@@ -278,7 +278,7 @@ class _CantiereDetailBody extends ConsumerWidget {
 
     final id = await createLocalDraft(
       ref,
-      title: 'Rapporto di lavoro — ${cantiere.name}',
+      title: 'Rapporto di intervento — ${cantiere.name}',
       cantiereId: cantiere.id,
       customerId: cantiere.customerId,
       tenantId: cantiere.tenantId,
@@ -288,7 +288,7 @@ class _CantiereDetailBody extends ConsumerWidget {
     if (id == null) {
       showAppToast(
         context,
-        message: 'Accedi per creare un rapporto di lavoro.',
+        message: 'Accedi per creare un rapporto di intervento.',
         tone: ToastTone.warning,
       );
       return;
@@ -1122,7 +1122,7 @@ class _ReportsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionTitle(title: 'Rapporti di lavoro'),
+        const SectionTitle(title: 'Rapporti di intervento'),
         reportsAsync.when(
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
@@ -1131,11 +1131,11 @@ class _ReportsSection extends ConsumerWidget {
           error: (e, _) => UnavailableState.forFetchError(
             offline: e is TicketDetailOfflineException,
             icon: LucideIcons.fileText,
-            offlineTitle: 'Rapportini non disponibili offline',
+            offlineTitle: 'Rapporti di intervento non disponibili offline',
             offlineBody:
-                'Questo dispositivo non ha ancora scaricato i rapportini. Riprova quando '
+                'Questo dispositivo non ha ancora scaricato i rapporti di intervento. Riprova quando '
                 'torni online.',
-            errorTitle: 'Impossibile caricare i rapportini',
+            errorTitle: 'Impossibile caricare i rapporti di intervento',
             errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
           ).paddedForTab(),
           data: (data) {
@@ -1143,18 +1143,18 @@ class _ReportsSection extends ConsumerWidget {
             if (reports.isEmpty) {
               return const EmptyState(
                 icon: LucideIcons.fileText,
-                title: 'Nessun rapporto di lavoro',
-                body: 'Non risultano rapporti di lavoro collegati a questo cantiere.',
+                title: 'Nessun rapporto di intervento',
+                body: 'Non risultano rapporti di intervento collegati a questo cantiere.',
               );
             }
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: Column(
                 children: [
-                  if (data.fromMirror) const _MirrorNotice(what: 'rapportini'),
+                  if (data.fromMirror) const _MirrorNotice(what: 'rapporti di intervento'),
                   ...reports.asMap().entries.map((entry) {
                     final r = entry.value;
-                    final title = r['title'] as String? ?? 'Rapporto di lavoro';
+                    final title = r['title'] as String? ?? 'Rapporto di intervento';
                     final stato = r['stato'];
                     final statoLabel =
                         _statoLabels[stato is int ? stato : int.tryParse('$stato')] ?? 'Bozza';

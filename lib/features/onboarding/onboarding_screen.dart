@@ -73,7 +73,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   'La posizione viene registrata quando timbri su un cantiere, come prova di dove '
                   'sei intervenuto.',
               senzaDiEsso:
-                  'Puoi comunque timbrare e compilare rapporti di lavoro: resteranno senza '
+                  'Puoi comunque timbrare e compilare rapporti di intervento: resteranno senza '
                   'coordinate.',
               ctaLabel: 'Consenti la posizione',
               checkStatus: () async =>
@@ -92,7 +92,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               titolo: 'Avvisi sul lavoro',
               motivo:
                   'Ti avvisiamo quando ti viene assegnato un intervento, quando cambia un '
-                  'appuntamento e quando un rapporto di lavoro ha bisogno di te.',
+                  'appuntamento e quando un rapporto di intervento ha bisogno di te.',
               senzaDiEsso:
                   'Senza notifiche l\'app funziona lo stesso: trovi tutto in Dashboard e in '
                   'Calendario, ma lo scopri quando apri l\'app.',
@@ -128,8 +128,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               titolo: 'Fotocamera e microfono',
               motivo:
                   'La fotocamera serve per allegare foto dell\'intervento al rapporto di '
-                  'lavoro; il microfono per dettare la descrizione invece di scriverla.',
-              senzaDiEsso: 'Puoi comunque compilare i rapporti di lavoro a mano, senza foto.',
+                  'intervento; il microfono per dettare la descrizione invece di scriverla.',
+              senzaDiEsso: 'Puoi comunque compilare i rapporti di intervento a mano, senza foto.',
               ctaLabel: 'Consenti',
               checkStatus: _cameraMicStatus,
               request: _cameraMicRequest,

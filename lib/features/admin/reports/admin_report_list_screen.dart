@@ -100,7 +100,7 @@ class _AdminReportListBody extends ConsumerWidget {
         slivers: [
           SliverToBoxAdapter(
             child: ScreenHeader(
-              title: 'Rapporti di lavoro',
+              title: 'Rapporti',
               subtitle: 'Vista amministratore',
               showBack: true,
             ),
@@ -152,9 +152,9 @@ class _AdminReportListBody extends ConsumerWidget {
               child: e is TicketDetailOfflineException
                   ? const UnavailableState(
                       icon: LucideIcons.fileText,
-                      titolo: 'Rapportini non disponibili offline',
+                      titolo: 'Rapporti di intervento non disponibili offline',
                       motivo:
-                          'Questo dispositivo non ha ancora scaricato i rapportini. Apri questa '
+                          'Questo dispositivo non ha ancora scaricato i rapporti di intervento. Apri questa '
                           'lista con una connessione attiva per averli anche offline.',
                     )
                   : ErrorState(
@@ -174,8 +174,8 @@ class _AdminReportListBody extends ConsumerWidget {
                 return SliverToBoxAdapter(
                   child: EmptyState(
                     icon: LucideIcons.fileText,
-                    title: 'Nessun rapporto di lavoro',
-                    body: 'Non ci sono rapporti di lavoro per questo filtro.',
+                    title: 'Nessun rapporto di intervento',
+                    body: 'Non ci sono rapporti di intervento per questo filtro.',
                   ),
                 );
               }
@@ -187,7 +187,7 @@ class _AdminReportListBody extends ConsumerWidget {
                   if (data.fromMirror && i == 0) {
                     return Column(
                       children: [
-                        const MirrorNotice(what: 'rapportini'),
+                        const MirrorNotice(what: 'rapporti di intervento'),
                         _AdminReportRow(report: filtered[i], isLast: filtered.length == 1),
                       ],
                     );

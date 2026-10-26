@@ -357,7 +357,7 @@ Future<String?> createCantiereReportDraft(
     );
     return createLocalDraft(
       ref,
-      title: 'Rapporto di lavoro — $cantiereName',
+      title: 'Rapporto di intervento — $cantiereName',
       cantiereId: cantiereId,
       customerId: customerId,
       tenantId: tenantId,
@@ -398,7 +398,7 @@ Future<String?> createCantiereReportDraft(
       id: reportId,
       tenantId: resolvedTenantId,
       createdAt: now,
-      title: 'Rapporto di lavoro — $cantiereName',
+      title: 'Rapporto di intervento — $cantiereName',
       insertedUserId: internalUserId,
       locationId: seed.locationId ?? '',
       cantiereId: Value(cantiereId),

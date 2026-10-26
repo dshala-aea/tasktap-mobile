@@ -922,7 +922,7 @@ void main() {
       expect(find.textContaining('2 punti da chiarire'), findsOneWidget);
       // Both block Confirm, mirroring the server.
       final confirm = tester.widget<AppButton>(
-        find.widgetWithText(AppButton, 'Conferma e apri il rapporto di lavoro'),
+        find.widgetWithText(AppButton, 'Conferma e apri il rapporto di intervento'),
       );
       expect(confirm.onPressed, isNull);
       await _unmount(tester);
@@ -998,7 +998,7 @@ void main() {
       await _typeAndSend(tester, 'Uno');
       bool confirmOn() => tester
           .widget<AppButton>(
-            find.widgetWithText(AppButton, 'Conferma e apri il rapporto di lavoro'),
+            find.widgetWithText(AppButton, 'Conferma e apri il rapporto di intervento'),
           )
           .onPressed != null;
       expect(confirmOn(), isTrue);
@@ -1428,7 +1428,7 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Compila nel rapporto di lavoro'));
+      await tester.tap(find.text('Compila nel rapporto di intervento'));
       await tester.pumpAndSettle();
       expect(find.textContaining('editor:'), findsOneWidget);
 
@@ -1442,7 +1442,7 @@ void main() {
       );
       tester.state<NavigatorState>(find.byType(Navigator).last).pop();
       await tester.pumpAndSettle();
-      expect(find.text('Apri il rapporto di lavoro collegato'), findsOneWidget);
+      expect(find.text('Apri il rapporto di intervento collegato'), findsOneWidget);
       await _typeAndSend(tester, 'Ho finito');
 
       expect(ai.postedEdits.last, [
@@ -1461,7 +1461,7 @@ void main() {
       final ai = _FakeAi(detail: _detail(draft: liveDraft()));
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Compila nel rapporto di lavoro'));
+      await tester.tap(find.text('Compila nel rapporto di intervento'));
       await tester.pumpAndSettle();
       final staff = await db.select(db.reportStaffTable).get();
       await (db.update(db.reportStaffTable)..where((r) => r.id.equals(staff.single.id))).write(
@@ -1500,7 +1500,7 @@ void main() {
 
       AppButton compila() => tester.widget<AppButton>(
         find.ancestor(
-          of: find.text('Compila nel rapporto di lavoro'),
+          of: find.text('Compila nel rapporto di intervento'),
           matching: find.byType(AppButton),
         ),
       );
@@ -1608,14 +1608,14 @@ void main() {
       await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
       await _typeAndSend(tester, 'Ho iniziato'); // a message makes Conferma available
-      expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNotNull);
-      expect(button(tester, 'Conferma e apri il rapporto di lavoro').onPressed, isNotNull);
+      expect(button(tester, 'Compila nel rapporto di intervento').onPressed, isNotNull);
+      expect(button(tester, 'Conferma e apri il rapporto di intervento').onPressed, isNotNull);
 
       await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
       await tester.pumpAndSettle();
 
-      expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNull);
-      expect(button(tester, 'Conferma e apri il rapporto di lavoro').onPressed, isNull);
+      expect(button(tester, 'Compila nel rapporto di intervento').onPressed, isNull);
+      expect(button(tester, 'Conferma e apri il rapporto di intervento').onPressed, isNull);
       await _unmount(tester);
     });
 
@@ -1776,14 +1776,14 @@ void main() {
         ..turnScript.add(const AiConversationException(404, 'gone'));
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
-      expect(find.text('Apri il rapporto di lavoro collegato'), findsOneWidget);
+      expect(find.text('Apri il rapporto di intervento collegato'), findsOneWidget);
 
       await tester.tap(find.text('Accetta').last);
       await tester.pumpAndSettle();
 
       expect(find.textContaining('non esiste più sul server'), findsOneWidget);
       expect(
-        find.text('Compila nel rapporto di lavoro'),
+        find.text('Compila nel rapporto di intervento'),
         findsOneWidget,
         reason: 'the feed was released',
       );
@@ -1802,10 +1802,10 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.textContaining('già stata usata per un rapporto di lavoro inviato'),
+          find.textContaining('già stata usata per un rapporto di intervento inviato'),
           findsOneWidget,
         );
-        expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNull);
+        expect(button(tester, 'Compila nel rapporto di intervento').onPressed, isNull);
         expect(db.select(db.reportMateriali).get(), completion(isEmpty), reason: 'not rewritten');
         // The AI draft itself stays readable.
         expect(find.textContaining('Cavo'), findsWidgets);
@@ -1827,7 +1827,7 @@ void main() {
       expect(ai.abandoned, [sess]);
       expect(ai.startCalls, hasLength(1));
       expect(find.textContaining('già stata usata'), findsNothing);
-      expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNotNull);
+      expect(button(tester, 'Compila nel rapporto di intervento').onPressed, isNotNull);
       await _unmount(tester);
     });
 
@@ -1838,7 +1838,7 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('già stata usata per un rapporto di lavoro inviato'),
+        find.textContaining('già stata usata per un rapporto di intervento inviato'),
         findsOneWidget,
       );
       await _unmount(tester); // back, WITHOUT 'Abbandona e ricomincia'
@@ -1847,11 +1847,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('già stata usata per un rapporto di lavoro inviato'),
+        find.textContaining('già stata usata per un rapporto di intervento inviato'),
         findsOneWidget,
       );
-      expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNull);
-      expect(button(tester, 'Conferma e apri il rapporto di lavoro').onPressed, isNull);
+      expect(button(tester, 'Compila nel rapporto di intervento').onPressed, isNull);
+      expect(button(tester, 'Conferma e apri il rapporto di intervento').onPressed, isNull);
       expect(await db.select(db.reportMateriali).get(), isEmpty);
       expect(await db.select(db.reportStaffTable).get(), isEmpty);
       expect(await db.select(db.draftReports).get(), hasLength(1), reason: 'no new report');
@@ -1927,7 +1927,7 @@ void main() {
 
       expect(await db.select(db.reportMateriali).get(), isEmpty, reason: 'the queued report is untouched');
       expect(
-        find.textContaining('già stata usata per un rapporto di lavoro inviato'),
+        find.textContaining('già stata usata per un rapporto di intervento inviato'),
         findsOneWidget,
       );
       expect(find.textContaining('Cavo'), findsWidgets, reason: 'the draft stays readable');
