@@ -87,8 +87,9 @@ the flow exists to provide) over 5 pages:
    permessi di cui TaskTap ha bisogno"). Single "Inizia" action.
 2. **Location** — icon/titolo/motivo/senzaDiEsso card, same shape `askPermissionPurpose` already
    renders (inlined here rather than shown as a sheet, since this is a full page, not an
-   interruption of some other flow). **Consenti** / **Non ora**.
-3. **Notifiche** — same card shape, wired to `NotificationService.instance.ensurePermission()`.
+   interruption of some other flow). The OS dialog is the ask — see "App Store 5.1.1" below.
+3. **Notifiche** — same card shape, wired to `NotificationService.instance.ensurePermission()`, with
+   **no "Non ora"** — same rule.
 4. **Fotocamera e microfono** — one card explaining both together (matches how the original request
    grouped them), **Consenti** requests both permissions.
 5. **Blocco biometrico** — same card shape; **Attiva** only shown if the device actually has
@@ -96,21 +97,50 @@ the flow exists to provide) over 5 pages:
    plainly instead of offering a button that can't work.
 
 Each permission page (2–5) renders one of three states, checked on page build:
-- **Not yet decided** — the explanation card with Consenti/Non ora.
+- **Not yet decided** — the explanation card. On pages 2 and 3 the OS dialog fires immediately, on
+  entry; pages 4 and 5 show a Consenti/Non ora pair.
 - **Already granted** (from a prior contextual ask, or a previous partial run of this same flow —
   see below) — a plain confirmation state, no button, auto-advances after a short beat or on tap
   anywhere.
 - **Permanently denied** (OS won't re-prompt — the common case on iOS after one refusal) — the same
   card, but the action becomes "Apri impostazioni" (`app_settings`-style intent/URL, whichever the
   target service already uses if it has one, otherwise `AppSettings.openAppSettings()` from
-  `permission_handler`) instead of re-firing a dialog that can't appear.
+  `permission_handler`) instead of re-firing a dialog that can't appear. Coming back from Settings
+  re-reads the status (`didChangeAppLifecycleState` → resumed), so a grant made there lands on the
+  granted state instead of leaving a stale "Apri impostazioni".
 
 Last page's "Vai alla Dashboard" (or "Fine" on page 5, whichever reads better in context) writes
 `onboardingCompletedProvider`'s flag; the router's own redirect then takes over navigation — the
 screen does not call `context.go(...)` itself.
 
-**No global skip.** Each of pages 2–5 has its own "Non ora", satisfying "must be seen once,
+**No global skip.** Pages 4 and 5 each have their own "Non ora", satisfying "must be seen once,
 individually skippable" without a shortcut that defeats the transparency purpose of the flow.
+
+### App Store 5.1.1: the system dialog is the consent screen
+
+Pages 2 (Location) and 3 (Notifiche) set `PermissionStepPage.requiresSystemDialog`: the OS dialog
+is fired as soon as the purpose card is on screen, and there is no app-drawn "Consenti / Non ora"
+to answer instead.
+
+Apple requires consent to come from the system dialog. An app-crafted allow/deny pair that stands
+in for it is a rejection risk — it mimics a system permission dialog — and the OS never sees the
+answer, so what the app would record is a local preference dressed up as consent. It is also the
+worse product behaviour: on iOS a "Non ora" taken here costs the technician the one dialog the OS
+will ever show them, and nothing in the app can give it back. What those steps offer instead:
+
+- undecided → the purpose card, and the real OS dialog, fired without a tap; the action button (if
+  the ask somehow lands back on undecided, e.g. the camera half of page 4) is a retry of that same
+  dialog, never a substitute for it;
+- refused → "Apri impostazioni" plus a plain **Continua** (navigation out of the step, never a
+  recorded refusal) plus the automatic re-check on return, above;
+- unavailable (Firebase failed to init) → the plain statement plus Continua.
+
+A platform call that *throws* is not an answer: it falls into the unavailable state rather than
+stranding the page on a spinner, which on a step with no skip would trap the technician inside
+onboarding. Pages 4 and 5 keep "Non ora": page 4's request can legitimately end still-undecided
+(camera granted, microphone not) so it must stay escapable, and page 5 is an app setting with no OS
+consent dialog behind it.
+again later through the OS.
 
 ### Per-step permission wiring (all delegate to existing code)
 
@@ -159,7 +189,10 @@ places now need identically.
 
 - Widget tests per permission step: not-yet-decided → Consenti → granted; not-yet-decided → Non ora
   → advances without prompting; already-granted → auto-advance state; permanently-denied → settings
-  link shown, no prompt fired.
+  link shown, no prompt fired. For the notifications step specifically: undecided offers the ask
+  and no skip at all; a refusal lands on "Apri impostazioni" + "Continua"; a resume from the
+  background re-reads the status; a `request` that throws lands on the unavailable state rather than
+  a spinner.
 - A router test asserting the onboarding gate: authenticated + not completed → redirected to
   `/onboarding`; authenticated + completed → never redirected there; unauthenticated on
   `/onboarding` → redirected to `/login`. Mirrors whatever pattern the existing kiosk-gate test (if

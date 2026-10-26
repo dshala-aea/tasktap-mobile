@@ -76,6 +76,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   'Puoi comunque timbrare e compilare rapporti di lavoro: resteranno senza '
                   'coordinate.',
               ctaLabel: 'Consenti la posizione',
+              // The OS dialog is the ask, fired on page entry — no crafted allow/deny pair of our
+              // own. See PermissionStepPage.requiresSystemDialog.
+              requiresSystemDialog: true,
               checkStatus: () async =>
                   _fromGps(await ref.read(locationServiceProvider).permissionStatus()),
               request: () async {
@@ -97,6 +100,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   'Senza notifiche l\'app funziona lo stesso: trovi tutto in Dashboard e in '
                   'Calendario, ma lo scopri quando apri l\'app.',
               ctaLabel: 'Attiva le notifiche',
+              // App Store 5.1.1: the system dialog is the ask, fired on page entry. No "Non ora"
+              // and no crafted consent button — on iOS a skip recorded locally burns the one
+              // system dialog the technician will ever be shown. A refusal lands on
+              // "Apri impostazioni".
+              requiresSystemDialog: true,
               checkStatus: () async {
                 if (!NotificationService.isAvailable) return PermissionStepStatus.unavailable;
                 final status = await NotificationService.instance.authorizationStatus();
