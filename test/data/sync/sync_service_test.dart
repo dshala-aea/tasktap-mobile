@@ -335,6 +335,37 @@ void main() {
       expect(row.priority, isNull);
     });
 
+    // Field-parity gap: `TicketDto.prodottoAssistenzaIds` rode the wire since the join table existed
+    // and mobile stored nothing — the ticket screen's "prodotti" section rebuilt the list from the
+    // checklist's `ticket_assets` mirror instead, which is capped per sync and empty for a job with
+    // no controls. Stored as JSON text, same as `tagsJson`.
+    test('stores the prodotti assistenza a ticket covers', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          tickets: [
+            _ticketJson()..['prodottoAssistenzaIds'] = ['pa-1', 'pa-2'],
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.prodottoAssistenzaIdsJson, '["pa-1","pa-2"]');
+    });
+
+    test('a ticket with no prodotti assistenza stores an empty list, not null', () async {
+      // The server always fills the key (it is a list, defaulting to empty), and the reader
+      // distinguishes "no coverage" from "never synced". Encoding `[]` keeps both paths one shape.
+      _stubDioGet(mockDio, _syncPayload(tickets: [_ticketJson()]));
+
+      await svc.sync();
+
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.prodottoAssistenzaIdsJson, '[]');
+    });
+
     test('inserts a new schedule with parsed time minutes', () async {
       _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson()]));
 
@@ -505,6 +536,35 @@ void main() {
       expect(row.diagnosi, 'Pompa bloccata');
       expect(row.soluzione, 'Sostituita');
       expect(row.cantiereId, 'cantiere-9');
+    });
+
+    // Field-parity gap: the rapportino's human number was on the wire and never stored, so the
+    // rapportini list had nothing to identify a row by beyond its title.
+    test('carries the report numero from the synced report', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          draftReports: [
+            {..._draftReportJson(), 'numero': 'RAP-2026-0042'},
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final row = (await db.select(db.draftReports).get()).single;
+      expect(row.numero, 'RAP-2026-0042');
+    });
+
+    test('a report the server has not numbered yet stores a null numero, not an empty string', () async {
+      // A draft created on the device and never submitted has no number. Null keeps that distinct
+      // from a number the server sent as blank, which would render as a bare `#`.
+      _stubDioGet(mockDio, _syncPayload(draftReports: [_draftReportJson()]));
+
+      await svc.sync();
+
+      final row = (await db.select(db.draftReports).get()).single;
+      expect(row.numero, isNull);
     });
 
     test('inserts multiple entities in one sync', () async {

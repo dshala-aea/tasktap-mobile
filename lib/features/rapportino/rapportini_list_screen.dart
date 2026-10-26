@@ -18,6 +18,7 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import '../../data/reports/import_server_report.dart' show ServerReportNotEditableException;
+import '../ticket/ticket_label.dart' show ticketReference;
 import 'create_draft.dart';
 import 'import_server_report_action.dart';
 import 'rapportino_list_providers.dart';
@@ -353,18 +354,21 @@ class _RapportinoRow extends ConsumerWidget {
       'it',
     ).format((draft.updatedAt ?? draft.createdAt).toLocal());
 
-    // Subtitle: tecnico count · ore · materiali count.
+    // Subtitle: the report's number, then tecnico count · ore · materiali count.
     //
     // Used to lead with `#$shortId` — eight hex characters of the draft's own row id, the same
-    // "identifier a human cannot recognise" bug already fixed on the ticket list. A rapportino
-    // has no `numero` synced locally (unlike a ticket), so there is nothing real to show in its
-    // place; the title and this summary carry the row on their own, same as a numberless ticket.
+    // "identifier a human cannot recognise" bug already fixed on the ticket list. It was removed
+    // rather than replaced because `Report.numero` was not mirrored; schema 59 mirrors it, so the
+    // row leads with the real number the office quotes over the phone, through the same
+    // `ticketReference` rule (nothing invented for a draft that has none yet — a Bozza created on
+    // the device only gets one when it is submitted).
+    final reference = ticketReference(draft.numero);
     final subParts = <String>[
       if (staffCount > 0) '$staffCount tecnico',
       oreLabel,
       '$materialiCount mat.',
     ];
-    final subtitle = subParts.join(' · ');
+    final subtitle = [?reference, ...subParts].join(' · ');
 
     final row = InkWell(
       onTap: () async {

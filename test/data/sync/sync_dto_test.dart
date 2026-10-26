@@ -76,6 +76,37 @@ void main() {
     });
   });
 
+  group('TicketDto.prodottoAssistenzaIds', () {
+    Map<String, dynamic> json({Object? ids = #absent}) => {
+      'id': 't1',
+      'tenantId': 'tenant1',
+      'createdAt': '2026-08-31T00:00:00Z',
+      'title': 'Test',
+      'customerId': 'c1',
+      'locationId': 'l1',
+      'statusId': 1,
+      'typeId': 1,
+      if (ids != #absent) 'prodottoAssistenzaIds': ids,
+    };
+
+    test('parses the units the ticket covers', () {
+      expect(
+        TicketDto.fromJson(json(ids: ['pa-1', 'pa-2'])).prodottoAssistenzaIds,
+        ['pa-1', 'pa-2'],
+      );
+    });
+
+    test('defaults to an empty list, not null, when the key is absent', () {
+      // The server has always sent it (the entity fills it from the join table), so an absent key
+      // means an older backend. Empty keeps one shape for the writer, which encodes it as `[]`.
+      expect(TicketDto.fromJson(json()).prodottoAssistenzaIds, isEmpty);
+    });
+
+    test('keeps an empty list as an empty list', () {
+      expect(TicketDto.fromJson(json(ids: <String>[])).prodottoAssistenzaIds, isEmpty);
+    });
+  });
+
   group('SyncTicketMaterialeDto.fromJson', () {
     test('parses a catalog-referenced item', () {
       final json = {
@@ -134,6 +165,28 @@ void main() {
 
     test('is null when the server sends an explicit null', () {
       expect(CustomerDto.fromJson(json(agentId: null)).agentId, isNull);
+    });
+  });
+
+  group('ReportDto.numero', () {
+    Map<String, dynamic> json({Object? numero = #absent}) => {
+      'id': 'r1',
+      'tenantId': 'tenant1',
+      'createdAt': '2026-10-24T00:00:00Z',
+      'title': 'Rapportino caldaia',
+      'insertedUserId': 'u1',
+      'locationId': 'l1',
+      'stato': 'Bozza',
+      if (numero != #absent) 'numero': numero,
+    };
+
+    test('parses the human number when the server has assigned one', () {
+      expect(ReportDto.fromJson(json(numero: 'RAP-2026-0042')).numero, 'RAP-2026-0042');
+    });
+
+    test('is null for a draft the server has not numbered yet', () {
+      expect(ReportDto.fromJson(json()).numero, isNull);
+      expect(ReportDto.fromJson(json(numero: null)).numero, isNull);
     });
   });
 }

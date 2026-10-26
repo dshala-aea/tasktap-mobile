@@ -99,6 +99,7 @@ Future<void> _seedDraft(
   String submissionState = 'draft',
   String stato = 'Bozza',
   bool isLocalOnly = true,
+  String? numero,
 }) async {
   await db
       .into(db.draftReports)
@@ -108,6 +109,7 @@ Future<void> _seedDraft(
           tenantId: 'tenant-1',
           createdAt: DateTime.utc(2026, 6, 1),
           title: title,
+          numero: Value(numero),
           insertedUserId: 'user-1',
           locationId: 'loc-1',
           isLocalOnly: Value(isLocalOnly),
@@ -201,6 +203,38 @@ void main() {
         findsNothing,
         reason: 'a background-flush failure must be visible without opening the draft',
       );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    // Field-parity gap: the server numbers a rapportino (`numero`) and mobile never stored it, so
+    // the list could only show a title — two "Manutenzione caldaia" rows were indistinguishable.
+    testWidgets('a numbered report leads its subtitle with the number', (tester) async {
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'Revisione caldaia',
+        numero: 'RAP-2026-0042',
+        isLocalOnly: false,
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('#RAP-2026-0042'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a draft the server has not numbered shows no invented reference', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Bozza appena creata');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('#'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

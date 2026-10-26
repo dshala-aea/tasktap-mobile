@@ -946,6 +946,13 @@ class SyncService {
               dueDate: Value(formatDateOnly(t.dueDate)),
               tagsJson: Value(jsonEncode(t.tags)),
               extensionValues: Value(t.extensionValues),
+              // The units this job covers, as the server just told us. Never derived from the
+              // checklist mirror: that one is capped per sync and only covers tickets with
+              // controls, so it cannot state a ticket's coverage. See
+              // `Tickets.prodottoAssistenzaIdsJson`.
+              prodottoAssistenzaIdsJson: Value(
+                jsonEncode(t.prodottoAssistenzaIds),
+              ),
             ),
           );
     }
@@ -1033,6 +1040,10 @@ class SyncService {
               createdAt: r.createdAt,
               updatedAt: Value(r.updatedAt),
               title: r.title,
+              // Server-assigned, and null until a draft is submitted — see
+              // `DraftReports.numero`. Written on every upsert so a number the office assigned
+              // between two syncs reaches the list without the row being edited on the device.
+              numero: Value(r.numero),
               scheduleId: Value(r.scheduleId),
               ticketId: Value(r.ticketId),
               customerId: Value(r.customerId),
