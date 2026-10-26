@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/reports/submit_report_request.dart';
+import 'package:tasktap_mobile/domain/reports/customer_signature_absence_reason.dart';
 
 /// Checks what the app actually puts on the wire against the API's own OpenAPI snapshot.
 ///
@@ -90,13 +91,9 @@ void main() {
     /// Every optional field populated — an all-nulls payload would assert nothing, because
     /// `toJson` drops what it has no value for and the unknown-key check would see an empty map.
     ///
-    /// `customerSignatureAbsenceReason` / `...Note` are deliberately absent here: they ship on a
-    /// backend branch (`feat/report-signature-absence`) that has not merged, so
-    /// `openapi.snapshot.json` has no schema entry for them yet and `expectNoUnknownKeys` would
-    /// reject keys the server in fact accepts. Their wire shape is pinned by
-    /// `test/data/reports/submit_report_wire_shape_test.dart` in the meantime — that test asserts
-    /// the integer reason and the note are sent *only* when there is no signature allegato. Add
-    /// them to `fullRequest` when the snapshot is next refreshed from a master that has them.
+    /// `customerSignatureAbsenceReason` / `...Note` cannot live here: this request carries a
+    /// signature allegato, and a report has one or the other, never both, so `toJson` suppresses
+    /// them. `unsignedRequest` below is the branch that does have them.
     final fullRequest = SubmitReportRequest(
       id: '00000000-0000-0000-0000-000000000001',
       scheduleId: '00000000-0000-0000-0000-000000000002',
@@ -133,10 +130,37 @@ void main() {
       ],
     );
 
+    /// The unsigned branch: a customer who could not sign, so the reason and note go on the wire
+    /// and the signature allegato does not.
+    final unsignedRequest = SubmitReportRequest(
+      id: '00000000-0000-0000-0000-000000000011',
+      locationId: '00000000-0000-0000-0000-000000000004',
+      title: 'Manutenzione',
+      customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.altro,
+      customerSignatureAbsenceNote: 'Il cliente era assente',
+    );
+
     test('SubmitReportRequest sends no field the server does not have', () {
       final json = fullRequest.toJson();
       expectNoUnknownKeys('SubmitReportRequest', json);
       reportUnsentFields('SubmitReportRequest', json);
+    });
+
+    /// The absence keys were the last two the app sent that the snapshot could not vouch for.
+    /// They reach the wire only here, so this is the only place the gate can check them.
+    test('the unsigned report sends the absence reason as its integer, never the name', () {
+      final json = unsignedRequest.toJson();
+
+      expect(
+        json['customerSignatureAbsenceReason'],
+        CustomerSignatureAbsenceReason.altro.wireValue,
+        reason:
+            'the enum has no JsonStringEnumConverter server-side: the int is the contract, and '
+            'a name would bind to the default reason or be rejected',
+      );
+      expect(json['customerSignatureAbsenceNote'], 'Il cliente era assente');
+      expect(json.containsKey('customerSignatureAllegatoId'), isFalse);
+      expectNoUnknownKeys('SubmitReportRequest', json);
     });
 
     test(
