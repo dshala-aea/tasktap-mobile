@@ -54,11 +54,11 @@ class RapportinoViewScreen extends ConsumerWidget {
         error: (e, _) => SafeArea(
           child: Column(
             children: [
-              ScreenHeader(title: 'Rapporto di lavoro', showBack: true),
+              ScreenHeader(title: 'Rapporto', showBack: true),
               Expanded(
                 child: UnavailableState(
                   icon: LucideIcons.xCircle,
-                  titolo: 'Impossibile caricare il rapporto di lavoro',
+                  titolo: 'Impossibile caricare il rapporto di intervento',
                   motivo: 'Si è verificato un errore imprevisto. Riprova.',
                   action: AppButton(
                     label: 'Riprova',
@@ -76,11 +76,11 @@ class RapportinoViewScreen extends ConsumerWidget {
             return SafeArea(
               child: Column(
                 children: [
-                  ScreenHeader(title: 'Rapporto di lavoro', showBack: true),
+                  ScreenHeader(title: 'Rapporto', showBack: true),
                   EmptyState(
                     icon: LucideIcons.fileX,
-                    title: 'Rapporto di lavoro non trovato',
-                    body: 'Il rapporto di lavoro richiesto non è disponibile in cache.',
+                    title: 'Rapporto di intervento non trovato',
+                    body: 'Il rapporto di intervento richiesto non è disponibile in cache.',
                   ),
                 ],
               ),
@@ -1033,7 +1033,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
       if (newId == null) {
         showAppToast(
           context,
-          message: 'Accedi per rielaborare il rapporto di lavoro.',
+          message: 'Accedi per rielaborare il rapporto di intervento.',
           tone: ToastTone.warning,
         );
         return;
@@ -1063,7 +1063,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  "L'ufficio ha respinto questo rapporto di lavoro.",
+                  "L'ufficio ha respinto questo rapporto di intervento.",
                   style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.ink),
                 ),
               ),

@@ -34,9 +34,9 @@ class ChecklistWarningPanel extends ConsumerWidget {
             color: context.colors.amber,
             message: n == 1
                 ? 'Manca 1 controllo obbligatorio sugli asset. '
-                      'L\'ufficio non riceverà il rapporto di lavoro finché non lo compili.'
+                      'L\'ufficio non riceverà il rapporto di intervento finché non lo compili.'
                 : 'Mancano $n controlli obbligatori sugli asset. L\'ufficio non riceverà il '
-                      'rapporto di lavoro finché non li compili.',
+                      'rapporto di intervento finché non li compili.',
           ),
           for (final m in preview)
             Padding(

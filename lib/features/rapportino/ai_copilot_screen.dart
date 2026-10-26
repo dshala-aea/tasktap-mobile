@@ -329,7 +329,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     if (e is AiConversationException && e.offline) {
       return 'La bozza AI richiede la connessione e ora non c\'è segnale. '
-          'La dettatura sul telefono funziona anche offline: puoi compilare il rapporto di lavoro '
+          'La dettatura sul telefono funziona anche offline: puoi compilare il rapporto di intervento '
           'a mano e dettare nei campi.';
     }
     return e.toString();
@@ -387,8 +387,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   void _markDraftUsed(String reason) {
     _linkedReportId = null;
     _usedDraftMessage =
-        'Questa bozza è già stata usata per un rapporto di lavoro inviato. $reason '
-        'Per un nuovo rapporto di lavoro abbandonala e ricomincia.';
+        'Questa bozza è già stata usata per un rapporto di intervento inviato. $reason '
+        'Per un nuovo rapporto di intervento abbandonala e ricomincia.';
   }
 
   /// On entry (and before Compila): a linked report that is no longer an editable draft means
@@ -486,7 +486,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           if (mounted) {
             showAppToast(
               context,
-              message: 'Accedi per creare un rapporto di lavoro.',
+              message: 'Accedi per creare un rapporto di intervento.',
               tone: ToastTone.warning,
             );
           }
@@ -1037,7 +1037,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         setState(() => _confirming = false);
         showAppToast(
           context,
-          message: 'Non riesco a creare il rapporto di lavoro su questo telefono. Riprova.',
+          message: 'Non riesco a creare il rapporto di intervento su questo telefono. Riprova.',
           tone: ToastTone.error,
         );
         return;
@@ -1210,7 +1210,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     if (id == null) {
       showAppToast(
         context,
-        message: 'Accedi per creare un rapporto di lavoro.',
+        message: 'Accedi per creare un rapporto di intervento.',
         tone: ToastTone.warning,
       );
       return;
@@ -1233,7 +1233,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     final id = await createLocalDraft(
       ref,
-      title: ticket != null ? 'Rapporto di lavoro — ${ticket.title}' : 'Nuovo rapporto di lavoro',
+      title: ticket != null ? 'Rapporto di intervento — ${ticket.title}' : 'Nuovo rapporto di intervento',
       locationId: ticket?.locationId ?? '',
       ticketId: ticketId,
       cantiereId: widget.cantiereId,

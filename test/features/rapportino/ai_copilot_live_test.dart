@@ -1516,7 +1516,7 @@ void main() {
       );
       tester.state<NavigatorState>(find.byType(Navigator).last).pop();
       await tester.pumpAndSettle();
-      // GONE: the "Apri il rapporto di lavoro collegato" banner the chat drew after returning from
+      // GONE: the "Apri il rapporto di intervento collegato" banner the chat drew after returning from
       // the editor. The wizard has no chat pane to hang it on; what still holds is that Controlla
       // stayed put, with every action available again.
       expect(find.widgetWithText(AppButton, 'Modifica'), findsOneWidget);
@@ -1843,7 +1843,7 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
       await _compile(tester, ai, _seededDraft());
-      // GONE: the "Apri il rapporto di lavoro collegato" banner — the wizard gives the link no
+      // GONE: the "Apri il rapporto di intervento collegato" banner — the wizard gives the link no
       // surface, so the feed's presence is asserted through its effect below (it is released).
       ai.turnScript.add(const AiConversationException(404, 'gone'));
 
@@ -1875,7 +1875,7 @@ void main() {
         await _compile(tester, ai, liveDraft(withCable: true));
 
         expect(
-          find.textContaining('già stata usata per un rapporto di lavoro inviato'),
+          find.textContaining('già stata usata per un rapporto di intervento inviato'),
           findsOneWidget,
         );
         expect(button(tester, 'Modifica').onPressed, isNull);
@@ -1913,7 +1913,7 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('già stata usata per un rapporto di lavoro inviato'),
+        find.textContaining('già stata usata per un rapporto di intervento inviato'),
         findsOneWidget,
       );
       await _unmount(tester); // back, WITHOUT 'Abbandona e ricomincia'
@@ -1923,7 +1923,7 @@ void main() {
       await _compile(tester, ai, liveDraft(withCable: true));
 
       expect(
-        find.textContaining('già stata usata per un rapporto di lavoro inviato'),
+        find.textContaining('già stata usata per un rapporto di intervento inviato'),
         findsOneWidget,
       );
       expect(button(tester, 'Modifica').onPressed, isNull);
@@ -2002,7 +2002,7 @@ void main() {
 
       expect(await db.select(db.reportMateriali).get(), isEmpty, reason: 'the queued report is untouched');
       expect(
-        find.textContaining('già stata usata per un rapporto di lavoro inviato'),
+        find.textContaining('già stata usata per un rapporto di intervento inviato'),
         findsOneWidget,
       );
       expect(find.textContaining('Cavo'), findsWidgets, reason: 'the draft stays readable');

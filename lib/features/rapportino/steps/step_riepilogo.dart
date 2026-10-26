@@ -143,7 +143,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
       if (!mounted) return;
       showAppToast(
         context,
-        message: 'Rapporto di lavoro inviato con successo',
+        message: 'Rapporto di intervento inviato con successo',
         tone: ToastTone.success,
       );
       Navigator.of(context).pop();
@@ -254,7 +254,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
       // survived.
       if (mounted) {
         setState(
-          () => _submitError = humanErrorMessage(e, azione: 'inviare il rapporto di lavoro'),
+          () => _submitError = humanErrorMessage(e, azione: 'inviare il rapporto di intervento'),
         );
       }
     } finally {
@@ -433,7 +433,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           AppTextField.multiline(
             controller: _signoffCtrl,
             label: 'Osservazioni cliente',
-            hint: 'Confermo l\'esecuzione dei lavori e la presa visione del rapporto di lavoro.',
+            hint: 'Confermo l\'esecuzione dei lavori e la presa visione del rapporto di intervento.',
             maxLines: 3,
             onChanged: (v) => ref
                 .read(reportEditorProvider(widget.reportId).notifier)
@@ -510,9 +510,9 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                 return _StatusCard(
                   color: context.colors.red,
                   icon: LucideIcons.xCircle,
-                  title: "L'ufficio ha respinto questo rapporto di lavoro.",
+                  title: "L'ufficio ha respinto questo rapporto di intervento.",
                   subtitle:
-                      'Sola lettura. Rilavoralo dalla lista dei rapporti di lavoro per '
+                      'Sola lettura. Rilavoralo dalla lista dei rapporti di intervento per '
                       'correggerlo e inviarlo di nuovo.',
                 );
               }
@@ -524,7 +524,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                     _StatusCard(
                       color: context.colors.green,
                       icon: LucideIcons.checkCircle2,
-                      title: 'Rapporto di lavoro inviato con successo.',
+                      title: 'Rapporto di intervento inviato con successo.',
                     ),
                     const SizedBox(height: 10),
                     // The one moment worth a stamping entrance (see StatusStamp.animate's own
@@ -541,7 +541,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   icon: LucideIcons.refreshCw,
                   title: subState == DraftSubmissionState.uploadingMedia
                       ? 'Caricamento media in corso...'
-                      : 'Invio rapporto di lavoro...',
+                      : 'Invio rapporto di intervento...',
                   showProgress: true,
                 );
               }
@@ -613,7 +613,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                       icon: LucideIcons.refreshCw,
                       title: 'In attesa di connessione',
                       subtitle:
-                          'Il rapporto di lavoro è salvato e verrà inviato appena '
+                          'Il rapporto di intervento è salvato e verrà inviato appena '
                           'torni online.',
                     )
                   else if (validation.isValid)
@@ -621,7 +621,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                       color: context.colors.green,
                       icon: LucideIcons.checkCircle2,
                       title: 'Pronto per l\'invio',
-                      subtitle: 'Il rapporto di lavoro è completo e pronto per essere inviato.',
+                      subtitle: 'Il rapporto di intervento è completo e pronto per essere inviato.',
                     ),
                   if (_submitError != null) ...[
                     const SizedBox(height: 8),
@@ -629,7 +629,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   ],
                   const SizedBox(height: 12),
                   AppButton(
-                    label: _submitting ? 'Invio in corso...' : 'Invia rapporto di lavoro',
+                    label: _submitting ? 'Invio in corso...' : 'Invia rapporto di intervento',
                     icon: _submitting ? null : const Icon(LucideIcons.send),
                     onPressed: validation.isValid && !_submitting ? _onInvia : null,
                     isLoading: _submitting,

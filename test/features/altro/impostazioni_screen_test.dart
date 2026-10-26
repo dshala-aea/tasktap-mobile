@@ -145,7 +145,7 @@ void main() {
     expect(find.text('Pianificazione'), findsOneWidget);
     expect(find.text('Licenza e abbonamento'), findsOneWidget);
     expect(find.text('Ore e presenze'), findsOneWidget);
-    expect(find.text('Rapporti di lavoro'), findsOneWidget);
+    expect(find.text('Rapporti di intervento'), findsOneWidget);
     expect(find.text('Menzioni'), findsOneWidget);
     expect(find.text('Ticket in ritardo'), findsOneWidget);
     await drain(tester);

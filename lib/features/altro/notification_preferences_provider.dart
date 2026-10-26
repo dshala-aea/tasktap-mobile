@@ -14,7 +14,7 @@ import '../../data/settings/notification_preferences_api_client.dart';
 enum PrefGroup {
   interventi('Interventi'),
   pianificazione('Pianificazione'),
-  rapportini('Rapporti di lavoro e ore'),
+  rapportini('Rapporti di intervento e ore'),
   assenze('Assenze'),
   magazzino('Magazzino'),
   sistema('Sistema'),
@@ -108,23 +108,23 @@ const Map<int, NotificationPrefLabel> kNotificationPrefLabels = {
   ),
   25: NotificationPrefLabel(
     PrefGroup.rapportini,
-    'Rapporto di lavoro inviato',
-    'Quando un tecnico invia un rapporto di lavoro all\'ufficio',
+    'Rapporto di intervento inviato',
+    'Quando un tecnico invia un rapporto di intervento all\'ufficio',
   ),
   17: NotificationPrefLabel(
     PrefGroup.rapportini,
-    'Rapporto di lavoro rivisto',
-    'Quando un tuo rapporto di lavoro viene rivisto',
+    'Rapporto di intervento rivisto',
+    'Quando un tuo rapporto di intervento viene rivisto',
   ),
   18: NotificationPrefLabel(
     PrefGroup.rapportini,
-    'Rapporto di lavoro respinto',
-    'Quando un tuo rapporto di lavoro viene respinto',
+    'Rapporto di intervento respinto',
+    'Quando un tuo rapporto di intervento viene respinto',
   ),
   19: NotificationPrefLabel(
     PrefGroup.rapportini,
-    'Rapporto di lavoro annullato',
-    'Quando un rapporto di lavoro viene annullato',
+    'Rapporto di intervento annullato',
+    'Quando un rapporto di intervento viene annullato',
   ),
   20: NotificationPrefLabel(
     PrefGroup.assenze,

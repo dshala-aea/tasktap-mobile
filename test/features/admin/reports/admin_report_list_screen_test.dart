@@ -118,7 +118,7 @@ void main() {
 
       expect(find.text('Manutenzione caldaia'), findsOneWidget);
       expect(
-        find.textContaining('potrebbero mancare rapportini non ancora scaricati'),
+        find.textContaining('potrebbero mancare rapporti di intervento non ancora scaricati'),
         findsOneWidget,
       );
 
@@ -136,8 +136,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Rapportini non disponibili offline'), findsOneWidget);
-        expect(find.text('Nessun rapportino'), findsNothing);
+        expect(find.text('Rapporti di intervento non disponibili offline'), findsOneWidget);
+        expect(find.text('Nessun rapporto di intervento'), findsNothing);
 
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();

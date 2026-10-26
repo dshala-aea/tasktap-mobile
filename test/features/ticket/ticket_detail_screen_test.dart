@@ -661,7 +661,7 @@ void main() {
       await seedBase(db);
       await pump(tester);
 
-      expect(find.text('Crea rapporto di lavoro'), findsOneWidget);
+      expect(find.text('Crea rapporto di intervento'), findsOneWidget);
       expect(find.text('Timbra cantiere'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -692,8 +692,8 @@ void main() {
 
       await pump(tester);
 
-      expect(find.text('Crea rapporto di lavoro'), findsNothing);
-      expect(find.text('AI Copilot'), findsNothing);
+      expect(find.text('Crea rapporto di intervento'), findsNothing);
+      expect(find.text('Assistente AI'), findsNothing);
       // Not silence: the bar says the ticket is closed and where the way back is.
       expect(find.textContaining('Intervento chiuso'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1217,9 +1217,9 @@ void main() {
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nessun rapporto di lavoro'), findsOneWidget);
+      expect(find.text('Nessun rapporto di intervento'), findsOneWidget);
       expect(
-        find.text('Non ci sono rapporti di lavoro registrati per questo ticket.'),
+        find.text('Non ci sono rapporti di intervento registrati per questo ticket.'),
         findsOneWidget,
       );
       await resetAndDispose(tester);
@@ -1234,10 +1234,10 @@ void main() {
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rapporti di lavoro non ancora sul telefono'), findsOneWidget);
+      expect(find.text('Rapporti di intervento non ancora sul telefono'), findsOneWidget);
       // Never claims "nessun rapportino" — that would say "there is
       // nothing" when the truth is "we could not check".
-      expect(find.text('Nessun rapporto di lavoro'), findsNothing);
+      expect(find.text('Nessun rapporto di intervento'), findsNothing);
       await resetAndDispose(tester);
     });
 
@@ -1268,8 +1268,8 @@ void main() {
       // The row renders `StatusPill`, which is a `StatusStamp` — the stamp device upper-cases its
       // label (same as the Rapportini list's 'BOZZA'/'INVIATA' assertions).
       expect(find.text('INVIATO'), findsOneWidget, reason: 'the mirror stato, by name');
-      expect(find.text('Rapporti di lavoro non ancora sul telefono'), findsNothing);
-      expect(find.text('Nessun rapporto di lavoro'), findsNothing);
+      expect(find.text('Rapporti di intervento non ancora sul telefono'), findsNothing);
+      expect(find.text('Nessun rapporto di intervento'), findsNothing);
       await resetAndDispose(tester);
     });
   });

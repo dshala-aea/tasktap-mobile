@@ -116,7 +116,7 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
               icon: LucideIcons.clipboardCheck,
               title: 'Nessun ticket',
               body:
-                  'Questo rapporto di lavoro non è collegato a un ticket: '
+                  'Questo rapporto di intervento non è collegato a un ticket: '
                   'non ci sono controlli per asset.',
             )
           : ref
