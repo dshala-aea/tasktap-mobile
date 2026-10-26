@@ -13,11 +13,12 @@
 // device — a fixed wall tablet's site doesn't change scan to scan, so the technician is never
 // asked. Scan, confirm, done.
 //
-// Split into two screens (scan prompt, then confirm) rather than one stateful screen toggling
+// Split into two screens (scan, then confirm) rather than one stateful screen toggling
 // between phases: KioskConfirmTimbraScreen takes the scanned token as a plain constructor
 // parameter, so its error-handling logic is directly widget-testable without driving the real
 // camera — the same reason `mobile_scanner`-touching flows elsewhere in this app (see
 // step_materiali_fold_test.dart) only test that the scan button renders, never the camera itself.
+// The first of the two no longer draws a prompt of its own: see ScanTimbraScreen's doc comment.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'package:flutter/material.dart';
@@ -32,57 +33,71 @@ import '../../data/timbratura/worklog_api_client.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'timbra_providers.dart';
 
-/// Entry screen: prompts for a camera scan of the totem's QR, then pushes
-/// [KioskConfirmTimbraScreen] with the scanned token.
+/// Opens the camera sheet and returns the raw scanned string, or null if the technician backs
+/// out. Injectable so the flow's two outcomes can be driven without a camera — the same reason
+/// [KioskConfirmTimbraScreen] takes its token as a plain constructor parameter.
+typedef ScanOpener = Future<String?> Function(BuildContext context);
+
+/// Entry screen: the scanner itself.
+///
+/// There used to be a page here — header, a sentence about the totem, and a second "Scansiona QR"
+/// button — so clocking in from the dashboard, the Timbra header or the QR-required notice cost
+/// two taps and a screen that asked nothing. Nothing on that page was a decision; it only
+/// restated where the technician had already chosen to go. The camera now opens on the way in,
+/// and the route exists purely to own the scan → confirm → pop sequence.
 class ScanTimbraScreen extends StatefulWidget {
-  const ScanTimbraScreen({super.key});
+  const ScanTimbraScreen({super.key, this.openScanner = _openTotemScanner});
+
+  static Future<String?> _openTotemScanner(BuildContext context) =>
+      openBarcodeScanSheet(context, title: 'Scansiona il totem');
+
+  final ScanOpener openScanner;
 
   @override
   State<ScanTimbraScreen> createState() => _ScanTimbraScreenState();
 }
 
 class _ScanTimbraScreenState extends State<ScanTimbraScreen> {
+  bool _started = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Post-frame: opening a route from `initState` would push during this frame's build.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scan());
+  }
+
   Future<void> _scan() async {
-    final value = await openBarcodeScanSheet(context, title: 'Scansiona il totem');
-    if (value == null || !mounted) return;
+    if (_started) return;
+    _started = true;
+
+    final value = await widget.openScanner(context);
+    if (!mounted) return;
+
+    if (value == null || value.trim().isEmpty) {
+      // Cancelled. With no prompt page to fall back to, staying mounted would strand the
+      // technician on an empty screen.
+      Navigator.of(context).pop();
+      return;
+    }
+
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => KioskConfirmTimbraScreen(token: value.trim())));
+
+    // The confirmation screen pops itself once the punch lands (or offers its own way back on a
+    // failure); this route has served its purpose either way and must not be what the technician
+    // lands back on.
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Never seen for long: the camera sheet paints over it on the first post-frame. It is the
+    // honest thing to show while the camera starts, and it is not a page to come back to.
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const ScreenHeader(title: 'Timbra con QR', showBack: true),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Inquadra il codice QR mostrato dal totem presenze per registrare '
-                      'ingresso o uscita.',
-                      style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
-                    ),
-                    const SizedBox(height: AppSpacing.xxl),
-                    AppButton(
-                      label: 'Scansiona QR',
-                      icon: const Icon(Icons.qr_code_scanner, size: 18),
-                      onPressed: _scan,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      body: const Center(child: CircularProgressIndicator()),
     );
   }
 }

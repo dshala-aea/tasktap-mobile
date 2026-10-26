@@ -1,7 +1,7 @@
 // test/features/timbra/scan_timbra_screen_test.dart
 //
-// Widget tests for ScanTimbraScreen (scan prompt only — driving the real camera isn't tested,
-// same convention as step_materiali_fold_test.dart's "shows the scan button") and
+// Widget tests for ScanTimbraScreen (the scan→confirm hand-off — the camera itself is injected,
+// so no real scanner is driven, same convention as step_materiali_fold_test.dart) and
 // KioskConfirmTimbraScreen (the auto-submit/error/retry flow, fully testable since it takes the
 // scanned token as a plain constructor parameter — see scan_timbra_screen.dart's own header
 // comment for why it's split this way). No location/customer here: the backend now resolves the
@@ -113,12 +113,74 @@ Future<void> _pushConfirmScreen(WidgetTester tester, Widget tree) async {
 
 void main() {
   group('ScanTimbraScreen', () {
-    testWidgets('renders the header and the scan button', (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: ScanTimbraScreen()));
+    /// A real route stack to land back on: on cancel, and after the confirm screen returns, this
+    /// screen pops itself — popping the sole root route of a bare `MaterialApp.home` has no
+    /// destination (see `_buildConfirmScreen`'s own note on the same pitfall).
+    Widget buildScanStack({required ScanOpener openScanner}) {
+      return MaterialApp(
+        home: Navigator(
+          onGenerateRoute: (settings) => MaterialPageRoute(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => ScanTimbraScreen(openScanner: openScanner)),
+                  ),
+                  child: const Text('MARKER-UNDERNEATH'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('opens the camera on the way in — no prompt page to tap through first', (
+      tester,
+    ) async {
+      final opened = <String>[];
+      await tester.pumpWidget(
+        buildScanStack(
+          openScanner: (context) {
+            opened.add('scan');
+            return Future.value(null); // backed out
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('MARKER-UNDERNEATH'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Timbra con QR'), findsOneWidget);
-      expect(find.widgetWithText(AppButton, 'Scansiona QR'), findsOneWidget);
+      expect(opened, hasLength(1), reason: 'the route is the scanner, not a prompt for one');
+      // Cancelling leaves nothing behind: no page still offering a second scan button.
+      expect(find.text('MARKER-UNDERNEATH'), findsOneWidget);
+      expect(find.widgetWithText(AppButton, 'Scansiona QR'), findsNothing);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('a scanned token goes straight to the confirmation screen, then back', (
+      tester,
+    ) async {
+      final client = _FakeWorklogApiClient(
+        result: const KioskScanResult(action: 'in', workLogId: 'wl-1'),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            worklogApiClientProvider.overrideWithValue(client),
+            internalUserIdProvider.overrideWith((ref) async => 'user-1'),
+          ],
+          child: buildScanStack(openScanner: (context) => Future.value('  dev-9:200:hmac  ')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('MARKER-UNDERNEATH'));
+      await tester.pumpAndSettle();
+
+      // The token is trimmed on the way through, and the punch landed without any further tap.
+      expect(client.calls.single['token'], 'dev-9:200:hmac');
+      expect(find.text('MARKER-UNDERNEATH'), findsOneWidget);
 
       await _teardown(tester);
     });
