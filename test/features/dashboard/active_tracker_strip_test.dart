@@ -17,9 +17,12 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
@@ -121,6 +124,7 @@ void main() {
     List<ActiveTracker>? trackers,
     bool online = true,
     Dio? dio,
+    String clockInMethod = 'Both',
   }) {
     final mockDio = dio ?? MockDio();
     // The queued ticket-timer push runs unawaited behind every close; stub the batch endpoint so
@@ -146,6 +150,7 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(online),
         internalUserIdProvider.overrideWith((ref) async => 'user-1'),
+        effectiveClockInMethodProvider.overrideWithValue(clockInMethod),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -164,6 +169,50 @@ void main() {
       ),
     );
   }
+
+  /// The same strip behind a real router: under QrOnly the row's one action navigates, and
+  /// `context.push` needs a route to push to. `'/'` is the strip, `timbraQr` stands in for the
+  /// scanner.
+  Widget buildRoutedStrip({
+    required IWorkSessionRepository repo,
+    required List<ActiveTracker> trackers,
+    String clockInMethod = 'QrOnly',
+  }) {
+    final router = GoRouter(
+      initialLocation: '/',
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => Scaffold(body: ActiveTrackerStrip(trackers: trackers)),
+        ),
+        GoRoute(
+          path: AppRoutes.timbraQr,
+          builder: (_, _) => const Scaffold(body: Text('SCANNER QR')),
+        ),
+      ],
+    );
+
+    return ProviderScope(
+      overrides: [
+        workSessionRepositoryProvider.overrideWithValue(repo),
+        dioProvider.overrideWithValue(MockDio()),
+        locationServiceProvider.overrideWithValue(const DisabledLocationService()),
+        appDatabaseProvider.overrideWithValue(db),
+        isOnlineProvider.overrideWithValue(true),
+        internalUserIdProvider.overrideWith((ref) async => 'user-1'),
+        effectiveClockInMethodProvider.overrideWithValue(clockInMethod),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    );
+  }
+
+  List<ActiveTracker> attendanceTrackers() => [
+    ActiveTracker(
+      kind: ActiveTrackerKind.attendance,
+      id: 'local-attendance',
+      startedAtUtc: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
+    ),
+  ];
 
   testWidgets(
     'tapping Ferma surfaces a toast when closing the worklog genuinely fails, instead of '
@@ -289,6 +338,74 @@ void main() {
 
     final sessions = await real.getTodaySessions();
     expect(sessions.any((s) => s.eventType == 'fine'), isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(Duration.zero);
+    }
+  });
+
+  // ── QrOnly tenants ──────────────────────────────────────────────────────────
+  //
+  // Reported from the field: with a QR-only tenant, break start/stop from the hero worked
+  // without ever scanning while "Ferma" — the one control that reaches the server — failed.
+  // The row is a copy of the Timbra screen's buttons, and that screen already swaps them for
+  // "Scansiona QR" under QrOnly; this one did not.
+
+  testWidgets('QrOnly: the attendance row offers the scanner instead of Pausa/Ferma, and it opens', (
+    tester,
+  ) async {
+    final repo = await seededFailingRepo('fine');
+    await tester.pumpWidget(buildRoutedStrip(repo: repo, trackers: attendanceTrackers()));
+    await tester.pump();
+    await tester.pump();
+
+    // Pausa wrote a break event locally without any scan; Ferma sent a punch the server refuses.
+    expect(find.text('Pausa'), findsNothing);
+    expect(find.text('Ferma'), findsNothing);
+    expect(find.text('Timbra con QR'), findsOneWidget);
+
+    await tester.tap(find.text('Timbra con QR'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('SCANNER QR'), findsOneWidget);
+
+    // The clock did not move: the punch happens after the scan, on the scanner's own screen.
+    final sessions = await repo.getTodaySessions();
+    expect(sessions.any((s) => s.eventType == 'fine'), isFalse);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(Duration.zero);
+    }
+  });
+
+  testWidgets('QrOnly leaves the site-session row alone: it has no scan-only punch to defer to', (
+    tester,
+  ) async {
+    final start = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+    await tester.pumpWidget(
+      buildStrip(
+        repo: WorkSessionRepository(db),
+        clockInMethod: 'QrOnly',
+        trackers: [
+          ...attendanceTrackers(),
+          ActiveTracker(
+            kind: ActiveTrackerKind.cantiere,
+            id: 'p1',
+            startedAtUtc: start,
+            label: 'Cantiere Via Roma',
+            entityId: 'c1',
+          ),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Timbra con QR'), findsOneWidget, reason: 'attendance defers to the totem');
+    expect(find.text('Ferma'), findsOneWidget, reason: 'the site session still stops from here');
 
     await tester.pumpWidget(const SizedBox.shrink());
     for (var i = 0; i < 5; i++) {

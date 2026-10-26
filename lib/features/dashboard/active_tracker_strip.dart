@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../data/worklogs/active_tracker_api_client.dart';
@@ -47,6 +48,16 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 ///
 /// A pause button that silently did nothing on two of three kinds would be worse than its absence,
 /// so it is only drawn where it exists.
+///
+/// ## QrOnly tenants
+///
+/// The three controls are copies of the Timbra screen's buttons, and that screen already knows a
+/// tenant can require a kiosk scan: `ButtonOnly`/`QrOnly` swaps its buttons for "Scansiona QR".
+/// This row did not, so under `QrOnly` the same technician could start and end a break from Home
+/// without ever scanning (the app allowed it; only the server refused the *button* punch, and the
+/// pause path never reached the wire) while "Ferma" — which does hit the wire — failed. Both are
+/// now the one action that can complete on a `QrOnly` tenant: open the scanner, where the server's
+/// `availableActions` decide which transition to offer.
 class ActiveTrackerStrip extends ConsumerWidget {
   const ActiveTrackerStrip({super.key, required this.trackers});
 
@@ -107,6 +118,10 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
 
   Future<void> _stop() {
     final t = widget.tracker;
+    // Not reachable from the UI — under QrOnly the row draws one scanner action instead of these
+    // two — but a punch the server is guaranteed to refuse must not be reachable at all, and the
+    // guard costs nothing.
+    if (t.kind == ActiveTrackerKind.attendance && _qrOnly) return _openScanner();
     return _run(() async {
       switch (t.kind) {
         case ActiveTrackerKind.attendance:
@@ -165,10 +180,17 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
     });
   }
 
-  Future<void> _togglePause() => _run(() async {
-    await ref.read(punchNotifierProvider.notifier).togglePause(ref.read(timbraStateProvider));
-    _throwIfPunchFailed();
-  });
+  Future<void> _togglePause() {
+    if (_qrOnly) return _openScanner();
+    return _run(() async {
+      await ref.read(punchNotifierProvider.notifier).togglePause(ref.read(timbraStateProvider));
+      _throwIfPunchFailed();
+    });
+  }
+
+  bool get _qrOnly => ref.read(effectiveClockInMethodProvider) == 'QrOnly';
+
+  Future<void> _openScanner() async => context.push(AppRoutes.timbraQr);
 
   /// `PunchNotifier.punch()`/`togglePause()` never throw — a repo failure is caught internally
   /// and parked in the notifier's own `state` as `AsyncError`, which is exactly the contract
@@ -197,7 +219,14 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
 
     // Pause exists for the working day only. The guard is the server's, so a payroll-locked month
     // states its reason instead of failing on tap.
-    final canPause = t.kind == ActiveTrackerKind.attendance;
+    //
+    // Neither control is drawn under QrOnly: see this class's own doc comment. The elapsed clock,
+    // the "in pausa" badge and the label still come from the tracker, so the row keeps telling the
+    // technician what is running while it sends them to the totem to change it.
+    final qrOnly =
+        t.kind == ActiveTrackerKind.attendance &&
+        ref.watch(effectiveClockInMethodProvider) == 'QrOnly';
+    final canPause = t.kind == ActiveTrackerKind.attendance && !qrOnly;
     final pauseGuard = canPause ? ref.watch(pauseGuardProvider) : null;
 
     // A running ticket clock is the mockup's "hero-task" chip — the job this elapsed time is
@@ -289,16 +318,24 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
                 ),
               )
             else ...[
-              if (canPause)
+              if (qrOnly)
                 _GlassAction(
-                  icon: onBreak ? LucideIcons.play : LucideIcons.coffee,
-                  label: onBreak ? 'Riprendi' : 'Pausa',
-                  blockedReason: pauseGuard != null && pauseGuard.blocked
-                      ? pauseGuard.reason
-                      : null,
-                  onTap: _togglePause,
-                ),
-              _GlassAction(icon: LucideIcons.square, label: 'Ferma', onTap: _stop),
+                  icon: LucideIcons.scanLine,
+                  label: 'Timbra con QR',
+                  onTap: _openScanner,
+                )
+              else ...[
+                if (canPause)
+                  _GlassAction(
+                    icon: onBreak ? LucideIcons.play : LucideIcons.coffee,
+                    label: onBreak ? 'Riprendi' : 'Pausa',
+                    blockedReason: pauseGuard != null && pauseGuard.blocked
+                        ? pauseGuard.reason
+                        : null,
+                    onTap: _togglePause,
+                  ),
+                _GlassAction(icon: LucideIcons.square, label: 'Ferma', onTap: _stop),
+              ],
             ],
           ],
         ),
