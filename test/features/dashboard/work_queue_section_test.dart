@@ -406,7 +406,9 @@ void main() {
       // The server's own label is lowercase ("ferie", as the presenze export prints it); a category
       // reads as one only with its capital.
       expect(find.text('Ferie'), findsOneWidget);
-      expect(find.text('ASSENZA'), findsOneWidget);
+      // The tier header renders as "<TITLE>  <count>", so it is matched by containing rather than
+      // by equality.
+      expect(find.textContaining('ASSENZA'), findsOneWidget);
       // No card inviting the technician to start work that does not exist.
       expect(find.text('DA FARE'), findsNothing);
       expect(find.text('Apri'), findsNothing);
@@ -432,7 +434,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Permesso'), findsOneWidget);
-      expect(find.text('ASSENZA'), findsOneWidget);
+      expect(find.textContaining('ASSENZA'), findsOneWidget);
       expect(find.text('Sostituzione caldaia'), findsOneWidget);
       expect(find.text('DA FARE'), findsOneWidget);
 
