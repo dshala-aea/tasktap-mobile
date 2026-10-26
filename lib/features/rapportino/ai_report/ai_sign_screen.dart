@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
@@ -17,6 +18,8 @@ import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
+import '../../../presentation/providers/schedule_providers.dart' show customerByIdProvider;
+import '../absence/customer_absence.dart';
 import 'ai_card.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -60,6 +63,10 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
       final file = File('${dir.path}/$id.png');
       await file.writeAsBytes(bytes);
       await notifier.saveCustomerSignature(allegatoId: id, bytes: bytes, localPath: file.path);
+      // The two are alternatives, not a pair: once the customer has signed, a recorded reason would
+      // describe a report that is in fact signed, and the office would read "Senza firma cliente"
+      // over a signature.
+      await notifier.clearCustomerSignatureAbsence();
     } catch (e) {
       if (mounted) {
         setState(() => _error = humanErrorMessage(e, azione: 'salvare la firma'));
@@ -67,6 +74,20 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
     } finally {
       if (mounted) setState(() => _capturing = false);
     }
+  }
+
+  /// "Il cliente non può firmare": the reason replaces the signature pad and, per the submit gate,
+  /// is what lets an unsigned report leave the phone.
+  Future<void> _recordAbsence(ReportEditorState state, ReportEditorNotifier notifier) async {
+    final choice = await showDialog<CustomerAbsenceChoice>(
+      context: context,
+      builder: (_) => CustomerAbsenceDialog(
+        initialReason: state.customerSignatureAbsenceReason,
+        initialNote: state.customerSignatureAbsenceNote,
+      ),
+    );
+    if (choice == null || !mounted) return;
+    await notifier.setCustomerSignatureAbsence(reason: choice.reason, note: choice.note);
   }
 
   Future<void> _send(ReportEditorState state) async {
@@ -100,10 +121,28 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
     final state = ref.watch(reportEditorProvider(widget.reportId));
     final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
     final signed = state.customerSignatureAllegatoId != null;
+    final absence = state.customerSignatureAbsenceReason;
     final hours = state.staffRows
         .map((r) => r.hoursWorked)
         .whereType<double>()
         .fold<double>(0, (a, b) => a + b);
+
+    // Who the customer is, from the local cache: the name goes under "Firma qui" so the person
+    // holding the phone can check it is the right one before signing, and the stamp line is what the
+    // PDF will carry. Both degrade to nothing when the customer is not cached (a cantiere-bound
+    // rapportino, or a first run before the first sync) — never to an invented name.
+    final customer = state.customerId == null
+        ? null
+        : ref.watch(customerByIdProvider(state.customerId!)).valueOrNull;
+    final company = customer?.companyName.trim();
+    final contact = customer?.contactPerson?.trim();
+    final signerName = (contact != null && contact.isNotEmpty)
+        ? contact
+        : (company != null && company.isNotEmpty) ? company : null;
+    final when = DateFormat('dd/MM/yyyy, HH:mm').format(DateTime.now());
+    final stamp = (contact != null && contact.isNotEmpty && company != null && company.isNotEmpty)
+        ? '$company · $when'
+        : when;
 
     return PopScope(
       // Leaving mid-flow must not silently drop the report: it stays a draft on the phone either
@@ -159,75 +198,119 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
                     const AiCardGap(),
 
                     // ── Firma ────────────────────────────────────────────────────
-                    AiCard(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const AiLabel('Firma qui'),
-                          const SizedBox(height: 8),
-                          if (signed && state.customerSignatureLocalPath != null) ...[
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: Image.file(
-                                File(state.customerSignatureLocalPath!),
-                                height: 140,
-                                fit: BoxFit.contain,
-                                errorBuilder: (ctx, e, _) => Icon(
-                                  LucideIcons.imageOff,
-                                  color: context.colors.inkMuted,
-                                  size: 40,
-                                ),
+                    // Signed pad and recorded absence are alternatives on screen exactly as they are
+                    // in the model: showing the reason card while a signature exists would invite the
+                    // technician to record why a signed report was not signed.
+                    if (absence != null)
+                      CustomerAbsenceCard(
+                        reason: absence,
+                        note: state.customerSignatureAbsenceNote,
+                        onEdit: _capturing || _sending
+                            ? () {}
+                            : () => _recordAbsence(state, notifier),
+                      )
+                    else
+                      AiCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const AiLabel('Firma qui'),
+                            if (signerName != null) ...[
+                              const SizedBox(height: 4),
+                              AiValue(signerName),
+                            ],
+                            const SizedBox(height: 2),
+                            Text(
+                              stamp,
+                              style: TextStyle(
+                                fontFamily: 'IBM Plex Mono',
+                                fontSize: 11,
+                                letterSpacing: 0.6,
+                                color: context.colors.inkMuted,
                               ),
                             ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton(
-                                key: const ValueKey('ai-sign-clear'),
-                                onPressed: _capturing || _sending
-                                    ? null
-                                    : () => notifier.clearCustomerSignature(),
-                                style: TextButton.styleFrom(
-                                  minimumSize: const Size(44, 44),
-                                ),
-                                child: Text(
-                                  'Cancella firma',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: context.colors.red,
+                            const SizedBox(height: 10),
+                            if (signed && state.customerSignatureLocalPath != null) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Image.file(
+                                  File(state.customerSignatureLocalPath!),
+                                  height: 140,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (ctx, e, _) => Icon(
+                                    LucideIcons.imageOff,
+                                    color: context.colors.inkMuted,
+                                    size: 40,
                                   ),
                                 ),
                               ),
-                            ),
-                          ] else
-                            GestureDetector(
-                              key: const ValueKey('ai-sign-capture'),
-                              onTap: _capturing || _sending ? null : () => _capture(notifier),
-                              child: Container(
-                                height: 140,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: context.colors.borderStrong,
-                                    style: BorderStyle.solid,
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton(
+                                  key: const ValueKey('ai-sign-clear'),
+                                  onPressed: _capturing || _sending
+                                      ? null
+                                      : () => notifier.clearCustomerSignature(),
+                                  style: TextButton.styleFrom(
+                                    minimumSize: const Size(44, 44),
+                                  ),
+                                  child: Text(
+                                    'Cancella firma',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: context.colors.red,
+                                    ),
                                   ),
                                 ),
-                                child: Center(
-                                  child: _capturing
-                                      ? const SizedBox(
-                                          width: 24,
-                                          height: 24,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        )
-                                      : AiHelper('Fai firmare il cliente con il dito'),
+                              ),
+                            ] else ...[
+                              GestureDetector(
+                                key: const ValueKey('ai-sign-capture'),
+                                onTap: _capturing || _sending ? null : () => _capture(notifier),
+                                child: AiCard(
+                                  todo: true,
+                                  padding: EdgeInsets.zero,
+                                  child: SizedBox(
+                                    height: 140,
+                                    child: Center(
+                                      child: _capturing
+                                          ? const SizedBox(
+                                              width: 24,
+                                              height: 24,
+                                              child: CircularProgressIndicator(strokeWidth: 2),
+                                            )
+                                          : AiHelper('Fai firmare il cliente con il dito'),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton(
+                                  key: const ValueKey('ai-sign-absent'),
+                                  onPressed: _capturing || _sending
+                                      ? null
+                                      : () => _recordAbsence(state, notifier),
+                                  style: TextButton.styleFrom(
+                                    minimumSize: const Size(44, 44),
+                                  ),
+                                  child: Text(
+                                    'Il cliente non può firmare',
+                                    style: TextStyle(
+                                      fontFamily: 'Archivo',
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: context.colors.red,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                    ),
                     if (_error != null) ...[
                       const AiCardGap(),
                       Container(
@@ -259,9 +342,17 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
                   AppSpacing.base,
                 ),
                 child: AppButton(
-                  label: _sending ? 'Invio in corso…' : 'Firma e invia all\'ufficio',
+                  // A signed report is sent to be filed; an unsigned one is sent because the customer
+                  // could not sign, and the office reads that difference off the button.
+                  label: _sending
+                      ? 'Invio in corso…'
+                      : signed
+                      ? 'Firma e invia all\'ufficio'
+                      : 'Invia senza firma',
                   isLoading: _sending,
-                  onPressed: !signed || _sending || _capturing ? null : () => _send(state),
+                  onPressed: (!signed && absence == null) || _sending || _capturing
+                      ? null
+                      : () => _send(state),
                 ),
               ),
             ],
