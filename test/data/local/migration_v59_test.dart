@@ -84,10 +84,11 @@ void main() {
 
   /// Rewinds the file to the shape a real v57 database has: neither column exists.
   ///
-  /// 57 and not 58: this branch's ladder ends at the 59 step, so a fixture that claims 58 would skip
-  /// the very migration under test. When schema 58 (schedules.is_assenza, a separate branch) lands
-  /// first, its step runs here too against a fixture that already declares that column and its own
-  /// `PRAGMA` guard skips it — which is why every step since 50 is guarded.
+  /// 57 and not 58: a fixture that claimed 58 would skip the very migration under test. The ladder
+  /// now runs 58 (`schedules.is_assenza`) and then 59 (this pair), so a reopened file walks both.
+  /// Step 58 finds its column already declared by the fixture's current-schema DDL and its own
+  /// `PRAGMA` guard skips the add — which is why every step since 50 is guarded, and why this
+  /// fixture does not have to reconstruct a v57 `schedules`.
   NativeDatabase rewindToV57() => NativeDatabase(
     file,
     setup: (raw) {

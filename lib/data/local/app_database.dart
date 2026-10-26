@@ -2398,7 +2398,7 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(draftReports, draftReports.customerSignatureAbsenceNote);
           }
         }
-         if (from < 58) {
+        if (from < 58) {
           // An approved absence is materialised server-side as an ordinary schedule so the agenda
           // blocks the day — which also means the phone could not tell it from a job: it counted in
           // "oggi" and sat in the work queue as "da fare", and the admin screens offered edits the
