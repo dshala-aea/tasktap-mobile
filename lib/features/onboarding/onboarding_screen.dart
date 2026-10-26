@@ -76,6 +76,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   'Puoi comunque timbrare e compilare rapporti di intervento: resteranno senza '
                   'coordinate.',
               ctaLabel: 'Consenti la posizione',
+              // The OS dialog is the ask, fired on page entry — no crafted allow/deny pair of our
+              // own. See PermissionStepPage.requiresSystemDialog.
+              requiresSystemDialog: true,
               checkStatus: () async =>
                   _fromGps(await ref.read(locationServiceProvider).permissionStatus()),
               request: () async {
@@ -97,6 +100,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   'Senza notifiche l\'app funziona lo stesso: trovi tutto in Dashboard e in '
                   'Calendario, ma lo scopri quando apri l\'app.',
               ctaLabel: 'Attiva le notifiche',
+              // App Store 5.1.1: the system dialog is the ask, fired on page entry. No "Non ora"
+              // and no crafted consent button — on iOS a skip recorded locally burns the one
+              // system dialog the technician will ever be shown. A refusal lands on
+              // "Apri impostazioni".
+              requiresSystemDialog: true,
               checkStatus: () async {
                 if (!NotificationService.isAvailable) return PermissionStepStatus.unavailable;
                 final status = await NotificationService.instance.authorizationStatus();
@@ -131,6 +139,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   'intervento; il microfono per dettare la descrizione invece di scriverla.',
               senzaDiEsso: 'Puoi comunque compilare i rapporti di intervento a mano, senza foto.',
               ctaLabel: 'Consenti',
+              // Both halves are OS permissions, so both asks are the OS dialog, fired on page
+              // entry — including the refusal, which is the "Non ora" here. See
+              // PermissionStepPage.requiresSystemDialog.
+              requiresSystemDialog: true,
               checkStatus: _cameraMicStatus,
               request: _cameraMicRequest,
               onDone: _next,
@@ -175,18 +187,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<PermissionStepStatus> _cameraMicRequest() async {
     final cameraResult = await Permission.camera.request();
-    // Mic's actual grant still goes through DictationService, not permission_handler, so the app
-    // keeps exactly one place that decides "dictation actually works" (capability + permission
-    // together) — see step_dettagli.dart's own capability() call for the other consumer of this.
+    // The microphone is asked for exactly like the camera: the OS dialog is the only consent, and
+    // the refusal the technician gives it *is* the "Non ora". It used to be left unasked here —
+    // `DictationService.capability()` reads `hasPermission`, it never requests — which is why this
+    // step could end "still undecided" and needed an app-drawn skip. The *decision* still goes
+    // through DictationService (capability + permission together), so there remains exactly one
+    // place that says whether dictation actually works; see step_dettagli.dart's capability() call
+    // for its other consumer.
+    await Permission.microphone.request();
     final micCapability = await ref.read(dictationServiceProvider).capability();
     final micStatus = await Permission.microphone.status;
     if (cameraResult.isGranted && (micCapability.microphoneGranted || micStatus.isGranted)) {
       return PermissionStepStatus.granted;
     }
-    if (cameraResult.isPermanentlyDenied || micStatus.isPermanentlyDenied) {
-      return PermissionStepStatus.deniedForever;
-    }
-    return PermissionStepStatus.notDetermined;
+    // A real ask just happened, so anything short of granted is the OS's answer — final on both
+    // platforms, unlike the ambiguous pre-ask status check above. Returning "undecided" here would
+    // leave the step with no way forward once the app no longer offers a skip of its own.
+    return PermissionStepStatus.deniedForever;
   }
 
   PermissionStepStatus _fromGps(GpsPermissionStatus status) => switch (status) {

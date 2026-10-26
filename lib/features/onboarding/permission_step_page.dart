@@ -41,6 +41,7 @@ class PermissionStepPage extends StatefulWidget {
     required this.request,
     required this.onDone,
     this.onOpenSettings,
+    this.requiresSystemDialog = false,
   });
 
   final IconData icon;
@@ -70,13 +71,29 @@ class PermissionStepPage extends StatefulWidget {
   /// settings-opening callback.
   final VoidCallback? onOpenSettings;
 
+  /// When true, this step's ask is the real system dialog and nothing else: it is fired as soon
+  /// as the purpose card is on screen, and there is no app-drawn "Consenti / Non ora" for the
+  /// technician to answer instead.
+  ///
+  /// This is an App Store rule, not a preference. Consent has to come from the system dialog; an
+  /// app-crafted allow/deny pair that stands in for it is a 5.1.1 rejection risk (it mimics a
+  /// system permission dialog) and the OS never sees the answer, so what the app records is a
+  /// local preference dressed up as consent. Notifications are where this bites hardest: on iOS a
+  /// recorded "Non ora" costs the technician the one system dialog they will ever be shown, and
+  /// nothing in the app can give it back to them.
+  ///
+  /// Set by the three OS-permission steps — Location, Notifiche, Fotocamera e microfono. Not by
+  /// Blocco biometrico, which is an app setting with no OS consent dialog behind it, so its
+  /// Consenti/Non ora is a real choice about a feature rather than a stand-in for system consent.
+  final bool requiresSystemDialog;
+
   @override
   State<PermissionStepPage> createState() => _PermissionStepPageState();
 }
 
 enum _Ui { loading, ask, granted, deniedForever, unavailable }
 
-class _PermissionStepPageState extends State<PermissionStepPage> {
+class _PermissionStepPageState extends State<PermissionStepPage> with WidgetsBindingObserver {
   _Ui _ui = _Ui.loading;
   bool _busy = false;
   Timer? _autoAdvanceTimer;
@@ -84,20 +101,38 @@ class _PermissionStepPageState extends State<PermissionStepPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoAdvanceTimer?.cancel();
     super.dispose();
+  }
+
+  /// Coming back from the system settings page this step just sent the technician to is the one
+  /// moment the answer can change without this page asking for it. Without the re-check the page
+  /// kept saying "Apri impostazioni" over a permission that was already granted, and the
+  /// technician had to leave via "Continua" to find out it had worked — the opposite of the
+  /// "open the system settings" escape this step offers.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _ui == _Ui.deniedForever) _load();
   }
 
   Future<void> _load() async {
     final status = await widget.checkStatus();
     if (!mounted) return;
     setState(() => _ui = _uiFor(status));
-    if (_ui == _Ui.granted) _scheduleAutoAdvance();
+    if (_ui == _Ui.granted) {
+      _scheduleAutoAdvance();
+      return;
+    }
+    // The system dialog is the prompt: fire it as soon as the purpose card is on screen, so the
+    // technician is never asked to answer a consent screen of the app's own making.
+    if (_ui == _Ui.ask && widget.requiresSystemDialog) unawaited(_consenti());
   }
 
   _Ui _uiFor(PermissionStepStatus status) => switch (status) {
@@ -117,7 +152,22 @@ class _PermissionStepPageState extends State<PermissionStepPage> {
   Future<void> _consenti() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final status = await widget.request();
+    final PermissionStepStatus status;
+    try {
+      status = await widget.request();
+    } catch (_) {
+      // A platform call that throws — Firebase misconfigured after init, a channel error — is not
+      // an answer. Leaving `_busy` set would strand the page on a spinner with no way forward,
+      // which on a [PermissionStepPage.requiresSystemDialog] step (no skip at all) traps the
+      // technician inside onboarding. Report it as "this device can't ask right now", the state
+      // that always carries a continue.
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _ui = _Ui.unavailable;
+      });
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -125,6 +175,11 @@ class _PermissionStepPageState extends State<PermissionStepPage> {
     });
     if (_ui == _Ui.granted) _scheduleAutoAdvance();
   }
+
+  /// Label for the secondary action. On a [PermissionStepPage.requiresSystemDialog] step it is a
+  /// plain "Continua": it only ever appears after the OS has already answered, and it must not
+  /// read as an app-authored "Non ora" that the app could mistake for a decision of its own.
+  String get _continueLabel => widget.requiresSystemDialog ? 'Continua' : 'Non ora';
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +225,11 @@ class _PermissionStepPageState extends State<PermissionStepPage> {
         return [
           const Text('Non disponibile su questo dispositivo.', textAlign: TextAlign.center),
           const SizedBox(height: AppSpacing.base),
-          AppButton.secondary(label: 'Non ora', onPressed: widget.onDone, size: AppButtonSize.lg),
+          AppButton.secondary(
+            label: _continueLabel,
+            onPressed: widget.onDone,
+            size: AppButtonSize.lg,
+          ),
         ];
       case _Ui.deniedForever:
         return [
@@ -180,7 +239,11 @@ class _PermissionStepPageState extends State<PermissionStepPage> {
             size: AppButtonSize.lg,
           ),
           const SizedBox(height: AppSpacing.sm),
-          AppButton.secondary(label: 'Non ora', onPressed: widget.onDone, size: AppButtonSize.lg),
+          AppButton.secondary(
+            label: _continueLabel,
+            onPressed: widget.onDone,
+            size: AppButtonSize.lg,
+          ),
         ];
       case _Ui.ask:
         return [
@@ -190,8 +253,16 @@ class _PermissionStepPageState extends State<PermissionStepPage> {
             onPressed: _busy ? null : _consenti,
             size: AppButtonSize.lg,
           ),
-          const SizedBox(height: AppSpacing.sm),
-          AppButton.secondary(label: 'Non ora', onPressed: widget.onDone, size: AppButtonSize.lg),
+          // No skip on a requiresSystemDialog step: the only way past the undecided state is the
+          // real system dialog, so the answer is always the OS's and never the app's.
+          if (!widget.requiresSystemDialog) ...[
+            const SizedBox(height: AppSpacing.sm),
+            AppButton.secondary(
+              label: _continueLabel,
+              onPressed: widget.onDone,
+              size: AppButtonSize.lg,
+            ),
+          ],
         ];
     }
   }

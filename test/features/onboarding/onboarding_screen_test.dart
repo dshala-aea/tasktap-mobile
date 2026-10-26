@@ -41,8 +41,25 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Inizia'));
-    await tester.pumpAndSettle();
+    // The page transition only. A full settle would run past this page: location is already
+    // granted here, and a granted step advances itself after a short beat.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Dove sei intervenuto'), findsOneWidget);
+  });
+
+  testWidgets('a granted Location step advances itself to the Notifiche step', (tester) async {
+    await tester.pumpWidget(_wrap('user-1'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Inizia'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Avvisi sul lavoro'), findsOneWidget);
+    // Firebase is not initialised in tests, so the Notifiche step is in its unavailable state: no
+    // OS dialog to offer, and a plain "Continua" is the only action — never a consent screen.
+    expect(find.text('Non disponibile su questo dispositivo.'), findsOneWidget);
+    expect(find.text('Non ora'), findsNothing);
   });
 }
