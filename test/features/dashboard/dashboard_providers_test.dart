@@ -8,6 +8,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/dashboard/dashboard_providers.dart';
@@ -22,6 +23,7 @@ void main() {
   late AppDatabase db;
   late ProviderContainer container;
   late DateTime today;
+  late DateTime tomorrow;
 
   setUp(() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -29,8 +31,13 @@ void main() {
     container = ProviderContainer(
       overrides: [appDatabaseProvider.overrideWithValue(db)],
     );
-    final now = DateTime.now().toUtc();
-    today = DateTime.utc(now.year, now.month, now.day);
+    // Anchored to the *business* day, not the UTC date. The queue reads its day through
+    // `BusinessTime`, and between 23:00Z and 00:00Z (CET) the UTC date is still yesterday while
+    // the business day has already rolled over — every schedule seeded for this fixture's "today"
+    // then fell outside the day the queue reads and the whole file went red for that one hour,
+    // in whichever CI run happened to land inside it.
+    final bt = BusinessTime.fallback();
+    (today, tomorrow) = bt.utcRangeForBusinessDate(bt.businessToday());
   });
 
   tearDown(() async {
@@ -239,12 +246,12 @@ void main() {
     await seedSchedule(
       id: 's-closed-tomorrow',
       ticketId: 't-closed',
-      day: today.add(const Duration(days: 1)),
+      day: tomorrow,
     );
     await seedSchedule(
       id: 's-open-tomorrow',
       ticketId: 't-open',
-      day: today.add(const Duration(days: 1)),
+      day: tomorrow,
     );
 
     final queue = await readQueue();
@@ -354,7 +361,7 @@ void main() {
     await seedSchedule(
       id: 's-ferie-domani',
       ticketId: null,
-      day: today.add(const Duration(days: 1)),
+      day: tomorrow,
       isAssenza: true,
     );
 
