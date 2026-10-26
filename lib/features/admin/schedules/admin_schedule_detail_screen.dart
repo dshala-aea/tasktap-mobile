@@ -30,19 +30,26 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheduleAsync = ref.watch(adminScheduleDetailProvider(scheduleId));
+    // An approved absence arrives as an ordinary schedule row (that is how the server blocks the
+    // day), and the backend refuses every write to it (`absence_schedule_read_only`). Offering
+    // Modifica here invites an edit that can only fail; the absence it stands for is managed where
+    // it lives, from Ferie e Permessi. Null while loading, so the FAB is not flickered in first.
+    final lockedByAbsence = scheduleAsync.valueOrNull?.isAssenza ?? false;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-        child: AppFab(
-          icon: LucideIcons.pencil,
-          tooltip: 'Modifica',
-          onPressed: () async {
-            await context.push<bool>('/altro/pianificazioni/$scheduleId/modifica');
-          },
-        ),
-      ),
+      floatingActionButton: lockedByAbsence
+          ? null
+          : Padding(
+              padding: EdgeInsets.only(bottom: context.fabSafeBottom),
+              child: AppFab(
+                icon: LucideIcons.pencil,
+                tooltip: 'Modifica',
+                onPressed: () async {
+                  await context.push<bool>('/altro/pianificazioni/$scheduleId/modifica');
+                },
+              ),
+            ),
       body: SafeArea(
         child: scheduleAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -125,6 +132,27 @@ class _ScheduleDetailBody extends ConsumerWidget {
             showBack: true,
           ),
         ),
+        // The FAB is gone for these rows, so the screen has to say why — an office user who came
+        // here to move a job must not read the absence as "this one just cannot be edited".
+        if (schedule.isAssenza)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+                AppSpacing.pagePadding,
+                0,
+              ),
+              child: InlineAlert(
+                icon: LucideIcons.calendarX,
+                color: context.colors.amber,
+                message:
+                    'Assenza approvata: questa voce è creata dalla richiesta di ferie, permesso '
+                    'o malattia e non si può modificare da qui. Per cambiarla, annulla la '
+                    'richiesta dalle assenze.',
+              ),
+            ),
+          ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.pagePadding),

@@ -371,6 +371,15 @@ class Schedules extends Table {
   TextColumn get title => text()();
   TextColumn get description => text()();
 
+  /// True when this row exists because an absence request (Ferie/Permesso/Malattia) was approved.
+  ///
+  /// The server creates an ordinary `Schedule` for an approved absence so the agenda blocks the
+  /// day, so status and assignment say nothing about it: the row reaches the device looking like
+  /// work, counted in "oggi" and queued as "da fare". The flag is what lets every reader tell the
+  /// two apart. Defaults to false — the honest reading of a row written before the column existed,
+  /// and the behaviour of every build before this one.
+  BoolColumn get isAssenza => boolean().withDefault(const Constant(false))();
+
   // Who is on this schedule lives in [ScheduleAssignees]. teamLeadId, staffIds and squadraId
   // were dropped server-side (backend ADR-0009) and stopped arriving; keeping them here would
   // have left three columns that are null forever and a staffIds blob that never parses to
@@ -1663,7 +1672,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 57;
+  int get schemaVersion => 58;
 
   @override
   MigrationStrategy get migration {
@@ -2354,6 +2363,23 @@ class AppDatabase extends _$AppDatabase {
             'customer_signature_absence_note',
           )) {
             await m.addColumn(draftReports, draftReports.customerSignatureAbsenceNote);
+          }
+        }
+        if (from < 58) {
+          // An approved absence is materialised server-side as an ordinary schedule so the agenda
+          // blocks the day — which also means the phone could not tell it from a job: it counted in
+          // "oggi" and sat in the work queue as "da fare", and the admin screens offered edits the
+          // backend refuses (`absence_schedule_read_only`). `isAssenza` is the server's own answer
+          // to "is this really work".
+          //
+          // No `syncCursorGeneration` bump: a technician's schedules are re-sent in full on every
+          // sync (the delta filter deliberately does not cover them — see
+          // `MobileUserSyncService`'s type-level delta contract), so the first sync after the
+          // upgrade fills the flag on rows already on the device. Same `PRAGMA table_info` guard as
+          // 50-57, and here it is required: the older-schema fixtures rewind `user_version` on the
+          // CURRENT schema, which already declares the column.
+          if (!await _columnExists(m.database, 'schedules', 'is_assenza')) {
+            await m.addColumn(schedules, schedules.isAssenza);
           }
         }
       },

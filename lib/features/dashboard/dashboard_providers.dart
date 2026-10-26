@@ -153,7 +153,7 @@ final runningTicketTimerIdsProvider = StreamProvider.autoDispose<Set<String>>((
 /// "work has started" outranks the schedule's own status, because both the technician's timer and
 /// the ticket's own "In corso" flag say the job is under way while the office's schedule row still
 /// says "da fare".
-enum ScheduleBucket { live, waiting, done, actionable, cancelled }
+enum ScheduleBucket { live, waiting, done, actionable, cancelled, absence }
 
 ScheduleBucket bucketOfSchedule(
   Schedule schedule, {
@@ -161,6 +161,12 @@ ScheduleBucket bucketOfSchedule(
   required Set<String> runningTicketIds,
   required Set<String> inProgressTicketIds,
 }) {
+  // First, before every other question: an approved absence (ferie/permesso/malattia) arrives as a
+  // normal schedule row — that is how the server blocks the day — and it is the one row that is
+  // never work, whatever its status says. Left to the rules below it landed in `actionable` and
+  // was queued as "da fare", with a card inviting the technician to start a job that does not
+  // exist.
+  if (schedule.isAssenza) return ScheduleBucket.absence;
   if (scheduleTicketIsClosed(schedule, closedTicketIds)) {
     return ScheduleBucket.done;
   }
@@ -204,15 +210,18 @@ final dashboardStatsProvider = Provider.autoDispose<DashboardStats>((ref) {
   );
 
   // Counted through the same buckets the queue uses, so the hero's "DA FARE" remainder cannot
-  // disagree with what the queue below it shows.
+  // disagree with what the queue below it shows. Absences are not "interventi": a day off counted
+  // beside a day of work is the same bug as one queued as a job, one screen up.
+  final work = today.where((s) => bucket(s) != ScheduleBucket.absence);
   return DashboardStats(
-    todayCount: today.length,
-    inProgressCount: today.where((s) => bucket(s) == ScheduleBucket.live).length,
-    completedCount: today.where((s) => bucket(s) == ScheduleBucket.done).length,
+    todayCount: work.length,
+    inProgressCount: work.where((s) => bucket(s) == ScheduleBucket.live).length,
+    completedCount: work.where((s) => bucket(s) == ScheduleBucket.done).length,
     upcomingCount: upcoming
         .where(
           (s) =>
               bucket(s) != ScheduleBucket.cancelled &&
+              bucket(s) != ScheduleBucket.absence &&
               !scheduleTicketIsClosed(s, closedTickets),
         )
         .length,
@@ -244,6 +253,7 @@ class WorkQueueBuckets {
     required this.upcoming,
     required this.inAttesa,
     required this.fatto,
+    required this.absences,
   });
 
   /// statusId == 2 (In corso) today. Usually the same job(s) a running clock names in the hero's
@@ -273,11 +283,23 @@ class WorkQueueBuckets {
   /// leaves the schedule in "da fare", so status alone would keep calling it outstanding work.
   final List<Schedule> fatto;
 
+  /// Today's approved absences (ferie/permesso/malattia), in time order.
+  ///
+  /// Not work, and not in any tier above: the day is blocked for the technician, so there is
+  /// nothing to start, nothing to wait on and nothing to finish. The dashboard still says what the
+  /// day holds — "Ferie" where a job card would otherwise sit — because a technician opening the
+  /// app on a day off should read that, not an empty queue that looks like a sync failure.
+  final List<Schedule> absences;
+
   /// Whether today itself has anything in it, in any state. False means the day is genuinely
   /// empty, whatever [upcoming] holds — the dashboard states that rather than letting future
   /// rows stand in for today's work.
   bool get hasTodayWork =>
       live.isNotEmpty || daFare != null || inAttesa.isNotEmpty || fatto.isNotEmpty;
+
+  /// Whether today holds anything at all, work or absence. The day off is a fact about the day,
+  /// not an empty day, so the screen states it instead of the "nothing assigned" sentence.
+  bool get hasTodayAnything => hasTodayWork || absences.isNotEmpty;
 
   /// Every open job still ahead today, in time order — [daFare] first, then [restOfToday].
   ///
@@ -307,6 +329,7 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
   final live = <Schedule>[];
   final inAttesa = <Schedule>[];
   final fatto = <Schedule>[];
+  final absences = <Schedule>[];
   final actionableToday = <Schedule>[];
   for (final schedule in today) {
     switch (bucket(schedule)) {
@@ -318,6 +341,8 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
         fatto.add(schedule);
       case ScheduleBucket.actionable:
         actionableToday.add(schedule);
+      case ScheduleBucket.absence:
+        absences.add(schedule);
       case ScheduleBucket.cancelled:
         break;
     }
@@ -333,15 +358,19 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
     daFare: daFare,
     restOfToday: restOfToday,
     // Tomorrow's rows run through the same buckets: a closed ticket's job tomorrow is not work
-    // ahead, for the same reason a cancelled one is not, and the hero's count agrees.
+    // ahead, for the same reason a cancelled one is not, and the hero's count agrees. An absence
+    // is dropped for the same reason — it is not work ahead — and it stays visible in Calendario,
+    // which is where a planned day off belongs.
     upcoming: upcoming
         .where(
           (s) =>
               bucket(s) != ScheduleBucket.cancelled &&
+              bucket(s) != ScheduleBucket.absence &&
               !scheduleTicketIsClosed(s, closedTickets),
         )
         .toList(),
     inAttesa: inAttesa,
     fatto: fatto,
+    absences: absences,
   );
 });

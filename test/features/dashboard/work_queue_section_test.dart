@@ -360,4 +360,109 @@ void main() {
       await tester.pumpAndSettle();
     });
   });
+
+  group('WorkQueueSection an approved absence is not a job', () {
+    Future<void> insertSchedule(
+      AppDatabase db, {
+      required String id,
+      required DateTime activityDate,
+      required String title,
+      bool isAssenza = false,
+    }) {
+      return db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: id,
+              tenantId: 'tenant-1',
+              createdAt: activityDate,
+              activityDate: activityDate,
+              timeStartMinutes: 0,
+              timeEndMinutes: 0,
+              userId: 'u1',
+              statusId: 1,
+              locationId: 'loc-1',
+              allDay: const Value(true),
+              title: title,
+              description: '',
+              isAssenza: Value(isAssenza),
+            ),
+          );
+    }
+
+    testWidgets('a day off today reads as ASSENZA, never as a card to start', (tester) async {
+      final dayStart = _today();
+      await insertSchedule(
+        db,
+        id: 's-ferie',
+        activityDate: dayStart,
+        title: 'ferie',
+        isAssenza: true,
+      );
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      // The server's own label is lowercase ("ferie", as the presenze export prints it); a category
+      // reads as one only with its capital.
+      expect(find.text('Ferie'), findsOneWidget);
+      expect(find.text('ASSENZA'), findsOneWidget);
+      // No card inviting the technician to start work that does not exist.
+      expect(find.text('DA FARE'), findsNothing);
+      expect(find.text('Apri'), findsNothing);
+      // And the day is not reported as empty: it is a day off, which is a fact about the day.
+      expect(find.text('Nessun lavoro assegnato per la giornata di oggi.'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a day off still shows alongside the day\'s work', (tester) async {
+      final dayStart = _today();
+      await insertSchedule(
+        db,
+        id: 's-ferie',
+        activityDate: dayStart,
+        title: 'permesso',
+        isAssenza: true,
+      );
+      await insertSchedule(db, id: 's-job', activityDate: dayStart, title: 'Sostituzione caldaia');
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Permesso'), findsOneWidget);
+      expect(find.text('ASSENZA'), findsOneWidget);
+      expect(find.text('Sostituzione caldaia'), findsOneWidget);
+      expect(find.text('DA FARE'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a day off next week is not counted under PROSSIMI 7 GIORNI', (tester) async {
+      // Synced device, so "nothing anywhere" below is a statement about the technician's week and
+      // not about a mirror that never arrived.
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      final dayStart = _today();
+      await insertSchedule(
+        db,
+        id: 's-ferie-domani',
+        activityDate: dayStart.add(const Duration(days: 2)),
+        title: 'ferie',
+        isAssenza: true,
+      );
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      // It stays visible in Calendario; here it would read as upcoming work.
+      expect(find.text('Ferie'), findsNothing);
+      expect(find.textContaining('PROSSIMI 7 GIORNI'), findsNothing);
+      expect(find.text('Nessun intervento oggi'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
 }

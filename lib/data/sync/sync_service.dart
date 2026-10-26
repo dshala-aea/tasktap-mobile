@@ -971,6 +971,9 @@ class SyncService {
               allDay: Value(s.allDay),
               title: s.title,
               description: s.description,
+              // An approved absence is a normal schedule row on the wire; this is the only thing
+              // that separates it from work. See `Schedules.isAssenza`.
+              isAssenza: Value(s.isAssenza),
             ),
           );
 

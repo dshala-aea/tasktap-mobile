@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_detail_screen.dart';
@@ -238,6 +239,40 @@ void main() {
 
     expect(find.textContaining('Luigi Bianchi'), findsOneWidget);
     expect(find.textContaining('Anna Verdi'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  // An approved absence is materialised server-side as an ordinary schedule, so this screen used
+  // to offer Modifica on it — and the backend answers that edit with `absence_schedule_read_only`.
+  // The FAB is gone for those rows and the screen states why, rather than letting an office user
+  // discover the refusal after filling the form.
+  testWidgets('an absence-owned row hides Modifica and says why', (tester) async {
+    await _seedSchedule(db);
+    await (db.update(db.schedules)..where((s) => s.id.equals('sched-1'))).write(
+      const SchedulesCompanion(isAssenza: Value(true), title: Value('ferie')),
+    );
+
+    await tester.pumpWidget(_buildView(db: db));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppFab), findsNothing);
+    expect(find.textContaining('Assenza approvata'), findsOneWidget);
+    expect(find.textContaining('non si può modificare da qui'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a job keeps its Modifica action and carries no excuse', (tester) async {
+    await _seedSchedule(db);
+
+    await tester.pumpWidget(_buildView(db: db));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppFab), findsOneWidget);
+    expect(find.textContaining('Assenza approvata'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

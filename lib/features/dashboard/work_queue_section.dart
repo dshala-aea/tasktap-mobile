@@ -38,7 +38,7 @@ class WorkQueueSection extends ConsumerWidget {
     final q = ref.watch(workQueueProvider);
 
     // Nothing anywhere: one empty state for the whole queue.
-    if (!q.hasTodayWork && q.upcoming.isEmpty) {
+    if (!q.hasTodayAnything && q.upcoming.isEmpty) {
       // The queue is built from the mirror, so "nothing anywhere" is only the technician's day
       // once a sync has landed on this phone. On a device that has never synced it is the phone
       // that has nothing — wishing them a good day on the strength of a missing download is the
@@ -67,6 +67,15 @@ class WorkQueueSection extends ConsumerWidget {
     }
 
     final todaySections = <Widget>[];
+
+    // A day off comes first: it is what the day holds, and it is the one row here that is not a
+    // job. It used to arrive as an ordinary schedule and land in Da fare, with a card inviting the
+    // technician to start work that does not exist.
+    if (q.absences.isNotEmpty) {
+      todaySections.add(
+        _CompactTier(title: 'ASSENZA', schedules: q.absences, tier: _Tier.assenza),
+      );
+    }
 
     for (final schedule in q.live) {
       todaySections.add(_FocusCard(schedule: schedule, tier: _Tier.live));
@@ -98,7 +107,11 @@ class WorkQueueSection extends ConsumerWidget {
           // directly above rows dated tomorrow and later whenever the day itself was empty, and
           // a technician reading it could not tell "nothing today, but Thursday is booked" from
           // "nothing today" — the two look identical and mean different things.
-          if (q.hasTodayWork)
+          //
+          // `hasTodayAnything`, not `hasTodayWork`: a day that holds only an approved absence has
+          // no work in it, but it is not an empty day either — the absence tier built above is
+          // today's answer, and this branch used to drop it on the floor.
+          if (q.hasTodayAnything)
             ...todaySections
           else
             const Padding(
@@ -124,7 +137,7 @@ class WorkQueueSection extends ConsumerWidget {
   }
 }
 
-enum _Tier { live, daFare, programmato, inAttesa, fatto }
+enum _Tier { live, daFare, programmato, inAttesa, fatto, assenza }
 
 extension on _Tier {
   /// Icon + text together, always — see the signage grammar's own rule: a status is never color
@@ -141,6 +154,9 @@ extension on _Tier {
     // second icon for the same idea.
     _Tier.inAttesa => (LucideIcons.coffee, 'IN ATTESA'),
     _Tier.fatto => (LucideIcons.check, 'FATTO'),
+    // A day off is not a job in any state, so it gets the one glyph that says "not a work day"
+    // rather than borrowing a job tier's.
+    _Tier.assenza => (LucideIcons.calendarX, 'ASSENZA'),
   };
 }
 
@@ -201,12 +217,19 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
       ? null
       : _dateQualifiedTimeLabel(schedule.activityDate, schedule.timeStartMinutes);
   return _RowContent(
-    title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
+    // The server titles an absence row with the plain type label ("ferie", "permesso" — the same
+    // lowercase words the presenze export prints). A job title is written by a person and keeps
+    // its own casing; an absence label is a category, so it gets a capital and reads as one.
+    title: schedule.title.isNotEmpty
+        ? (schedule.isAssenza ? _capitalised(schedule.title) : schedule.title)
+        : (schedule.isAssenza ? 'Assenza' : 'Intervento'),
     subtitle: subtitle,
     customerLabel: customerName,
     timeLabel: timeLabel,
   );
 }
+
+String _capitalised(String s) => '${s[0].toUpperCase()}${s.substring(1)}';
 
 void _open(BuildContext context, Schedule schedule) {
   final ticketId = schedule.ticketId;

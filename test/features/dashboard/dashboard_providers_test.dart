@@ -80,6 +80,7 @@ void main() {
     required String? ticketId,
     required DateTime day,
     int statusId = _daFare,
+    bool isAssenza = false,
   }) => db
       .into(db.schedules)
       .insert(
@@ -94,8 +95,10 @@ void main() {
           userId: 'user-1',
           statusId: statusId,
           locationId: 'loc-1',
-          title: 'Intervento $id',
+          // An approved absence carries the server's own label, lowercase, and no ticket.
+          title: isAssenza ? 'ferie' : 'Intervento $id',
           description: '',
+          isAssenza: Value(isAssenza),
         ),
       );
 
@@ -312,5 +315,80 @@ void main() {
 
     expect(queue.live, isEmpty);
     expect(queue.fatto.map((s) => s.id), ['s-1']);
+  });
+
+  // An approved absence is materialised server-side as an ordinary schedule so the agenda blocks
+  // the day. Nothing in the row itself says "not work": it has a status, an assignee and no ticket,
+  // which is exactly the shape the "da fare" bucket used to claim. The technician then read a day
+  // off as a day with a job to start.
+  test('an approved absence is not queued as work', () async {
+    await seedStatus(id: 1, name: 'Aperto');
+    await seedTicket(id: 't-1', statusId: 1);
+    await seedSchedule(id: 's-job', ticketId: 't-1', day: today);
+    await seedSchedule(id: 's-ferie', ticketId: null, day: today, isAssenza: true);
+
+    final queue = await readQueue();
+    final stats = container.read(dashboardStatsProvider);
+
+    expect(queue.daFare?.id, 's-job');
+    expect(queue.restOfToday, isEmpty);
+    expect(queue.absences.map((s) => s.id), ['s-ferie']);
+    // Counted through the same buckets: "N interventi oggi" must not include the day off.
+    expect(stats.todayCount, 1);
+  });
+
+  test('a day that holds only an absence is not an empty day', () async {
+    await seedSchedule(id: 's-ferie', ticketId: null, day: today, isAssenza: true);
+
+    final queue = await readQueue();
+
+    expect(queue.absences.map((s) => s.id), ['s-ferie']);
+    // The screen branches on these two: `hasTodayWork` picks the "nothing assigned" sentence and
+    // must not swallow the absence, `hasTodayAnything` is what keeps the day from reading as
+    // empty.
+    expect(queue.hasTodayWork, isFalse);
+    expect(queue.hasTodayAnything, isTrue);
+  });
+
+  test('an absence in the next seven days is not work ahead', () async {
+    await seedSchedule(
+      id: 's-ferie-domani',
+      ticketId: null,
+      day: today.add(const Duration(days: 1)),
+      isAssenza: true,
+    );
+
+    final queue = await readQueue();
+    final stats = container.read(dashboardStatsProvider);
+
+    // Still visible in Calendario, which is where a planned day off belongs — but the dashboard's
+    // "Prossimi 7 giorni" counts work, and "1 in arrivo" over a week off is a wrong day.
+    expect(queue.upcoming, isEmpty);
+    expect(stats.upcomingCount, 0);
+  });
+
+  // The flag outranks the status for the same reason a closed ticket does: the office may well
+  // move an absence row's status, and a finished-looking one must not return to the queue.
+  test('an absence stays out of every work tier whatever its status says', () async {
+    await seedSchedule(
+      id: 's-ferie-live',
+      ticketId: null,
+      day: today,
+      statusId: _inCorso,
+      isAssenza: true,
+    );
+    await seedSchedule(
+      id: 's-ferie-fatto',
+      ticketId: null,
+      day: today,
+      statusId: 5,
+      isAssenza: true,
+    );
+
+    final queue = await readQueue();
+
+    expect(queue.live, isEmpty);
+    expect(queue.fatto, isEmpty);
+    expect(queue.absences.map((s) => s.id), ['s-ferie-live', 's-ferie-fatto']);
   });
 }
