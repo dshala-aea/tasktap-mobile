@@ -560,7 +560,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     final text = _inputCtrl.text.trim();
     if (text.isEmpty || _sessionId == null || _sending || _aiBlocked || _recording) return;
     if (_failed != null) return; // the unsent update must be retried or discarded first
-    _inputCtrl.clear();
+    // The box is NOT cleared here. "Descrivi di nuovo" promises that a report the assistant got
+    // wrong costs a sentence rather than a re-recording, and that promise is only kept if the
+    // sentence is still in the box when the technician comes back. The turn carries its own copy
+    // of the text from this point on, so nothing downstream depends on the field being empty.
     await _run(_Outgoing(key: const Uuid().v4(), text: text));
   }
 
