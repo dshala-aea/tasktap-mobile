@@ -193,6 +193,12 @@ void main() {
         // already declares the column, so the guard skips the add here; migration_v56_test.dart
         // covers the add path itself.
         'ticket_statuses',
+        // `schedules` too: schema 58 adds `is_assenza` to it, and every v33 device has carried its
+        // agenda since the first release. Same fixture gap as `ticket_statuses` above — without the
+        // table the step does not skip, it crashes with `no such table: schedules`, which is what
+        // this fixture did when the column landed. Today's DDL declares the column, so the guard
+        // skips the add; migration_v58_test.dart covers the add path itself.
+        'schedules',
       ]);
     });
 

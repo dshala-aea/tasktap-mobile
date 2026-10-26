@@ -1378,6 +1378,15 @@ class ScheduleDto {
   final String title;
   final String description;
 
+  /// True when this row exists because an absence request (Ferie/Permesso/Malattia) was approved,
+  /// not because someone scheduled real work.
+  ///
+  /// The server materialises an approved absence as a completely ordinary `Schedule` row, so
+  /// without this flag the device cannot tell one apart from a job: it counted in "oggi" and in
+  /// the work queue. Defaults to false so a build talking to an older backend reads every row as a
+  /// job — the behaviour it had before the flag existed — rather than guessing.
+  final bool isAssenza;
+
   /// Everyone on this schedule, with every reason they are on it.
   ///
   /// Replaces teamLeadId / staffIds / squadraId, which the server dropped (backend ADR-0009).
@@ -1400,6 +1409,7 @@ class ScheduleDto {
     required this.allDay,
     required this.title,
     required this.description,
+    this.isAssenza = false,
     this.assignees = const [],
   });
 
@@ -1423,6 +1433,7 @@ class ScheduleDto {
       allDay: j['allDay'] as bool? ?? false,
       title: j['title'] as String? ?? '',
       description: j['description'] as String? ?? '',
+      isAssenza: j['isAssenza'] as bool? ?? false,
       assignees: (j['assignees'] as List<dynamic>? ?? const [])
           .map((e) => ScheduleAssigneeDto.fromJson(e as Map<String, dynamic>))
           .toList(growable: false),
