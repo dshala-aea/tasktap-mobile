@@ -187,7 +187,7 @@ class AiKvRow extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) trailing!,
+          ?trailing,
           const SizedBox(width: 12),
           Text(
             value,

@@ -104,11 +104,6 @@ class _Outgoing {
     this.recording,
     this.voice,
     this.text,
-    this.source = AiTurnSource.typed,
-    this.audioRef,
-    this.durationSeconds,
-    this.replacesTurnId,
-    this.supersedes,
   });
 
   /// Generated once. For a recording it derives from the recording's own persisted key, so it is
@@ -123,13 +118,9 @@ class _Outgoing {
 
   /// Empty (not null) once a recording became the input: the words travel in [audioRef].
   String? text;
-  AiTurnSource source;
+  AiTurnSource source = AiTurnSource.typed;
   String? audioRef;
   int? durationSeconds;
-  final String? replacesTurnId;
-
-  /// The message a correction replaces (to strike it through once the correction lands).
-  final _ChatMessage? supersedes;
   _ChatMessage? message;
 
   /// The technician's hand edits from the editor that ride in this turn (Task 12). Frozen on the
@@ -744,7 +735,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       if (!mounted) return;
       _cancelThinkingTimers();
       setState(() {
-        o.supersedes?.superseded = true;
         o.message?.accepted = true;
         if (o.recording != null) _pendingRecs.removeWhere((r) => r.id == o.recording!.id);
         _messages.add(_ChatMessage(isOperator: false, text: result.assistantReplyText));
@@ -932,7 +922,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           text: o.text!,
           source: o.source,
           audioRef: o.audioRef,
-          replacesTurnId: o.replacesTurnId,
           confirmedEdits: (o.edits == null || o.edits!.isEmpty)
               ? null
               : [for (final e in o.edits!) e.toJson()],
@@ -1204,7 +1193,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       }
 
       if (!mounted) return;
-      context.go(AppRoutes.rapportiniEditor(localId));
+      // The report exists locally now, so the flow's last screen is the signing one: the customer
+      // signs, the technician sends, and only then does the office have a report. Anything still to
+      // change goes through "Modifica" on the Controlla screen, which opens the full editor.
+      context.go(AppRoutes.aiSign(localId));
     } catch (e) {
       if (!mounted) return;
       setState(() {
