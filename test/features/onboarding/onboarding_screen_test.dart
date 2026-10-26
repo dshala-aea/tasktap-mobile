@@ -41,10 +41,14 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Inizia'));
-    // The page transition only. A full settle would run past this page: location is already
-    // granted here, and a granted step advances itself after a short beat.
+    // The 250 ms page transition, then one more frame. The step reads the OS status from
+    // `initState`, so the frame the transition lands on is still the loading spinner — the answer
+    // only reaches a build after that read completes. Settling here would work today too, but
+    // only because the granted step's auto-advance is a Timer rather than a scheduled frame;
+    // this sequence does not lean on that.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
 
     expect(find.text('Dove sei intervenuto'), findsOneWidget);
   });
@@ -54,6 +58,11 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Inizia'));
+    await tester.pumpAndSettle();
+    // The granted step leaves by itself after a short beat. That is a Timer, and settling runs no
+    // clock — so the beat has to be advanced explicitly before the transition it starts can be
+    // settled, along with the Notifiche step's own status read.
+    await tester.pump(const Duration(milliseconds: 900));
     await tester.pumpAndSettle();
 
     expect(find.text('Avvisi sul lavoro'), findsOneWidget);
