@@ -293,7 +293,14 @@ Future<void> _describeAndGenerate(
   WidgetTester tester, [
   String text = 'Ho fatto il lavoro',
 ]) async {
-  await tester.tap(find.byKey(const ValueKey('ai-toggle-writing')));
+  // The toggle is the last thing on step 1, below the mic orb, in a scrolling list: on the 800x600
+  // surface the tests run on, its centre is past the bottom of the viewport and a bare `tap` lands
+  // on the pinned footer's "Genera il rapporto" instead. Scroll it into view first, as a
+  // technician would.
+  final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
+  await tester.ensureVisible(toggle);
+  await tester.pumpAndSettle();
+  await tester.tap(toggle);
   await tester.pumpAndSettle();
   await tester.enterText(find.byKey(const ValueKey('ai-description-field')), text);
   await tester.pump();

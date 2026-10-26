@@ -455,6 +455,21 @@ Future<void> _tapBack(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 300));
 }
 
+/// Taps "Preferisci scrivere?" and reveals the description field.
+///
+/// The toggle is the last thing on step 1, below the mic orb, in a scrolling list: on the 800x600
+/// surface the tests run on its centre is past the bottom of the viewport, so a bare `tap` derives
+/// an offset that hit-tests to the pinned footer's "Genera il rapporto" instead — the tap lands on
+/// a different control and the field never appears. Scrolling it into view first is what a
+/// technician does, and it is the only way the tap reaches the widget it names.
+Future<void> _tapToggleWriting(WidgetTester tester) async {
+  final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
+  await tester.ensureVisible(toggle);
+  await tester.pumpAndSettle();
+  await tester.tap(toggle);
+  await tester.pumpAndSettle();
+}
+
 /// Switches step 1 to the keyboard, types [text] and generates the report. Descrivi is the only
 /// screen with an input, so a second update first goes back through "Descrivi di nuovo" — exactly
 /// what the technician does.
@@ -464,8 +479,7 @@ Future<void> _typeAndGenerate(WidgetTester tester, String text) async {
     await tester.pumpAndSettle();
   }
   if (find.byKey(const ValueKey('ai-description-field')).evaluate().isEmpty) {
-    await tester.tap(find.byKey(const ValueKey('ai-toggle-writing')));
-    await tester.pumpAndSettle();
+    await _tapToggleWriting(tester);
   }
   await tester.enterText(find.byKey(const ValueKey('ai-description-field')), text);
   // The footer's button only enables once the parent has heard about the text.
@@ -1085,8 +1099,7 @@ void main() {
     testWidgets('typed send is blocked while recording', (tester) async {
       await tester.pumpWidget(_wrap(_FakeAi(), _FakeVoice()));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('ai-toggle-writing')));
-      await tester.pumpAndSettle();
+      await _tapToggleWriting(tester);
       await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Ho iniziato');
       await tester.pump();
       // Generation is available up to the moment the microphone opens, so the assertion below is

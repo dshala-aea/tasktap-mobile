@@ -24,6 +24,9 @@ void main() {
         'the day disc is an AnimatedContainer that moves on selection',
     'lib/features/timbra/timbra_screen.dart':
         'the 180dp gradient disc: ink over a glow reads as a smudge, and it swaps to a spinner',
+    'lib/features/rapportino/ai_report/ai_describe_step.dart':
+        'the 120dp solid disc inside two pulsing halos — same shape as timbra\'s, and the rings '
+        'speeding up plus the mic becoming a stop square is the feedback',
     'lib/presentation/screens/login/login_screen.dart':
         'the logo\'s long-press into kiosk activation is deliberately unadvertised — an InkWell '
         'ripple would visibly hint the logo is interactive, defeating the point',
