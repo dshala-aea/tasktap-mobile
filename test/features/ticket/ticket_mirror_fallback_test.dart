@@ -8,9 +8,15 @@
 //    online + server fault  → the mirror (a 503 is not "this ticket covers no prodotti");
 //    online + 4xx           → thrown (that IS an answer: gone, or not yours to see);
 //    mirror empty as well   → TicketDetailOfflineException, never "nothing here".
+//
+// For the prodotti section the mirror has two sources: the ticket's own coverage list (schema 59,
+// filled from the join table) and the checklist's `ticket_assets` rows, which the sync caps and
+// which are empty for a job with no controls. The coverage list wins when it has anything to say.
+
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -101,6 +107,45 @@ void main() {
         );
   }
 
+  /// The unit in the local catalogue, plus the ticket row that says it covers it. This is the pair
+  /// the server actually sends: `TicketDto.prodottoAssistenzaIds` off the join table, and the
+  /// `prodottiAssistenza` catalogue rows beside it.
+  Future<void> insertCoveredProduct({
+    required String id,
+    required String name,
+    List<String>? ticketCovers,
+  }) async {
+    await db
+        .into(db.prodottiAssistenza)
+        .insert(
+          ProdottiAssistenzaCompanion.insert(
+            id: id,
+            tenantId: 't',
+            createdAt: DateTime.utc(2026, 10, 1),
+            name: name,
+            customerId: 'c1',
+            locationId: 'l1',
+          ),
+        );
+    if (ticketCovers != null) {
+      await db
+          .into(db.tickets)
+          .insertOnConflictUpdate(
+            TicketsCompanion.insert(
+              id: 'ticket-1',
+              tenantId: 't',
+              createdAt: DateTime.utc(2026, 10, 1),
+              title: 'Sostituzione caldaia',
+              customerId: 'c1',
+              locationId: 'l1',
+              statusId: 1,
+              typeId: 1,
+              prodottoAssistenzaIdsJson: Value(jsonEncode(ticketCovers)),
+            ),
+          );
+    }
+  }
+
   group('ticketAttachmentsProvider', () {
     test('online, a request that never arrived answers from the mirror', () async {
       await insertAttachment('a1');
@@ -169,6 +214,42 @@ void main() {
         c.read(ticketProdottiProvider('ticket-1').future),
         throwsA(isA<TicketDetailOfflineException>()),
       );
+    });
+
+    // The checklist mirror is a *capped* view of the units (`MaxAssetControlRowsPerSync`) and is
+    // empty for a job with no controls at all, so on a dead request it under-reports coverage. The
+    // ticket's own list is the authority the server filled from the join table.
+    test('coverage on the ticket row wins over the checklist mirror', () async {
+      await insertCoveredAsset(assetId: 'p1', name: 'Caldaia');
+      await insertCoveredAsset(assetId: 'p2', name: 'Split');
+      await insertCoveredProduct(id: 'p2', name: 'Split', ticketCovers: const ['p2']);
+
+      final c = container(online: true);
+      final rows = await c.read(ticketProdottiProvider('ticket-1').future);
+
+      expect(rows.map((r) => r['id']), ['p2']);
+    });
+
+    test('coverage answers even when the checklist mirror is empty', () async {
+      await insertCoveredProduct(id: 'p1', name: 'Caldaia', ticketCovers: const ['p1']);
+
+      final c = container(online: true, serverStatus: 503);
+      final rows = await c.read(ticketProdottiProvider('ticket-1').future);
+
+      expect(rows.single['name'], 'Caldaia');
+      expect(rows.single['serialNumber'], isNull);
+    });
+
+    test('an empty coverage list is not "nothing here" — the mirror still answers', () async {
+      // The server sends `[]` for a ticket with no join rows, and a ticket whose coverage rows have
+      // not arrived yet is also a real state. Neither is evidence against the checklist mirror.
+      await insertCoveredAsset(assetId: 'p1', name: 'Caldaia');
+      await insertCoveredProduct(id: 'p9', name: 'Non coperto', ticketCovers: const []);
+
+      final c = container(online: true, serverStatus: 500);
+      final rows = await c.read(ticketProdottiProvider('ticket-1').future);
+
+      expect(rows.map((r) => r['id']), ['p1']);
     });
   });
 }

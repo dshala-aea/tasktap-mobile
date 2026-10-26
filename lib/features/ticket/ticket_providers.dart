@@ -11,6 +11,9 @@ import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
+// The JSON-text list decoder `Tickets.prodottoAssistenzaIdsJson` shares with the pending-ticket
+// outbox — one decoder for one format, per its own doc comment.
+import '../../data/tickets/pending_ticket_repository.dart' show decodePendingStringList;
 import '../../data/timbratura/ticket_timer_sync_service.dart'
     show ticketTimerRepositoryProvider;
 import '../admin/admin_api_client.dart';
@@ -275,16 +278,24 @@ final ticketReportsProvider = FutureProvider.autoDispose
 /// Prodotti in assistenza the ticket covers (Prodotti compartment): the ticket's coverage ids from
 /// the server, then each prodotto's card.
 ///
-/// Online the server's coverage ids are authoritative and each card is fetched live — the local
-/// `ticket_assets` rows are not an authoritative coverage list (see
-/// [TicketDetailApiClient.fetchCoveredProdottoIds]), they are what the sync last wrote.
+/// Online the server's coverage ids are authoritative and each card is fetched live.
 ///
-/// Offline those mirror rows are the only answer this phone has, and they are what the checklist
-/// card on the same tab already renders ([checklistReadRepositoryProvider]), so the compartment
-/// stays readable on site instead of going blank. The card-shaped map holds the identity fields the
-/// mirror keeps (`name`, `serialNumber`, `matricola`); `codice`/`marchio`/`modello` are not
-/// mirrored and simply render as absent. An empty mirror throws, exactly like its siblings: nothing
-/// on this phone is not the same fact as no asset on the ticket.
+/// Offline the ticket's own coverage list (`Tickets.prodottoAssistenzaIdsJson`, schema 59) is the
+/// answer, resolved against the `prodotti_assistenza` reference mirror — the same rows the online
+/// cards are built from, so the compartment says on site what it says in signal. It is the
+/// ticket's complete statement of coverage; before schema 59 the only mirror was `ticket_assets`,
+/// which is derived from the CHECKLIST scope (capped per sync, and only for tickets that carry
+/// control rows), so a job whose units had no controls fell through to the compartment's
+/// "Non disponibile offline" line for coverage the payload had already named.
+///
+/// `ticket_assets` stays as the fallback for a device that has not yet re-synced with a schema-59
+/// build (its cursor generation changed, so the first full sync fills the ticket column) and for an
+/// older server that does not fill the list at all. Those rows are what the checklist card on the
+/// same tab already renders ([checklistReadRepositoryProvider]), and the card-shaped map holds the
+/// identity fields that table keeps (`name`, `serialNumber`, `matricola`).
+///
+/// An empty answer throws, exactly like its siblings: nothing on this phone is not the same fact as
+/// no asset on the ticket.
 ///
 /// Online, a call that never arrived or a server fault degrades to those same mirror rows rather
 /// than blanking the compartment — the technician is standing in front of the machine either way.
@@ -299,7 +310,37 @@ final ticketProdottiProvider = FutureProvider.autoDispose
           ),
         );
 
+      /// The ticket's own coverage ids, resolved against the reference mirror. Empty when the
+      /// ticket carries none (older payload, or genuinely no unit).
+      Future<List<Map<String, dynamic>>> fromTicketCoverage() async {
+        final db = ref.watch(appDatabaseProvider);
+        final ticket = await (db.select(
+          db.tickets,
+        )..where((t) => t.id.equals(ticketId))).getSingleOrNull();
+        final ids = decodePendingStringList(ticket?.prodottoAssistenzaIdsJson);
+        if (ids.isEmpty) return const [];
+        final rows = await (db.select(
+          db.prodottiAssistenza,
+        )..where((p) => p.id.isIn(ids))).get();
+        return rows
+            .map(
+              (p) => <String, dynamic>{
+                'id': p.id,
+                'name': p.name,
+                'codice': p.codice,
+                'serialNumber': p.serialNumber,
+                'marchio': p.marchio,
+              },
+            )
+            .toList();
+      }
+
       Future<List<Map<String, dynamic>>> fromMirror() async {
+        final covered = await fromTicketCoverage();
+        // A ticket that names its units is answered from that list alone: it is the complete
+        // statement, and mixing in the checklist mirror would add nothing but a second sort order.
+        if (covered.isNotEmpty) return byName(covered);
+
         final db = ref.watch(appDatabaseProvider);
         final query = db.select(db.ticketAssets).join([
           innerJoin(db.assets, db.assets.id.equalsExp(db.ticketAssets.prodottoAssistenzaId)),

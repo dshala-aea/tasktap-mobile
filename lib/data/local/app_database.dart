@@ -258,7 +258,27 @@ class Tickets extends Table {
   TextColumn get technicianNotes => text().nullable()();
   TextColumn get internalNotes => text().nullable()();
   TextColumn get contractId => text().nullable()();
+  /// Legacy, and deliberately kept rather than dropped: the singular asset a ticket covered.
+  ///
+  /// The server's ticket carries `ProdottoAssistenzaIds` — a LIST, filled from the
+  /// `TicketProdottoAssistenza` join table — so this column never had a writer and reads null on
+  /// every row. [prodottoAssistenzaIdsJson] is what the mirror actually fills. Dropping a column
+  /// would mean rewriting the whole table on upgrade for no gain; nothing reads this one.
   TextColumn get prodottoAssistenzaId => text().nullable()();
+
+  /// The products this ticket covers, JSON-encoded — same storage as [tagsJson] (see its doc
+  /// comment for why not a comma-join).
+  ///
+  /// The server fills this on every synced ticket (`MobileUserSyncService`: one set-based read of
+  /// the join table for the whole payload), and it was invisible here for the same reason as
+  /// `numero` and `priorita`: the entity is on the wire, the client never read the key. What the
+  /// mirror did have was `TicketAssets` — coverage rows derived from the *checklist* scope, capped
+  /// per sync and only for tickets that have checklist rows at all — so a job whose units carried
+  /// no controls had no visible coverage offline. The ticket's own list is the complete statement.
+  ///
+  /// Tickets are delta-filtered, so a ticket that has not changed since the mirror was written
+  /// would keep a null forever without `syncCursorGeneration` bumping to v16 — see its doc comment.
+  TextColumn get prodottoAssistenzaIdsJson => text().nullable()();
   TextColumn get commessaId => text().nullable()();
 
   /// The cantiere (worksite) this ticket is linked to, when it has one — a ticket may or may not
@@ -693,6 +713,19 @@ class DraftReports extends Table {
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
   TextColumn get title => text()();
+
+  /// The rapportino's human number, exactly as a ticket's `numero` — what the office calls this
+  /// report ("il 41 del cliente").
+  ///
+  /// Server-side only and read-only on the device: a locally created draft has no number until it
+  /// is submitted, and the server assigns one. The sync payload has always carried it (the payload
+  /// ships the `Report` entity itself), but `ReportDto.fromJson` never read the key, so every
+  /// rapportini row could only ever show a title. Null means *no number yet*, and the list shows
+  /// nothing rather than inventing one from the row id.
+  ///
+  /// Drafts are delta-filtered by `UpdatedAt`, so `syncCursorGeneration` was bumped to v16 alongside
+  /// this column — otherwise a report the office had not touched since would keep its null forever.
+  TextColumn get numero => text().nullable()();
   TextColumn get scheduleId => text().nullable()();
   TextColumn get ticketId => text().nullable()();
   TextColumn get customerId => text().nullable()();
@@ -1672,7 +1705,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 58;
+  int get schemaVersion => 59;
 
   @override
   MigrationStrategy get migration {
@@ -2365,7 +2398,7 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(draftReports, draftReports.customerSignatureAbsenceNote);
           }
         }
-        if (from < 58) {
+         if (from < 58) {
           // An approved absence is materialised server-side as an ordinary schedule so the agenda
           // blocks the day — which also means the phone could not tell it from a job: it counted in
           // "oggi" and sat in the work queue as "da fare", and the admin screens offered edits the
@@ -2380,6 +2413,35 @@ class AppDatabase extends _$AppDatabase {
           // CURRENT schema, which already declares the column.
           if (!await _columnExists(m.database, 'schedules', 'is_assenza')) {
             await m.addColumn(schedules, schedules.isAssenza);
+          }
+        }
+        if (from < 59) {
+          // Two fields that were on the wire and never mirrored — the same class of defect as
+          // `numero` (schema 12), `priority`/`dueDate` (schema 20) and `tagsJson` (schema 32).
+          //
+          // `tickets.prodottoAssistenzaIdsJson` — the units a job covers. Read off the ticket
+          // entity the payload already ships, which `MobileUserSyncService` fills for every synced
+          // ticket from the `TicketProdottoAssistenza` join table.
+          //
+          // `draft_reports.numero` — the rapportino's human number. Server-assigned, so null on a
+          // locally created draft that has not been submitted yet.
+          //
+          // BOTH need `syncCursorGeneration` bumped to v16, and the task's own note that a
+          // rapportino "is carried in full on every sync" is not true of a delta: the drafts query
+          // is filtered on `(UpdatedAt ?? CreatedAt) > cutoff` exactly like tickets
+          // (`MobileUserSyncService`), so neither field would ever arrive for a row the office had
+          // not touched since this build was installed.
+          //
+          // Same `PRAGMA table_info` guard as 50-57, and here it is required: the
+          // older-schema fixtures in test/ rewind `user_version` on the CURRENT schema, which
+          // already declares both columns, so an unconditional add would die on
+          // `duplicate column name` before the app opens. migration_v59_test.dart covers the real
+          // add path on a database that genuinely lacks them.
+          if (!await _columnExists(m.database, 'tickets', 'prodotto_assistenza_ids_json')) {
+            await m.addColumn(tickets, tickets.prodottoAssistenzaIdsJson);
+          }
+          if (!await _columnExists(m.database, 'draft_reports', 'numero')) {
+            await m.addColumn(draftReports, draftReports.numero);
           }
         }
       },
@@ -2504,7 +2566,16 @@ class AppDatabase extends _$AppDatabase {
   ///      priority stripe would stay blank until somebody happened to edit the job. Same reasoning as
   ///      v3/v4/v6/v8. The `draft_reports.is_ai_assisted` fix in the same release needs no bump of its
   ///      own: the mobile payload carries every Bozza the user authored, in full, on each sync.
-  static const String syncCursorGeneration = 'v15';
+  ///      (Correction, v16: that last sentence is not true — `MobileUserSyncService` filters the
+  ///      draft query on `(UpdatedAt ?? CreatedAt) > cutoff` exactly like tickets, so a "full" list
+  ///      is only full on a sync without a cursor. The v16 bump below re-sends everything once and
+  ///      therefore backfills `is_ai_assisted` on every draft written before v15 too.)
+  /// v16 — 2026-10-26, schema 59 added `tickets.prodottoAssistenzaIdsJson` and
+  ///      `draft_reports.numero`. Both were already on the wire inside the entity JSON the payload
+  ///      ships (the server even fills the covered-asset list for every synced ticket), and both
+  ///      tables are delta-filtered, so an untouched ticket or rapportino would keep its null
+  ///      forever — the same blind spot as v3/v4/v6/v8/v10/v12/v13/v15.
+  static const String syncCursorGeneration = 'v16';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

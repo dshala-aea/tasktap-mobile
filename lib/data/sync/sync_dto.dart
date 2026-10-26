@@ -817,6 +817,14 @@ class TicketDto {
   /// double decode at the point of use. Null means the ticket has no custom-field values.
   final String? extensionValues;
 
+  /// The products (units) this ticket covers — see `Tickets.prodottoAssistenzaIdsJson`'s own doc
+  /// comment in `app_database.dart`.
+  ///
+  /// Not a column on the server: `MobileUserSyncService` fills it per synced ticket from the
+  /// `TicketProdottoAssistenza` join table. Empty means the ticket covers no unit, which is also
+  /// what an older server that does not yet fill it sends — the list is additive on the wire.
+  final List<String> prodottoAssistenzaIds;
+
   const TicketDto({
     required this.id,
     required this.tenantId,
@@ -841,6 +849,7 @@ class TicketDto {
     this.dueDate,
     this.tags = const [],
     this.extensionValues,
+    this.prodottoAssistenzaIds = const [],
   });
 
   factory TicketDto.fromJson(Map<String, dynamic> j) => TicketDto(
@@ -870,6 +879,9 @@ class TicketDto {
     dueDate: parseDateOnly(j['dueDate']),
     tags: (j['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
     extensionValues: j['extensionValues'] as String?,
+    prodottoAssistenzaIds:
+        (j['prodottoAssistenzaIds'] as List<dynamic>?)?.cast<String>() ??
+        const [],
   );
 
   /// Every wire key [TicketDto.fromJson] reads.
@@ -907,6 +919,7 @@ class TicketDto {
     'dueDate',
     'tags',
     'extensionValues',
+    'prodottoAssistenzaIds',
   };
 }
 
@@ -1506,6 +1519,10 @@ class ReportDto {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final String title;
+
+  /// The rapportino's human number, server-assigned — see `DraftReports.numero`'s own doc comment
+  /// in `app_database.dart`. Null on a draft created locally and not yet submitted.
+  final String? numero;
   final String? scheduleId;
   final String? ticketId;
   final String? customerId;
@@ -1550,6 +1567,7 @@ class ReportDto {
     required this.createdAt,
     this.updatedAt,
     required this.title,
+    this.numero,
     this.scheduleId,
     this.ticketId,
     this.customerId,
@@ -1583,6 +1601,7 @@ class ReportDto {
     createdAt: DateTime.parse(j['createdAt'] as String),
     updatedAt: _dt(j['updatedAt']),
     title: j['title'] as String,
+    numero: j['numero'] as String?,
     scheduleId: j['scheduleId'] as String?,
     ticketId: j['ticketId'] as String?,
     customerId: j['customerId'] as String?,
@@ -1620,6 +1639,7 @@ class ReportDto {
     'createdAt',
     'updatedAt',
     'title',
+    'numero',
     'scheduleId',
     'ticketId',
     'customerId',
