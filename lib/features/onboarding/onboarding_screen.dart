@@ -139,6 +139,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   'lavoro; il microfono per dettare la descrizione invece di scriverla.',
               senzaDiEsso: 'Puoi comunque compilare i rapporti di lavoro a mano, senza foto.',
               ctaLabel: 'Consenti',
+              // Both halves are OS permissions, so both asks are the OS dialog, fired on page
+              // entry — including the refusal, which is the "Non ora" here. See
+              // PermissionStepPage.requiresSystemDialog.
+              requiresSystemDialog: true,
               checkStatus: _cameraMicStatus,
               request: _cameraMicRequest,
               onDone: _next,
@@ -183,18 +187,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Future<PermissionStepStatus> _cameraMicRequest() async {
     final cameraResult = await Permission.camera.request();
-    // Mic's actual grant still goes through DictationService, not permission_handler, so the app
-    // keeps exactly one place that decides "dictation actually works" (capability + permission
-    // together) — see step_dettagli.dart's own capability() call for the other consumer of this.
+    // The microphone is asked for exactly like the camera: the OS dialog is the only consent, and
+    // the refusal the technician gives it *is* the "Non ora". It used to be left unasked here —
+    // `DictationService.capability()` reads `hasPermission`, it never requests — which is why this
+    // step could end "still undecided" and needed an app-drawn skip. The *decision* still goes
+    // through DictationService (capability + permission together), so there remains exactly one
+    // place that says whether dictation actually works; see step_dettagli.dart's capability() call
+    // for its other consumer.
+    await Permission.microphone.request();
     final micCapability = await ref.read(dictationServiceProvider).capability();
     final micStatus = await Permission.microphone.status;
     if (cameraResult.isGranted && (micCapability.microphoneGranted || micStatus.isGranted)) {
       return PermissionStepStatus.granted;
     }
-    if (cameraResult.isPermanentlyDenied || micStatus.isPermanentlyDenied) {
-      return PermissionStepStatus.deniedForever;
-    }
-    return PermissionStepStatus.notDetermined;
+    // A real ask just happened, so anything short of granted is the OS's answer — final on both
+    // platforms, unlike the ambiguous pre-ask status check above. Returning "undecided" here would
+    // leave the step with no way forward once the app no longer offers a skip of its own.
+    return PermissionStepStatus.deniedForever;
   }
 
   PermissionStepStatus _fromGps(GpsPermissionStatus status) => switch (status) {

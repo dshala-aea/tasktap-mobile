@@ -82,10 +82,9 @@ class PermissionStepPage extends StatefulWidget {
   /// recorded "Non ora" costs the technician the one system dialog they will ever be shown, and
   /// nothing in the app can give it back to them.
   ///
-  /// Set by the Location and Notifiche steps. Not by Fotocamera e microfono, whose request can
-  /// legitimately end still-undecided (the camera half can be granted while the microphone half is
-  /// not), so it needs a skip to stay escapable, nor by Blocco biometrico, which is an app setting
-  /// with no OS consent dialog behind it.
+  /// Set by the three OS-permission steps — Location, Notifiche, Fotocamera e microfono. Not by
+  /// Blocco biometrico, which is an app setting with no OS consent dialog behind it, so its
+  /// Consenti/Non ora is a real choice about a feature rather than a stand-in for system consent.
   final bool requiresSystemDialog;
 
   @override

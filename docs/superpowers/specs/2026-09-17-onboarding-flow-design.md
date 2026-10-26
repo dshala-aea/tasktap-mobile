@@ -91,14 +91,16 @@ the flow exists to provide) over 5 pages:
 3. **Notifiche** — same card shape, wired to `NotificationService.instance.ensurePermission()`, with
    **no "Non ora"** — same rule.
 4. **Fotocamera e microfono** — one card explaining both together (matches how the original request
-   grouped them), **Consenti** requests both permissions.
+   grouped them). The OS dialog is the ask for **both** permissions, camera first then microphone —
+   see below.
 5. **Blocco biometrico** — same card shape; **Attiva** only shown if the device actually has
    biometrics enrolled (mirrors the existing Impostazioni guard); otherwise the page states that
-   plainly instead of offering a button that can't work.
+   plainly instead of offering a button that can't work. The one step with a genuine Consenti/Non ora
+   of the app's own: there is no OS consent dialog to delegate to.
 
 Each permission page (2–5) renders one of three states, checked on page build:
-- **Not yet decided** — the explanation card. On pages 2 and 3 the OS dialog fires immediately, on
-  entry; pages 4 and 5 show a Consenti/Non ora pair.
+- **Not yet decided** — the explanation card. On pages 2, 3 and 4 the OS dialog fires immediately, on
+  entry; page 5 shows a Consenti/Non ora pair.
 - **Already granted** (from a prior contextual ask, or a previous partial run of this same flow —
   see below) — a plain confirmation state, no button, auto-advances after a short beat or on tap
   anywhere.
@@ -113,14 +115,17 @@ Last page's "Vai alla Dashboard" (or "Fine" on page 5, whichever reads better in
 `onboardingCompletedProvider`'s flag; the router's own redirect then takes over navigation — the
 screen does not call `context.go(...)` itself.
 
-**No global skip.** Pages 4 and 5 each have their own "Non ora", satisfying "must be seen once,
-individually skippable" without a shortcut that defeats the transparency purpose of the flow.
+**No global skip on the OS steps.** Pages 2, 3 and 4 put the decision where it belongs — the system
+dialog, whose refusal is the "Non ora" — so there is nothing of the app's own to skip. Page 5
+(biometric lock) keeps a Consenti/Non ora pair: it switches on a feature, and there is no OS consent
+dialog behind it.
 
 ### App Store 5.1.1: the system dialog is the consent screen
 
-Pages 2 (Location) and 3 (Notifiche) set `PermissionStepPage.requiresSystemDialog`: the OS dialog
-is fired as soon as the purpose card is on screen, and there is no app-drawn "Consenti / Non ora"
-to answer instead.
+Pages 2 (Location), 3 (Notifiche) and 4 (Fotocamera e microfono) set
+`PermissionStepPage.requiresSystemDialog`: the OS dialog is fired as soon as the purpose card is on
+screen, and there is no app-drawn "Consenti / Non ora" to answer instead. Page 4 asks twice — camera,
+then microphone — because both are OS permissions and neither may be consented for by the app.
 
 Apple requires consent to come from the system dialog. An app-crafted allow/deny pair that stands
 in for it is a rejection risk — it mimics a system permission dialog — and the OS never sees the
@@ -128,19 +133,18 @@ answer, so what the app would record is a local preference dressed up as consent
 worse product behaviour: on iOS a "Non ora" taken here costs the technician the one dialog the OS
 will ever show them, and nothing in the app can give it back. What those steps offer instead:
 
-- undecided → the purpose card, and the real OS dialog, fired without a tap; the action button (if
-  the ask somehow lands back on undecided, e.g. the camera half of page 4) is a retry of that same
-  dialog, never a substitute for it;
+- undecided → the purpose card, and the real OS dialog, fired without a tap; any button that remains
+  is a retry of that same dialog, never a substitute for it;
 - refused → "Apri impostazioni" plus a plain **Continua** (navigation out of the step, never a
   recorded refusal) plus the automatic re-check on return, above;
-- unavailable (Firebase failed to init) → the plain statement plus Continua.
+- unavailable (Firebase failed to init, no recogniser on the device) → the plain statement plus
+  Continua.
 
 A platform call that *throws* is not an answer: it falls into the unavailable state rather than
 stranding the page on a spinner, which on a step with no skip would trap the technician inside
-onboarding. Pages 4 and 5 keep "Non ora": page 4's request can legitimately end still-undecided
-(camera granted, microphone not) so it must stay escapable, and page 5 is an app setting with no OS
-consent dialog behind it.
-again later through the OS.
+onboarding. For the same reason page 4's microphone half is asked for rather than only checked: a
+request that can end "still undecided" — camera granted, microphone never asked — would otherwise
+need an app-drawn skip to stay escapable.
 
 ### Per-step permission wiring (all delegate to existing code)
 
@@ -148,7 +152,7 @@ again later through the OS.
 |---|---|---|
 | Location | `ref.read(locationServiceProvider).getCurrentPosition()` to fire the prompt; a **new** `ILocationService.permissionStatus()` to render the right state beforehand | `getCurrentPosition()` is the same call `step_dettagli.dart`'s `_captureGps` makes — reused as-is for the actual prompt, coordinate discarded. But `willPromptForPermission()` (the only status check the interface exposes today) deliberately collapses "granted" and "deniedForever" to the same `false` — its own doc comment says so, and that's correct for its one existing caller, which only needs "should I show the purpose sheet." Onboarding needs to tell those two apart to render "already done" vs. "open settings," so this adds one small method returning an enum (`granted`/`denied`/`deniedForever`/`disabled`), concrete-with-a-default like `willPromptForPermission` so test fakes need no changes. `willPromptForPermission()` itself is untouched. |
 | Notifiche | `NotificationService.instance.ensurePermission()` to fire the prompt; a **new** `NotificationService.authorizationStatus()` to render the right state beforehand | `ensurePermission()` is unchanged. `hasPermission()` (the only status check exposed today) collapses `notDetermined`/`denied` to the same `false` — fine for its one current caller ("can I skip asking"), not enough for onboarding to tell "never asked" from "said no." Adds one small method returning the raw `AuthorizationStatus`. Also guarded on `NotificationService.isAvailable` exactly like every other call site — if Firebase failed to init, this page states that plainly instead of a dead button. Note: `AuthorizationStatus` has no distinct "permanently denied" value on Android (unlike iOS's real never-again-on-deny), so `denied` is treated as "offer settings" on both platforms — the safe default, since re-requesting an already-denied permission generally shows nothing anyway. |
-| Fotocamera e microfono | Status check for both via `permission_handler`'s `Permission.camera.status`/`Permission.microphone.status` (the only one of the three that already distinguishes granted/denied/permanentlyDenied natively — no new method needed here, unlike Location/Notifiche above); the actual grant via `Permission.camera.request()` for camera, `DictationService.initialize()` for microphone | Mic's *request* deliberately still goes through `DictationService`, not `permission_handler`, even though its *status* is read via `permission_handler` — so the app has exactly one place that decides "dictation actually works" (capability + OS permission together), matching `step_dettagli.dart`'s existing `capability()` call. See "New dependency" below for why camera needs a new package at all. |
+| Fotocamera e microfono | Status check for both via `permission_handler`'s `Permission.camera.status`/`Permission.microphone.status` (the only one of the three that already distinguishes granted/denied/permanentlyDenied natively — no new method needed here, unlike Location/Notifiche above); the actual grant via `Permission.camera.request()` and `Permission.microphone.request()`, with the decision read back through `DictationService.capability()` | Both asks are OS dialogs (`requiresSystemDialog`). `DictationService.capability()` only *reads* `hasPermission` — it never requests — so leaving the microphone half unasked made this step the one that could end still-undecided and need an app-drawn skip. The ask now goes through `permission_handler` like the camera, and the *decision* stays with `DictationService` (capability + OS permission together), so there is exactly one place that says whether dictation actually works, matching `step_dettagli.dart`'s existing `capability()` call. See "New dependency" below for why camera needs `permission_handler` at all. |
 | Blocco biometrico | The extracted shared function (see "Biometric refactor" below) | Identical behavior to today's Impostazioni toggle: capability check → biometric verify prompt → persist to `impostazioniProvider`. |
 
 ### New dependency: `permission_handler`
