@@ -52,50 +52,6 @@ import 'draft_for_ticket.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 
-class _ChatMessage {
-  _ChatMessage({
-    required this.isOperator,
-    required this.text,
-    this.source = AiTurnSource.typed,
-    this.turnId,
-    this.audioRef,
-    this.durationSeconds,
-  });
-  final bool isOperator;
-
-  /// What the operator typed, or the corrected text of a voice turn. EMPTY for a voice turn taken
-  /// as recorded: the words are in the audio, never in a transcript this client produced.
-  final String text;
-  final AiTurnSource source;
-
-  /// The server's id of this operator turn, once known (the POST response carries none, so it is
-  /// read back from the conversation). A correction replaces this turn.
-  String? turnId;
-
-  /// Set when this turn's input was a recording the model listened to.
-  final String? audioRef;
-
-  /// Length of that recording, when this client uploaded it (a turn resumed from the server only
-  /// says that it was spoken).
-  final int? durationSeconds;
-
-  /// What the bubble shows: the text, or the recording's own label when there is no text to show.
-  String get displayText {
-    if (isOperator && source == AiTurnSource.voice && text.trim().isEmpty) {
-      final d = durationSeconds;
-      return d == null ? 'Registrazione vocale' : 'Registrazione vocale · ${_mmss(d)}';
-    }
-    return text;
-  }
-
-  /// Replaced by a later correction: shown struck through.
-  bool superseded = false;
-
-  /// False for an operator message the server has not accepted yet (in flight, failed, or held
-  /// back): rendered as NOT sent so it never looks delivered.
-  bool accepted = true;
-}
-
 /// One turn on its way to the server, kept whole until it succeeds so a retry re-sends exactly the
 /// same thing under exactly the same Idempotency-Key.
 class _Outgoing {
@@ -121,7 +77,6 @@ class _Outgoing {
   AiTurnSource source = AiTurnSource.typed;
   String? audioRef;
   int? durationSeconds;
-  _ChatMessage? message;
 
   /// The technician's hand edits from the editor that ride in this turn (Task 12). Frozen on the
   /// first attempt so every retry sends the same body under the same key; acknowledged only once
@@ -149,12 +104,6 @@ const _expiryWarningWindow = Duration(days: 3);
 /// acts on the local Report Confirm created, which does not exist until this screen is done.
 enum _AiStep { describe, review }
 
-/// `0:42` / `2:07` — the length of a recording, as the operator's bubble shows it.
-String _mmss(int seconds) {
-  final s = seconds < 0 ? 0 : seconds;
-  return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
-}
-
 class AiCopilotScreen extends ConsumerStatefulWidget {
   const AiCopilotScreen({
     super.key,
@@ -175,8 +124,6 @@ class AiCopilotScreen extends ConsumerStatefulWidget {
 
 class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsBindingObserver {
   final _inputCtrl = TextEditingController();
-  final _scrollCtrl = ScrollController();
-  final _messages = <_ChatMessage>[];
 
   String? _sessionId;
   AiCopilotDraftDto _draft = AiCopilotDraftDto.empty;
@@ -305,7 +252,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     _cancelThinkingTimers();
     _interruptSub?.cancel();
     _inputCtrl.dispose();
-    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -361,9 +307,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       setState(() {
         _sessionId = id;
         _starting = false;
-        if (detail != null) _adopt(detail, withTurns: true);
+        if (detail != null) _adopt(detail);
       });
-      _scrollToEnd();
       unawaited(_loadPending());
       unawaited(_refreshLinked().then((_) => _checkLinkedReport(apply: detail != null)));
     } catch (e) {
@@ -390,25 +335,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     return e.toString();
   }
 
-  /// Takes what the server holds as the truth for the draft, the expiry and (on entry) the
-  /// conversation so far.
-  void _adopt(AiConversationDetailDto d, {required bool withTurns}) {
+  /// Takes what the server holds as the truth for the draft and its expiry.
+  void _adopt(AiConversationDetailDto d) {
     _draft = d.draft;
     _expiresAt = d.expiresAtUtc;
-    if (withTurns) {
-      _messages
-        ..clear()
-        ..addAll(
-          d.turns.map(
-            (t) => _ChatMessage(
-              isOperator: t.isOperator,
-              text: t.text,
-              source: t.source,
-              turnId: t.isOperator ? t.turnId : null,
-            ),
-          ),
-        );
-    }
   }
 
   // ── live feed into the editor (Task 12) ──────────────────────────────────────
@@ -516,7 +446,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       _sessionId = null;
       _usedDraftMessage = null;
       _linkedReportId = null;
-      _messages.clear();
       _draft = AiCopilotDraftDto.empty;
       _confirmKey = null;
     });
@@ -714,19 +643,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         );
         return;
       }
-      if (o.message == null) {
-        final m = _ChatMessage(
-          isOperator: true,
-          text: o.text!,
-          source: o.source,
-          audioRef: o.audioRef,
-          durationSeconds: o.durationSeconds,
-        )..accepted = false;
-        o.message = m;
-        if (mounted) setState(() => _messages.add(m));
-        _scrollToEnd();
-      }
-
       // Hand edits made in the editor since the last sync ride in this turn, folded as confirmed
       // BEFORE the model reads it (Task 12).
       // Only a session that feeds a report has hand edits; an unlinked one never touches the store.
@@ -735,9 +651,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       if (!mounted) return;
       _cancelThinkingTimers();
       setState(() {
-        o.message?.accepted = true;
         if (o.recording != null) _pendingRecs.removeWhere((r) => r.id == o.recording!.id);
-        _messages.add(_ChatMessage(isOperator: false, text: result.assistantReplyText));
         _draft = result.draft;
         _sending = false;
         // A turn that compiled something takes the technician to the result. A turn that only asked
@@ -752,10 +666,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         unawaited(_quiet(ref.read(aiEditSyncerProvider).acknowledge(sessionId, o.edits!)));
       }
       unawaited(_feedApply());
-      _scrollToEnd();
       // The turn is accepted: only now is the local recording no longer needed.
       unawaited(_discardRecording(o));
-      unawaited(_learnTurnIds());
     } on AiVoiceUploadException catch (e) {
       if (!mounted) return;
       _cancelThinkingTimers();
@@ -828,8 +740,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     );
     if (edited == null || edited.trim().isEmpty || !mounted) return;
     setState(() {
-      if (o.message != null) _messages.remove(o.message);
-      o.message = null;
       o.text = edited.trim();
       _failedTooLong = false;
     });
@@ -841,7 +751,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     final o = _failed;
     if (o == null) return;
     setState(() {
-      if (o.message != null) _messages.remove(o.message);
       _failed = null;
       _failureMessage = null;
     });
@@ -957,7 +866,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           refetched = true;
           final d = await client.getConversation(sessionId);
           if (!mounted) rethrow;
-          setState(() => _adopt(d, withTurns: false));
+          setState(() => _adopt(d));
           continue;
         }
         rethrow;
@@ -965,43 +874,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
   }
 
-  /// The turn response names no turn id, so the id a correction must replace is read back from the
-  /// conversation: the latest operator turn, if it is the text we just sent.
-  Future<void> _learnTurnIds() async {
-    final id = _sessionId;
-    if (id == null) return;
-    try {
-      final d = await ref.read(aiApiClientProvider).getConversation(id);
-      if (!mounted) return;
-      final lastServer = d.turns.lastWhere(
-        (t) => t.isOperator,
-        orElse: () => const AiConversationTurn(
-          turnId: '',
-          role: '',
-          text: '',
-          source: AiTurnSource.typed,
-        ),
-      );
-      if (lastServer.turnId.isEmpty) return;
-      final localLast = _messages.lastWhere(
-        (m) => m.isOperator && !m.superseded,
-        orElse: () => _ChatMessage(isOperator: false, text: ''),
-      );
-      if (localLast.isOperator &&
-          localLast.turnId == null &&
-          localLast.accepted &&
-          localLast.text == lastServer.text) {
-        setState(() {
-          localLast.turnId = lastServer.turnId;
-          _expiresAt = d.expiresAtUtc;
-        });
-      }
-    } catch (_) {
-      // Best effort: "Correggi" looks the id up again when it is tapped.
-    }
-  }
-
-  // ── correction ───────────────────────────────────────────────────────────────
+  // ── voice ────────────────────────────────────────────────────────────────────
 
   Future<void> _toggleMic() async {
     if (_sending) return;
@@ -1217,7 +1090,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   }
 
   bool get _needsLeaveConfirm =>
-      !_forceLeave && (_recording || _failed != null || _messages.any((m) => !m.accepted));
+      !_forceLeave && (_recording || _failed != null || _sending || _confirming);
 
   /// Leaving (or being torn down) while recording must always release the microphone. Ticket-bound:
   /// stop and keep the file (offered again on the next entry). Ticketless: it could never be
@@ -1368,17 +1241,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       tenantId: ticket?.tenantId,
     );
     return id;
-  }
-
-  void _scrollToEnd() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollCtrl.hasClients) return;
-      _scrollCtrl.animateTo(
-        _scrollCtrl.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    });
   }
 
   // ── build ────────────────────────────────────────────────────────────────────
