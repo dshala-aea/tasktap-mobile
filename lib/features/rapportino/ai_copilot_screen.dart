@@ -1308,6 +1308,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                         busy: _sending,
                         thinkingLabel: _thinkingStageMessages[_thinkingStage],
                         voiceDisabled: _voiceDisabled,
+                        // Credits are gone for the month: the orb goes dim rather than accepting a
+                        // tap whose upload the server will refuse again. A failed turn is NOT in
+                        // this list on purpose — connectivity comes back, and speaking again is a
+                        // legitimate retry.
+                        micEnabled: _micBlockedMessage == null,
                         controller: _inputCtrl,
                         writing: _writing,
                         onToggleWriting: () => setState(() => _writing = !_writing),

@@ -28,6 +28,7 @@ class AiDescribeStep extends StatefulWidget {
     required this.busy,
     required this.thinkingLabel,
     required this.voiceDisabled,
+    this.micEnabled = true,
     required this.controller,
     required this.writing,
     required this.onToggleWriting,
@@ -46,6 +47,12 @@ class AiDescribeStep extends StatefulWidget {
 
   /// Voice capture is off for the whole company.
   final bool voiceDisabled;
+
+  /// The microphone must not take taps right now — the caller has something the technician cannot
+  /// fix by retrying (AI credits exhausted for the month). Kept separate from [voiceDisabled],
+  /// whose helper sentence says the *company* has no voice capture: that sentence would be a lie
+  /// about a tenant that simply ran out of credits, and the banner above already says the true one.
+  final bool micEnabled;
 
   final TextEditingController controller;
 
@@ -146,7 +153,8 @@ class _AiDescribeStepState extends State<AiDescribeStep> {
               _MicOrb(
                 recording: widget.recording,
                 busy: widget.busy,
-                onTap: widget.busy ? null : widget.onMic,
+                enabled: widget.micEnabled,
+                onTap: widget.busy || !widget.micEnabled ? null : widget.onMic,
               ),
               const SizedBox(height: 12),
               Text(
@@ -235,10 +243,19 @@ class _AiDescribeStepState extends State<AiDescribeStep> {
 
 /// The 120 pt red orb with its two halos, or a spinner while the assistant is compiling.
 class _MicOrb extends StatefulWidget {
-  const _MicOrb({required this.recording, required this.busy, required this.onTap});
+  const _MicOrb({
+    required this.recording,
+    required this.busy,
+    required this.enabled,
+    required this.onTap,
+  });
 
   final bool recording;
   final bool busy;
+
+  /// False when the orb is present but must not respond — drawn dimmed, so it reads as "not now"
+  /// rather than as a button that silently does nothing.
+  final bool enabled;
   final VoidCallback? onTap;
 
   @override
@@ -319,14 +336,17 @@ class _MicOrbState extends State<_MicOrb> with SingleTickerProviderStateMixin {
             ),
             GestureDetector(
               onTap: widget.onTap,
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(color: context.colors.red, shape: BoxShape.circle),
-                child: Icon(
-                  widget.recording ? LucideIcons.square : LucideIcons.mic,
-                  size: 46,
-                  color: Colors.white,
+              child: Opacity(
+                opacity: widget.enabled ? 1 : 0.45,
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(color: context.colors.red, shape: BoxShape.circle),
+                  child: Icon(
+                    widget.recording ? LucideIcons.square : LucideIcons.mic,
+                    size: 46,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),

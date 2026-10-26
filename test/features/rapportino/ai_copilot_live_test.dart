@@ -1,10 +1,20 @@
 // dart format width=100
 // test/features/rapportino/ai_copilot_live_test.dart
 //
-// Task 11 — the LIVE draft: resume/start from a ticket, the seeded draft with provenance badges,
-// voice turns (record -> upload -> turn carrying only its audioRef), correction, and the 409/429
-// handling around a turn.
+// Task 11 — the LIVE draft, driven through the two-step wizard (Descrivi → Controlla): resume/start
+// from a ticket, voice turns (record -> upload -> turn carrying only its audioRef), the
+// 409/429/422 handling around a turn, the banners, unsent recordings, consent and leave behaviour,
+// and the live feed into the editor (Task 12).
 // A fake AiApiClient and a fake VoiceCaptureController stand in for the network and the microphone.
+//
+// PORTED to the wizard. The chat pane this file used to drive is gone from lib/, so two tests were
+// deleted outright rather than retargeted at a weaker assertion, their subject no longer existing:
+//   - 'Correcting_a_voice_turn_posts_replacesTurnId' — correcting a previous turn (Correggi,
+//     `replacesTurnId`, the "Invia correzione" dialog) was deleted from the screen; a report the
+//     assistant got wrong is redone with "Descrivi di nuovo".
+//   - 'Compila and Conferma are disabled while recording' — both actions now live only on Controlla,
+//     which cannot be shown while the microphone is on (the mic exists only on Descrivi).
+// Per-assertion losses inside surviving tests are marked `// GONE:` at the point they were dropped.
 
 import 'dart:async';
 import 'dart:collection';
@@ -23,6 +33,7 @@ import 'package:tasktap_mobile/core/audio/audio_recorder_service.dart';
 import 'package:tasktap_mobile/core/audio/pending_recording_store.dart';
 import 'package:tasktap_mobile/core/audio/voice_capture_controller.dart';
 import 'package:tasktap_mobile/core/audio/voice_capture_provider.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart' show gpsPreferenceProvider;
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
@@ -315,6 +326,24 @@ AiCopilotDraftDto _seededDraft() => const AiCopilotDraftDto(
   openItems: [],
 );
 
+/// A draft with something on it, so a turn carrying it moves the flow to Controlla and the review
+/// screen has a value to show.
+AiCopilotDraftDto _reviewableDraft() => const AiCopilotDraftDto(
+  workers: [
+    AiDraftWorkerRef(
+      userId: 'me-1',
+      fullName: 'Marco Rossi',
+      hours: 3,
+      state: AiResolutionState.resolvedBySystem,
+      source: AiFactSource.ticketRecord,
+    ),
+  ],
+  materials: [],
+  controlli: [],
+  activities: [],
+  openItems: [],
+);
+
 class _NoopSync extends SyncNotifier {
   _NoopSync(AppDatabase db) : super(SyncService(db: db, dio: Dio()), db);
   @override
@@ -378,32 +407,84 @@ Future<void> _openPushed(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Types [text] and sends it.
-Future<void> _typeAndSend(WidgetTester tester, String text) async {
-  await tester.enterText(find.byType(TextFormField), text);
-  await tester.tap(find.byTooltip('Invia'));
+/// The step-1 microphone orb. It carries no tooltip and no visible label any more — it is a 120 pt
+/// disc drawn inside a `GestureDetector` — so its icon is the only stable handle, and that icon
+/// flips from the microphone to a stop square while a recording runs.
+Finder get _micIdle => find.byIcon(LucideIcons.mic);
+Finder get _micRecording => find.byIcon(LucideIcons.square);
+
+/// Is the orb taking taps? The step disables it by handing `_MicOrb` a null callback rather than by
+/// replacing the widget, so the gesture detector is where "enabled" lives.
+bool _micEnabled(WidgetTester tester) =>
+    tester
+        .widget<GestureDetector>(
+          find.ancestor(of: _micIdle, matching: find.byType(GestureDetector)).first,
+        )
+        .onTap !=
+    null;
+
+/// The one action of step 1, "Genera il rapporto": the same `_send` the chat's paper-plane called.
+/// (While a turn is in flight its label becomes "Generazione in corso…", so this is only usable
+/// when nothing is being sent.)
+AppButton _generateButton(WidgetTester tester) =>
+    tester.widget<AppButton>(find.widgetWithText(AppButton, 'Genera il rapporto'));
+
+/// Taps the orb to start a recording. Nothing may `pumpAndSettle` again until the recording ends:
+/// the orb's halos animate for as long as `recording` is true, so the settle loop would spin until
+/// it timed out. Two plain frames are enough for the controller's `start()` and the rebuild.
+Future<void> _startRecording(WidgetTester tester) async {
+  await tester.tap(_micIdle);
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 50));
+}
+
+/// Starts and stops one recording and lets the upload + turn run.
+Future<void> _recordOnce(WidgetTester tester) async {
+  await _startRecording(tester);
+  await tester.tap(_micRecording);
+  // Recording is off again, so the halos have stopped and settling is safe.
   await tester.pumpAndSettle();
+}
+
+/// The header's back control. It is an icon with a screen-reader label now ("Indietro"), so the
+/// chevron glyph is the handle. The fixed pumps let a confirmation dialog finish opening even while
+/// a recording keeps the orb pulsing (which rules out `pumpAndSettle`).
+Future<void> _tapBack(WidgetTester tester) async {
+  await tester.tap(find.byIcon(LucideIcons.chevronLeft));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+/// Switches step 1 to the keyboard, types [text] and generates the report. Descrivi is the only
+/// screen with an input, so a second update first goes back through "Descrivi di nuovo" — exactly
+/// what the technician does.
+Future<void> _typeAndGenerate(WidgetTester tester, String text) async {
+  if (find.byKey(const ValueKey('ai-describe-again')).evaluate().isNotEmpty) {
+    await tester.tap(find.byKey(const ValueKey('ai-describe-again')));
+    await tester.pumpAndSettle();
+  }
+  if (find.byKey(const ValueKey('ai-description-field')).evaluate().isEmpty) {
+    await tester.tap(find.byKey(const ValueKey('ai-toggle-writing')));
+    await tester.pumpAndSettle();
+  }
+  await tester.enterText(find.byKey(const ValueKey('ai-description-field')), text);
+  // The footer's button only enables once the parent has heard about the text.
+  await tester.pump();
+  await tester.tap(find.widgetWithText(AppButton, 'Genera il rapporto'));
+  await tester.pumpAndSettle();
+}
+
+/// Puts the flow on Controlla showing [draft]. Step 2 is only reached through a turn that compiled
+/// something, and the screen renders THAT turn's draft — the resumed one has no surface until then —
+/// so a test that wants a particular draft on step 2 has to have the server return it from a turn.
+Future<void> _compile(WidgetTester tester, _FakeAi ai, AiCopilotDraftDto draft) async {
+  ai.turnScript.add(AiConversationTurnResult(assistantReplyText: 'Ok.', draft: draft));
+  await _typeAndGenerate(tester, 'Ho finito il lavoro');
 }
 
 Future<void> _failOneTypedTurn(_FakeAi ai, WidgetTester tester) async {
   ai.turnScript.add(const AiConversationException(null, 'Nessuna connessione.', offline: true));
-  await _typeAndSend(tester, 'Primo aggiornamento');
-}
-
-bool _enabled(WidgetTester tester, String tooltip) =>
-    tester
-        .widget<IconButton>(
-          find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton)).first,
-        )
-        .onPressed !=
-    null;
-
-/// Tap the mic twice (start, then stop) and let the upload + turn run.
-Future<void> _recordOnce(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.byTooltip('Ferma la registrazione'));
-  await tester.pumpAndSettle();
+  await _typeAndGenerate(tester, 'Primo aggiornamento');
 }
 
 void main() {
@@ -499,40 +580,40 @@ void main() {
       expect(ai.resumeCalls, ['tkt-1']);
       expect(ai.startCalls, isEmpty, reason: 'a live session exists: nothing new is started');
       expect(ai.getCalls, ['sess-live']);
-      expect(find.text('Sono arrivato in sede'), findsOneWidget);
-      expect(find.text('Annotato.'), findsOneWidget);
-      expect(find.textContaining('Luca Bianchi'), findsOneWidget);
+      // GONE: the two turn texts and the worker's name. The turns were chat bubbles, and Controlla
+      // renders neither them nor the worker lines. What resuming still has to prove is that the
+      // draft was adopted and the flow opened on a usable Descrivi screen.
+      expect(find.byKey(const ValueKey('ai-toggle-writing')), findsOneWidget);
       await _unmount(tester);
     });
 
-    testWidgets('starts a session when none is live and shows the seeded draft at once', (
-      tester,
-    ) async {
+    testWidgets('starts a session when none is live', (tester) async {
       final ai = _FakeAi(detail: _detail(draft: _seededDraft()));
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
 
       expect(ai.startCalls, ['tkt-1']);
-      expect(find.textContaining('Manutenzione compressore'), findsOneWidget);
+      // GONE: 'the seeded draft is shown at once'. The draft has no surface before the first
+      // compiled turn — Controlla is only reached through one — so entry lands on Descrivi.
+      expect(find.textContaining('Descrivi le attività svolte'), findsOneWidget);
       await _unmount(tester);
     });
 
-    testWidgets('Seeded_draft_shows_planned_items_marked_planned', (tester) async {
+    testWidgets('Seeded_draft_shows_planned_items_as_proposals', (tester) async {
       final ai = _FakeAi(detail: _detail(draft: _seededDraft()));
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
+      await _compile(tester, ai, _seededDraft());
 
-      // Two planned entries (worker + material), each with the "not confirmed" badge.
-      expect(find.text('Pianificato: conferma'), findsNWidgets(2));
-      expect(
-        find.byWidgetPredicate(
-          (w) => w.key is ValueKey && '${(w.key! as ValueKey).value}'.startsWith('planned-unconfirmed-row'),
-        ),
-        findsNWidgets(2),
-      );
-      // The ticket's own hours are labelled as coming from the ticket, not as work reported.
-      expect(find.text('Dal ticket'), findsOneWidget);
-      expect(find.byType(DraftProvenanceBadge), findsNWidgets(3));
+      // A planned value the technician has not confirmed is offered to accept, never drawn as
+      // stock already used — the same rule `isUnconfirmedProposal` encodes for the badges.
+      // GONE: the chat summary's two 'Pianificato: conferma' badges and their
+      // `planned-unconfirmed-row` keys. Controlla renders only the material row (worker lines have
+      // no card), and its needsConfirmation state turns the badge into the 'Accetta' action below.
+      expect(find.text('Filtro olio'), findsOneWidget);
+      expect(find.text('Accetta'), findsOneWidget);
+      // The ticket's own activity is shown with the 3 h the ticket already had, beside its text.
+      expect(find.text('Manutenzione compressore · 3 h'), findsOneWidget);
       await _unmount(tester);
     });
   });
@@ -587,7 +668,9 @@ void main() {
       expect(p.source, AiTurnSource.voice);
       expect(p.audioRef, 'audio-1');
       expect(p.replacesTurnId, isNull);
-      expect(find.text('Registrazione vocale · 0:12'), findsOneWidget);
+      // GONE: the 'Registrazione vocale · 0:12' bubble. This turn compiled nothing, so the flow
+      // stays on Descrivi and is ready for the next description — which is what is asserted here.
+      expect(find.text('TOCCA PER INIZIARE'), findsOneWidget);
       await _unmount(tester);
     });
 
@@ -635,43 +718,11 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('Correcting_a_voice_turn_posts_replacesTurnId', (tester) async {
-      final ai = _FakeAi();
-      // After the voice turn the server's turn list names the operator turn: that id is what a
-      // correction replaces (the POST response carries no turn id). A voice turn's text is EMPTY
-      // (its words are the recording), so that is what the match sees.
-      ai.onRefetch = () => _detail(
-        turns: [
-          AiConversationTurn(
-            turnId: 'turn-7',
-            role: 'Operator',
-            text: '',
-            source: AiTurnSource.voice,
-            at: DateTime.utc(2026, 10, 20, 9),
-          ),
-        ],
-      );
-      final voice = _FakeVoice();
-      await tester.pumpWidget(_wrap(ai, voice));
-      await tester.pumpAndSettle();
-      await _recordOnce(tester);
+    // DELETED: 'Correcting_a_voice_turn_posts_replacesTurnId'. The correction path (Correggi, the
+    // `correction-field` dialog, `replacesTurnId`) no longer exists in lib/ — a wrong report is
+    // redone from Descrivi.
 
-      await tester.tap(find.text('Correggi'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const ValueKey('correction-field')), 'Ho cambiato il filtro olio');
-      await tester.tap(find.text('Invia correzione'));
-      await tester.pumpAndSettle();
-
-      expect(ai.posted, hasLength(2));
-      final c = ai.posted[1];
-      expect(c.replacesTurnId, 'turn-7');
-      expect(c.text, 'Ho cambiato il filtro olio');
-      expect(c.audioRef, 'audio-1');
-      expect(c.key, isNot(ai.posted[0].key), reason: 'a correction is a new turn: its own key');
-      await _unmount(tester);
-    });
-
-    testWidgets('Voice_disabled_404_hides_the_mic', (tester) async {
+    testWidgets('Voice_disabled_404_says_so_and_leaves_writing', (tester) async {
       final ai = _FakeAi();
       final voice = _FakeVoice()
         ..uploads.add(
@@ -682,15 +733,17 @@ void main() {
         );
       await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('Registra un aggiornamento vocale'), findsOneWidget);
+      expect(_micIdle, findsOneWidget);
 
       await _recordOnce(tester);
 
-      expect(find.byTooltip('Registra un aggiornamento vocale'), findsNothing);
+      // The orb is not hidden any more: the screen says voice is off for the company and leaves the
+      // description to the keyboard. Retrying cannot help, so no retry is offered…
       expect(find.textContaining('registrazione vocale non è attiva'), findsOneWidget);
-      // Typing (and on-device dictation) is untouched.
-      expect(find.byTooltip('Invia'), findsOneWidget);
       expect(find.text('Riprova invio'), findsNothing, reason: 'retrying cannot help');
+      // …and typing (and on-device dictation) is untouched: the turn still goes through.
+      await _typeAndGenerate(tester, 'Ho cambiato il filtro olio');
+      expect(ai.posted.single.text, 'Ho cambiato il filtro olio');
       await _unmount(tester);
     });
 
@@ -699,7 +752,7 @@ void main() {
       await tester.pumpWidget(_wrap(_FakeAi(), voice));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.tap(_micIdle);
       await tester.pumpAndSettle();
 
       expect(find.textContaining('l\'audio viene inviato al server di TaskTap'), findsOneWidget);
@@ -729,14 +782,13 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextFormField), 'Cambio filtro');
-      await tester.tap(find.byTooltip('Invia'));
-      await tester.pumpAndSettle();
+      await _typeAndGenerate(tester, 'Cambio filtro');
 
       expect(ai.posted, hasLength(3));
       expect(ai.posted.map((p) => p.key).toSet(), hasLength(1));
+      // The compiled activity is on Controlla: the retried turn landed and its draft is shown.
       expect(find.textContaining('Cambio filtro'), findsWidgets);
-      expect(find.text('Fatto.'), findsOneWidget);
+      // GONE: the assistant's 'Fatto.' reply — a chat bubble the wizard never renders.
       await _unmount(tester);
     });
 
@@ -748,9 +800,7 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextFormField), 'Cambio filtro');
-      await tester.tap(find.byTooltip('Invia'));
-      await tester.pumpAndSettle();
+      await _typeAndGenerate(tester, 'Cambio filtro');
 
       expect(ai.posted.length, lessThanOrEqualTo(8));
       expect(ai.posted.map((p) => p.key).toSet(), hasLength(1));
@@ -768,9 +818,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(ai.getCalls, hasLength(1));
 
-      await tester.enterText(find.byType(TextFormField), 'Cambio filtro');
-      await tester.tap(find.byTooltip('Invia'));
-      await tester.pumpAndSettle();
+      await _typeAndGenerate(tester, 'Cambio filtro');
 
       expect(ai.posted, hasLength(2));
       expect(ai.posted[1].key, ai.posted[0].key);
@@ -789,9 +837,7 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextFormField), 'Cambio filtro');
-      await tester.tap(find.byTooltip('Invia'));
-      await tester.pumpAndSettle();
+      await _typeAndGenerate(tester, 'Cambio filtro');
 
       expect(ai.posted, hasLength(2));
       expect(find.text('Riprova invio'), findsOneWidget);
@@ -804,16 +850,21 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextFormField), 'Cambio filtro');
-      await tester.tap(find.byTooltip('Invia'));
-      await tester.pumpAndSettle();
+      await _typeAndGenerate(tester, 'Cambio filtro');
 
-      // The draft is still there and readable.
-      expect(find.textContaining('Luca Bianchi'), findsOneWidget);
-      expect(find.textContaining('Manutenzione compressore'), findsOneWidget);
+      // GONE: 'the draft is still there and readable' (the worker's name and the activity text).
+      // The refused turn leaves the flow on Descrivi, and Controlla — the only screen that renders
+      // the draft — is not shown there. The coverage that remains is the manual path below.
       // The manual path is offered, and sending more to the AI is not.
       expect(find.text('Continua senza AI'), findsOneWidget);
       expect(find.text('Riprova invio'), findsNothing);
+      await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Ancora');
+      await tester.pump();
+      expect(
+        _generateButton(tester).onPressed,
+        isNull,
+        reason: 'no credits: the only way forward is the manual report',
+      );
 
       await tester.tap(find.text('Continua senza AI'));
       await tester.pumpAndSettle();
@@ -887,43 +938,47 @@ void main() {
 
     testWidgets('leaving the screen does NOT delete a live draft', (tester) async {
       final ai = _FakeAi();
-      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      // Pushed, so the back control really leaves: on the initial route there is nowhere to pop to
+      // and the assertion below would hold whether or not the screen released anything.
+      await tester.pumpWidget(_wrap(ai, _FakeVoice(), pushed: true));
+      await _openPushed(tester);
+      await _tapBack(tester);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Esci'));
-      await tester.pumpAndSettle();
+      expect(find.text('home-screen'), findsOneWidget);
       await _unmount(tester);
       expect(ai.abandoned, isEmpty, reason: 'the draft is durable: it is resumed, not discarded');
     });
 
     testWidgets('Held_removed_item_is_rendered', (tester) async {
-      final ai = _FakeAi(
-        detail: _detail(
-          draft: const AiCopilotDraftDto(
-            workers: [],
-            materials: [],
-            controlli: [],
-            activities: [],
-            openItems: [
-              AiCandidateFact(
-                field: 'removed.materials.id:abc',
-                state: AiResolutionState.conflict,
-                conflictOperatorValue: 'Filtro olio',
-              ),
-              AiCandidateFact(field: 'workers[0].hours', state: AiResolutionState.ambiguous),
-            ],
-          ),
-        ),
-      );
+      final ai = _FakeAi(detail: _detail(draft: AiCopilotDraftDto.empty));
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
+      await _compile(
+        tester,
+        ai,
+        const AiCopilotDraftDto(
+          workers: [],
+          materials: [],
+          controlli: [],
+          activities: [],
+          openItems: [
+            AiCandidateFact(
+              field: 'removed.materials.id:abc',
+              state: AiResolutionState.conflict,
+              conflictOperatorValue: 'Filtro olio',
+            ),
+            AiCandidateFact(field: 'workers[0].hours', state: AiResolutionState.ambiguous),
+          ],
+        ),
+      );
 
       expect(find.textContaining('Filtro olio'), findsOneWidget);
       expect(find.textContaining('rimosso'), findsWidgets);
-      expect(find.textContaining('2 punti da chiarire'), findsOneWidget);
+      // GONE: the '2 punti da chiarire' count — Controlla has no count line. What it does say is
+      // that the open items block the confirm, which is the fact that count was standing for.
+      expect(find.text('DA CHIARIRE PRIMA DI CONFERMARE'), findsOneWidget);
       // Both block Confirm, mirroring the server.
-      final confirm = tester.widget<AppButton>(
-        find.widgetWithText(AppButton, 'Conferma e apri il rapporto di lavoro'),
-      );
+      final confirm = tester.widget<AppButton>(find.widgetWithText(AppButton, 'Conferma'));
       expect(confirm.onPressed, isNull);
       await _unmount(tester);
     });
@@ -937,15 +992,17 @@ void main() {
       await _failOneTypedTurn(ai, tester);
       expect(ai.posted, hasLength(1));
 
-      await tester.enterText(find.byType(TextFormField), 'Secondo');
-      expect(_enabled(tester, 'Invia'), isFalse);
-      expect(_enabled(tester, 'Registra un aggiornamento vocale'), isFalse);
+      await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Secondo');
+      await tester.pump();
+      expect(_generateButton(tester).onPressed, isNull, reason: 'the unsent update comes first');
+      // GONE: 'the microphone is disabled too'. `AiDescribeStep` receives only the 404
+      // `voiceDisabled` flag; a failed turn does not stop the orb taking taps.
       expect(find.text('Riprova invio'), findsOneWidget);
       expect(find.text('Scarta'), findsOneWidget);
       await _unmount(tester);
     });
 
-    testWidgets('Discard_reenables_sending_and_removes_the_bubble', (tester) async {
+    testWidgets('Discard_reenables_sending', (tester) async {
       final ai = _FakeAi();
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
@@ -953,10 +1010,10 @@ void main() {
 
       await tester.tap(find.text('Scarta'));
       await tester.pumpAndSettle();
-      expect(find.text('Primo aggiornamento'), findsNothing);
+      // GONE: 'the failed bubble is gone' — there is no bubble, so its absence would prove nothing.
       expect(find.text('Riprova invio'), findsNothing);
 
-      await _typeAndSend(tester, 'Secondo');
+      await _typeAndGenerate(tester, 'Secondo');
       expect(ai.posted, hasLength(2));
       expect(ai.posted[1].text, 'Secondo');
       await _unmount(tester);
@@ -977,53 +1034,73 @@ void main() {
       await _unmount(tester);
     });
 
-    testWidgets('A_failed_bubble_is_marked_not_sent_until_accepted', (tester) async {
+    testWidgets('A_failed_update_is_marked_not_sent_until_accepted', (tester) async {
       final ai = _FakeAi();
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
       await _failOneTypedTurn(ai, tester);
-      expect(find.text('Non inviato'), findsOneWidget);
+      // The failed bubble's 'Non inviato' badge is now the banner's own sentence.
+      expect(find.textContaining('L\'aggiornamento non è stato inviato'), findsOneWidget);
 
       await tester.tap(find.text('Riprova invio'));
       await tester.pumpAndSettle();
-      expect(find.text('Non inviato'), findsNothing);
+      expect(find.textContaining('L\'aggiornamento non è stato inviato'), findsNothing);
       await _unmount(tester);
     });
 
     testWidgets('Confirm_is_disabled_while_failed_or_sending', (tester) async {
-      final ai = _FakeAi();
-      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      final ai = _FakeAi(detail: _detail(draft: _reviewableDraft()));
+      // Controlla has no input, so the only way to have a turn in flight while it is up is the
+      // pending-recordings banner: the footer's guard is what this asserts.
+      final voice = _FakeVoice()..pending = [_rec('a')];
+      await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
-      // One accepted turn so Confirm is otherwise available.
-      await _typeAndSend(tester, 'Uno');
+      await _compile(tester, ai, _reviewableDraft());
       bool confirmOn() => tester
-          .widget<AppButton>(
-            find.widgetWithText(AppButton, 'Conferma e apri il rapporto di lavoro'),
-          )
-          .onPressed != null;
+          .widget<AppButton>(find.widgetWithText(AppButton, 'Conferma'))
+          .onPressed !=
+          null;
       expect(confirmOn(), isTrue);
 
       ai.turnGate = Completer<void>();
-      await tester.enterText(find.byType(TextFormField), 'Due');
-      await tester.tap(find.byTooltip('Invia'));
+      ai.turnScript
+          .add(const AiConversationException(null, 'Nessuna connessione.', offline: true));
+      await tester.tap(find.text('Invia'));
       await tester.pump();
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
       expect(confirmOn(), isFalse, reason: 'a turn is in flight');
+
       ai.turnGate!.complete();
       await tester.pumpAndSettle();
-      expect(confirmOn(), isTrue);
-
-      await _failOneTypedTurn(ai, tester);
+      expect(find.text('Riprova invio'), findsOneWidget);
       expect(confirmOn(), isFalse, reason: 'a turn has failed');
+
+      // Retrying the failed turn clears it, and Conferma comes back.
+      await tester.tap(find.text('Riprova invio'));
+      await tester.pumpAndSettle();
+      expect(confirmOn(), isTrue);
       await _unmount(tester);
     });
 
     testWidgets('typed send is blocked while recording', (tester) async {
       await tester.pumpWidget(_wrap(_FakeAi(), _FakeVoice()));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.tap(find.byKey(const ValueKey('ai-toggle-writing')));
       await tester.pumpAndSettle();
-      expect(_enabled(tester, 'Invia'), isFalse);
+      await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Ho iniziato');
+      await tester.pump();
+      // Generation is available up to the moment the microphone opens, so the assertion below is
+      // about the recording and not about an empty field.
+      expect(_generateButton(tester).onPressed, isNotNull);
+
+      await _startRecording(tester);
+
+      expect(_generateButton(tester).onPressed, isNull);
+      expect(
+        tester.widget<TextButton>(find.byKey(const ValueKey('ai-toggle-writing'))).onPressed,
+        isNull,
+        reason: 'the description cannot be swapped mid-recording either',
+      );
       await _unmount(tester);
     });
   });
@@ -1136,14 +1213,14 @@ void main() {
       await _openPushed(tester);
       await _failOneTypedTurn(ai, tester);
 
-      await tester.tap(find.text('Esci'));
+      await _tapBack(tester);
       await tester.pumpAndSettle();
       expect(find.textContaining('non inviato'), findsWidgets);
       await tester.tap(find.text('Resta qui'));
       await tester.pumpAndSettle();
       expect(find.text('home-screen'), findsNothing);
 
-      await tester.tap(find.text('Esci'));
+      await _tapBack(tester);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Esci comunque'));
       await tester.pumpAndSettle();
@@ -1159,7 +1236,7 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), ticketId: null, pushed: true));
       await _openPushed(tester);
 
-      await tester.tap(find.text('Esci'));
+      await _tapBack(tester);
       await tester.pumpAndSettle();
 
       expect(find.text('home-screen'), findsOneWidget);
@@ -1172,7 +1249,7 @@ void main() {
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), pushed: true));
       await _openPushed(tester);
 
-      await tester.tap(find.text('Esci'));
+      await _tapBack(tester);
       await tester.pumpAndSettle();
 
       expect(find.text('home-screen'), findsOneWidget);
@@ -1214,11 +1291,9 @@ void main() {
       final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(ai, voice, ticketId: null, pushed: true));
       await _openPushed(tester);
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-      await tester.pumpAndSettle();
+      await _startRecording(tester);
 
-      await tester.tap(find.text('Esci'));
-      await tester.pumpAndSettle();
+      await _tapBack(tester);
       expect(find.textContaining('andrà perso'), findsOneWidget);
       expect(find.textContaining('riproporremo'), findsNothing);
       expect(find.textContaining('potrai inviarla'), findsNothing);
@@ -1236,11 +1311,9 @@ void main() {
       final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(_FakeAi(), voice, pushed: true));
       await _openPushed(tester);
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-      await tester.pumpAndSettle();
+      await _startRecording(tester);
 
-      await tester.tap(find.text('Esci'));
-      await tester.pumpAndSettle();
+      await _tapBack(tester);
       expect(find.textContaining('riproporremo'), findsOneWidget);
       await tester.tap(find.text('Esci comunque'));
       await tester.pumpAndSettle();
@@ -1274,8 +1347,7 @@ void main() {
       final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(_FakeAi(), voice, ticketId: null));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-      await tester.pumpAndSettle();
+      await _startRecording(tester);
 
       await _unmount(tester);
       expect(voice.cancelCalls, 1);
@@ -1286,8 +1358,7 @@ void main() {
       final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(_FakeAi(), voice));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-      await tester.pumpAndSettle();
+      await _startRecording(tester);
 
       await _unmount(tester);
       expect(voice.stopCalls, 1);
@@ -1305,7 +1376,7 @@ void main() {
       if (consent) voice.startScript.add(RecordingStartResult.consentRequired);
       await tester.pumpWidget(_wrap(_FakeAi(), voice, ticketId: ticketId));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
+      await tester.tap(_micIdle);
       await tester.pump();
       if (consent) {
         await tester.pumpAndSettle();
@@ -1359,10 +1430,8 @@ void main() {
       final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(_FakeAi(), voice, ticketId: null, pushed: true));
       await _openPushed(tester);
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Esci'));
-      await tester.pumpAndSettle();
+      await _startRecording(tester);
+      await _tapBack(tester);
       await tester.tap(find.text('Esci comunque'));
       await tester.pumpAndSettle();
       await _unmount(tester);
@@ -1404,31 +1473,36 @@ void main() {
     testWidgets('Accetta on a planned entry sends a property-less edits-only request', (
       tester,
     ) async {
-      final ai = _FakeAi(detail: _detail(draft: _seededDraft()));
+      final ai = _FakeAi();
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
+      await _compile(tester, ai, _seededDraft());
 
-      expect(find.text('Accetta'), findsNWidgets(2), reason: 'one per planned entry');
-      await tester.tap(find.text('Accetta').last);
+      // One per planned MATERIAL. A planned worker has no inline accept any more: Controlla draws
+      // workers only as their total hours, so the material row is the one entry that can be
+      // accepted on its own.
+      expect(find.text('Accetta'), findsOneWidget, reason: 'one per planned material entry');
+      await tester.tap(find.text('Accetta'));
       await tester.pumpAndSettle();
 
-      expect(ai.posted.single.text, '', reason: 'edits-only: no model call, no charge');
-      expect(ai.postedEdits.single, [
+      expect(ai.posted.last.text, '', reason: 'edits-only: no model call, no charge');
+      expect(ai.postedEdits.last, [
         {'kind': 'material', 'id': 'm-1', 'remove': false},
       ]);
       await _unmount(tester);
     });
 
-    testWidgets('Compila nel rapportino writes only the confirmed subset; a hand edit then rides '
+    testWidgets('Modifica writes only the confirmed subset into the editor; a hand edit then rides '
         'in the next turn', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
-      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
-      ai.turnScript.add(AiConversationTurnResult(assistantReplyText: 'Ok.', draft: liveDraft()));
+      final ai = _FakeAi();
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
+      await _compile(tester, ai, liveDraft());
+      ai.turnScript.add(AiConversationTurnResult(assistantReplyText: 'Ok.', draft: liveDraft()));
 
-      await tester.tap(find.text('Compila nel rapporto di lavoro'));
+      await tester.tap(find.text('Modifica'));
       await tester.pumpAndSettle();
       expect(find.textContaining('editor:'), findsOneWidget);
 
@@ -1442,8 +1516,11 @@ void main() {
       );
       tester.state<NavigatorState>(find.byType(Navigator).last).pop();
       await tester.pumpAndSettle();
-      expect(find.text('Apri il rapporto di lavoro collegato'), findsOneWidget);
-      await _typeAndSend(tester, 'Ho finito');
+      // GONE: the "Apri il rapporto di lavoro collegato" banner the chat drew after returning from
+      // the editor. The wizard has no chat pane to hang it on; what still holds is that Controlla
+      // stayed put, with every action available again.
+      expect(find.widgetWithText(AppButton, 'Modifica'), findsOneWidget);
+      await _typeAndGenerate(tester, 'Ho finito');
 
       expect(ai.postedEdits.last, [
         {'kind': 'worker', 'id': 'me-1', 'property': 'hours', 'value': 5.0, 'remove': false},
@@ -1458,10 +1535,11 @@ void main() {
         'is isolated and never sent again', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
-      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
+      final ai = _FakeAi();
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Compila nel rapporto di lavoro'));
+      await _compile(tester, ai, liveDraft());
+      await tester.tap(find.text('Modifica'));
       await tester.pumpAndSettle();
       final staff = await db.select(db.reportStaffTable).get();
       await (db.update(db.reportStaffTable)..where((r) => r.id.equals(staff.single.id))).write(
@@ -1475,46 +1553,51 @@ void main() {
         ..add(refused) // the turn with the edit
         ..add(refused) // the edit alone, edits-only: isolated and dropped
         ..add(AiConversationTurnResult(assistantReplyText: 'Annotato.', draft: liveDraft()));
-      await _typeAndSend(tester, 'Ho finito');
+      await _typeAndGenerate(tester, 'Ho finito');
 
       const edit = {'kind': 'worker', 'id': 'me-1', 'property': 'hours', 'value': 5.0, 'remove': false};
-      expect(ai.posted.map((p) => p.text).toList(), ['Ho finito', '', 'Ho finito']);
+      expect(ai.posted.map((p) => p.text).toList(), [
+        'Ho finito il lavoro', // the turn that compiled the draft on Controlla
+        'Ho finito',
+        '',
+        'Ho finito',
+      ]);
       expect(ai.postedEdits, [
+        null,
         [edit],
         [edit],
         null,
       ], reason: 'the spoken update goes through without the refused edit');
-      expect(find.text('Annotato.'), findsOneWidget);
-
-      await _typeAndSend(tester, 'Altro');
+      // GONE: `find.text('Annotato.')` — the assistant's reply line is not rendered anywhere in the
+      // wizard, which shows the compiled draft on Controlla and nothing of the conversation.
+      await _typeAndGenerate(tester, 'Altro');
       expect(ai.postedEdits.last, isNull, reason: 'a refused edit never wedges later turns');
       await _unmount(tester);
     });
 
-    testWidgets('Compila is disabled while a turn is in flight (no editor hydrated under a pending '
-        'apply)', (tester) async {
-      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
-      ai.turnGate = Completer<void>();
-      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+    testWidgets('Modifica is disabled while a turn is in flight (no editor hydrated under a '
+        'pending apply)', (tester) async {
+      final ai = _FakeAi();
+      final voice = _FakeVoice()..pending = [_rec('a')];
+      await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
+      await _compile(tester, ai, liveDraft());
 
-      AppButton compila() => tester.widget<AppButton>(
-        find.ancestor(
-          of: find.text('Compila nel rapporto di lavoro'),
-          matching: find.byType(AppButton),
-        ),
-      );
-      expect(compila().onPressed, isNotNull);
+      AppButton modifica() =>
+          tester.widget<AppButton>(find.widgetWithText(AppButton, 'Modifica'));
+      expect(modifica().onPressed, isNotNull);
 
-      await tester.enterText(find.byType(TextFormField), 'Sto lavorando');
-      await tester.tap(find.byTooltip('Invia'));
+      // A turn in flight while Controlla is up: the pending-recording banner's "Invia" is the one
+      // send reachable from this screen.
+      ai.turnGate = Completer<void>();
+      await tester.tap(find.text('Invia'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      expect(compila().onPressed, isNull, reason: 'a turn is in flight');
+      expect(modifica().onPressed, isNull, reason: 'a turn is in flight');
 
       ai.turnGate!.complete();
       await tester.pumpAndSettle();
-      expect(compila().onPressed, isNotNull);
+      expect(modifica().onPressed, isNotNull);
       await _unmount(tester);
     });
 
@@ -1524,25 +1607,23 @@ void main() {
         state: AiResolutionState.conflict,
         conflictOperatorValue: 'Filtro olio',
       );
-      final ai = _FakeAi(
-        detail: _detail(
-          draft: const AiCopilotDraftDto(
-            workers: [],
-            materials: [],
-            controlli: [],
-            activities: [],
-            openItems: [held],
-          ),
-        ),
+      const draftWithHeld = AiCopilotDraftDto(
+        workers: [],
+        materials: [],
+        controlli: [],
+        activities: [],
+        openItems: [held],
       );
+      final ai = _FakeAi();
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
+      await _compile(tester, ai, draftWithHeld);
 
       expect(find.text('Reinserisci'), findsOneWidget);
       await tester.tap(find.text('Mantieni rimosso'));
       await tester.pumpAndSettle();
-      expect(ai.posted.single.text, '');
-      expect(ai.postedEdits.single, [
+      expect(ai.posted.last.text, '');
+      expect(ai.postedEdits.last, [
         {'kind': 'material', 'id': 'm-1', 'remove': true},
       ]);
       await _unmount(tester);
@@ -1602,22 +1683,9 @@ void main() {
     );
 
     // ── MUST FIX 5 ─────────────────────────────────────────────────────────────
-    testWidgets('Compila and Conferma are disabled while recording', (tester) async {
-      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
-      final voice = _FakeVoice();
-      await tester.pumpWidget(_wrap(ai, voice));
-      await tester.pumpAndSettle();
-      await _typeAndSend(tester, 'Ho iniziato'); // a message makes Conferma available
-      expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNotNull);
-      expect(button(tester, 'Conferma e apri il rapporto di lavoro').onPressed, isNotNull);
-
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-      await tester.pumpAndSettle();
-
-      expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNull);
-      expect(button(tester, 'Conferma e apri il rapporto di lavoro').onPressed, isNull);
-      await _unmount(tester);
-    });
+    // 'Compila and Conferma are disabled while recording' was deleted: both actions live only on
+    // Controlla, and Controlla cannot be reached while the microphone is on (the mic is on Descrivi
+    // and generating is refused while recording). The behaviour has no reachable state to assert.
 
     // ── SHOULD FIX (a): backgrounding ──────────────────────────────────────────
     testWidgets('backgrounding while recording stops and keeps a ticket-bound recording', (
@@ -1627,8 +1695,7 @@ void main() {
       final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-      await tester.pumpAndSettle();
+      await _startRecording(tester);
 
       for (final st in [
         AppLifecycleState.inactive,
@@ -1659,8 +1726,7 @@ void main() {
       final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(ai, voice, ticketId: null));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-      await tester.pumpAndSettle();
+      await _startRecording(tester);
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       await tester.pumpAndSettle();
@@ -1673,36 +1739,37 @@ void main() {
     testWidgets('an exhausted balance never locks a live session (typing and mic stay on)', (
       tester,
     ) async {
-      final ai = _FakeAi(detail: _detail(draft: liveDraft()))
+      final ai = _FakeAi()
         ..quota = const AiQuotaDto(monthlyLimit: 20, used: 20, remaining: 0);
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Crediti AI esauriti: puoi finire questa bozza'), findsOneWidget);
-      expect(_enabled(tester, 'Registra un aggiornamento vocale'), isTrue);
-      await _typeAndSend(tester, 'Ho finito');
+      expect(_micEnabled(tester), isTrue);
+      await _typeAndGenerate(tester, 'Ho finito');
       expect(ai.posted.single.text, 'Ho finito');
       await _unmount(tester);
     });
 
-    testWidgets('an upload refused for credits disables ONLY the microphone; typed turns continue', (
-      tester,
-    ) async {
-      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
+    testWidgets('an upload refused for credits says the microphone is unavailable; typed turns '
+        'continue', (tester) async {
+      final ai = _FakeAi();
       final voice = _FakeVoice()..uploads.add(const AiQuotaExhaustedException());
-      ai.turnScript.add(AiConversationTurnResult(assistantReplyText: 'Ok.', draft: liveDraft()));
       await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
 
       await _recordOnce(tester);
 
-      expect(_enabled(tester, 'Registra un aggiornamento vocale'), isFalse);
       expect(find.textContaining('registrazione vocale non è disponibile'), findsOneWidget);
       expect(find.text('Continua senza AI'), findsNothing, reason: 'the session is not blocked');
-      await _typeAndSend(tester, 'Scrivo a mano');
-      expect(ai.posted.single.text, 'Scrivo a mano');
-      expect(find.textContaining('Luca').evaluate().length + find.textContaining('Marco').evaluate().length,
-          greaterThan(0), reason: 'the draft stays readable');
+      // The orb goes dim and stops taking taps: AI credits are gone for the month, so a second tap
+      // could only earn the same refusal. A *failed* turn deliberately leaves it enabled — the
+      // network comes back and speaking again is a legitimate retry.
+      expect(_micEnabled(tester), isFalse);
+      // GONE: the draft-readable assertion looked for the worker names ("Luca"/"Marco"); Controlla
+      // renders workers as their total hours, never by name.
+      await _typeAndGenerate(tester, 'Scrivo a mano');
+      expect(ai.posted.last.text, 'Scrivo a mano');
       await _unmount(tester);
     });
 
@@ -1724,7 +1791,7 @@ void main() {
     testWidgets('a 422 text-too-long offers to shorten and re-sends the shortened text', (
       tester,
     ) async {
-      final ai = _FakeAi(detail: _detail(draft: liveDraft()))
+      final ai = _FakeAi()
         ..turnScript.add(
           const AiConversationException(
             422,
@@ -1734,7 +1801,7 @@ void main() {
         );
       await tester.pumpWidget(_wrap(ai, _FakeVoice()));
       await tester.pumpAndSettle();
-      await _typeAndSend(tester, 'Testo lunghissimo');
+      await _typeAndGenerate(tester, 'Testo lunghissimo');
 
       expect(find.text('Accorcia il testo'), findsOneWidget);
       expect(find.text('Riprova invio'), findsNothing);
@@ -1752,11 +1819,11 @@ void main() {
     testWidgets('a transcript over the server cap is never posted and can be shortened', (
       tester,
     ) async {
-      final ai = _FakeAi(detail: _detail(draft: liveDraft()));
+      final ai = _FakeAi();
       final voice = _FakeVoice();
       await tester.pumpWidget(_wrap(ai, voice));
       await tester.pumpAndSettle();
-      await _typeAndSend(tester, 'a' * (maxTurnCharacters + 1));
+      await _typeAndGenerate(tester, 'a' * (maxTurnCharacters + 1));
 
       expect(ai.posted, isEmpty, reason: 'refused locally, no doomed request');
       expect(find.text('Accorcia il testo'), findsOneWidget);
@@ -1772,20 +1839,23 @@ void main() {
     // ── MUST FIX 1: refused edits-only never jams ──────────────────────────────
     testWidgets('a 404 on an Accetta unlinks the feed and tells the technician', (tester) async {
       final db = await dbWithLinkedReport();
-      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: _seededDraft()))
-        ..turnScript.add(const AiConversationException(404, 'gone'));
+      final ai = _FakeAi(liveSessionId: sess);
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
-      expect(find.text('Apri il rapporto di lavoro collegato'), findsOneWidget);
+      await _compile(tester, ai, _seededDraft());
+      // GONE: the "Apri il rapporto di lavoro collegato" banner — the wizard gives the link no
+      // surface, so the feed's presence is asserted through its effect below (it is released).
+      ai.turnScript.add(const AiConversationException(404, 'gone'));
 
-      await tester.tap(find.text('Accetta').last);
+      // Only the planned material carries an inline accept on Controlla.
+      await tester.tap(find.text('Accetta'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('non esiste più sul server'), findsOneWidget);
       expect(
-        find.text('Compila nel rapporto di lavoro'),
+        find.widgetWithText(AppButton, 'Modifica'),
         findsOneWidget,
-        reason: 'the feed was released',
+        reason: 'the flow is still usable and the feed was released',
       );
       expect(await AiDraftFeedStore().sessionForReport(reportId), isNull);
       await _unmount(tester);
@@ -1793,19 +1863,23 @@ void main() {
 
     // ── MUST FIX 2 + 3: a used report is never rewritten or re-seeded ──────────
     for (final submission in ['readyToSubmit', 'failed', 'submitted', 'uploadingMedia']) {
-      testWidgets('resuming a draft whose report is $submission blocks Compila and Conferma', (
+      testWidgets('resuming a draft whose report is $submission blocks Modifica and Conferma', (
         tester,
       ) async {
         final db = await dbWithLinkedReport(submission: submission);
-        final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
+        final ai = _FakeAi(liveSessionId: sess);
         await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
         await tester.pumpAndSettle();
+        // Controlla is the only screen with these two actions, and it is only reached through a
+        // turn: the block has to hold there.
+        await _compile(tester, ai, liveDraft(withCable: true));
 
         expect(
           find.textContaining('già stata usata per un rapporto di lavoro inviato'),
           findsOneWidget,
         );
-        expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNull);
+        expect(button(tester, 'Modifica').onPressed, isNull);
+        expect(button(tester, 'Conferma').onPressed, isNull);
         expect(db.select(db.reportMateriali).get(), completion(isEmpty), reason: 'not rewritten');
         // The AI draft itself stays readable.
         expect(find.textContaining('Cavo'), findsWidgets);
@@ -1817,9 +1891,10 @@ void main() {
       tester,
     ) async {
       final db = await dbWithLinkedReport(submission: 'submitted');
-      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
+      final ai = _FakeAi(liveSessionId: sess);
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
+      await _compile(tester, ai, liveDraft(withCable: true));
 
       await tester.tap(find.text('Abbandona e ricomincia'));
       await tester.pumpAndSettle();
@@ -1827,14 +1902,14 @@ void main() {
       expect(ai.abandoned, [sess]);
       expect(ai.startCalls, hasLength(1));
       expect(find.textContaining('già stata usata'), findsNothing);
-      expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNotNull);
+      expect(button(tester, 'Modifica').onPressed, isNotNull);
       await _unmount(tester);
     });
 
     testWidgets('re-entering after a refusal, without abandoning, still shows the used banner and '
-        'blocks Compila and Conferma', (tester) async {
+        'blocks Modifica and Conferma', (tester) async {
       final db = await dbWithLinkedReport(submission: 'submitted');
-      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
+      final ai = _FakeAi(liveSessionId: sess);
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
       expect(
@@ -1845,13 +1920,14 @@ void main() {
 
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
+      await _compile(tester, ai, liveDraft(withCable: true));
 
       expect(
         find.textContaining('già stata usata per un rapporto di lavoro inviato'),
         findsOneWidget,
       );
-      expect(button(tester, 'Compila nel rapporto di lavoro').onPressed, isNull);
-      expect(button(tester, 'Conferma e apri il rapporto di lavoro').onPressed, isNull);
+      expect(button(tester, 'Modifica').onPressed, isNull);
+      expect(button(tester, 'Conferma').onPressed, isNull);
       expect(await db.select(db.reportMateriali).get(), isEmpty);
       expect(await db.select(db.reportStaffTable).get(), isEmpty);
       expect(await db.select(db.draftReports).get(), hasLength(1), reason: 'no new report');
@@ -1882,8 +1958,7 @@ void main() {
       final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft(withCable: true)));
       await tester.pumpWidget(_wrap(ai, _FakeVoice(), database: db));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Registra un aggiornamento vocale'));
-      await tester.pumpAndSettle();
+      await _startRecording(tester);
 
       final restart = tester.widget<TextButton>(find.byKey(const ValueKey('abandon-and-restart')));
       expect(restart.onPressed, isNull);
@@ -1909,7 +1984,7 @@ void main() {
     testWidgets('a report submitted while the copilot is open refuses the next turn apply and '
         'the open-in-editor path creates no new report', (tester) async {
       final db = await dbWithLinkedReport();
-      final ai = _FakeAi(liveSessionId: sess, detail: _detail(draft: liveDraft()));
+      final ai = _FakeAi(liveSessionId: sess);
       ai.turnScript.add(
         AiConversationTurnResult(
           assistantReplyText: 'Aggiunto il cavo.',
@@ -1923,7 +1998,7 @@ void main() {
         const DraftReportsCompanion(submissionState: Value('readyToSubmit')),
       );
 
-      await _typeAndSend(tester, 'ho usato anche 2 m di cavo');
+      await _typeAndGenerate(tester, 'ho usato anche 2 m di cavo');
 
       expect(await db.select(db.reportMateriali).get(), isEmpty, reason: 'the queued report is untouched');
       expect(
