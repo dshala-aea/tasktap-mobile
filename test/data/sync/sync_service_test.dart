@@ -148,7 +148,7 @@ Map<String, dynamic> _scheduleJson({
       ],
 };
 
-Map<String, dynamic> _ticketJson({String id = 'ticket-1'}) => {
+Map<String, dynamic> _ticketJson({String id = 'ticket-1', String? priorita = 'Media'}) => {
   'id': id,
   'tenantId': 'tenant-1',
   'createdAt': '2026-01-01T00:00:00Z',
@@ -165,8 +165,11 @@ Map<String, dynamic> _ticketJson({String id = 'ticket-1'}) => {
   'technicianNotes': null,
   'internalNotes': null,
   'contractId': null,
-  'prodottoAssistenzaId': null,
   'commessaId': null,
+  // The server's own spelling — `Ticket.Priorita` carries `[JsonPropertyName("priorita")]`.
+  // There is no `priority` key on the wire, and a fixture that invents one hides the bug where
+  // the client read that name and stored null for every ticket.
+  'priorita': priorita,
 };
 
 Map<String, dynamic> _ticketStatusJson({int id = 1, String name = 'Aperto'}) => {
@@ -188,6 +191,7 @@ Map<String, dynamic> _draftReportJson({
   String id = 'report-1',
   String stato = 'Bozza',
   String? updatedAt,
+  bool isAiAssisted = false,
 }) => {
   'id': id,
   'tenantId': 'tenant-1',
@@ -202,7 +206,6 @@ Map<String, dynamic> _draftReportJson({
   'locationId': 'loc-1',
   'startedAt': null,
   'endedAt': null,
-  'documentTemplateId': null,
   'customerSignatureAllegatoId': null,
   'technicianSignatureAllegatoId': null,
   'technicianNotes': null,
@@ -215,6 +218,7 @@ Map<String, dynamic> _draftReportJson({
   'materialiNotRequired': false,
   'customerSignoffText': null,
   'customerSignoffAt': null,
+  'isAiAssisted': isAiAssisted,
 };
 
 /// Stub a Dio GET response with the given JSON body.
@@ -302,6 +306,33 @@ void main() {
 
       final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
       expect(row.tagsJson, '["urgente","garanzia"]');
+    });
+
+    // The priority column existed since schema 20 and was filled from `priority` — a key the
+    // server never sends. Every mirrored ticket held a null, and the list's priority stripe and
+    // TalkBack label were blank on every device. The value rides on `priorita`.
+    test('stores a ticket\'s priority from the priorita key', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(tickets: [_ticketJson(priorita: 'Urgente')]),
+      );
+
+      await svc.sync();
+
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.priority, 'Urgente');
+    });
+
+    test('a ticket payload with no priorita stores a null priority, not a guess', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(tickets: [_ticketJson(priorita: null)]),
+      );
+
+      await svc.sync();
+
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.priority, isNull);
     });
 
     test('inserts a new schedule with parsed time minutes', () async {
@@ -395,6 +426,43 @@ void main() {
       expect(rows.length, 1);
       expect(rows.first.id, 'report-1');
       expect(rows.first.stato, 'Bozza');
+    });
+
+    // Authorship is a compliance claim (ADR-0016 §2), so it has to survive the server round trip.
+    // The column has existed since the draft editor started setting it locally; what was missing is
+    // this side of the write — the flag was never parsed, and an unlisted column in the companion is
+    // written as its DEFAULT on insert, so every server-arrived draft came back as hand-written.
+    test('a server-arrived draft keeps its AI-authorship flag', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(draftReports: [_draftReportJson(isAiAssisted: true)]),
+      );
+
+      await svc.sync();
+
+      final row = (await db.select(db.draftReports).get()).single;
+      expect(row.isAiAssisted, isTrue);
+    });
+
+    test('a re-sync clears the flag when the server says the report is not AI-assisted', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(draftReports: [_draftReportJson(isAiAssisted: true)]),
+      );
+      await svc.sync();
+
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          draftReports: [
+            _draftReportJson(updatedAt: '2026-06-22T09:00:00Z', isAiAssisted: false),
+          ],
+        ),
+      );
+      await svc.sync();
+
+      final row = (await db.select(db.draftReports).get()).single;
+      expect(row.isAiAssisted, isFalse);
     });
 
     test('a synced-down draft carries no version — the bulk sync DTO has none', () async {

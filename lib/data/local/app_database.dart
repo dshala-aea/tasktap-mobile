@@ -2425,7 +2425,14 @@ class AppDatabase extends _$AppDatabase {
   ///      already past a customer would never receive its contacts until something else touched
   ///      that customer — and the Contatti section would stay empty on a device that had just been
   ///      upgraded to show it.
-  static const String syncCursorGeneration = 'v14';
+  /// v15 — 2026-10-25, the `priorita` wire key. No schema change: `tickets.priority` has been there
+  ///      since v4, but it was filled from `priority`, a key the server never sends (`Ticket` carries
+  ///      `priorita`), so every mirrored ticket holds a null. A delta sync only re-sends tickets that
+  ///      changed, so without this bump an untouched ticket would keep its null forever and the
+  ///      priority stripe would stay blank until somebody happened to edit the job. Same reasoning as
+  ///      v3/v4/v6/v8. The `draft_reports.is_ai_assisted` fix in the same release needs no bump of its
+  ///      own: the mobile payload carries every Bozza the user authored, in full, on each sync.
+  static const String syncCursorGeneration = 'v15';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

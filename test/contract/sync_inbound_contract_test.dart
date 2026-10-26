@@ -156,6 +156,47 @@ void main() {
     );
   }
 
+  // `TicketDto`/`ReportDto` describe entity graphs, so their `fromJson` deliberately reads a
+  // SUBSET of the server's schema — the two-directional loop above cannot hold for them. The one
+  // direction that still can is the one that matters: every key they read must exist on the
+  // server. A missing JSON key is just `null`, which is how `priority` (the server spells it
+  // `priorita`) and `documentTemplateId` (no such property) survived here for months.
+  final entityReadKeys = <String, Set<String>>{
+    'Ticket': TicketDto.readKeys,
+    'Report': ReportDto.readKeys,
+  };
+
+  for (final entry in entityReadKeys.entries) {
+    test('${entry.key}: every key the app reads exists on the server', () {
+      expect(
+        entry.value.difference(props(entry.key)),
+        isEmpty,
+        reason: 'the app reads keys the server does not declare',
+      );
+    });
+  }
+
+  test('TicketDto reads the priority off the key the server actually sends', () {
+    final sample = instance('Ticket');
+    final dto = TicketDto.fromJson(sample);
+    expect(
+      dto.priority,
+      sample['priorita'],
+      reason: 'the wire key is priorita (Ticket.Priorita), never priority',
+    );
+  });
+
+  test('ReportDto carries the server-recorded AI-authorship flag', () {
+    // `stato` is normalized by hand: the snapshot declares `ReportStatoEnum` as a bare integer,
+    // because the enum type itself carries no converter — the one on `Report.Stato` is scoped to
+    // the property, which the schema generator does not see. The wire really does send the name
+    // ("Bozza"), which is what `ReportDto.fromJson` casts to String, so the generated sample's `1`
+    // is a snapshot artefact, not what a device receives.
+    final sample = instance('Report')..['stato'] = 'Bozza';
+    final dto = ReportDto.fromJson(sample);
+    expect(dto.isAiAssisted, isTrue);
+  });
+
   test(
     'MobileUserSyncResult declares every checklist member the app reads',
     () {

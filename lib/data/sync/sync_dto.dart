@@ -792,7 +792,6 @@ class TicketDto {
   final String? technicianNotes;
   final String? internalNotes;
   final String? contractId;
-  final String? prodottoAssistenzaId;
   final String? commessaId;
 
   /// The cantiere this ticket is linked to, when it has one. See `Tickets.cantiereId`'s own doc
@@ -836,7 +835,6 @@ class TicketDto {
     this.technicianNotes,
     this.internalNotes,
     this.contractId,
-    this.prodottoAssistenzaId,
     this.commessaId,
     this.cantiereId,
     this.priority,
@@ -863,14 +861,53 @@ class TicketDto {
     technicianNotes: j['technicianNotes'] as String?,
     internalNotes: j['internalNotes'] as String?,
     contractId: j['contractId'] as String?,
-    prodottoAssistenzaId: j['prodottoAssistenzaId'] as String?,
     commessaId: j['commessaId'] as String?,
     cantiereId: j['cantiereId'] as String?,
-    priority: j['priority'] as String?,
+    // The backend property is `Priorita` with `[JsonPropertyName("priorita")]`, so the wire key is
+    // the Italian word — reading `priority` yielded null on every ticket ever synced, and the card
+    // (and its stripe) has always shown the default. Pinned by [readKeys] below.
+    priority: j['priorita'] as String?,
     dueDate: parseDateOnly(j['dueDate']),
     tags: (j['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
     extensionValues: j['extensionValues'] as String?,
   );
+
+  /// Every wire key [TicketDto.fromJson] reads.
+  ///
+  /// Deliberately not `wireKeys` like the reference DTOs: those are compared with the OpenAPI
+  /// schema in BOTH directions, and that cannot hold for an entity graph the server composes —
+  /// `Ticket` carries members this client ignores on purpose. The contract test compares this set
+  /// one way only: every key here must exist on the server's `Ticket` schema. That is what catches
+  /// a rename — the `priorita` key was read as `priority` for as long as this DTO has existed, and
+  /// nothing failed, because a missing JSON key is just `null`.
+  ///
+  /// Keep it in step with `fromJson`: a key added there and not here is unpinned, which is the
+  /// state this comment is here to make expensive.
+  static const Set<String> readKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'title',
+    'numero',
+    'description',
+    'customerId',
+    'locationId',
+    'assignedUserId',
+    'statusId',
+    'typeId',
+    'agentId',
+    'closedAt',
+    'technicianNotes',
+    'internalNotes',
+    'contractId',
+    'commessaId',
+    'cantiereId',
+    'priorita',
+    'dueDate',
+    'tags',
+    'extensionValues',
+  };
 }
 
 // ── Materiale ──────────────────────────────────────────────────────────────────
@@ -1469,7 +1506,6 @@ class ReportDto {
   final String locationId;
   final DateTime? startedAt;
   final DateTime? endedAt;
-  final String? documentTemplateId;
   final String? customerSignatureAllegatoId;
   final String? technicianSignatureAllegatoId;
   final String? technicianNotes;
@@ -1482,6 +1518,16 @@ class ReportDto {
   final bool materialiNotRequired;
   final String? customerSignoffText;
   final DateTime? customerSignoffAt;
+
+  /// Whether a model produced any of this rapportino's text, as the server recorded it.
+  ///
+  /// The server has carried `isAiAssisted` since ADR-0016 (it is `Report.IsAiAssisted`, and the
+  /// column here has existed since the draft editor started setting it locally). This DTO never
+  /// read it, so a report that arrived from the server — a draft written on another device, or
+  /// this one after a reinstall — lost its provenance marker, and `_upsertDraftReports` wrote the
+  /// Drift default `false` over it. Authorship is a compliance claim (ADR-0016 §2), not a UI hint:
+  /// the flag has to survive a round trip through the server unchanged.
+  final bool isAiAssisted;
 
   /// The tenant's custom-field values for this rapportino, raw JSON-object text — see
   /// `TicketDto.extensionValues` for the double-encoded wire shape.
@@ -1504,7 +1550,6 @@ class ReportDto {
     required this.locationId,
     this.startedAt,
     this.endedAt,
-    this.documentTemplateId,
     this.customerSignatureAllegatoId,
     this.technicianSignatureAllegatoId,
     this.technicianNotes,
@@ -1517,6 +1562,7 @@ class ReportDto {
     this.materialiNotRequired = false,
     this.customerSignoffText,
     this.customerSignoffAt,
+    this.isAiAssisted = false,
     this.extensionValues,
   });
 
@@ -1537,7 +1583,6 @@ class ReportDto {
     locationId: j['locationId'] as String,
     startedAt: _dt(j['startedAt']),
     endedAt: _dt(j['endedAt']),
-    documentTemplateId: j['documentTemplateId'] as String?,
     customerSignatureAllegatoId: j['customerSignatureAllegatoId'] as String?,
     technicianSignatureAllegatoId:
         j['technicianSignatureAllegatoId'] as String?,
@@ -1551,8 +1596,45 @@ class ReportDto {
     materialiNotRequired: j['materialiNotRequired'] as bool? ?? false,
     customerSignoffText: j['customerSignoffText'] as String?,
     customerSignoffAt: _dt(j['customerSignoffAt']),
+    isAiAssisted: j['isAiAssisted'] as bool? ?? false,
     extensionValues: j['extensionValues'] as String?,
   );
+
+  /// Every wire key [ReportDto.fromJson] reads — the same one-way pin as [TicketDto.readKeys],
+  /// and here it has already earned its keep: `documentTemplateId` was read for years against a
+  /// server schema that has no such property, so the field was permanently null.
+  static const Set<String> readKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'title',
+    'scheduleId',
+    'ticketId',
+    'customerId',
+    'cantiereId',
+    'details',
+    'diagnosi',
+    'soluzione',
+    'insertedUserId',
+    'locationId',
+    'startedAt',
+    'endedAt',
+    'customerSignatureAllegatoId',
+    'technicianSignatureAllegatoId',
+    'technicianNotes',
+    'closedAt',
+    'stato',
+    'inviatoAt',
+    'controllatoAt',
+    'controllatoDa',
+    'fatturatoAt',
+    'materialiNotRequired',
+    'customerSignoffText',
+    'customerSignoffAt',
+    'isAiAssisted',
+    'extensionValues',
+  };
 }
 
 // ── Reference entities ──────────────────────────────────────────────────────────

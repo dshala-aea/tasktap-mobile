@@ -126,9 +126,11 @@ void main() {
   /// columns for most of its book. Schema 49 (`customer_contacts`) is the fifth: the member is only
   /// sent on a full-scope payload, and even there a customer whose contact list changed is pulled
   /// back in only when its contacts moved after the cutoff — a device on a delta cursor would keep
-  /// the old numbers, and a deleted contact has no tombstone to correct them. This test is the
-  /// record that no release moved the generation silently.
+  /// the old numbers, and a deleted contact has no tombstone to correct them. The sixth is v15: no
+  /// schema change at all, just the `priorita` key — the column was filled from `priority`, which
+  /// the server never sends, so every mirrored ticket held a null and only a full sync can refill
+  /// the ones nobody edits. This test is the record that no release moved the generation silently.
   test('the sync cursor generation is the one the current release set', () {
-    expect(AppDatabase.syncCursorGeneration, 'v14');
+    expect(AppDatabase.syncCursorGeneration, 'v15');
   });
 }
