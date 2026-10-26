@@ -118,6 +118,7 @@ Map<String, dynamic> _scheduleJson({
   String title = 'Manutenzione',
   String? updatedAt,
   String activityDate = '2026-06-21T00:00:00Z',
+  bool isAssenza = false,
   List<Map<String, dynamic>>? assignees,
 }) => {
   'id': id,
@@ -133,6 +134,8 @@ Map<String, dynamic> _scheduleJson({
   'locationId': 'loc-1',
   'allDay': false,
   'title': title,
+  // Present on every row the server sends; only absence-owned ones are true.
+  'isAssenza': isAssenza,
   'description': 'Descrizione intervento',
   'assignees':
       assignees ??
@@ -379,6 +382,27 @@ void main() {
       // 08:00 → 480 minutes; 17:00 → 1020 minutes
       expect(s.timeStartMinutes, 480);
       expect(s.timeEndMinutes, 1020);
+    });
+
+    // An approved absence is materialised server-side as an ordinary schedule, so this flag is the
+    // only thing on the row that says "not work". It has to survive the mirror write, or every
+    // reader downstream (queue, counters, admin screens) keeps treating the day off as a job.
+    test("mirrors the server's absence flag onto the row", () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          schedules: [
+            _scheduleJson(id: 'sched-ferie', title: 'ferie', isAssenza: true),
+            _scheduleJson(id: 'sched-job'),
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.schedules).get();
+      expect(rows.firstWhere((s) => s.id == 'sched-ferie').isAssenza, isTrue);
+      expect(rows.firstWhere((s) => s.id == 'sched-job').isAssenza, isFalse);
     });
 
     test('stores who is on a schedule', () async {

@@ -146,6 +146,38 @@ void main() {
     });
   });
 
+  group('ScheduleDto.isAssenza', () {
+    Map<String, dynamic> json({Object? isAssenza = #absent}) => {
+      'id': 's1',
+      'tenantId': 'tenant1',
+      'createdAt': '2026-10-24T00:00:00Z',
+      'activityDate': '2026-10-24T00:00:00Z',
+      'timeStart': '00:00:00',
+      'timeEnd': '00:00:00',
+      'userId': 'u1',
+      'statusId': 1,
+      'locationId': 'loc-1',
+      'allDay': true,
+      'title': 'ferie',
+      'description': '',
+      if (isAssenza != #absent) 'isAssenza': isAssenza,
+    };
+
+    test('parses an absence-owned row', () {
+      expect(ScheduleDto.fromJson(json(isAssenza: true)).isAssenza, isTrue);
+    });
+
+    test('a job reads as a job', () {
+      expect(ScheduleDto.fromJson(json(isAssenza: false)).isAssenza, isFalse);
+    });
+
+    // An older backend does not send the key at all. Reading every row as a job is the behaviour
+    // the app had before the flag existed — a guess in the other direction would empty the day.
+    test('is false when the key is absent (older backend)', () {
+      expect(ScheduleDto.fromJson(json()).isAssenza, isFalse);
+    });
+  });
+
   group('CustomerDto.agentId', () {
     Map<String, dynamic> json({Object? agentId = #absent}) => {
       'id': 'c1',
