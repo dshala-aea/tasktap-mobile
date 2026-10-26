@@ -210,8 +210,9 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
                     // ── Firma ────────────────────────────────────────────────────
                     // Signed pad and recorded absence are alternatives on screen exactly as they are
                     // in the model: showing the reason card while a signature exists would invite the
-                    // technician to record why a signed report was not signed.
-                    if (absence != null)
+                    // technician to record why a signed report was not signed. `signed` wins when both
+                    // are somehow set — the submit drops the absence fields in that case anyway.
+                    if (absence != null && !signed)
                       CustomerAbsenceCard(
                         reason: absence,
                         note: state.customerSignatureAbsenceNote,
