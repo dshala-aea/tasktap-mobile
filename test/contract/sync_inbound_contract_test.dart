@@ -187,7 +187,13 @@ void main() {
   });
 
   test('ReportDto carries the server-recorded AI-authorship flag', () {
-    final dto = ReportDto.fromJson(instance('Report'));
+    // `stato` is normalized by hand: the snapshot declares `ReportStatoEnum` as a bare integer,
+    // because the enum type itself carries no converter — the one on `Report.Stato` is scoped to
+    // the property, which the schema generator does not see. The wire really does send the name
+    // ("Bozza"), which is what `ReportDto.fromJson` casts to String, so the generated sample's `1`
+    // is a snapshot artefact, not what a device receives.
+    final sample = instance('Report')..['stato'] = 'Bozza';
+    final dto = ReportDto.fromJson(sample);
     expect(dto.isAiAssisted, isTrue);
   });
 
