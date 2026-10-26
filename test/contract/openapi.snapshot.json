@@ -27234,6 +27234,9 @@
         },
         "description": "Where a signed-in portal customer belongs. Only the tenant\u0027s public slug (already in every\nportal login URL), nothing else about the tenant or the customer."
       },
+      "CustomerSignatureAbsenceReason": {
+        "type": "integer"
+      },
       "DecideAbsenceRequestBody": {
         "type": "object",
         "properties": {
@@ -32370,6 +32373,24 @@
             "description": "UTC timestamp of customer acceptance.",
             "format": "date-time"
           },
+          "customerSignatureAbsenceReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Perch\u00E9 il cliente non ha firmato questo rapportino. Null quando il cliente ha firmato (o\nquando nessuno ha ancora indicato un motivo). La firma non \u00E8 obbligatoria per inviare: questo\ncampo esiste perch\u00E9 l\u0027ufficio sappia il motivo dell\u0027assenza, invece di vedere solo un vuoto.",
+                "$ref": "#/components/schemas/CustomerSignatureAbsenceReason"
+              }
+            ]
+          },
+          "customerSignatureAbsenceNote": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Nota libera che accompagna il motivo dell\u0027assenza della firma (max 500 caratteri), ad\nesempio il dettaglio di \u0022Altro\u0022."
+          },
           "diagnosi": {
             "type": [
               "null",
@@ -33220,7 +33241,9 @@
           "customerSignatureAllegatoId",
           "technicianSignatureAllegatoId",
           "customerSignoffText",
-          "customerSignoffAt"
+          "customerSignoffAt",
+          "customerSignatureAbsenceReason",
+          "customerSignatureAbsenceNote"
         ],
         "type": "object",
         "properties": {
@@ -33250,6 +33273,22 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "customerSignatureAbsenceReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CustomerSignatureAbsenceReason"
+              }
+            ]
+          },
+          "customerSignatureAbsenceNote": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -35271,6 +35310,24 @@
               "string"
             ],
             "description": "Customer acceptance text captured at signing time."
+          },
+          "customerSignatureAbsenceReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Why the customer did not sign. The customer signature is not a precondition for sending, so\nthis is how the phone tells the office the reason instead of leaving the signature blank\nwith no explanation. Must be null when Guid? SubmitReportRequest.CustomerSignatureAllegatoId is set \u2014\na report cannot both carry the customer\u0027s signature and say it was not given.",
+                "$ref": "#/components/schemas/CustomerSignatureAbsenceReason"
+              }
+            ]
+          },
+          "customerSignatureAbsenceNote": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Free-text detail accompanying the absence reason (max 500 characters) \u2014 notably the \u0022why\u0022\nbehind \u0022Altro\u0022."
           },
           "materialiNotRequired": {
             "type": "boolean",
@@ -40241,6 +40298,24 @@
             ],
             "description": "FK to the technician\u0027s signature Allegato.",
             "format": "uuid"
+          },
+          "customerSignatureAbsenceReason": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Why the customer did not sign. Null = not provided, leaves the existing value untouched \u2014\nsame \u0060HasValue\u0060-gated convention as the other nullable fields here, because the entity\nvalue and \u0022clear it\u0022 cannot otherwise be distinguished. Rejected when the request also sets\nGuid? UpdateReportRequest.CustomerSignatureAllegatoId: the two are contradictory.",
+                "$ref": "#/components/schemas/CustomerSignatureAbsenceReason"
+              }
+            ]
+          },
+          "customerSignatureAbsenceNote": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Free-text detail accompanying CustomerSignatureAbsenceReason? UpdateReportRequest.CustomerSignatureAbsenceReason (max 500\ncharacters). Null = not provided, leaves the existing value untouched."
           },
           "diagnosi": {
             "type": [
