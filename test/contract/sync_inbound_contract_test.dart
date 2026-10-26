@@ -197,6 +197,35 @@ void main() {
     expect(dto.isAiAssisted, isTrue);
   });
 
+  test('TicketDto reads the covered units off the plural list the server sends', () {
+    final sample = instance('Ticket');
+    // The generated sample carries one element (the schema is an array of ids).
+    expect(sample['prodottoAssistenzaIds'], isA<List<dynamic>>());
+    final dto = TicketDto.fromJson(sample);
+    expect(
+      dto.prodottoAssistenzaIds,
+      ['00000000-0000-0000-0000-000000000001'],
+      reason: 'the server sends prodottoAssistenzaIds, never a singular prodottoAssistenzaId',
+    );
+
+    // A ticket that covers nothing must read as an empty list, not as "unknown".
+    expect(
+      TicketDto.fromJson(sample..['prodottoAssistenzaIds'] = <Object?>[])
+          .prodottoAssistenzaIds,
+      isEmpty,
+    );
+  });
+
+  test('ReportDto carries the rapportino number the office quotes', () {
+    final sample = instance('Report')..['stato'] = 'Bozza';
+    final dto = ReportDto.fromJson(sample);
+    expect(dto.numero, isA<String>());
+    expect(dto.numero, isNotEmpty);
+    // A report from before numbering has none, and "none" must stay distinguishable from "0" or
+    // from the row id the UI used to fall back to.
+    expect(ReportDto.fromJson(sample..['numero'] = null).numero, isNull);
+  });
+
   test(
     'MobileUserSyncResult declares every checklist member the app reads',
     () {

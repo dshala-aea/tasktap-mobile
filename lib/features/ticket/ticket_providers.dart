@@ -1,3 +1,5 @@
+import 'dart:convert' show jsonDecode;
+
 import 'package:dio/dio.dart' show DioException;
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -275,16 +277,20 @@ final ticketReportsProvider = FutureProvider.autoDispose
 /// Prodotti in assistenza the ticket covers (Prodotti compartment): the ticket's coverage ids from
 /// the server, then each prodotto's card.
 ///
-/// Online the server's coverage ids are authoritative and each card is fetched live — the local
-/// `ticket_assets` rows are not an authoritative coverage list (see
-/// [TicketDetailApiClient.fetchCoveredProdottoIds]), they are what the sync last wrote.
+/// Online the server's coverage ids are authoritative and each card is fetched live. Offline the
+/// same coverage list is read from the mirror — `tickets.prodottoAssistenzaIdsJson` holds exactly
+/// the ids the live endpoint returns, and each is resolved against the `prodotti_assistenza` table
+/// the sync already fills. Before that column existed the only offline answer was the
+/// `ticket_assets` join, which is *not* a coverage list: it is the checklist's asset tree, so a
+/// covered unit with no checklist row was invisible, and the compartment could not even show a
+/// codice or a marchio (see the fallback's own note below).
 ///
-/// Offline those mirror rows are the only answer this phone has, and they are what the checklist
-/// card on the same tab already renders ([checklistReadRepositoryProvider]), so the compartment
-/// stays readable on site instead of going blank. The card-shaped map holds the identity fields the
-/// mirror keeps (`name`, `serialNumber`, `matricola`); `codice`/`marchio`/`modello` are not
-/// mirrored and simply render as absent. An empty mirror throws, exactly like its siblings: nothing
-/// on this phone is not the same fact as no asset on the ticket.
+/// The `ticket_assets` join stays as the second fallback, for a device upgrading into this release
+/// before its next sync has backfilled the column, and for tickets the server itself stored without
+/// the plural list. The card-shaped map holds the identity fields the mirror keeps (`name`,
+/// `serialNumber`, `matricola` from the asset tree; `codice`/`marchio` from the prodotto row);
+/// `modello` is not mirrored and simply renders as absent. An empty answer throws, exactly like its
+/// siblings: nothing on this phone is not the same fact as no asset on the ticket.
 ///
 /// Online, a call that never arrived or a server fault degrades to those same mirror rows rather
 /// than blanking the compartment — the technician is standing in front of the machine either way.
@@ -299,7 +305,7 @@ final ticketProdottiProvider = FutureProvider.autoDispose
           ),
         );
 
-      Future<List<Map<String, dynamic>>> fromMirror() async {
+      Future<List<Map<String, dynamic>>> fromAssets() async {
         final db = ref.watch(appDatabaseProvider);
         final query = db.select(db.ticketAssets).join([
           innerJoin(db.assets, db.assets.id.equalsExp(db.ticketAssets.prodottoAssistenzaId)),
@@ -321,6 +327,47 @@ final ticketProdottiProvider = FutureProvider.autoDispose
         );
       }
 
+      /// The ticket's own coverage ids, resolved against the mirrored prodotti.
+      ///
+      /// `null` means "this device holds no coverage list for the ticket" — the column has not been
+      /// backfilled yet — and the caller falls through to the asset tree. An empty *list* is an
+      /// answer, not a gap: the server said this ticket covers no unit, and the compartment then
+      /// says so instead of resurrecting whatever the checklist asset tree happens to hold.
+      Future<List<Map<String, dynamic>>?> fromCoverage() async {
+        final db = ref.watch(appDatabaseProvider);
+        final row = await (db.select(db.tickets)..where((t) => t.id.equals(ticketId)))
+            .getSingleOrNull();
+        final raw = row?.prodottoAssistenzaIdsJson;
+        if (raw == null) return null;
+        // Decoded defensively: this is server-authored text, and a malformed value must not take
+        // the whole tab down on the one screen that has no other way to name the machine.
+        final List<dynamic> ids;
+        try {
+          ids = jsonDecode(raw) as List<dynamic>;
+        } catch (_) {
+          return null;
+        }
+        final cache = ref.watch(referenceCacheProvider);
+        final cards = <Map<String, dynamic>>[];
+        for (final id in ids.whereType<String>()) {
+          final p = await cache.prodottoAssistenzaById(id);
+          if (p == null) continue;
+          cards.add({
+            'id': p.id,
+            'name': p.name,
+            'codice': p.codice,
+            'serialNumber': p.serialNumber,
+            'marchio': p.marchio,
+            'categoria': p.categoria,
+          });
+        }
+        // Ids the mirror cannot resolve are not the same as "no coverage": if the ticket names
+        // units this device has never downloaded, the asset tree is a better answer than a blank
+        // tab, and only a genuinely empty id list is the server saying "none".
+        if (cards.isEmpty && ids.isNotEmpty) return null;
+        return byName(cards);
+      }
+
       if (ref.watch(isOnlineProvider)) {
         try {
           final ids = await ref
@@ -333,7 +380,9 @@ final ticketProdottiProvider = FutureProvider.autoDispose
           if (!isTransportOrServerFault(e)) rethrow;
         }
       }
-      return fromMirror();
+      final covered = await fromCoverage();
+      if (covered != null) return covered;
+      return fromAssets();
     });
 
 /// Files uploaded directly to a ticket (Allegati tab).

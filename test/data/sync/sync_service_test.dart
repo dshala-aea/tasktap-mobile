@@ -148,7 +148,11 @@ Map<String, dynamic> _scheduleJson({
       ],
 };
 
-Map<String, dynamic> _ticketJson({String id = 'ticket-1', String? priorita = 'Media'}) => {
+Map<String, dynamic> _ticketJson({
+  String id = 'ticket-1',
+  String? priorita = 'Media',
+  List<String> prodottoAssistenzaIds = const [],
+}) => {
   'id': id,
   'tenantId': 'tenant-1',
   'createdAt': '2026-01-01T00:00:00Z',
@@ -170,6 +174,9 @@ Map<String, dynamic> _ticketJson({String id = 'ticket-1', String? priorita = 'Me
   // There is no `priority` key on the wire, and a fixture that invents one hides the bug where
   // the client read that name and stored null for every ticket.
   'priorita': priorita,
+  // Likewise plural: the server declares `prodottoAssistenzaIds`, a list. The singular key the
+  // client used to read does not exist.
+  'prodottoAssistenzaIds': prodottoAssistenzaIds,
 };
 
 Map<String, dynamic> _ticketStatusJson({int id = 1, String name = 'Aperto'}) => {
@@ -192,6 +199,7 @@ Map<String, dynamic> _draftReportJson({
   String stato = 'Bozza',
   String? updatedAt,
   bool isAiAssisted = false,
+  String? numero,
 }) => {
   'id': id,
   'tenantId': 'tenant-1',
@@ -219,6 +227,9 @@ Map<String, dynamic> _draftReportJson({
   'customerSignoffText': null,
   'customerSignoffAt': null,
   'isAiAssisted': isAiAssisted,
+  // The rapportino's human number — the handle the office and the customer quote. On the wire
+  // since numbering existed; null means this report has none.
+  'numero': numero,
 };
 
 /// Stub a Dio GET response with the given JSON body.
@@ -333,6 +344,37 @@ void main() {
 
       final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
       expect(row.priority, isNull);
+    });
+
+    // Field-parity gap of the same class: the server sends the units the job covers as a plural
+    // list, and the client read a singular key that does not exist. Offline, the Prodotti
+    // compartment could not name a single unit.
+    test('stores the ticket\'s covered units as JSON text', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          tickets: [
+            _ticketJson(prodottoAssistenzaIds: ['prod-a', 'prod-b']),
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.prodottoAssistenzaIdsJson, '["prod-a","prod-b"]');
+    });
+
+    test('a ticket that covers nothing stores an empty list, not null', () async {
+      _stubDioGet(mockDio, _syncPayload(tickets: [_ticketJson()]));
+
+      await svc.sync();
+
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      // The distinction matters downstream: "[]" is the server saying this job covers no unit,
+      // and it must not silently fall back to the checklist's asset tree. Null is reserved for a
+      // device whose column the sync has not filled yet.
+      expect(row.prodottoAssistenzaIdsJson, '[]');
     });
 
     test('inserts a new schedule with parsed time minutes', () async {

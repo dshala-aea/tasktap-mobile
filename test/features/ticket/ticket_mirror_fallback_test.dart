@@ -9,8 +9,10 @@
 //    online + 4xx           → thrown (that IS an answer: gone, or not yours to see);
 //    mirror empty as well   → TicketDetailOfflineException, never "nothing here".
 
+import 'dart:convert' show jsonEncode;
+
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -101,6 +103,39 @@ void main() {
         );
   }
 
+  /// [coverageIds] null models a ticket synced before `prodottoAssistenzaIdsJson` was backfilled.
+  Future<void> insertTicket({required List<String>? coverageIds}) => db
+      .into(db.tickets)
+      .insert(
+        TicketsCompanion.insert(
+          id: 'ticket-1',
+          tenantId: 't',
+          createdAt: DateTime.utc(2026, 10, 1),
+          title: 'Manutenzione caldaia',
+          customerId: 'c',
+          locationId: 'l',
+          statusId: 1,
+          typeId: 1,
+          prodottoAssistenzaIdsJson: coverageIds == null
+              ? const Value.absent()
+              : Value(jsonEncode(coverageIds)),
+        ),
+      );
+
+  Future<void> insertProdotto({required String id, required String name}) => db
+      .into(db.prodottiAssistenza)
+      .insert(
+        ProdottiAssistenzaCompanion.insert(
+          id: id,
+          tenantId: 't',
+          createdAt: DateTime.utc(2026, 10, 1),
+          name: name,
+          customerId: 'c',
+          locationId: 'l',
+          codice: Value('COD-$id'),
+        ),
+      );
+
   group('ticketAttachmentsProvider', () {
     test('online, a request that never arrived answers from the mirror', () async {
       await insertAttachment('a1');
@@ -169,6 +204,55 @@ void main() {
         c.read(ticketProdottiProvider('ticket-1').future),
         throwsA(isA<TicketDetailOfflineException>()),
       );
+    });
+  });
+
+  // The ticket's own coverage list (`prodottoAssistenzaIds`) answers the compartment on its own:
+  // the asset tree is a second, older source and it is only consulted when the coverage column has
+  // nothing to say. The three states are distinct and each one has a different right answer.
+  group('ticketProdottiProvider — the ticket\'s coverage list', () {
+    test('offline, the coverage list names the units without the asset tree', () async {
+      await insertTicket(coverageIds: ['p1', 'p2']);
+      await insertProdotto(id: 'p2', name: 'Split');
+      await insertProdotto(id: 'p1', name: 'Caldaia');
+
+      final c = container(online: false);
+      final rows = await c.read(ticketProdottiProvider('ticket-1').future);
+
+      expect(rows.map((r) => r['name']), ['Caldaia', 'Split']);
+      expect(rows.first['codice'], 'COD-p1');
+    });
+
+    test('a ticket synced before the column was filled still answers from the asset tree', () async {
+      await insertTicket(coverageIds: null);
+      await insertCoveredAsset(assetId: 'p1', name: 'Caldaia');
+
+      final c = container(online: false);
+      final rows = await c.read(ticketProdottiProvider('ticket-1').future);
+
+      expect(rows.map((r) => r['id']), ['p1']);
+    });
+
+    test('the server saying "no units" wins over a stale asset tree', () async {
+      await insertTicket(coverageIds: const []);
+      await insertCoveredAsset(assetId: 'p1', name: 'Caldaia');
+
+      final c = container(online: false);
+      final rows = await c.read(ticketProdottiProvider('ticket-1').future);
+
+      // An empty list is an answer, not a gap: falling through to the tree would show a machine the
+      // ticket no longer covers.
+      expect(rows, isEmpty);
+    });
+
+    test('ids the mirror cannot resolve fall back to the asset tree, not to a blank tab', () async {
+      await insertTicket(coverageIds: ['never-downloaded']);
+      await insertCoveredAsset(assetId: 'p1', name: 'Caldaia');
+
+      final c = container(online: false);
+      final rows = await c.read(ticketProdottiProvider('ticket-1').future);
+
+      expect(rows.map((r) => r['id']), ['p1']);
     });
   });
 }

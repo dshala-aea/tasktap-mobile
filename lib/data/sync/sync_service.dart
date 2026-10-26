@@ -946,6 +946,10 @@ class SyncService {
               dueDate: Value(formatDateOnly(t.dueDate)),
               tagsJson: Value(jsonEncode(t.tags)),
               extensionValues: Value(t.extensionValues),
+              // Same "unlisted column is not neutral" rule as every other one here: left out, this
+              // takes its default (null) on insert and is untouched on conflict, so a ticket's
+              // coverage would never reach the device at all.
+              prodottoAssistenzaIdsJson: Value(jsonEncode(t.prodottoAssistenzaIds)),
             ),
           );
     }
@@ -1063,6 +1067,10 @@ class SyncService {
               // would lose the provenance marker the moment the row first existed locally.
               isAiAssisted: Value(r.isAiAssisted),
               extensionValues: Value(r.extensionValues),
+              // Same rule as `isAiAssisted` above: unlisted, the human number would be null on
+              // every server-arrived report, so no rapportini row could be recognised by the number
+              // the office quotes.
+              numero: Value(r.numero),
               // Synced-down reports are never local-only
               isLocalOnly: const Value(false),
             ),

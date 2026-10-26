@@ -177,7 +177,16 @@ class _RapportinoViewBody extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ScreenHeader(title: draft.title, showBack: true),
+          // The number is the report's identity to the office and the customer; the title alone
+          // ("Rapporto di lavoro") names a category, not a document. Absent for a report the server
+          // has not numbered, and then the header is just the title.
+          ScreenHeader(
+            title: draft.title,
+            subtitle: (draft.numero != null && draft.numero!.isNotEmpty)
+                ? 'Rapporto #${draft.numero}'
+                : null,
+            showBack: true,
+          ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => refreshWithFeedback(context, ref),

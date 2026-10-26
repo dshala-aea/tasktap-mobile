@@ -99,6 +99,7 @@ Future<void> _seedDraft(
   String submissionState = 'draft',
   String stato = 'Bozza',
   bool isLocalOnly = true,
+  String? numero,
 }) async {
   await db
       .into(db.draftReports)
@@ -113,6 +114,7 @@ Future<void> _seedDraft(
           isLocalOnly: Value(isLocalOnly),
           stato: Value(stato),
           submissionState: Value(submissionState),
+          numero: Value(numero),
         ),
       );
 }
@@ -201,6 +203,54 @@ void main() {
         findsNothing,
         reason: 'a background-flush failure must be visible without opening the draft',
       );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  // `Report.numero` travelled on the wire all along and was never mirrored, so the row had to lead
+  // with eight hex characters of the draft's own row id — an identifier no technician or office
+  // clerk recognises. It is now a column, and it is also the number the office quotes, so a search
+  // for it must find the report even when the title says nothing about it.
+  group('RapportiniListScreen — the report number', () {
+    testWidgets('the row leads with the number the office quotes', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Intervento idraulico', numero: '778');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('#778'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a draft the server has never seen shows no invented number', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Bozza locale');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      // No `#` prefix at all — the subtitle falls back to the summary rather than to the row id.
+      expect(find.textContaining('#'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('searching the number finds the report', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Intervento idraulico', numero: '778');
+      await _seedDraft(db, id: 'draft-2', title: 'Revisione caldaia', numero: '900');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, '778');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Intervento idraulico'), findsOneWidget);
+      expect(find.text('Revisione caldaia'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

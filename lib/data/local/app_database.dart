@@ -258,6 +258,14 @@ class Tickets extends Table {
   TextColumn get technicianNotes => text().nullable()();
   TextColumn get internalNotes => text().nullable()();
   TextColumn get contractId => text().nullable()();
+
+  /// DEAD — superseded by [prodottoAssistenzaIdsJson], kept only because dropping a column from a
+  /// shipped Drift table is a rewrite of the whole table for no data.
+  ///
+  /// The server's `Ticket` carries no singular `prodottoAssistenzaId`: it carries
+  /// `prodottoAssistenzaIds`, a list (one job can cover several units). This column was declared
+  /// beside `contractId` on the assumption that it did, and, because no writer fills it and no
+  /// reader asks for it, it cost nothing and told nobody. Do not write it; see the plural column.
   TextColumn get prodottoAssistenzaId => text().nullable()();
   TextColumn get commessaId => text().nullable()();
 
@@ -304,6 +312,22 @@ class Tickets extends Table {
   /// (schema 12) and `priority`/`dueDate` (schema 20). See `syncCursorGeneration`'s own doc
   /// comment for why this needs a bump too.
   TextColumn get extensionValues => text().nullable()();
+
+  /// The prodotti in assistenza this ticket covers, JSON-encoded — the plural list the server
+  /// actually sends (`Ticket.prodottoAssistenzaIds`), as opposed to the dead singular column
+  /// above.
+  ///
+  /// Same storage as [PendingTickets.prodottoAssistenzaIdsJson] and [tagsJson] (which has the
+  /// reasoning for JSON text over a join table): nothing queries coverage by id relationally, the
+  /// ids are resolved for display through [ProdottiAssistenza] — the mirror the sync already
+  /// fills — exactly as a contract or commessa id is.
+  ///
+  /// Without it the Prodotti compartment could name the units only by asking the live detail
+  /// endpoint, so a technician standing in front of the machine offline got an empty tab; and
+  /// online it went blank whenever that one call failed. Same field-parity gap as `numero`
+  /// (schema 12), `priority`/`dueDate` (schema 20) and `extensionValues` (schema 44); tickets are
+  /// delta-filtered, so it needs the cursor bump described in `syncCursorGeneration`.
+  TextColumn get prodottoAssistenzaIdsJson => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -677,6 +701,20 @@ class DraftReports extends Table {
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
   TextColumn get title => text()();
+
+  /// The rapportino's human number — the same one the office and the customer quote ("#123").
+  ///
+  /// It has been on the wire since numbering existed (`Report.numero`); this mirror simply never
+  /// held it, so the rapportini list had nothing recognisable to lead with and showed the title
+  /// alone (`_RapportinoRow`'s own comment recorded the gap). Null means *no number* — a report
+  /// from before numbering, or a local-only draft the server has never seen — and the UI then
+  /// shows nothing rather than reaching for a row id, the same rule `Tickets.numero` follows.
+  ///
+  /// Needs no cursor bump of its own: the mobile payload carries every Bozza the user authored, in
+  /// full, on each sync, so the next one fills this. (The bump in this release is for tickets,
+  /// which are delta-filtered — see `syncCursorGeneration`.)
+  TextColumn get numero => text().nullable()();
+
   TextColumn get scheduleId => text().nullable()();
   TextColumn get ticketId => text().nullable()();
   TextColumn get customerId => text().nullable()();
@@ -1641,7 +1679,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 55;
+  int get schemaVersion => 56;
 
   @override
   MigrationStrategy get migration {
@@ -2287,6 +2325,26 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(reportControlli, reportControlli.assetId);
           }
         }
+        if (from < 56) {
+          // Two field-parity columns, one step — both are data the payload already carried and the
+          // mirror silently dropped, the same class as `numero`/`priorita`/`extensionValues`:
+          //
+          //   * `tickets.prodottoAssistenzaIdsJson` — the units a job covers. The server sends the
+          //     plural list; the old singular column is dead. Tickets are delta-filtered, so
+          //     `syncCursorGeneration` moves to v16 alongside this: an untouched ticket would keep
+          //     an empty coverage list forever.
+          //   * `draft_reports.numero` — the rapportino's human number. No bump needed for it:
+          //     every Bozza is re-sent in full on each sync.
+          //
+          // Same `PRAGMA table_info` guard as 50, 51 and 55: a re-created table or a half-applied
+          // step must not kill the app on `duplicate column name` before it opens.
+          if (!await _columnExists(m.database, 'tickets', 'prodotto_assistenza_ids_json')) {
+            await m.addColumn(tickets, tickets.prodottoAssistenzaIdsJson);
+          }
+          if (!await _columnExists(m.database, 'draft_reports', 'numero')) {
+            await m.addColumn(draftReports, draftReports.numero);
+          }
+        }
       },
     );
   }
@@ -2409,7 +2467,16 @@ class AppDatabase extends _$AppDatabase {
   ///      priority stripe would stay blank until somebody happened to edit the job. Same reasoning as
   ///      v3/v4/v6/v8. The `draft_reports.is_ai_assisted` fix in the same release needs no bump of its
   ///      own: the mobile payload carries every Bozza the user authored, in full, on each sync.
-  static const String syncCursorGeneration = 'v15';
+  /// v16 — 2026-10-26, schema 56 added `tickets.prodottoAssistenzaIdsJson`. Same reasoning as v15,
+  ///      and the sharper case: tickets are delta-filtered, so a ticket nobody has edited since the
+  ///      upgrade would keep an empty coverage list forever and its Prodotti compartment would stay
+  ///      blank offline. `draft_reports.numero` landed in the same step and needs no entry of its
+  ///      own — the payload carries every Bozza the user authored, in full, on each sync.
+  ///
+  ///      Numbered v16 for the same reason the entry above is v15: the `ticket_statuses.isInProgress`
+  ///      step on its own branch also claims schema 56. Either order is safe; whichever lands
+  ///      second moves its schema step up by one (and this constant with it) and keeps both entries.
+  static const String syncCursorGeneration = 'v16';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

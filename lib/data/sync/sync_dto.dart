@@ -817,6 +817,16 @@ class TicketDto {
   /// double decode at the point of use. Null means the ticket has no custom-field values.
   final String? extensionValues;
 
+  /// The prodotti in assistenza this job covers — the plural list the server declares
+  /// (`Ticket.prodottoAssistenzaIds`). Empty means the ticket covers none.
+  ///
+  /// The server has carried this the whole time and the client read a singular
+  /// `prodottoAssistenzaId` instead, which the server never sends: the Prodotti compartment could
+  /// name the covered units only by asking the live detail endpoint, so it was empty offline and
+  /// blanked whenever that one call failed. See `Tickets.prodottoAssistenzaIdsJson`'s own doc
+  /// comment for the storage and the cursor reasoning.
+  final List<String> prodottoAssistenzaIds;
+
   const TicketDto({
     required this.id,
     required this.tenantId,
@@ -841,6 +851,7 @@ class TicketDto {
     this.dueDate,
     this.tags = const [],
     this.extensionValues,
+    this.prodottoAssistenzaIds = const [],
   });
 
   factory TicketDto.fromJson(Map<String, dynamic> j) => TicketDto(
@@ -870,6 +881,9 @@ class TicketDto {
     dueDate: parseDateOnly(j['dueDate']),
     tags: (j['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
     extensionValues: j['extensionValues'] as String?,
+    prodottoAssistenzaIds:
+        (j['prodottoAssistenzaIds'] as List<dynamic>?)?.cast<String>() ??
+        const [],
   );
 
   /// Every wire key [TicketDto.fromJson] reads.
@@ -907,6 +921,7 @@ class TicketDto {
     'dueDate',
     'tags',
     'extensionValues',
+    'prodottoAssistenzaIds',
   };
 }
 
@@ -1528,6 +1543,11 @@ class ReportDto {
   /// `TicketDto.extensionValues` for the double-encoded wire shape.
   final String? extensionValues;
 
+  /// The rapportino's human number — see `DraftReports.numero`'s own doc comment in
+  /// `app_database.dart`. Null means the report has no number, and the UI shows nothing rather
+  /// than substituting a row id.
+  final String? numero;
+
   const ReportDto({
     required this.id,
     required this.tenantId,
@@ -1559,6 +1579,7 @@ class ReportDto {
     this.customerSignoffAt,
     this.isAiAssisted = false,
     this.extensionValues,
+    this.numero,
   });
 
   factory ReportDto.fromJson(Map<String, dynamic> j) => ReportDto(
@@ -1593,6 +1614,7 @@ class ReportDto {
     customerSignoffAt: _dt(j['customerSignoffAt']),
     isAiAssisted: j['isAiAssisted'] as bool? ?? false,
     extensionValues: j['extensionValues'] as String?,
+    numero: j['numero'] as String?,
   );
 
   /// Every wire key [ReportDto.fromJson] reads — the same one-way pin as [TicketDto.readKeys],
@@ -1629,6 +1651,7 @@ class ReportDto {
     'customerSignoffAt',
     'isAiAssisted',
     'extensionValues',
+    'numero',
   };
 }
 

@@ -221,7 +221,13 @@ class _RapportiniListBody extends ConsumerWidget {
         _RapportinoFilter.pagata => label == 'pagata',
         _RapportinoFilter.annullato => label == 'annullato',
       };
-      final matchQuery = query.isEmpty || d.title.toLowerCase().contains(query.toLowerCase());
+      // The number is what the office and the customer quote to each other, so a search for "123"
+      // must find rapportino #123 — not only a title that happens to contain the digits.
+      final query = this.query.toLowerCase();
+      final matchQuery =
+          query.isEmpty ||
+          d.title.toLowerCase().contains(query) ||
+          (d.numero?.toLowerCase().contains(query) ?? false);
       return matchFilter && matchQuery;
     }).toList();
 
@@ -353,13 +359,16 @@ class _RapportinoRow extends ConsumerWidget {
       'it',
     ).format((draft.updatedAt ?? draft.createdAt).toLocal());
 
-    // Subtitle: tecnico count · ore · materiali count.
+    // Subtitle: the report's number (when it has one) · tecnico count · ore · materiali count.
     //
     // Used to lead with `#$shortId` — eight hex characters of the draft's own row id, the same
-    // "identifier a human cannot recognise" bug already fixed on the ticket list. A rapportino
-    // has no `numero` synced locally (unlike a ticket), so there is nothing real to show in its
-    // place; the title and this summary carry the row on their own, same as a numberless ticket.
+    // "identifier a human cannot recognise" bug already fixed on the ticket list. The number the
+    // office quotes (`Report.numero`) was on the wire all along and simply never mirrored, so this
+    // row had nothing real to show in its place. A local-only draft the server has never seen has
+    // no number yet — it shows the summary alone, same as a numberless ticket.
+    final numero = draft.numero;
     final subParts = <String>[
+      if (numero != null && numero.isNotEmpty) '#$numero',
       if (staffCount > 0) '$staffCount tecnico',
       oreLabel,
       '$materialiCount mat.',
