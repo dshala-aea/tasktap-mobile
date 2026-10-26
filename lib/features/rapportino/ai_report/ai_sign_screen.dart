@@ -33,6 +33,16 @@ import 'ai_card.dart';
 //
 // The report stays a draft until this screen's one button sends it: "Firma e invia all'ufficio" is
 // the same enqueue + forced flush the editor's own submit uses.
+//
+// Two lines of the design are deliberately not built, both for the same reason — there is nothing
+// behind them:
+//
+// - the signer's name is printed, not editable (SPEC §5.2 asks for a text field). Nothing in the
+//   report or in the submit payload carries a "who signed" string, so an editable field would
+//   collect a correction it could not send anywhere.
+// - "Invia una copia del rapporto al cliente via email" (SPEC §5.3) is absent: no route sends a
+//   report by email and no report field records the request. The checkbox would be a promise the
+//   backend cannot keep.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class AiSignScreen extends ConsumerStatefulWidget {
