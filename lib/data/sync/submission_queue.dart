@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/error_message.dart';
+import '../../domain/reports/customer_signature_absence_reason.dart';
 import '../../domain/reports/strumenti_selection.dart';
 import '../local/app_database.dart';
 import '../reports/draft_report_repository.dart';
@@ -476,6 +477,12 @@ class SubmissionQueue {
       startedAt: draft.startedAt,
       endedAt: draft.endedAt,
       customerSignatureAllegatoId: draft.customerSignatureAllegatoId,
+      // "Il cliente non può firmare": the raw column is the wire int; the request carries the
+      // mirrored enum and `toJson` puts the int back on the wire.
+      customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.fromWire(
+        draft.customerSignatureAbsenceReason,
+      ),
+      customerSignatureAbsenceNote: draft.customerSignatureAbsenceNote,
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
       customerSignoffText: draft.customerSignoffText,
       materialiNotRequired: draft.materialiNotRequired,

@@ -8,6 +8,7 @@ import '../../core/location/location_service.dart';
 import '../../data/local/app_database.dart';
 import '../../data/reports/draft_report_repository.dart';
 import '../../data/sync/sync_service.dart';
+import '../../domain/reports/customer_signature_absence_reason.dart';
 import '../../domain/reports/draft_validation.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -264,6 +265,8 @@ class ReportEditorState {
     this.richiedeSecondoIntervento = false,
     this.customerSignatureLocalPath,
     this.customerSignatureAllegatoId,
+    this.customerSignatureAbsenceReason,
+    this.customerSignatureAbsenceNote,
     this.technicianSignatureLocalPath,
     this.technicianSignatureAllegatoId,
     this.technicianSignaturePrefillSuppressed = false,
@@ -327,6 +330,16 @@ class ReportEditorState {
   // Step 5 — Firme
   final String? customerSignatureLocalPath;
   final String? customerSignatureAllegatoId;
+
+  /// Why the customer did not sign ("Il cliente non può firmare"), or null when the customer
+  /// signed or nothing was recorded. Mutually exclusive with [customerSignatureAllegatoId]; see
+  /// `DraftReports.customerSignatureAbsenceReason`'s doc comment.
+  final CustomerSignatureAbsenceReason? customerSignatureAbsenceReason;
+
+  /// Free text explaining [customerSignatureAbsenceReason] — required when it is `altro`, optional
+  /// otherwise. Null when there is nothing to say.
+  final String? customerSignatureAbsenceNote;
+
   final String? technicianSignatureLocalPath;
   final String? technicianSignatureAllegatoId;
 
@@ -390,6 +403,8 @@ class ReportEditorState {
     endedAt: null,
     documentTemplateId: null,
     customerSignatureAllegatoId: customerSignatureAllegatoId,
+    customerSignatureAbsenceReason: customerSignatureAbsenceReason?.wireValue,
+    customerSignatureAbsenceNote: customerSignatureAbsenceNote,
     technicianSignatureAllegatoId: technicianSignatureAllegatoId,
     technicianSignaturePrefillSuppressed: technicianSignaturePrefillSuppressed,
     strumentiPrefilled: false,
@@ -440,6 +455,8 @@ class ReportEditorState {
     bool? richiedeSecondoIntervento,
     String? customerSignatureLocalPath,
     String? customerSignatureAllegatoId,
+    CustomerSignatureAbsenceReason? customerSignatureAbsenceReason,
+    String? customerSignatureAbsenceNote,
     String? technicianSignatureLocalPath,
     String? technicianSignatureAllegatoId,
     bool? technicianSignaturePrefillSuppressed,
@@ -459,6 +476,8 @@ class ReportEditorState {
     bool clearTicketFreeText = false,
     bool clearCantiereFreeText = false,
     bool clearCustomerSignature = false,
+    bool clearCustomerSignatureAbsence = false,
+    bool clearCustomerSignatureAbsenceNote = false,
     bool clearTechnicianSignature = false,
     bool clearSaveError = false,
   }) {
@@ -494,6 +513,13 @@ class ReportEditorState {
       customerSignatureAllegatoId: clearCustomerSignature
           ? null
           : (customerSignatureAllegatoId ?? this.customerSignatureAllegatoId),
+      customerSignatureAbsenceReason: clearCustomerSignatureAbsence
+          ? null
+          : (customerSignatureAbsenceReason ?? this.customerSignatureAbsenceReason),
+      customerSignatureAbsenceNote:
+          clearCustomerSignatureAbsence || clearCustomerSignatureAbsenceNote
+              ? null
+              : (customerSignatureAbsenceNote ?? this.customerSignatureAbsenceNote),
       technicianSignatureLocalPath: clearTechnicianSignature
           ? null
           : (technicianSignatureLocalPath ?? this.technicianSignatureLocalPath),
@@ -706,6 +732,10 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       richiedeSecondoIntervento: draft.richiedeSecondoIntervento,
       customerSignatureAllegatoId: draft.customerSignatureAllegatoId,
       customerSignatureLocalPath: customerSignatureLocalPath,
+      customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.fromWire(
+        draft.customerSignatureAbsenceReason,
+      ),
+      customerSignatureAbsenceNote: draft.customerSignatureAbsenceNote,
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
       technicianSignatureLocalPath: technicianSignatureLocalPath,
       technicianSignaturePrefillSuppressed: draft.technicianSignaturePrefillSuppressed,
@@ -1050,7 +1080,39 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     state = state.copyWith(
       customerSignatureLocalPath: localPath,
       customerSignatureAllegatoId: allegatoId,
+      // A signed report cannot also say the customer could not sign. Capture is itself a
+      // deliberate signing act, so any previously recorded reason no longer applies.
+      clearCustomerSignatureAbsence: true,
     );
+    await _autosave();
+  }
+
+  /// Records (or replaces) why the customer did not sign — "Il cliente non può firmare".
+  ///
+  /// [note] is trimmed and stored as null when blank. When [reason] is `altro` the UI requires a
+  /// non-empty note before enabling Salva; this method trusts that and simply stores what it is
+  /// given, because the same call also has to serve "Modifica motivo" for a reason that carries an
+  /// optional note.
+  ///
+  /// Clearing the reason (passing null) is deliberately a separate method
+  /// ([clearCustomerSignatureAbsence]) so an accidental null cannot silently erase a recorded
+  /// reason.
+  Future<void> setCustomerSignatureAbsence({
+    required CustomerSignatureAbsenceReason reason,
+    String? note,
+  }) async {
+    final trimmed = note?.trim();
+    state = state.copyWith(
+      customerSignatureAbsenceReason: reason,
+      customerSignatureAbsenceNote: (trimmed?.isEmpty ?? true) ? null : trimmed,
+      clearCustomerSignatureAbsenceNote: trimmed?.isEmpty ?? true,
+    );
+    await _autosave();
+  }
+
+  /// Removes the recorded absence reason and its note.
+  Future<void> clearCustomerSignatureAbsence() async {
+    state = state.copyWith(clearCustomerSignatureAbsence: true);
     await _autosave();
   }
 
@@ -1213,6 +1275,10 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       isAiAssisted: Value(state.isAiAssisted),
       richiedeSecondoIntervento: Value(state.richiedeSecondoIntervento),
       customerSignatureAllegatoId: Value(state.customerSignatureAllegatoId),
+      // The wire int, not the enum's ordinal — see
+      // `DraftReports.customerSignatureAbsenceReason`'s doc comment.
+      customerSignatureAbsenceReason: Value(state.customerSignatureAbsenceReason?.wireValue),
+      customerSignatureAbsenceNote: Value(state.customerSignatureAbsenceNote),
       technicianSignatureAllegatoId: Value(state.technicianSignatureAllegatoId),
       technicianSignaturePrefillSuppressed: Value(state.technicianSignaturePrefillSuppressed),
       customerSignoffText: Value(state.customerSignoffText),

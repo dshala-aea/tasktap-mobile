@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/reports/submit_report_request.dart';
+import 'package:tasktap_mobile/domain/reports/customer_signature_absence_reason.dart';
 
 /// The wire names a rapportino submission actually sends.
 ///
@@ -125,6 +126,63 @@ void main() {
         consumedCantiereWorkLogClientIds: ['punch-a', 'punch-b'],
       ).toJson();
       expect(json['consumedCantiereWorkLogClientIds'], ['punch-a', 'punch-b']);
+    });
+  });
+
+  group('customer signature absence ("Il cliente non può firmare")', () {
+    test('each reason goes out as its backend integer, never its name', () {
+      // The server enum has no string converter, so a name would bind to the default (0, i.e.
+      // Assente) — the exact silent-misbind this file exists to catch.
+      const expected = {
+        CustomerSignatureAbsenceReason.assente: 0,
+        CustomerSignatureAbsenceReason.rifiuta: 1,
+        CustomerSignatureAbsenceReason.altro: 2,
+      };
+      for (final entry in expected.entries) {
+        final json = SubmitReportRequest(
+          id: 'r1',
+          locationId: 'l1',
+          title: 'T',
+          customerSignatureAbsenceReason: entry.key,
+        ).toJson();
+        expect(json['customerSignatureAbsenceReason'], entry.value);
+        expect(json.containsKey('customerSignatureAbsenceNote'), isFalse);
+      }
+    });
+
+    test('the note is trimmed and sent only when non-empty', () {
+      const withNote = SubmitReportRequest(
+        id: 'r1',
+        locationId: 'l1',
+        title: 'T',
+        customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.altro,
+        customerSignatureAbsenceNote: '  Cliente in ospedale  ',
+      );
+      expect(withNote.toJson()['customerSignatureAbsenceNote'], 'Cliente in ospedale');
+
+      const blankNote = SubmitReportRequest(
+        id: 'r1',
+        locationId: 'l1',
+        title: 'T',
+        customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.assente,
+        customerSignatureAbsenceNote: '   ',
+      );
+      expect(blankNote.toJson().containsKey('customerSignatureAbsenceNote'), isFalse);
+    });
+
+    test('a signed report never also carries an absence reason', () {
+      final json = const SubmitReportRequest(
+        id: 'r1',
+        locationId: 'l1',
+        title: 'T',
+        customerSignatureAllegatoId: 'sig-cust',
+        customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.assente,
+        customerSignatureAbsenceNote: 'non doveva esserci',
+      ).toJson();
+
+      expect(json['customerSignatureAllegatoId'], 'sig-cust');
+      expect(json.containsKey('customerSignatureAbsenceReason'), isFalse);
+      expect(json.containsKey('customerSignatureAbsenceNote'), isFalse);
     });
   });
 

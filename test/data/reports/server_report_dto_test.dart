@@ -12,6 +12,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/reports/server_report_dto.dart';
+import 'package:tasktap_mobile/domain/reports/customer_signature_absence_reason.dart';
 
 Map<String, dynamic> backendFixture() => {
   'id': '11111111-1111-1111-1111-111111111111',
@@ -30,6 +31,10 @@ Map<String, dynamic> backendFixture() => {
   'startedAt': null,
   'endedAt': null,
   'customerSignatureAllegatoId': null,
+  // "Il cliente non può firmare": the backend enum, serialized as its INTEGER value (no string
+  // converter), plus the optional free-text note.
+  'customerSignatureAbsenceReason': 1,
+  'customerSignatureAbsenceNote': 'Il cliente ha rifiutato di firmare',
   'technicianSignatureAllegatoId': null,
   'technicianNotes': null,
   'closedAt': null,
@@ -134,7 +139,24 @@ void main() {
     expect(r.diagnosi, 'Pompa bloccata');
     expect(r.soluzione, 'Sostituita');
     expect(r.customerSignoffText, 'Lavoro accettato');
+    expect(r.customerSignatureAbsenceReason, CustomerSignatureAbsenceReason.rifiuta);
+    expect(r.customerSignatureAbsenceNote, 'Il cliente ha rifiutato di firmare');
     expect(r.isBozza, isTrue);
+  });
+
+  test('an unknown/absent absence reason reads null instead of failing the import', () {
+    expect(
+      ServerReportDto.fromJson(
+        backendFixture()..['customerSignatureAbsenceReason'] = 99,
+      ).customerSignatureAbsenceReason,
+      isNull,
+    );
+    expect(
+      ServerReportDto.fromJson(
+        backendFixture()..remove('customerSignatureAbsenceReason'),
+      ).customerSignatureAbsenceReason,
+      isNull,
+    );
   });
 
   test('parses staff, materiali and observations (controlli)', () {

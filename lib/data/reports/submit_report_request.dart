@@ -7,6 +7,8 @@
 // C# PascalCase properties via the default System.Text.Json policy).
 // ══════════════════════════════════════════════════════════════════════════════
 
+import '../../domain/reports/customer_signature_absence_reason.dart';
+
 /// Full rapportino payload sent to POST /api/reports/submit.
 /// Mirror of backend SubmitReportRequest.cs — field names are identical.
 class SubmitReportRequest {
@@ -26,6 +28,8 @@ class SubmitReportRequest {
     this.startedAt,
     this.endedAt,
     this.customerSignatureAllegatoId,
+    this.customerSignatureAbsenceReason,
+    this.customerSignatureAbsenceNote,
     this.technicianSignatureAllegatoId,
     this.customerSignoffText,
     this.materialiNotRequired = false,
@@ -102,8 +106,20 @@ class SubmitReportRequest {
   /// When the work actually ended (UTC ISO-8601).
   final DateTime? endedAt;
 
-  /// Allegato id of the customer's signature (required to submit).
+  /// Allegato id of the customer's signature. Required only when no
+  /// [customerSignatureAbsenceReason] is recorded: a report the customer could not sign states why
+  /// instead.
   final String? customerSignatureAllegatoId;
+
+  /// Why the customer did not sign ("Il cliente non può firmare"). Mirrors the backend
+  /// `CustomerSignatureAbsenceReason`, serialized as an INTEGER (`Assente = 0`, `Rifiuta = 1`,
+  /// `Altro = 2`). Never sent alongside [customerSignatureAllegatoId] — a report carries one or the
+  /// other, never both.
+  final CustomerSignatureAbsenceReason? customerSignatureAbsenceReason;
+
+  /// Free text explaining [customerSignatureAbsenceReason]. Sent only when non-empty and only
+  /// alongside a reason.
+  final String? customerSignatureAbsenceNote;
 
   /// Allegato id of the technician's signature (required to submit).
   final String? technicianSignatureAllegatoId;
@@ -160,6 +176,15 @@ class SubmitReportRequest {
     if (endedAt != null) 'endedAt': endedAt!.toUtc().toIso8601String(),
     if (customerSignatureAllegatoId != null)
       'customerSignatureAllegatoId': customerSignatureAllegatoId,
+    // Never both: a signed report emits no absence reason at all, even if the state somehow still
+    // held one. The enum goes out as its wire int, never a string. The note rides along only with
+    // a reason, and only when it has content — a blank note is not an answer.
+    if (customerSignatureAllegatoId == null && customerSignatureAbsenceReason != null)
+      'customerSignatureAbsenceReason': customerSignatureAbsenceReason!.wireValue,
+    if (customerSignatureAllegatoId == null &&
+        customerSignatureAbsenceReason != null &&
+        (customerSignatureAbsenceNote?.trim().isNotEmpty ?? false))
+      'customerSignatureAbsenceNote': customerSignatureAbsenceNote!.trim(),
     if (technicianSignatureAllegatoId != null)
       'technicianSignatureAllegatoId': technicianSignatureAllegatoId,
     if (customerSignoffText != null) 'customerSignoffText': customerSignoffText,
