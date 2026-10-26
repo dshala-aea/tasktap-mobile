@@ -293,11 +293,20 @@ Future<void> _describeAndGenerate(
   WidgetTester tester, [
   String text = 'Ho fatto il lavoro',
 ]) async {
-  // The toggle is the last thing on step 1, below the mic orb, in a scrolling list: on the 800x600
-  // surface the tests run on, its centre is past the bottom of the viewport and a bare `tap` lands
-  // on the pinned footer's "Genera il rapporto" instead. Scroll it into view first, as a
-  // technician would.
+  // The toggle is the last thing on step 1, below the mic orb, in a lazily-built list: on the
+  // 800x600 surface the tests run on its centre is past the bottom of the viewport, so a bare `tap`
+  // lands on the pinned footer's "Genera il rapporto" instead — and if a banner has pushed it
+  // further down it is not in the tree at all, so `ensureVisible` throws. Drag it into reach the way
+  // a thumb would, then ensure it is fully visible.
   final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
+  if (toggle.evaluate().isEmpty) {
+    await tester.dragUntilVisible(
+      toggle,
+      find.byType(Scrollable).first,
+      const Offset(0, -120),
+    );
+    await tester.pumpAndSettle();
+  }
   await tester.ensureVisible(toggle);
   await tester.pumpAndSettle();
   await tester.tap(toggle);
@@ -359,7 +368,18 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('ai-describe-again')));
     await tester.pumpAndSettle();
 
-    final field = tester.widget<TextField>(find.byKey(const ValueKey('ai-description-field')));
+    // Step 1 rebuilds, so its list starts at the top again and the field — the last child — has to
+    // be scrolled back into existence before it can be read.
+    final fieldFinder = find.byKey(const ValueKey('ai-description-field'));
+    if (fieldFinder.evaluate().isEmpty) {
+      await tester.dragUntilVisible(
+        fieldFinder,
+        find.byType(Scrollable).first,
+        const Offset(0, -120),
+      );
+      await tester.pumpAndSettle();
+    }
+    final field = tester.widget<TextField>(fieldFinder);
     expect(field.controller?.text, 'Ho sostituito la valvola');
   });
 

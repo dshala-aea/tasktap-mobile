@@ -433,6 +433,9 @@ AppButton _generateButton(WidgetTester tester) =>
 /// the orb's halos animate for as long as `recording` is true, so the settle loop would spin until
 /// it timed out. Two plain frames are enough for the controller's `start()` and the rebuild.
 Future<void> _startRecording(WidgetTester tester) async {
+  // The orb may have been scrolled out of view by a previous `_reveal` (the toggle sits below it);
+  // a tap on an off-screen widget is delivered to whatever is at that offset instead.
+  await _reveal(tester, _micIdle);
   await tester.tap(_micIdle);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 50));
@@ -455,17 +458,38 @@ Future<void> _tapBack(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 300));
 }
 
-/// Taps "Preferisci scrivere?" and reveals the description field.
+/// Brings [finder] into view, building it first if the list has not reached it yet.
 ///
-/// The toggle is the last thing on step 1, below the mic orb, in a scrolling list: on the 800x600
-/// surface the tests run on its centre is past the bottom of the viewport, so a bare `tap` derives
-/// an offset that hit-tests to the pinned footer's "Genera il rapporto" instead — the tap lands on
-/// a different control and the field never appears. Scrolling it into view first is what a
-/// technician does, and it is the only way the tap reaches the widget it names.
+/// Two things on step 1 are true at once. Its `ListView` only instantiates the children near the
+/// viewport, so a control pushed below the fold by a banner (a used-draft notice, "Continua senza
+/// AI") is not in the tree at all — `ensureVisible` needs an element and throws `No element`. And
+/// one that *is* built can still have its centre outside the viewport, which makes `tap` derive an
+/// offset that hit-tests to the pinned footer instead. Dragging the list the way a thumb would,
+/// then ensuring it is fully in view, covers both.
+Future<void> _reveal(WidgetTester tester, Finder finder, {bool settle = true}) async {
+  if (finder.evaluate().isEmpty) {
+    await tester.dragUntilVisible(
+      finder,
+      find.byType(Scrollable).first,
+      const Offset(0, -120),
+    );
+  }
+  if (settle) {
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+  } else {
+    // While a recording is running the orb's halos animate forever, so `pumpAndSettle` would spin
+    // until it timed out; a couple of fixed frames let the scroll land instead.
+    await tester.ensureVisible(finder);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+}
+
+/// Taps "Preferisci scrivere?" and reveals the description field.
 Future<void> _tapToggleWriting(WidgetTester tester) async {
   final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
-  await tester.ensureVisible(toggle);
-  await tester.pumpAndSettle();
+  await _reveal(tester, toggle);
   await tester.tap(toggle);
   await tester.pumpAndSettle();
 }
@@ -478,10 +502,19 @@ Future<void> _typeAndGenerate(WidgetTester tester, String text) async {
     await tester.tap(find.byKey(const ValueKey('ai-describe-again')));
     await tester.pumpAndSettle();
   }
-  if (find.byKey(const ValueKey('ai-description-field')).evaluate().isEmpty) {
-    await _tapToggleWriting(tester);
+  // Whether the keyboard mode is on is read from the toggle's own label, not from the field being
+  // absent: the list builds lazily, so an absent field means "not built yet" just as often as
+  // "mode off", and tapping the toggle in the second case would switch it off again. Reveal the
+  // toggle first — a banner above the list can leave it unbuilt — and only then read its label.
+  final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
+  await _reveal(tester, toggle);
+  if (find.text('Preferisci scrivere?').evaluate().isNotEmpty) {
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
   }
-  await tester.enterText(find.byKey(const ValueKey('ai-description-field')), text);
+  final field = find.byKey(const ValueKey('ai-description-field'));
+  await _reveal(tester, field);
+  await tester.enterText(field, text);
   // The footer's button only enables once the parent has heard about the text.
   await tester.pump();
   await tester.tap(find.widgetWithText(AppButton, 'Genera il rapporto'));
@@ -872,6 +905,8 @@ void main() {
       // The manual path is offered, and sending more to the AI is not.
       expect(find.text('Continua senza AI'), findsOneWidget);
       expect(find.text('Riprova invio'), findsNothing);
+      // The refusal banner above the field pushes it below the fold; reveal it before typing.
+      await _reveal(tester, find.byKey(const ValueKey('ai-description-field')));
       await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Ancora');
       await tester.pump();
       expect(
@@ -1006,6 +1041,8 @@ void main() {
       await _failOneTypedTurn(ai, tester);
       expect(ai.posted, hasLength(1));
 
+      // The failure banner above the field pushes it below the fold; reveal it before typing.
+      await _reveal(tester, find.byKey(const ValueKey('ai-description-field')));
       await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Secondo');
       await tester.pump();
       expect(_generateButton(tester).onPressed, isNull, reason: 'the unsent update comes first');
@@ -1109,8 +1146,12 @@ void main() {
       await _startRecording(tester);
 
       expect(_generateButton(tester).onPressed, isNull);
+      // Revealing the orb scrolled the list back up, so the toggle may no longer be built; bring it
+      // back with fixed pumps, since the running recording never settles.
+      final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
+      await _reveal(tester, toggle, settle: false);
       expect(
-        tester.widget<TextButton>(find.byKey(const ValueKey('ai-toggle-writing'))).onPressed,
+        tester.widget<TextButton>(toggle).onPressed,
         isNull,
         reason: 'the description cannot be swapped mid-recording either',
       );
