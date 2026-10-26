@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+	Privacy manifest for the TaskTap Runner target.
+
+	Apple requires every app bundle to declare (a) whether it tracks users and (b) the
+	"required reason" categories of any API it calls from its list, or the upload is flagged
+	(ITMS-91053 / ITMS-91056). The categories below are the ones this app's own code and its
+	directly-linked Flutter plugins reach; see
+	docs/superpowers/specs/2026-10-26-ios-privacy-manifest-design.md for the per-plugin evidence.
+
+	NSPrivacyCollectedDataTypes is deliberately absent: what the app collects is described in the
+	App Store Connect privacy questionnaire, and a second, hand-maintained copy here would be a
+	declaration nobody validates that silently drifts from it. Add it only if we ever want the
+	in-bundle privacy report to be authoritative instead of App Store Connect.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- shared_preferences: onboarding flag, offline-sync toggle, per-user settings. Scoped to
+		     this app's own defaults — nothing is read from or written to another app's domain. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<!-- drift/sqlite3_flutter_libs (the offline mirror), path_provider, file_picker, open_filex and
+		     share_plus all read and write files inside this app's own container. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+		<!-- Same plugins: free space is checked before writing the sqlite file and attachments, and
+		     after deleting them. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
