@@ -423,11 +423,11 @@ bool _micEnabled(WidgetTester tester) =>
         .onTap !=
     null;
 
-/// The one action of step 1, "Genera il rapporto": the same `_send` the chat's paper-plane called.
-/// (While a turn is in flight its label becomes "Generazione in corso…", so this is only usable
-/// when nothing is being sent.)
+/// The one action of step 1: the same `_send` the chat's paper-plane called. Found by key, not by
+/// label — the label changes with the state ("Generazione in corso…", "Genera di nuovo il rapporto"
+/// once a draft exists) while the action does not.
 AppButton _generateButton(WidgetTester tester) =>
-    tester.widget<AppButton>(find.widgetWithText(AppButton, 'Genera il rapporto'));
+    tester.widget<AppButton>(find.byKey(const ValueKey('ai-generate')));
 
 /// Taps the orb to start a recording. Nothing may `pumpAndSettle` again until the recording ends:
 /// the orb's halos animate for as long as `recording` is true, so the settle loop would spin until
@@ -517,7 +517,7 @@ Future<void> _typeAndGenerate(WidgetTester tester, String text) async {
   await tester.enterText(field, text);
   // The footer's button only enables once the parent has heard about the text.
   await tester.pump();
-  await tester.tap(find.widgetWithText(AppButton, 'Genera il rapporto'));
+  await tester.tap(find.byKey(const ValueKey('ai-generate')));
   await tester.pumpAndSettle();
 }
 
@@ -663,6 +663,24 @@ void main() {
       expect(find.text('Manutenzione compressore · 3 h'), findsOneWidget);
       await _unmount(tester);
     });
+
+    testWidgets('coming back to Descrivi over an existing draft offers to regenerate it', (
+      tester,
+    ) async {
+      final ai = _FakeAi(detail: _detail(draft: _seededDraft()));
+      await tester.pumpWidget(_wrap(ai, _FakeVoice()));
+      await tester.pumpAndSettle();
+      await _compile(tester, ai, _seededDraft());
+
+      await tester.tap(find.byKey(const ValueKey('ai-describe-again')));
+      await tester.pumpAndSettle();
+
+      // The label says this is a second attempt: the draft is still there, and the screen must not
+      // read as a fresh start on top of it.
+      expect(find.text('Genera di nuovo il rapporto'), findsOneWidget);
+      expect(find.text('Genera il rapporto'), findsNothing);
+      await _unmount(tester);
+    });
   });
 
   group('provenance label', () {
@@ -730,9 +748,9 @@ void main() {
 
       await _recordOnce(tester);
       expect(ai.posted, hasLength(1), reason: 'the response was lost: not retried silently');
-      expect(find.text('Riprova invio'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-retry')), findsOneWidget);
 
-      await tester.tap(find.text('Riprova invio'));
+      await tester.tap(find.byKey(const ValueKey('ai-retry')));
       await tester.pumpAndSettle();
 
       expect(ai.posted, hasLength(2));
@@ -740,7 +758,7 @@ void main() {
       expect(ai.posted[1].text, ai.posted[0].text);
       expect(ai.posted[1].audioRef, 'audio-1');
       expect(voice.uploadKeys, ['rec-key-1'], reason: 'already uploaded: the audio is not uploaded twice');
-      expect(find.text('Riprova invio'), findsNothing);
+      expect(find.byKey(const ValueKey('ai-retry')), findsNothing);
       await _unmount(tester);
     });
 
@@ -757,7 +775,7 @@ void main() {
 
       await _recordOnce(tester);
       expect(ai.posted, isEmpty);
-      await tester.tap(find.text('Riprova invio'));
+      await tester.tap(find.byKey(const ValueKey('ai-retry')));
       await tester.pumpAndSettle();
 
       expect(voice.uploadKeys, ['rec-key-1', 'rec-key-1']);
@@ -787,7 +805,7 @@ void main() {
       // The orb is not hidden any more: the screen says voice is off for the company and leaves the
       // description to the keyboard. Retrying cannot help, so no retry is offered…
       expect(find.textContaining('registrazione vocale non è attiva'), findsOneWidget);
-      expect(find.text('Riprova invio'), findsNothing, reason: 'retrying cannot help');
+      expect(find.byKey(const ValueKey('ai-retry')), findsNothing, reason: 'retrying cannot help');
       // …and typing (and on-device dictation) is untouched: the turn still goes through.
       await _typeAndGenerate(tester, 'Ho cambiato il filtro olio');
       expect(ai.posted.single.text, 'Ho cambiato il filtro olio');
@@ -803,6 +821,26 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('l\'audio viene inviato al server di TaskTap'), findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('a denied microphone says so on screen and offers Settings', (tester) async {
+      final voice = _FakeVoice()
+        ..startResult = RecordingStartResult.permissionPermanentlyDenied;
+      await tester.pumpWidget(_wrap(_FakeAi(), voice));
+      await tester.pumpAndSettle();
+
+      await _reveal(tester, _micIdle);
+      await tester.tap(_micIdle);
+      await tester.pumpAndSettle();
+
+      // Once the OS stops asking, a toast is gone before the technician can act on it: the state
+      // stays on screen and carries the one action that can undo it.
+      expect(find.textContaining('serve il microfono'), findsOneWidget);
+      expect(find.text('Apri impostazioni'), findsOneWidget);
+      expect(find.byKey(const ValueKey('mic-open-settings')), findsOneWidget);
+      // Writing is untouched — the banner says so and the toggle is still there.
+      expect(find.byKey(const ValueKey('ai-toggle-writing')), findsOneWidget);
       await _unmount(tester);
     });
   });
@@ -851,7 +889,7 @@ void main() {
 
       expect(ai.posted.length, lessThanOrEqualTo(8));
       expect(ai.posted.map((p) => p.key).toSet(), hasLength(1));
-      expect(find.text('Riprova invio'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-retry')), findsOneWidget);
       await _unmount(tester);
     });
 
@@ -871,7 +909,7 @@ void main() {
       expect(ai.posted[1].key, ai.posted[0].key);
       // One refetch because of the 409 (plus, at most, the turn-id lookup after success).
       expect(ai.getCalls.length, greaterThanOrEqualTo(2));
-      expect(find.text('Riprova invio'), findsNothing);
+      expect(find.byKey(const ValueKey('ai-retry')), findsNothing);
       await _unmount(tester);
     });
 
@@ -887,7 +925,7 @@ void main() {
       await _typeAndGenerate(tester, 'Cambio filtro');
 
       expect(ai.posted, hasLength(2));
-      expect(find.text('Riprova invio'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-retry')), findsOneWidget);
       await _unmount(tester);
     });
 
@@ -904,7 +942,7 @@ void main() {
       // the draft — is not shown there. The coverage that remains is the manual path below.
       // The manual path is offered, and sending more to the AI is not.
       expect(find.text('Continua senza AI'), findsOneWidget);
-      expect(find.text('Riprova invio'), findsNothing);
+      expect(find.byKey(const ValueKey('ai-retry')), findsNothing);
       // The refusal banner above the field pushes it below the fold; reveal it before typing.
       await _reveal(tester, find.byKey(const ValueKey('ai-description-field')));
       await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Ancora');
@@ -1045,10 +1083,12 @@ void main() {
       await _reveal(tester, find.byKey(const ValueKey('ai-description-field')));
       await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Secondo');
       await tester.pump();
-      expect(_generateButton(tester).onPressed, isNull, reason: 'the unsent update comes first');
+      // The unsent turn is the footer's one action, so the next send is not merely disabled — it is
+      // not offered at all until the turn goes through or is discarded.
+      expect(find.byKey(const ValueKey('ai-generate')), findsNothing);
+      expect(tester.widget<AppButton>(find.byKey(const ValueKey('ai-retry'))).onPressed, isNotNull);
       // GONE: 'the microphone is disabled too'. `AiDescribeStep` receives only the 404
       // `voiceDisabled` flag; a failed turn does not stop the orb taking taps.
-      expect(find.text('Riprova invio'), findsOneWidget);
       expect(find.text('Scarta'), findsOneWidget);
       await _unmount(tester);
     });
@@ -1062,7 +1102,7 @@ void main() {
       await tester.tap(find.text('Scarta'));
       await tester.pumpAndSettle();
       // GONE: 'the failed bubble is gone' — there is no bubble, so its absence would prove nothing.
-      expect(find.text('Riprova invio'), findsNothing);
+      expect(find.byKey(const ValueKey('ai-retry')), findsNothing);
 
       await _typeAndGenerate(tester, 'Secondo');
       expect(ai.posted, hasLength(2));
@@ -1093,7 +1133,7 @@ void main() {
       // The failed bubble's 'Non inviato' badge is now the banner's own sentence.
       expect(find.textContaining('L\'aggiornamento non è stato inviato'), findsOneWidget);
 
-      await tester.tap(find.text('Riprova invio'));
+      await tester.tap(find.byKey(const ValueKey('ai-retry')));
       await tester.pumpAndSettle();
       expect(find.textContaining('L\'aggiornamento non è stato inviato'), findsNothing);
       await _unmount(tester);
@@ -1123,11 +1163,11 @@ void main() {
 
       ai.turnGate!.complete();
       await tester.pumpAndSettle();
-      expect(find.text('Riprova invio'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-retry')), findsOneWidget);
       expect(confirmOn(), isFalse, reason: 'a turn has failed');
 
       // Retrying the failed turn clears it, and Conferma comes back.
-      await tester.tap(find.text('Riprova invio'));
+      await tester.tap(find.byKey(const ValueKey('ai-retry')));
       await tester.pumpAndSettle();
       expect(confirmOn(), isTrue);
       await _unmount(tester);
@@ -1169,7 +1209,7 @@ void main() {
       await _recordOnce(tester);
       expect(voice.fakeStore.deleted, isEmpty);
 
-      await tester.tap(find.text('Riprova invio'));
+      await tester.tap(find.byKey(const ValueKey('ai-retry')));
       await tester.pumpAndSettle();
       expect(voice.fakeStore.deleted, ['rec-1'], reason: 'deleted only after the turn is accepted');
       await _unmount(tester);
@@ -1858,7 +1898,7 @@ void main() {
       await _typeAndGenerate(tester, 'Testo lunghissimo');
 
       expect(find.text('Accorcia il testo'), findsOneWidget);
-      expect(find.text('Riprova invio'), findsNothing);
+      expect(find.byKey(const ValueKey('ai-retry')), findsOneWidget, reason: 'the same footer action, relabelled');
       await tester.tap(find.text('Accorcia il testo'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('correction-field')), 'Testo corto');

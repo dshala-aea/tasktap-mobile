@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/audio/pending_recording_store.dart';
@@ -165,7 +166,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   /// Set once the technician decided to leave (or the draft was abandoned): no more confirmation.
   bool _forceLeave = false;
 
-  /// The turn that has not gone through yet (offered as "Riprova invio"), and why.
+  /// The turn that has not gone through yet (offered as the footer's "Riprova"), and why.
   _Outgoing? _failed;
   String? _failureMessage;
 
@@ -192,6 +193,15 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   /// Only the MICROPHONE is unavailable (transcription refused for credits): typed turns and
   /// on-device dictation go on.
   String? _micBlockedMessage;
+
+  /// The OS refused the microphone. Kept as its own flag rather than folded into
+  /// [_micBlockedMessage] because the two need different actions: credits need the office, a denied
+  /// permission needs Settings. Cleared the moment a recording actually starts.
+  bool _micPermissionBlocked = false;
+
+  static const _micPermissionText =
+      'Per descrivere a voce serve il microfono. Puoi attivarlo dalle impostazioni o scrivere la '
+      'descrizione.';
 
   /// The failed turn was refused for its length: offer to shorten it.
   bool _failedTooLong = false;
@@ -922,7 +932,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     switch (result) {
       case RecordingStartResult.started:
-        setState(() => _recording = true);
+        setState(() {
+          _recording = true;
+          // The permission the OS asked for is now in hand: whatever the last refusal said about it
+          // is no longer true on screen.
+          _micPermissionBlocked = false;
+        });
         // The 5-minute hard stop or another app taking the microphone ends the recording without a tap.
         _interruptSub?.cancel();
         _voiceCtl = voice;
@@ -943,17 +958,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       case RecordingStartResult.notSignedIn:
         showAppToast(context, message: 'Accedi per registrare un aggiornamento.', tone: ToastTone.warning);
       case RecordingStartResult.permissionDenied:
-        showAppToast(
-          context,
-          message: 'Serve il permesso del microfono per registrare.',
-          tone: ToastTone.warning,
-        );
       case RecordingStartResult.permissionPermanentlyDenied:
-        showAppToast(
-          context,
-          message: 'Il microfono è bloccato: abilitalo dalle impostazioni del telefono.',
-          tone: ToastTone.warning,
-        );
+        // Not a toast: the message has to outlive the moment of the tap, and it carries the one
+        // action that fixes it. Writing stays available either way — the description card and
+        // on-device dictation never needed this permission.
+        setState(() => _micPermissionBlocked = true);
     }
   }
 
@@ -1348,6 +1357,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
     if (_step == _AiStep.review) {
       final busy = _sending || _confirming || _editing || _applying || _recording;
+      // Controlla can start a turn too — the pending-recordings banner's "Invia" — so a failure
+      // raised from here needs its retry here. The Modifica/Conferma row is replaced by it rather
+      // than joined by a third button: Conferma is disabled while a turn sits unsent (its own guard
+      // says so), and a disabled primary beside a live retry reads as the retry being secondary.
+      final retry = _failed != null;
       return Padding(
         padding: pad,
         child: Column(
@@ -1374,57 +1388,75 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
               ),
             ),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  // "Modifica" opens the ordinary report editor on this draft — every card
-                  // editable, the same editor the technician already knows — and keeps the session
-                  // alive, so what they change by hand survives the next turn. "Descrivi di nuovo"
-                  // (the link above) is the cheaper route when the assistant got the story wrong.
-                  //
-                  // SPEC §4 asks for the cards to become editable in place, the footer turning into
-                  // Annulla/Salva. This opens the real editor instead: same fields, same validation,
-                  // and no second editing implementation to drift from the first. Conferma after
-                  // that is not a second draft — it confirms INTO the report the editor created
-                  // (applyConfirmedDraft is matched by identity), so neither path duplicates a line.
-                  child: AppButton.secondary(
-                    label: 'Modifica',
-                    isLoading: _opening,
-                    onPressed: busy || _opening || _usedDraftMessage != null
-                        ? null
-                        : _openInEditor,
+            if (retry)
+              _retryAction()
+            else
+              Row(
+                children: [
+                  Expanded(
+                    // "Modifica" opens the ordinary report editor on this draft — every card
+                    // editable, the same editor the technician already knows — and keeps the session
+                    // alive, so what they change by hand survives the next turn. "Descrivi di nuovo"
+                    // (the link above) is the cheaper route when the assistant got the story wrong.
+                    //
+                    // SPEC §4 asks for the cards to become editable in place, the footer turning into
+                    // Annulla/Salva. This opens the real editor instead: same fields, same validation,
+                    // and no second editing implementation to drift from the first. Conferma after
+                    // that is not a second draft — it confirms INTO the report the editor created
+                    // (applyConfirmedDraft is matched by identity), so neither path duplicates a line.
+                    child: AppButton.secondary(
+                      label: 'Modifica',
+                      isLoading: _opening,
+                      onPressed: busy || _opening || _usedDraftMessage != null
+                          ? null
+                          : _openInEditor,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: AppButton(
-                    label: _confirming ? 'Preparo il rapporto…' : 'Conferma',
-                    isLoading: _confirming,
-                    onPressed: _sessionId == null ||
-                            _draft.hasBlockingOpenItems ||
-                            _confirming ||
-                            _sending ||
-                            _editing ||
-                            _recording ||
-                            _usedDraftMessage != null ||
-                            _failed != null
-                        ? null
-                        : _confirm,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: AppButton(
+                      label: _confirming ? 'Preparo il rapporto…' : 'Conferma',
+                      isLoading: _confirming,
+                      onPressed: _sessionId == null ||
+                              _draft.hasBlockingOpenItems ||
+                              _confirming ||
+                              _sending ||
+                              _editing ||
+                              _recording ||
+                              _usedDraftMessage != null ||
+                              _failed != null
+                          ? null
+                          : _confirm,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       );
     }
 
+    // The unsent turn is the error state, and its retry belongs where the attempt was made — the
+    // footer's one action — instead of a second button inside the banner that says the same thing.
+    if (_failed != null) return Padding(padding: pad, child: _retryAction());
+
     final hasText = _inputCtrl.text.trim().isNotEmpty;
+    // A draft has already been compiled for this ticket: this is not a first attempt, and the label
+    // says so. The description itself is not re-shown — on a voice turn the server never receives it
+    // as text, so displaying it would need a second local store for something the technician is
+    // about to express again anyway; what matters is that the screen does not read as a fresh start
+    // on top of an existing draft.
+    final hasDraft = _draftHasContent(_draft);
     return Padding(
       padding: pad,
       child: AppButton(
-        label: _sending ? 'Generazione in corso…' : 'Genera il rapporto',
+        key: const ValueKey('ai-generate'),
+        label: _sending
+            ? 'Generazione in corso…'
+            : hasDraft
+            ? 'Genera di nuovo il rapporto'
+            : 'Genera il rapporto',
         isLoading: _sending,
         onPressed: _sessionId == null ||
                 !hasText ||
@@ -1437,6 +1469,17 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       ),
     );
   }
+
+  /// The one action while a turn sits unsent, on whichever screen the technician is standing.
+  ///
+  /// A turn the server refused as too long is retried by shortening it first, so the label names
+  /// that step rather than promising a retry that would fail the same way again.
+  Widget _retryAction() => AppButton(
+    key: const ValueKey('ai-retry'),
+    label: _failedTooLong ? 'Accorcia il testo' : 'Riprova',
+    isLoading: _sending,
+    onPressed: _sending ? null : (_failedTooLong ? _shortenFailed : _retryFailed),
+  );
 
   List<Widget> _buildBanners(BuildContext context) {
     Widget banner(Color color, String text, List<Widget> actions) => Container(
@@ -1473,6 +1516,17 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           const [],
         ),
       if (_micBlockedMessage != null) banner(context.colors.amber, _micBlockedMessage!, const []),
+      // Once the OS stops asking, Settings is the only route back to a working microphone, and a
+      // toast is gone before the technician can act on it. The message stays until a recording
+      // actually starts, so the state it describes is the state on screen.
+      if (_micPermissionBlocked)
+        banner(context.colors.amber, _micPermissionText, [
+          TextButton(
+            key: const ValueKey('mic-open-settings'),
+            onPressed: () => openAppSettings(),
+            child: const Text('Apri impostazioni'),
+          ),
+        ]),
       if (_backgroundNote != null && !_recording)
         banner(context.colors.amber, _backgroundNote!, const []),
       if (_expiringSoon)
@@ -1489,15 +1543,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         ]),
       if (_failed != null && _failureMessage != null)
         banner(context.colors.red, '$_failureMessage\nL\'aggiornamento non è stato inviato.', [
-          if (_failedTooLong)
-            TextButton(
-              key: const ValueKey('shorten-failed'),
-              onPressed: _sending ? null : _shortenFailed,
-              child: const Text('Accorcia il testo'),
-            )
-          else
-            TextButton(
-                onPressed: _sending ? null : _retryFailed, child: const Text('Riprova invio')),
           TextButton(onPressed: _sending ? null : _discardFailed, child: const Text('Scarta')),
         ]),
       if (_pendingRecs.isNotEmpty && _failed == null)
