@@ -186,6 +186,13 @@ void main() {
         // fails with `no such table` — a fixture gap, not a device failure. Today's DDL already
         // declares all three columns, so the guard skips the adds.
         'cantiere_punches',
+        // `ticket_statuses` too: schema 56 adds `is_in_progress` to it. Every v33 device has
+        // carried that reference table since its first release, and `_columnExists` is a
+        // `PRAGMA table_info` — which answers "no column" for a missing table, so a fixture
+        // without it does not skip the step, it crashes it with `no such table`. Today's DDL
+        // already declares the column, so the guard skips the add here; migration_v56_test.dart
+        // covers the add path itself.
+        'ticket_statuses',
       ]);
     });
 

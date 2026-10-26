@@ -109,12 +109,32 @@ final closedTicketIdsProvider = StreamProvider.autoDispose<Set<String>>((ref) {
 bool scheduleTicketIsClosed(Schedule schedule, Set<String> closedTicketIds) =>
     schedule.ticketId != null && closedTicketIds.contains(schedule.ticketId);
 
+/// Ids of the tickets whose own status says work has started.
+///
+/// Read through the tenant's `isInProgress` flag, never through a status id or name: the seeded
+/// "In corso" is id 2 on a fresh tenant, but the flag is the contract and the name is renameable.
+///
+/// This is the office-side signal, and it is not the same as a running timer. The office moves a
+/// ticket to "In corso" when the job begins, and that leaves the linked schedule sitting in "da
+/// fare" — so without this set the dashboard called a started job outstanding work. The timer set
+/// below stays the device-local truth (the technician tapped start, possibly offline and not yet
+/// synced); the two are unioned at the bucketing step rather than one standing in for the other.
+final inProgressTicketIdsProvider = StreamProvider.autoDispose<Set<String>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final inProgressStatusIds = db.selectOnly(db.ticketStatuses)
+    ..addColumns([db.ticketStatuses.id])
+    ..where(db.ticketStatuses.isInProgress.equals(true));
+  return (db.select(db.tickets)..where((t) => t.statusId.isInQuery(inProgressStatusIds)))
+      .watch()
+      .map((rows) => {for (final row in rows) row.id});
+});
+
 /// Ids of the tickets this device is holding a running timer for.
 ///
-/// The tenant has no synced "in corso" flag on a ticket — the status mirror carries only
-/// `isClosed`/`isDefault` — so the ticket's own status cannot tell the dashboard that work has
-/// started. A running timer can, and it is the truest signal there is: the technician tapped
-/// start. A pending start counts too, the same way [TicketTimerRepository.running] counts it.
+/// The device-local counterpart to [inProgressTicketIdsProvider]: the technician tapped start, so
+/// the work is live even while the office's schedule row still says "da fare" and even before the
+/// start has reached the server. A pending start counts too, the same way
+/// [TicketTimerRepository.running] counts it.
 final runningTicketTimerIdsProvider = StreamProvider.autoDispose<Set<String>>((
   ref,
 ) {
@@ -129,15 +149,17 @@ final runningTicketTimerIdsProvider = StreamProvider.autoDispose<Set<String>>((
 /// cannot disagree about a row.
 ///
 /// Order matters. A closed ticket outranks everything (no badge may invite work on it); a
-/// cancelled schedule outranks a running timer (a cancelled job is not work in any bucket); and a
-/// running timer outranks the schedule's own status, because the technician is standing on the job
-/// while the office's schedule still says "da fare".
+/// cancelled schedule outranks a running timer (a cancelled job is not work in any bucket); and
+/// "work has started" outranks the schedule's own status, because both the technician's timer and
+/// the ticket's own "In corso" flag say the job is under way while the office's schedule row still
+/// says "da fare".
 enum ScheduleBucket { live, waiting, done, actionable, cancelled }
 
 ScheduleBucket bucketOfSchedule(
   Schedule schedule, {
   required Set<String> closedTicketIds,
   required Set<String> runningTicketIds,
+  required Set<String> inProgressTicketIds,
 }) {
   if (scheduleTicketIsClosed(schedule, closedTicketIds)) {
     return ScheduleBucket.done;
@@ -145,6 +167,13 @@ ScheduleBucket bucketOfSchedule(
   if (schedule.statusId == _kStatusCancelled) return ScheduleBucket.cancelled;
   if (schedule.statusId == _kStatusInProgress) return ScheduleBucket.live;
   if (schedule.ticketId != null && runningTicketIds.contains(schedule.ticketId)) {
+    return ScheduleBucket.live;
+  }
+  // The schedule row is a separate record from the ticket, and the office updates only the
+  // ticket's status when the job begins. So the ticket's flag has to be read here too, or a
+  // started job keeps its "da fare" badge until someone also moves the schedule.
+  if (schedule.ticketId != null &&
+      inProgressTicketIds.contains(schedule.ticketId)) {
     return ScheduleBucket.live;
   }
   if (schedule.statusId == _kStatusCompleted ||
@@ -164,11 +193,14 @@ final dashboardStatsProvider = Provider.autoDispose<DashboardStats>((ref) {
       ref.watch(closedTicketIdsProvider).valueOrNull ?? const <String>{};
   final runningTickets =
       ref.watch(runningTicketTimerIdsProvider).valueOrNull ?? const <String>{};
+  final inProgressTickets =
+      ref.watch(inProgressTicketIdsProvider).valueOrNull ?? const <String>{};
 
   ScheduleBucket bucket(Schedule s) => bucketOfSchedule(
     s,
     closedTicketIds: closedTickets,
     runningTicketIds: runningTickets,
+    inProgressTicketIds: inProgressTickets,
   );
 
   // Counted through the same buckets the queue uses, so the hero's "DA FARE" remainder cannot
@@ -262,11 +294,14 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
       ref.watch(closedTicketIdsProvider).valueOrNull ?? const <String>{};
   final runningTickets =
       ref.watch(runningTicketTimerIdsProvider).valueOrNull ?? const <String>{};
+  final inProgressTickets =
+      ref.watch(inProgressTicketIdsProvider).valueOrNull ?? const <String>{};
 
   ScheduleBucket bucket(Schedule s) => bucketOfSchedule(
     s,
     closedTicketIds: closedTickets,
     runningTicketIds: runningTickets,
+    inProgressTicketIds: inProgressTickets,
   );
 
   final live = <Schedule>[];

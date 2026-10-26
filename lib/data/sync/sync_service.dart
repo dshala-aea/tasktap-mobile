@@ -1458,7 +1458,8 @@ class SyncService {
     });
   }
 
-  Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {    for (final s in list) {
+  Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {
+    for (final s in list) {
       await db
           .into(db.ticketStatuses)
           .insertOnConflictUpdate(
@@ -1468,6 +1469,7 @@ class SyncService {
               name: s.name,
               isDefault: Value(s.isDefault),
               isClosed: Value(s.isClosed),
+              isInProgress: Value(s.isInProgress),
             ),
           );
     }

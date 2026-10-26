@@ -42,6 +42,7 @@ void main() {
     required int id,
     required String name,
     bool isClosed = false,
+    bool isInProgress = false,
   }) => db
       .into(db.ticketStatuses)
       .insert(
@@ -50,6 +51,7 @@ void main() {
           tenantId: 'tenant-1',
           name: name,
           isClosed: Value(isClosed),
+          isInProgress: Value(isInProgress),
         ),
       );
 
@@ -120,6 +122,7 @@ void main() {
     await container.read(upcomingSchedulesProvider.future);
     await container.read(closedTicketIdsProvider.future);
     await container.read(runningTicketTimerIdsProvider.future);
+    await container.read(inProgressTicketIdsProvider.future);
     return container.read(workQueueProvider);
   }
 
@@ -262,5 +265,52 @@ void main() {
 
     expect(queue.live.map((s) => s.id), ['s-live']);
     expect(queue.daFare, null);
+  });
+
+  // The office starts a job by moving the TICKET to "In corso"; the linked schedule row stays in
+  // "da fare", because nothing rewrites it. With only the schedule's own statusId to go on, the
+  // dashboard kept the job in the "DA FARE" slot while the work was already under way.
+  test("a ticket in \"In corso\" is live even with its schedule still 'da fare'", () async {
+    await seedStatus(id: 1, name: 'Aperto');
+    await seedStatus(id: _inCorso, name: 'In corso', isInProgress: true);
+    await seedTicket(id: 't-started', statusId: _inCorso);
+    await seedTicket(id: 't-pending', statusId: 1);
+    await seedSchedule(id: 's-started', ticketId: 't-started', day: today);
+    await seedSchedule(id: 's-pending', ticketId: 't-pending', day: today);
+
+    final queue = await readQueue();
+    final stats = container.read(dashboardStatsProvider);
+
+    expect(queue.live.map((s) => s.id), ['s-started']);
+    expect(queue.daFare?.id, 's-pending');
+    expect(stats.inProgressCount, 1);
+  });
+
+  // The flag is the contract, not the id and not the name: a tenant that renames "In corso" or
+  // seeds its own statuses gets a different id, and a dashboard keyed on `statusId == 2` would
+  // silently stop recognising started work for that tenant.
+  test('a renamed in-progress status is recognised through its flag, not its id', () async {
+    await seedStatus(id: 1, name: 'Aperto');
+    await seedStatus(id: 42, name: 'Sul posto', isInProgress: true);
+    await seedTicket(id: 't-1', statusId: 42);
+    await seedSchedule(id: 's-1', ticketId: 't-1', day: today);
+
+    final queue = await readQueue();
+
+    expect(queue.live.map((s) => s.id), ['s-1']);
+    expect(queue.daFare, null);
+  });
+
+  // A closed status that also carries the started flag is still finished work — closing must keep
+  // outranking every "work has started" signal, or a closed ticket would reappear on the clock.
+  test('a closed ticket outranks an in-progress flag on the same status', () async {
+    await seedStatus(id: 6, name: 'Chiuso', isClosed: true, isInProgress: true);
+    await seedTicket(id: 't-1', statusId: 6);
+    await seedSchedule(id: 's-1', ticketId: 't-1', day: today);
+
+    final queue = await readQueue();
+
+    expect(queue.live, isEmpty);
+    expect(queue.fatto.map((s) => s.id), ['s-1']);
   });
 }
