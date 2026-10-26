@@ -27,14 +27,11 @@ class AiDescribeStep extends StatefulWidget {
     required this.recording,
     required this.busy,
     required this.thinkingLabel,
-    required this.failureMessage,
-    required this.micBlockedMessage,
     required this.voiceDisabled,
     required this.controller,
     required this.writing,
     required this.onToggleWriting,
     required this.onMic,
-    required this.onShorten,
     this.onTextChanged,
   });
 
@@ -47,12 +44,6 @@ class AiDescribeStep extends StatefulWidget {
   /// What the in-flight turn is doing, staged client-side by the caller.
   final String thinkingLabel;
 
-  /// The last turn failed; the caller has already kept the description, so this is only the message.
-  final String? failureMessage;
-
-  /// Microphone refused / unavailable — the reason, shown under the mic.
-  final String? micBlockedMessage;
-
   /// Voice capture is off for the whole company.
   final bool voiceDisabled;
 
@@ -63,9 +54,6 @@ class AiDescribeStep extends StatefulWidget {
   final VoidCallback onToggleWriting;
 
   final VoidCallback onMic;
-
-  /// Only shown on the "too long" failure: the server refused the size of the description.
-  final VoidCallback onShorten;
 
   /// The description changed. The footer's "Genera il rapporto" lives in the parent, so it has to
   /// hear about it — without this the button stayed disabled while the technician typed.
@@ -188,11 +176,6 @@ class _AiDescribeStepState extends State<AiDescribeStep> {
               'La registrazione vocale non è attiva per questa azienda: scrivi la descrizione.',
             ),
           ),
-        if (widget.micBlockedMessage != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: AiHelper(widget.micBlockedMessage!, color: context.colors.ink),
-          ),
         if (!widget.busy)
           Padding(
             padding: const EdgeInsets.only(top: 6),
@@ -242,38 +225,6 @@ class _AiDescribeStepState extends State<AiDescribeStep> {
               ),
             ),
           ),
-        if (widget.failureMessage != null) ...[
-          const AiCardGap(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: context.colors.red.withAlpha(20),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.failureMessage!,
-                  style: TextStyle(
-                    fontFamily: 'Archivo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    height: 1.4,
-                    color: context.colors.red,
-                  ),
-                ),
-                if (widget.failureMessage!.contains('lunga'))
-                  TextButton(
-                    key: const ValueKey('ai-shorten-description'),
-                    onPressed: widget.busy ? null : widget.onShorten,
-                    style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
-                    child: const Text('Accorcia il testo'),
-                  ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }
