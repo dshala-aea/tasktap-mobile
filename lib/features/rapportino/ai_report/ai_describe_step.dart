@@ -151,7 +151,10 @@ class _AiDescribeStepState extends State<AiDescribeStep> {
               const SizedBox(height: 12),
               Text(
                 widget.busy
-                    ? 'STO COMPILANDO IL RAPPORTO…'
+                    // The caller stages this through the turn's own ~45s: one frozen string for that
+                    // long reads as a hung app. Uppercased here, not in the source copy, so the same
+                    // sentences can be reused wherever the screen speaks in normal case.
+                    ? widget.thinkingLabel.toUpperCase()
                     : widget.recording
                     ? '● IN ASCOLTO · $_mmss'
                     : hasText

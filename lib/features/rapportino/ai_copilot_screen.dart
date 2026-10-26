@@ -88,7 +88,7 @@ class _Outgoing {
 // "elaborando" label for that whole span reads as frozen, not working. Purely a client-side
 // staged message swap + spinner, no backend streaming involved.
 const _thinkingStageMessages = [
-  'Il copilot sta elaborando…',
+  'Sto compilando il rapporto…',
   'Sto verificando i dati con TaskTap…',
   'Quasi fatto…',
 ];
