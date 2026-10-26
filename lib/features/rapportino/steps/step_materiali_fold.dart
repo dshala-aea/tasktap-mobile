@@ -1060,7 +1060,7 @@ class _ControlliChecklist extends ConsumerWidget {
       return Padding(
         padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Text(
-          'I controlli sono legati al ticket: questo rapporto di lavoro non è '
+          'I controlli sono legati al ticket: questo rapporto di intervento non è '
           'collegato a nessun ticket, quindi non è previsto alcun controllo.',
           style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
         ),

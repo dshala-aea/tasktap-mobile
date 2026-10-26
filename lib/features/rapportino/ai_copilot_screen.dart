@@ -11,10 +11,7 @@ import '../../core/audio/voice_capture_controller.dart';
 import '../../core/audio/voice_capture_provider.dart';
 import '../../core/audio/voice_consent.dart';
 
-import '../../core/icons/app_lucide_icons.dart';
-import '../../core/dictation/dictate_button.dart';
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
@@ -24,10 +21,11 @@ import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider, reportEditorProvider;
 import 'ai_draft_feed.dart';
+import 'ai_report/ai_describe_step.dart';
+import 'ai_report/ai_review_step.dart';
 import 'apply_confirmed_draft.dart';
 import 'create_draft.dart';
 import 'draft_for_ticket.dart';
-import 'draft_provenance_badge.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AiCopilotScreen — the multi-turn AI copilot (distinct from step_dettagli.dart's
@@ -54,50 +52,6 @@ import 'draft_provenance_badge.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 
-class _ChatMessage {
-  _ChatMessage({
-    required this.isOperator,
-    required this.text,
-    this.source = AiTurnSource.typed,
-    this.turnId,
-    this.audioRef,
-    this.durationSeconds,
-  });
-  final bool isOperator;
-
-  /// What the operator typed, or the corrected text of a voice turn. EMPTY for a voice turn taken
-  /// as recorded: the words are in the audio, never in a transcript this client produced.
-  final String text;
-  final AiTurnSource source;
-
-  /// The server's id of this operator turn, once known (the POST response carries none, so it is
-  /// read back from the conversation). A correction replaces this turn.
-  String? turnId;
-
-  /// Set when this turn's input was a recording the model listened to.
-  final String? audioRef;
-
-  /// Length of that recording, when this client uploaded it (a turn resumed from the server only
-  /// says that it was spoken).
-  final int? durationSeconds;
-
-  /// What the bubble shows: the text, or the recording's own label when there is no text to show.
-  String get displayText {
-    if (isOperator && source == AiTurnSource.voice && text.trim().isEmpty) {
-      final d = durationSeconds;
-      return d == null ? 'Registrazione vocale' : 'Registrazione vocale · ${_mmss(d)}';
-    }
-    return text;
-  }
-
-  /// Replaced by a later correction: shown struck through.
-  bool superseded = false;
-
-  /// False for an operator message the server has not accepted yet (in flight, failed, or held
-  /// back): rendered as NOT sent so it never looks delivered.
-  bool accepted = true;
-}
-
 /// One turn on its way to the server, kept whole until it succeeds so a retry re-sends exactly the
 /// same thing under exactly the same Idempotency-Key.
 class _Outgoing {
@@ -106,11 +60,6 @@ class _Outgoing {
     this.recording,
     this.voice,
     this.text,
-    this.source = AiTurnSource.typed,
-    this.audioRef,
-    this.durationSeconds,
-    this.replacesTurnId,
-    this.supersedes,
   });
 
   /// Generated once. For a recording it derives from the recording's own persisted key, so it is
@@ -125,14 +74,9 @@ class _Outgoing {
 
   /// Empty (not null) once a recording became the input: the words travel in [audioRef].
   String? text;
-  AiTurnSource source;
+  AiTurnSource source = AiTurnSource.typed;
   String? audioRef;
   int? durationSeconds;
-  final String? replacesTurnId;
-
-  /// The message a correction replaces (to strike it through once the correction lands).
-  final _ChatMessage? supersedes;
-  _ChatMessage? message;
 
   /// The technician's hand edits from the editor that ride in this turn (Task 12). Frozen on the
   /// first attempt so every retry sends the same body under the same key; acknowledged only once
@@ -144,7 +88,7 @@ class _Outgoing {
 // "elaborando" label for that whole span reads as frozen, not working. Purely a client-side
 // staged message swap + spinner, no backend streaming involved.
 const _thinkingStageMessages = [
-  'Il copilot sta elaborando…',
+  'Sto compilando il rapporto…',
   'Sto verificando i dati con TaskTap…',
   'Quasi fatto…',
 ];
@@ -156,11 +100,9 @@ const _maxTurnInProgressRetries = 5;
 /// A draft with less than this left before deletion shows the expiry warning.
 const _expiryWarningWindow = Duration(days: 3);
 
-/// `0:42` / `2:07` — the length of a recording, as the operator's bubble shows it.
-String _mmss(int seconds) {
-  final s = seconds < 0 ? 0 : seconds;
-  return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
-}
+/// Which of the two screens this route is showing. The third step — Firma — is its own route: it
+/// acts on the local Report Confirm created, which does not exist until this screen is done.
+enum _AiStep { describe, review }
 
 class AiCopilotScreen extends ConsumerStatefulWidget {
   const AiCopilotScreen({
@@ -182,14 +124,22 @@ class AiCopilotScreen extends ConsumerStatefulWidget {
 
 class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsBindingObserver {
   final _inputCtrl = TextEditingController();
-  final _scrollCtrl = ScrollController();
-  final _messages = <_ChatMessage>[];
 
   String? _sessionId;
   AiCopilotDraftDto _draft = AiCopilotDraftDto.empty;
   bool _starting = true;
   bool _sending = false;
   bool _confirming = false;
+
+  /// Which screen of the flow is showing. The flow replaces the old single chat pane: the technician
+  /// describes on one screen and checks the compiled report on the next, as the client asked.
+  _AiStep _step = _AiStep.describe;
+
+  /// The technician chose to write the description instead of speaking it.
+  bool _writing = false;
+
+  /// The ticket's number, shown under the title. Fetched once; null when unknown (cantiere flow).
+  String? _ticketNumber;
 
   String? _startError;
   String? _confirmKey;
@@ -253,7 +203,24 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_loadTicketNumber());
     _start();
+  }
+
+  /// The header's subtitle. Read from the local mirror, not the server: it is already there for any
+  /// ticket the technician can open this screen from, and a failure here must never block the flow.
+  Future<void> _loadTicketNumber() async {
+    final id = widget.ticketId;
+    if (id == null) return;
+    try {
+      final db = ref.read(appDatabaseProvider);
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals(id))).getSingleOrNull();
+      final numero = row?.numero?.trim();
+      if (!mounted || numero == null || numero.isEmpty) return;
+      setState(() => _ticketNumber = numero);
+    } catch (_) {
+      // A missing row (or an unreadable mirror) costs the subtitle, nothing else.
+    }
   }
 
   /// Leaving the app (screen off, another app, the home button) never keeps the microphone hot:
@@ -285,7 +252,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     _cancelThinkingTimers();
     _interruptSub?.cancel();
     _inputCtrl.dispose();
-    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -341,9 +307,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       setState(() {
         _sessionId = id;
         _starting = false;
-        if (detail != null) _adopt(detail, withTurns: true);
+        if (detail != null) _adopt(detail);
       });
-      _scrollToEnd();
       unawaited(_loadPending());
       unawaited(_refreshLinked().then((_) => _checkLinkedReport(apply: detail != null)));
     } catch (e) {
@@ -364,31 +329,16 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     if (e is AiConversationException && e.offline) {
       return 'La bozza AI richiede la connessione e ora non c\'è segnale. '
-          'La dettatura sul telefono funziona anche offline: puoi compilare il rapporto di lavoro '
+          'La dettatura sul telefono funziona anche offline: puoi compilare il rapporto di intervento '
           'a mano e dettare nei campi.';
     }
     return e.toString();
   }
 
-  /// Takes what the server holds as the truth for the draft, the expiry and (on entry) the
-  /// conversation so far.
-  void _adopt(AiConversationDetailDto d, {required bool withTurns}) {
+  /// Takes what the server holds as the truth for the draft and its expiry.
+  void _adopt(AiConversationDetailDto d) {
     _draft = d.draft;
     _expiresAt = d.expiresAtUtc;
-    if (withTurns) {
-      _messages
-        ..clear()
-        ..addAll(
-          d.turns.map(
-            (t) => _ChatMessage(
-              isOperator: t.isOperator,
-              text: t.text,
-              source: t.source,
-              turnId: t.isOperator ? t.turnId : null,
-            ),
-          ),
-        );
-    }
   }
 
   // ── live feed into the editor (Task 12) ──────────────────────────────────────
@@ -437,8 +387,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   void _markDraftUsed(String reason) {
     _linkedReportId = null;
     _usedDraftMessage =
-        'Questa bozza è già stata usata per un rapporto di lavoro inviato. $reason '
-        'Per un nuovo rapporto di lavoro abbandonala e ricomincia.';
+        'Questa bozza è già stata usata per un rapporto di intervento inviato. $reason '
+        'Per un nuovo rapporto di intervento abbandonala e ricomincia.';
   }
 
   /// On entry (and before Compila): a linked report that is no longer an editable draft means
@@ -496,7 +446,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       _sessionId = null;
       _usedDraftMessage = null;
       _linkedReportId = null;
-      _messages.clear();
       _draft = AiCopilotDraftDto.empty;
       _confirmKey = null;
     });
@@ -537,7 +486,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           if (mounted) {
             showAppToast(
               context,
-              message: 'Accedi per creare un rapporto di lavoro.',
+              message: 'Accedi per creare un rapporto di intervento.',
               tone: ToastTone.warning,
             );
           }
@@ -595,6 +544,17 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   // ── sending ──────────────────────────────────────────────────────────────────
 
   bool get _aiBlocked => _aiBlockedMessage != null;
+
+  /// Does this draft have anything for the technician to check? A turn that only asked a question
+  /// resolves nothing, and moving to the review screen then would show an empty report.
+  static bool _draftHasContent(AiCopilotDraftDto d) =>
+      d.activities.isNotEmpty ||
+      d.workers.isNotEmpty ||
+      d.materials.isNotEmpty ||
+      d.controlli.isNotEmpty ||
+      d.strumenti.isNotEmpty ||
+      d.openItems.isNotEmpty ||
+      (d.customerSignoffText?.isNotEmpty ?? false);
 
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
@@ -683,19 +643,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         );
         return;
       }
-      if (o.message == null) {
-        final m = _ChatMessage(
-          isOperator: true,
-          text: o.text!,
-          source: o.source,
-          audioRef: o.audioRef,
-          durationSeconds: o.durationSeconds,
-        )..accepted = false;
-        o.message = m;
-        if (mounted) setState(() => _messages.add(m));
-        _scrollToEnd();
-      }
-
       // Hand edits made in the editor since the last sync ride in this turn, folded as confirmed
       // BEFORE the model reads it (Task 12).
       // Only a session that feeds a report has hand edits; an unlinked one never touches the store.
@@ -704,21 +651,23 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       if (!mounted) return;
       _cancelThinkingTimers();
       setState(() {
-        o.supersedes?.superseded = true;
-        o.message?.accepted = true;
         if (o.recording != null) _pendingRecs.removeWhere((r) => r.id == o.recording!.id);
-        _messages.add(_ChatMessage(isOperator: false, text: result.assistantReplyText));
         _draft = result.draft;
         _sending = false;
+        // A turn that compiled something takes the technician to the result. A turn that only asked
+        // a question leaves the draft empty and must not: there is nothing to check yet, and the
+        // description the technician just gave is still on screen to refine.
+        if (_draftHasContent(result.draft)) {
+          _step = _AiStep.review;
+          _writing = false;
+        }
       });
       if (o.edits!.isNotEmpty) {
         unawaited(_quiet(ref.read(aiEditSyncerProvider).acknowledge(sessionId, o.edits!)));
       }
       unawaited(_feedApply());
-      _scrollToEnd();
       // The turn is accepted: only now is the local recording no longer needed.
       unawaited(_discardRecording(o));
-      unawaited(_learnTurnIds());
     } on AiVoiceUploadException catch (e) {
       if (!mounted) return;
       _cancelThinkingTimers();
@@ -791,8 +740,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     );
     if (edited == null || edited.trim().isEmpty || !mounted) return;
     setState(() {
-      if (o.message != null) _messages.remove(o.message);
-      o.message = null;
       o.text = edited.trim();
       _failedTooLong = false;
     });
@@ -804,7 +751,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     final o = _failed;
     if (o == null) return;
     setState(() {
-      if (o.message != null) _messages.remove(o.message);
       _failed = null;
       _failureMessage = null;
     });
@@ -885,7 +831,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           text: o.text!,
           source: o.source,
           audioRef: o.audioRef,
-          replacesTurnId: o.replacesTurnId,
           confirmedEdits: (o.edits == null || o.edits!.isEmpty)
               ? null
               : [for (final e in o.edits!) e.toJson()],
@@ -921,83 +866,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
           refetched = true;
           final d = await client.getConversation(sessionId);
           if (!mounted) rethrow;
-          setState(() => _adopt(d, withTurns: false));
+          setState(() => _adopt(d));
           continue;
         }
         rethrow;
       }
     }
-  }
-
-  /// The turn response names no turn id, so the id a correction must replace is read back from the
-  /// conversation: the latest operator turn, if it is the text we just sent.
-  Future<void> _learnTurnIds() async {
-    final id = _sessionId;
-    if (id == null) return;
-    try {
-      final d = await ref.read(aiApiClientProvider).getConversation(id);
-      if (!mounted) return;
-      final lastServer = d.turns.lastWhere(
-        (t) => t.isOperator,
-        orElse: () => const AiConversationTurn(
-          turnId: '',
-          role: '',
-          text: '',
-          source: AiTurnSource.typed,
-        ),
-      );
-      if (lastServer.turnId.isEmpty) return;
-      final localLast = _messages.lastWhere(
-        (m) => m.isOperator && !m.superseded,
-        orElse: () => _ChatMessage(isOperator: false, text: ''),
-      );
-      if (localLast.isOperator &&
-          localLast.turnId == null &&
-          localLast.accepted &&
-          localLast.text == lastServer.text) {
-        setState(() {
-          localLast.turnId = lastServer.turnId;
-          _expiresAt = d.expiresAtUtc;
-        });
-      }
-    } catch (_) {
-      // Best effort: "Correggi" looks the id up again when it is tapped.
-    }
-  }
-
-  // ── correction ───────────────────────────────────────────────────────────────
-
-  Future<void> _correct(_ChatMessage m) async {
-    if (_sending || _sessionId == null) return;
-    if (m.turnId == null) await _learnTurnIds();
-    if (!mounted) return;
-    final replaces = m.turnId;
-    if (replaces == null) {
-      showAppToast(
-        context,
-        message: 'Non riesco a correggere questo messaggio adesso. Riprova tra poco.',
-        tone: ToastTone.warning,
-      );
-      return;
-    }
-    final corrected = await showDialog<String>(
-      context: context,
-      builder: (ctx) => _CorrectionDialog(initial: m.text),
-    );
-    if (corrected == null || corrected.trim().isEmpty || corrected.trim() == m.text.trim()) return;
-    await _run(
-      _Outgoing(
-        key: const Uuid().v4(),
-        text: corrected.trim(),
-        // The recording stays the turn's input: a correction of a voice turn is the text the
-        // technician types to say what it should have been, on top of the same audio.
-        source: m.audioRef != null ? AiTurnSource.voice : AiTurnSource.typed,
-        audioRef: m.audioRef,
-        durationSeconds: m.durationSeconds,
-        replacesTurnId: replaces,
-        supersedes: m,
-      ),
-    );
   }
 
   // ── voice ────────────────────────────────────────────────────────────────────
@@ -1163,7 +1037,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         setState(() => _confirming = false);
         showAppToast(
           context,
-          message: 'Non riesco a creare il rapporto di lavoro su questo telefono. Riprova.',
+          message: 'Non riesco a creare il rapporto di intervento su questo telefono. Riprova.',
           tone: ToastTone.error,
         );
         return;
@@ -1192,7 +1066,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       }
 
       if (!mounted) return;
-      context.go(AppRoutes.rapportiniEditor(localId));
+      // The report exists locally now, so the flow's last screen is the signing one: the customer
+      // signs, the technician sends, and only then does the office have a report. Anything still to
+      // change goes through "Modifica" on the Controlla screen, which opens the full editor.
+      context.go(AppRoutes.aiSign(localId));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1213,7 +1090,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   }
 
   bool get _needsLeaveConfirm =>
-      !_forceLeave && (_recording || _failed != null || _messages.any((m) => !m.accepted));
+      !_forceLeave && (_recording || _failed != null || _sending || _confirming);
 
   /// Leaving (or being torn down) while recording must always release the microphone. Ticket-bound:
   /// stop and keep the file (offered again on the next entry). Ticketless: it could never be
@@ -1333,7 +1210,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     if (id == null) {
       showAppToast(
         context,
-        message: 'Accedi per creare un rapporto di lavoro.',
+        message: 'Accedi per creare un rapporto di intervento.',
         tone: ToastTone.warning,
       );
       return;
@@ -1356,7 +1233,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     final id = await createLocalDraft(
       ref,
-      title: ticket != null ? 'Rapporto di lavoro — ${ticket.title}' : 'Nuovo rapporto di lavoro',
+      title: ticket != null ? 'Rapporto di intervento — ${ticket.title}' : 'Nuovo rapporto di intervento',
       locationId: ticket?.locationId ?? '',
       ticketId: ticketId,
       cantiereId: widget.cantiereId,
@@ -1364,17 +1241,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       tenantId: ticket?.tenantId,
     );
     return id;
-  }
-
-  void _scrollToEnd() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollCtrl.hasClients) return;
-      _scrollCtrl.animateTo(
-        _scrollCtrl.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
-    });
   }
 
   // ── build ────────────────────────────────────────────────────────────────────
@@ -1387,11 +1253,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
   @override
   Widget build(BuildContext context) {
-    final quota = ref.watch(aiQuotaProvider);
-    final quotaExhausted = quota.valueOrNull?.exhausted ?? false;
-    final blocked = _draft.hasBlockingOpenItems;
-    final sessionReady = _sessionId != null;
-
     return PopScope(
       canPop: !_needsLeaveConfirm,
       onPopInvokedWithResult: (didPop, _) {
@@ -1407,7 +1268,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         child: Column(
           children: [
             ScreenHeader(
-              title: 'Rapporto di lavoro con AI Copilot',
+              title: 'Rapporto di intervento',
+              subtitle: _ticketNumber,
               showBack: true,
               onBack: _leave,
             ),
@@ -1432,101 +1294,136 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
               ),
             if (!_starting && _startError == null) ...[
               ..._buildBanners(context),
-              Expanded(child: _buildChat(context)),
-              if (_draft.activities.isNotEmpty ||
-                  _draft.workers.isNotEmpty ||
-                  _draft.materials.isNotEmpty ||
-                  _draft.controlli.isNotEmpty ||
-                  _draft.strumenti.isNotEmpty ||
-                  _draft.diagnosi != null ||
-                  _draft.soluzione != null ||
-                  _draft.customerSignoffText != null ||
-                  _draft.openItems.isNotEmpty)
-                _buildDraftSummary(context),
-              if (_voiceDisabled)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.pagePadding,
-                    vertical: 4,
-                  ),
-                  child: Text(
-                    'La registrazione vocale non è attiva per questa azienda: scrivi o detta '
-                    'con la tastiera.',
-                    style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
-                  ),
-                ),
-              _buildInputRow(context, sessionReady, quotaExhausted),
-              // The live feed (Task 12): the confirmed part of the draft goes into the ordinary
-              // rapportino and keeps updating it after every later turn.
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.pagePadding,
-                  AppSpacing.sm,
-                  AppSpacing.pagePadding,
-                  0,
-                ),
-                child: AppButton.secondary(
-                  label: _linkedReportId != null
-                      ? 'Apri il rapporto di lavoro collegato'
-                      : 'Compila nel rapporto di lavoro',
-                  isLoading: _opening,
-                  // Never while a turn, an edit or an apply is in flight: the editor would hydrate
-                  // rows that are about to change underneath it.
-                  // Nor while recording: the editor would be pushed over a hot microphone whose
-                  // transcript is then posted and applied under it.
-                  onPressed:
-                      !sessionReady ||
-                          _opening ||
-                          _confirming ||
-                          _sending ||
-                          _editing ||
-                          _applying ||
-                          _recording ||
-                          _usedDraftMessage != null
-                      ? null
-                      : _openInEditor,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.pagePadding,
-                  AppSpacing.sm,
-                  AppSpacing.pagePadding,
-                  AppSpacing.base,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(child: AppButton.secondary(label: 'Esci', onPressed: _leave)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      // The label says "apri", not "crea": Confirm no longer creates anything
-                      // server-side, and the technician lands on a local Bozza that is not yet
-                      // sent. Copy that said "crea" would be the one place in the app where a
-                      // rapportino looks filed and is not.
-                      child: AppButton(
-                        label: _confirming
-                            ? 'Preparo il rapporto di lavoro…'
-                            : 'Conferma e apri il rapporto di lavoro',
-                        onPressed: !sessionReady ||
-                                _messages.isEmpty ||
-                                blocked ||
-                                _confirming ||
-                                _sending ||
-                                _editing ||
-                                _recording ||
-                                _usedDraftMessage != null ||
-                                _failed != null
-                            ? null
-                            : _confirm,
+              Expanded(
+                child: _step == _AiStep.review
+                    ? AiReviewStep(
+                        draft: _draft,
+                        busy: _sending || _editing || _applying || _confirming,
+                        onAccept: _accept,
+                        onResolveHeld: (item, {required bool reAdd}) =>
+                            _resolveHeld(item, reAdd: reAdd),
+                      )
+                    : AiDescribeStep(
+                        recording: _recording,
+                        busy: _sending,
+                        thinkingLabel: _thinkingStageMessages[_thinkingStage],
+                        voiceDisabled: _voiceDisabled,
+                        // Credits are gone for the month: the orb goes dim rather than accepting a
+                        // tap whose upload the server will refuse again. A failed turn is NOT in
+                        // this list on purpose — connectivity comes back, and speaking again is a
+                        // legitimate retry.
+                        micEnabled: _micBlockedMessage == null,
+                        controller: _inputCtrl,
+                        writing: _writing,
+                        onToggleWriting: () => setState(() => _writing = !_writing),
+                        onMic: _toggleMic,
+                        onTextChanged: () => setState(() {}),
                       ),
-                    ),
-                  ],
-                ),
               ),
+              _buildFooter(context),
             ],
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  /// The one action of each screen, pinned under it.
+  ///
+  /// "Genera il rapporto" sends exactly what the field or the recording holds — the same `_send` the
+  /// chat's paper-plane called. "Conferma" is the same guarded `_confirm` as before: it stays disabled
+  /// while an open item is ambiguous or conflicting, so the assistant's own uncertainty can never be
+  /// confirmed away by a tap.
+  Widget _buildFooter(BuildContext context) {
+    final pad = const EdgeInsets.fromLTRB(
+      AppSpacing.pagePadding,
+      AppSpacing.sm,
+      AppSpacing.pagePadding,
+      AppSpacing.base,
+    );
+
+    if (_step == _AiStep.review) {
+      final busy = _sending || _confirming || _editing || _applying || _recording;
+      return Padding(
+        padding: pad,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              key: const ValueKey('ai-describe-again'),
+              // The description is kept: a report the assistant got wrong costs a sentence, not a
+              // re-recording.
+              onPressed: busy || _usedDraftMessage != null
+                  ? null
+                  : () => setState(() => _step = _AiStep.describe),
+              style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+              child: Text(
+                'Descrivi di nuovo',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.colors.red),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  // "Modifica" opens the ordinary report editor on this draft — every card
+                  // editable, the same editor the technician already knows — and keeps the session
+                  // alive, so what they change by hand survives the next turn. "Descrivi di nuovo"
+                  // (the link above) is the cheaper route when the assistant got the story wrong.
+                  //
+                  // SPEC §4 asks for the cards to become editable in place, the footer turning into
+                  // Annulla/Salva. This opens the real editor instead: same fields, same validation,
+                  // and no second editing implementation to drift from the first. Conferma after
+                  // that is not a second draft — it confirms INTO the report the editor created
+                  // (applyConfirmedDraft is matched by identity), so neither path duplicates a line.
+                  child: AppButton.secondary(
+                    label: 'Modifica',
+                    isLoading: _opening,
+                    onPressed: busy || _opening || _usedDraftMessage != null
+                        ? null
+                        : _openInEditor,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: AppButton(
+                    label: _confirming ? 'Preparo il rapporto…' : 'Conferma',
+                    isLoading: _confirming,
+                    onPressed: _sessionId == null ||
+                            _draft.hasBlockingOpenItems ||
+                            _confirming ||
+                            _sending ||
+                            _editing ||
+                            _recording ||
+                            _usedDraftMessage != null ||
+                            _failed != null
+                        ? null
+                        : _confirm,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    final hasText = _inputCtrl.text.trim().isNotEmpty;
+    return Padding(
+      padding: pad,
+      child: AppButton(
+        label: _sending ? 'Generazione in corso…' : 'Genera il rapporto',
+        isLoading: _sending,
+        onPressed: _sessionId == null ||
+                !hasText ||
+                _sending ||
+                _recording ||
+                _aiBlocked ||
+                _failed != null
+            ? null
+            : _send,
       ),
     );
   }
@@ -1611,338 +1508,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     final e = _expiresAt!.toLocal();
     final d = '${e.day.toString().padLeft(2, '0')}/${e.month.toString().padLeft(2, '0')}';
     return 'Questa bozza scade il $d se non la riprendi. Puoi continuarla o abbandonarla.';
-  }
-
-  Widget _buildChat(BuildContext context) {
-    if (_messages.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
-        child: Center(
-          child: Text(
-            'Racconta cosa hai fatto, a voce o per iscritto — il copilot verifica persone, ore, '
-            'materiali e checklist con i dati reali di TaskTap prima di proporre una bozza.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: context.colors.inkMuted),
-          ),
-        ),
-      );
-    }
-
-    // Only the latest, still-valid voice message of the operator can be corrected.
-    final lastCorrectable = _messages.lastIndexWhere((m) => m.isOperator && !m.superseded);
-
-    return ListView.builder(
-      controller: _scrollCtrl,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.pagePadding,
-        vertical: AppSpacing.sm,
-      ),
-      itemCount: _messages.length + (_sending ? 1 : 0),
-      itemBuilder: (context, i) {
-        if (i == _messages.length) {
-          return Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: context.colors.inkMuted,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _thinkingStageMessages[_thinkingStage],
-                    style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        final m = _messages[i];
-        final notSent = !m.accepted && !_sending;
-        final canCorrect =
-            i == lastCorrectable &&
-            m.source == AiTurnSource.voice &&
-            m.accepted &&
-            !_sending &&
-            _failed == null &&
-            !_aiBlocked;
-        return Align(
-          alignment: m.isOperator ? Alignment.centerRight : Alignment.centerLeft,
-          child: Column(
-            crossAxisAlignment: m.isOperator ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            children: [
-              Container(
-                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
-                margin: const EdgeInsets.symmetric(vertical: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: notSent
-                      ? context.colors.bg3
-                      : (m.isOperator ? AppColors.Y : context.colors.surface),
-                  borderRadius: BorderRadius.circular(12),
-                  border: notSent ? Border.all(color: context.colors.red) : null,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (m.isOperator && m.source == AiTurnSource.voice) ...[
-                      Icon(
-                        LucideIcons.mic,
-                        size: 14,
-                        color: notSent ? context.colors.ink : Colors.white,
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    Flexible(
-                      child: Text(
-                        m.displayText,
-                        style: TextStyle(
-                          color: m.isOperator && !notSent ? Colors.white : context.colors.ink,
-                          decoration: m.superseded ? TextDecoration.lineThrough : null,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (notSent)
-                Text(
-                  'Non inviato',
-                  style: TextStyle(color: context.colors.red, fontSize: 11, fontWeight: FontWeight.w700),
-                ),
-              if (canCorrect)
-                TextButton(
-                  onPressed: () => _correct(m),
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(44, 44),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  child: const Text('Correggi'),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDraftSummary(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 260),
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 4),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.colors.borderMedium),
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_draft.diagnosi != null) _draftLine('Diagnosi', _draft.diagnosi!),
-            if (_draft.soluzione != null) _draftLine('Soluzione', _draft.soluzione!),
-            if (_draft.customerSignoffText != null)
-              _draftLine('Accettazione cliente', _draft.customerSignoffText!),
-            // What becomes the rapportino's Title/Description on Confirm (Confirm builds both
-            // directly from these) — shown before workers/materials so the technician can verify
-            // it, not just the line items.
-            for (final a in _draft.activities)
-              _draftRow(
-                '${a.description.isEmpty ? '—' : a.description}${a.hours != null ? ' · ${a.hours}h' : ''}',
-                a.state,
-                a.source,
-              ),
-            // A planned/assigned entry stays out of the rapportino until the technician accepts
-            // it here (a property-less confirmed edit): assignment is not participation.
-            for (final w in _draft.workers)
-              _draftRow(
-                '${w.fullName.isEmpty ? '—' : w.fullName}${w.hours != null ? ' · ${w.hours}h' : ''}',
-                w.state,
-                w.source,
-                accept: w.state == AiResolutionState.needsConfirmation && w.userId.isNotEmpty
-                    ? AiEditSyncer.acceptWorker(w)
-                    : null,
-              ),
-            for (final m in _draft.materials)
-              _draftRow(
-                '${m.name.isEmpty ? '—' : m.name} × ${m.quantity}',
-                m.state,
-                m.source,
-                accept: m.state == AiResolutionState.needsConfirmation
-                    ? AiEditSyncer.acceptMaterial(m)
-                    : null,
-              ),
-            for (final c in _draft.controlli)
-              _draftRow(c.describe(), c.state, AiFactSource.operatorInput),
-            // An instrument with no id is one the model only heard the name of: it stays a line the
-            // technician still has to pick from the catalogue, so it is shown as such, never applied.
-            for (final s in _draft.strumenti)
-              _draftRow(
-                s.strumentoId.isEmpty ? '${s.name} — da scegliere' : s.name,
-                s.state,
-                s.source,
-              ),
-            if (_draft.openItems.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  '${_draft.openItems.length} punti da chiarire'
-                  '${_draft.hasBlockingOpenItems ? ' — risolvi prima di confermare' : ''}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _draft.hasBlockingOpenItems ? context.colors.red : context.colors.inkMuted,
-                  ),
-                ),
-              ),
-              for (final item in _draft.openItems) ...[
-                Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: Text(
-                    describeOpenItem(item),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: item.state == AiResolutionState.conflict
-                          ? context.colors.red
-                          : context.colors.ink,
-                    ),
-                  ),
-                ),
-                // A held removal is settled by the technician, never by the AI.
-                if (item.isHeldRemoval)
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      if (AiEditSyncer.heldRemovalEdit(item, reAdd: true) != null)
-                        TextButton(
-                          onPressed: _sending || _editing
-                              ? null
-                              : () => _resolveHeld(item, reAdd: true),
-                          style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
-                          child: const Text('Reinserisci'),
-                        ),
-                      if (AiEditSyncer.heldRemovalEdit(item, reAdd: false) != null)
-                        TextButton(
-                          onPressed: _sending || _editing
-                              ? null
-                              : () => _resolveHeld(item, reAdd: false),
-                          style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
-                          child: const Text('Mantieni rimosso'),
-                        ),
-                    ],
-                  ),
-              ],
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _draftLine(String label, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    // Text.rich, not a bare RichText: it picks up the ambient DefaultTextStyle and — unlike
-    // RichText — is what find.text/find.textContaining actually look at in widget tests.
-    child: Text.rich(
-      TextSpan(
-        style: TextStyle(color: context.colors.ink, fontSize: 12),
-        children: [
-          TextSpan(text: '$label: ', style: const TextStyle(fontWeight: FontWeight.w700)),
-          TextSpan(text: value),
-        ],
-      ),
-    ),
-  );
-
-  /// One value of the draft with its provenance badge. A planned / ticket-recorded value the
-  /// technician has not confirmed is muted and italic: it must never read as work that was done.
-  Widget _draftRow(
-    String label,
-    AiResolutionState state,
-    AiFactSource source, {
-    AiConfirmedEdit? accept,
-  }) {
-    final unconfirmed = isUnconfirmedProposal(source, state);
-    return Padding(
-      key: unconfirmed ? ValueKey('planned-unconfirmed-row:$label') : null,
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontStyle: unconfirmed ? FontStyle.italic : FontStyle.normal,
-                color: unconfirmed ? context.colors.inkMuted : context.colors.ink,
-              ),
-            ),
-          ),
-          DraftProvenanceBadge(source: source, state: state),
-          if (accept != null)
-            TextButton(
-              key: ValueKey('accept-proposal:$label'),
-              onPressed: _sending || _editing ? null : () => _accept(accept),
-              style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
-              child: const Text('Accetta'),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInputRow(BuildContext context, bool sessionReady, bool quotaExhausted) {
-    // A LIVE session is never locked by credits: the server accepts its turns whatever the balance
-    // (spec 3.4), so the quota only matters before a session exists (Start refuses then).
-    final enabled = sessionReady && !_aiBlocked;
-    final micEnabled = enabled && _micBlockedMessage == null;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.pagePadding,
-        AppSpacing.sm,
-        AppSpacing.pagePadding,
-        0,
-      ),
-      child: AppTextField.multiline(
-        label: 'Scrivi cosa hai fatto…',
-        controller: _inputCtrl,
-        maxLines: 3,
-        enabled: enabled,
-        onChanged: (_) {},
-        suffixIcon: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!_voiceDisabled)
-              IconButton(
-                icon: Icon(
-                  _recording ? LucideIcons.square : LucideIcons.mic,
-                  size: 18,
-                  color: _recording ? context.colors.red : context.colors.ink,
-                ),
-                tooltip: _recording ? 'Ferma la registrazione' : 'Registra un aggiornamento vocale',
-                onPressed: micEnabled && _failed == null && (!_sending || _recording) ? _toggleMic : null,
-                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              ),
-            DictateButton(controller: _inputCtrl, onChanged: (_) {}, explainWhenUnavailable: false),
-            IconButton(
-              icon: Icon(LucideIcons.send, size: 18, color: context.colors.ink),
-              tooltip: 'Invia',
-              onPressed: enabled && !_sending && !_recording && _failed == null ? _send : null,
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

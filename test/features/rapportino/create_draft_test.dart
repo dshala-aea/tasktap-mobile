@@ -318,7 +318,7 @@ void main() {
       final id = await _callCreateLocalDraft(
         tester,
         container,
-        title: 'Rapporto di lavoro — Cantiere Via Roma',
+        title: 'Rapporto di intervento — Cantiere Via Roma',
         cantiereId: 'cant-1',
         customerId: 'cust-1',
         tenantId: 'tenant-1',
@@ -338,7 +338,7 @@ void main() {
       final id = await _callCreateLocalDraft(
         tester,
         container,
-        title: 'Rapporto di lavoro — Cantiere Via Roma',
+        title: 'Rapporto di intervento — Cantiere Via Roma',
         workAddress: 'Via Roma 10, Milano, 20100',
       );
 
@@ -643,7 +643,7 @@ void main() {
             'the cantiere link is what makes the submit claim this site\'s punches; losing it '
             'offline would silently detach the rapportino from the worksite',
       );
-      expect(draft.title, 'Rapporto di lavoro — Cantiere Via Roma');
+      expect(draft.title, 'Rapporto di intervento — Cantiere Via Roma');
       expect(draft.isLocalOnly, isTrue);
       expect(draft.stato, 'Bozza');
     });
@@ -724,7 +724,7 @@ void main() {
       final draft = await repo.getDraft('server-report-1');
       expect(draft, isNotNull, reason: 'the local draft must be keyed by the backend report id');
       expect(draft!.cantiereId, 'cant-1');
-      expect(draft.title, 'Rapporto di lavoro — Cantiere Via Roma');
+      expect(draft.title, 'Rapporto di intervento — Cantiere Via Roma');
       expect(draft.isLocalOnly, isTrue);
       expect(draft.stato, 'Bozza');
       expect(draft.ticketId, isNull, reason: 'a cantiere-originated draft has no ticket link');

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/error_message.dart';
+import '../../domain/reports/customer_signature_absence_reason.dart';
 import '../../domain/reports/strumenti_selection.dart';
 import '../local/app_database.dart';
 import '../reports/draft_report_repository.dart';
@@ -61,7 +62,7 @@ export 'draft_submission_state.dart';
 /// merge / re-import ("take the office's version" vs "keep mine") is a product decision, not
 /// something to guess at here — guessing would discard someone's work in one direction or the other.
 const String kStaleSubmitConflictMessage =
-    'Questo rapporto di lavoro è stato modificato in ufficio dopo che ne è stata scaricata '
+    'Questo rapporto di intervento è stato modificato in ufficio dopo che ne è stata scaricata '
     'una copia su questo telefono. Non riprovare a inviarlo: contatta l\'ufficio per farlo '
     'aggiornare. '
     'Quello che hai compilato è ancora salvato sul telefono.';
@@ -343,10 +344,10 @@ class SubmissionQueue {
       // guaranteed to 409 again. See kStaleSubmitConflictMessage.
       final message = e is FileSystemException
           ? 'File non trovato sul dispositivo: una foto o una firma non è più disponibile. '
-                'Rimuovila dal rapporto di lavoro e riprova.'
+                'Rimuovila dal rapporto di intervento e riprova.'
           : _isStaleSubmitConflict(e)
           ? kStaleSubmitConflictMessage
-          : humanErrorMessage(e, azione: 'inviare il rapporto di lavoro');
+          : humanErrorMessage(e, azione: 'inviare il rapporto di intervento');
       await _repo.updateSubmissionState(
         reportId: draft.id,
         state: DraftSubmissionState.failed,
@@ -476,6 +477,12 @@ class SubmissionQueue {
       startedAt: draft.startedAt,
       endedAt: draft.endedAt,
       customerSignatureAllegatoId: draft.customerSignatureAllegatoId,
+      // "Il cliente non può firmare": the raw column is the wire int; the request carries the
+      // mirrored enum and `toJson` puts the int back on the wire.
+      customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.fromWire(
+        draft.customerSignatureAbsenceReason,
+      ),
+      customerSignatureAbsenceNote: draft.customerSignatureAbsenceNote,
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
       customerSignoffText: draft.customerSignoffText,
       materialiNotRequired: draft.materialiNotRequired,

@@ -190,7 +190,7 @@ void main() {
       '"Invio fallito", and leaves the row queued', (tester) async {
     final db = await pumpSubmittable(tester, cachedOnline: true);
 
-    final invia = find.text('Invia rapporto di lavoro');
+    final invia = find.text('Invia rapporto di intervento');
     expect(invia, findsOneWidget);
     await tester.ensureVisible(invia);
     await tester.pump();

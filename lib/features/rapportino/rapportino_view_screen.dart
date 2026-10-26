@@ -22,6 +22,7 @@ import '../../data/local/app_database.dart';
 import '../../data/reports/report_pdf_cache.dart';
 import '../../data/reports/ticket_controls_cache_repository.dart' show cachedTicketControlsProvider;
 import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
+import '../../domain/reports/customer_signature_absence_reason.dart';
 import '../ticket/ticket_detail_api_client.dart'
     show ControlType, FlatTicketControl, flattenTicketControls;
 import 'create_draft.dart';
@@ -53,11 +54,11 @@ class RapportinoViewScreen extends ConsumerWidget {
         error: (e, _) => SafeArea(
           child: Column(
             children: [
-              ScreenHeader(title: 'Rapporto di lavoro', showBack: true),
+              ScreenHeader(title: 'Rapporto', showBack: true),
               Expanded(
                 child: UnavailableState(
                   icon: LucideIcons.xCircle,
-                  titolo: 'Impossibile caricare il rapporto di lavoro',
+                  titolo: 'Impossibile caricare il rapporto di intervento',
                   motivo: 'Si è verificato un errore imprevisto. Riprova.',
                   action: AppButton(
                     label: 'Riprova',
@@ -75,11 +76,11 @@ class RapportinoViewScreen extends ConsumerWidget {
             return SafeArea(
               child: Column(
                 children: [
-                  ScreenHeader(title: 'Rapporto di lavoro', showBack: true),
+                  ScreenHeader(title: 'Rapporto', showBack: true),
                   EmptyState(
                     icon: LucideIcons.fileX,
-                    title: 'Rapporto di lavoro non trovato',
-                    body: 'Il rapporto di lavoro richiesto non è disponibile in cache.',
+                    title: 'Rapporto di intervento non trovato',
+                    body: 'Il rapporto di intervento richiesto non è disponibile in cache.',
                   ),
                 ],
               ),
@@ -149,6 +150,9 @@ class _RapportinoViewBody extends ConsumerWidget {
     final technicianSignatureAllegato = draft.technicianSignatureAllegatoId == null
         ? null
         : allegati.where((a) => a.id == draft.technicianSignatureAllegatoId).firstOrNull;
+    final customerAbsenceReason = CustomerSignatureAbsenceReason.fromWire(
+      draft.customerSignatureAbsenceReason,
+    );
 
     // Names, not user ids. This joined raw GUIDs — on the read-only view of the document that
     // becomes an invoice, where "who did the work" is the line a customer actually reads back.
@@ -722,6 +726,53 @@ class _RapportinoViewBody extends ConsumerWidget {
                       ),
                     ),
 
+                  // ── Senza firma cliente (motivo) ──────────────────────────────
+                  // The counterpart of the block above for a report the customer could not sign:
+                  // show why, instead of leaving the section blank as if the signature had merely
+                  // been forgotten.
+                  if (draft.customerSignatureAllegatoId == null && customerAbsenceReason != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.pagePadding,
+                          0,
+                          AppSpacing.pagePadding,
+                          AppSpacing.base,
+                        ),
+                        child: AppCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SectionTitle(title: 'Firma cliente'),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Senza firma cliente — ${customerAbsenceReason.summaryLabel}',
+                                style: TextStyle(
+                                  fontFamily: 'Archivo',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.colors.ink,
+                                ),
+                              ),
+                              if (draft.customerSignatureAbsenceNote?.isNotEmpty ?? false) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  draft.customerSignatureAbsenceNote!,
+                                  style: TextStyle(
+                                    fontFamily: 'Archivo',
+                                    fontSize: 13,
+                                    fontStyle: FontStyle.italic,
+                                    color: context.colors.inkMuted,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
                   // ── Firma tecnico ─────────────────────────────────────────────
                   if (draft.technicianSignatureAllegatoId != null)
                     SliverToBoxAdapter(
@@ -982,7 +1033,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
       if (newId == null) {
         showAppToast(
           context,
-          message: 'Accedi per rielaborare il rapporto di lavoro.',
+          message: 'Accedi per rielaborare il rapporto di intervento.',
           tone: ToastTone.warning,
         );
         return;
@@ -1012,7 +1063,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  "L'ufficio ha respinto questo rapporto di lavoro.",
+                  "L'ufficio ha respinto questo rapporto di intervento.",
                   style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.ink),
                 ),
               ),

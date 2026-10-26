@@ -35,7 +35,7 @@ const _uuid = Uuid();
 class ServerReportNotEditableException implements Exception {
   const ServerReportNotEditableException();
   @override
-  String toString() => 'Questo rapporto di lavoro non è più modificabile.';
+  String toString() => 'Questo rapporto di intervento non è più modificabile.';
 }
 
 /// The full report is not on this device: sync never delivered its children (an older backend, or a
@@ -43,7 +43,7 @@ class ServerReportNotEditableException implements Exception {
 class ServerReportNotMirroredException implements Exception {
   const ServerReportNotMirroredException();
   @override
-  String toString() => 'I dati completi di questo rapporto di lavoro non sono sul telefono.';
+  String toString() => 'I dati completi di questo rapporto di intervento non sono sul telefono.';
 }
 
 /// Row id the Controlli step uses for the answer to one checklist item
@@ -177,6 +177,20 @@ Future<void> importServerReport({
             startedAt: Value(report.startedAt),
             endedAt: Value(report.endedAt),
             technicianNotes: Value(report.technicianNotes),
+            // "Il cliente non può firmare": mirrored so a report opened from the server keeps the
+            // reason instead of looking like an unsigned report with no explanation. The server
+            // guarantees a report never carries both, but the signed signature wins here anyway —
+            // the invariant the whole feature rests on is worth enforcing at the boundary.
+            customerSignatureAbsenceReason: Value(
+              report.customerSignatureAllegatoId == null
+                  ? report.customerSignatureAbsenceReason?.wireValue
+                  : null,
+            ),
+            customerSignatureAbsenceNote: Value(
+              report.customerSignatureAllegatoId == null
+                  ? report.customerSignatureAbsenceNote
+                  : null,
+            ),
             customerSignoffText: Value(report.customerSignoffText),
             materialiNotRequired: Value(report.materialiNotRequired),
             isAiAssisted: Value(report.isAiAssisted),

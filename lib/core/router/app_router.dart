@@ -60,6 +60,7 @@ import '../../features/ferie/ferie_permessi_form_screen.dart';
 import '../../features/ferie/ferie_permessi_list_screen.dart';
 import '../../features/clienti/clienti_list_screen.dart';
 import '../../features/rapportino/ai_copilot_screen.dart';
+import '../../features/rapportino/ai_report/ai_sign_screen.dart';
 import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../features/rapportino/rapportini_list_screen.dart';
 import '../../features/rapportino/rapportino_view_screen.dart';
@@ -243,6 +244,13 @@ abstract final class AppRoutes {
   /// Build the read-only view path for a submitted rapportino.
   static String rapportiniView(String reportId) =>
       '/altro/rapportini/view/$reportId';
+
+  /// Step 3 of the AI report flow: the customer's signature, on the draft Confirm created.
+  ///
+  /// A route of its own rather than a third step of the flow screen — by the time it opens the AI
+  /// conversation is over and an ordinary local report exists, so it navigates by report id like
+  /// every other signing surface.
+  static String aiSign(String reportId) => '/altro/rapportini/firma/$reportId';
 }
 
 /// Global navigator key — use for imperative navigation outside widget tree.
@@ -654,6 +662,15 @@ GoRouter buildRouter(WidgetRef ref) {
                         path: 'view/:reportId',
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => RapportinoViewScreen(
+                          reportId: state.pathParameters['reportId']!,
+                        ),
+                      ),
+                      // Step 3 of the AI report flow. Keyed by the local report id Confirm created,
+                      // so it is an ordinary signing surface — nothing AI-specific survives into it.
+                      GoRoute(
+                        path: 'firma/:reportId',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) => AiSignScreen(
                           reportId: state.pathParameters['reportId']!,
                         ),
                       ),

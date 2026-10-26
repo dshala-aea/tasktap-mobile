@@ -447,9 +447,9 @@ class _GpsCapture extends ConsumerWidget {
         titolo: 'Dove è stato fatto il lavoro',
         motivo:
             'La posizione viene registrata una sola volta, adesso, e allegata a questo '
-            'rapporto di lavoro come prova di dove sei intervenuto. Non ti seguiamo in background.',
+            'rapporto di intervento come prova di dove sei intervenuto. Non ti seguiamo in background.',
         senzaDiEsso:
-            'Puoi compilare e firmare il rapporto di lavoro lo stesso: resterà senza '
+            'Puoi compilare e firmare il rapporto di intervento lo stesso: resterà senza '
             'coordinate, e l\'indirizzo che hai scritto vale comunque.',
         cta: 'Consenti la posizione',
       );

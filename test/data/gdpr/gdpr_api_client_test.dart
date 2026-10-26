@@ -63,7 +63,7 @@ void main() {
   group('categories', () {
     test('counts come from the length of what the server actually sent', () {
       final summary = PersonalDataSummary.fromJson(export());
-      expect(categoryNamed(summary, 'Rapporti di lavoro che hai scritto').count, 3);
+      expect(categoryNamed(summary, 'Rapporti di intervento che hai scritto').count, 3);
       expect(categoryNamed(summary, 'Timbrature di cantiere').count, 2);
     });
 
@@ -97,12 +97,12 @@ void main() {
 
     test('a category sent as something other than a list is treated as not disclosed', () {
       final summary = PersonalDataSummary.fromJson(export(overrides: {'reports': 'many'}));
-      expect(categoryNamed(summary, 'Rapporti di lavoro che hai scritto').count, isNull);
+      expect(categoryNamed(summary, 'Rapporti di intervento che hai scritto').count, isNull);
     });
 
     test('an empty list still means zero, and must not be confused with absence', () {
       final summary = PersonalDataSummary.fromJson(export(overrides: {'reports': <dynamic>[]}));
-      expect(categoryNamed(summary, 'Rapporti di lavoro che hai scritto').count, 0);
+      expect(categoryNamed(summary, 'Rapporti di intervento che hai scritto').count, 0);
     });
   });
 

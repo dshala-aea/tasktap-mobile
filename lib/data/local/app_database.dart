@@ -710,6 +710,21 @@ class DraftReports extends Table {
   DateTimeColumn get endedAt => dateTime().nullable()();
   TextColumn get documentTemplateId => text().nullable()();
   TextColumn get customerSignatureAllegatoId => text().nullable()();
+
+  /// Why the customer did not sign — "Il cliente non può firmare".
+  ///
+  /// Mirrors the backend `CustomerSignatureAbsenceReason`, which is serialized as an INTEGER (no
+  /// string converter): `Assente = 0`, `Rifiuta = 1`, `Altro = 2`. Nullable, and mutually exclusive
+  /// with [customerSignatureAllegatoId]: a signed report carries no absence reason. Stored as the
+  /// raw int, not the Dart enum, so the column is the wire value and a renumbering server-side is
+  /// visible instead of silently remapped by a local ordinal.
+  IntColumn get customerSignatureAbsenceReason => integer().nullable()();
+
+  /// Free text explaining [customerSignatureAbsenceReason], required by the UI when the reason is
+  /// "Altro" and optional otherwise. Capped at 500 characters at the input; nullable because most
+  /// reasons need no explanation.
+  TextColumn get customerSignatureAbsenceNote => text().nullable()();
+
   TextColumn get technicianSignatureAllegatoId => text().nullable()();
   TextColumn get technicianNotes => text().nullable()();
   DateTimeColumn get closedAt => dateTime().nullable()();
@@ -1648,7 +1663,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 56;
+  int get schemaVersion => 57;
 
   @override
   MigrationStrategy get migration {
@@ -2308,6 +2323,37 @@ class AppDatabase extends _$AppDatabase {
           // step must not kill the app on `duplicate column name` before it opens.
           if (!await _columnExists(m.database, 'ticket_statuses', 'is_in_progress')) {
             await m.addColumn(ticketStatuses, ticketStatuses.isInProgress);
+          }
+        }
+        if (from < 57) {
+          // "Il cliente non può firmare": a ticket-linked report that the customer could not sign
+          // records why (assente / rifiuta / altro + an optional note) instead of being blocked
+          // forever, or submitted with no explanation at all. See
+          // `DraftReports.customerSignatureAbsenceReason`'s own doc comment for the wire shape.
+          //
+          // Two plain nullable columns, nothing to backfill: every existing row reads "no reason
+          // recorded", which is the true statement about a report written before this column
+          // existed. Client-authored only (the editor sets it, the submit sends it), never
+          // delta-synced from the server — no `syncCursorGeneration` bump needed.
+          //
+          // Same `PRAGMA table_info` guard as 50, 51, 55 and 56, and here it is not defensive but
+          // required: the older-schema fixtures in test/ rewind `user_version` on the CURRENT
+          // schema, which already declares both columns, so an unconditional add would die on
+          // `duplicate column name` before the app opens. migration_v57_test.dart covers the real
+          // add path on a database that genuinely lacks them.
+          if (!await _columnExists(
+            m.database,
+            'draft_reports',
+            'customer_signature_absence_reason',
+          )) {
+            await m.addColumn(draftReports, draftReports.customerSignatureAbsenceReason);
+          }
+          if (!await _columnExists(
+            m.database,
+            'draft_reports',
+            'customer_signature_absence_note',
+          )) {
+            await m.addColumn(draftReports, draftReports.customerSignatureAbsenceNote);
           }
         }
       },

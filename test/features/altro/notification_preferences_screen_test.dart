@@ -68,10 +68,10 @@ void main() {
 
     expect(find.text('INTERVENTI'), findsOneWidget);
     expect(find.text('PIANIFICAZIONE'), findsOneWidget);
-    expect(find.text('RAPPORTI DI LAVORO E ORE'), findsOneWidget);
+    expect(find.text('RAPPORTI DI INTERVENTO E ORE'), findsOneWidget);
     expect(find.text('MAGAZZINO'), findsOneWidget);
     expect(find.text('Intervento assegnato'), findsOneWidget);
-    expect(find.text('Rapporto di lavoro inviato'), findsOneWidget);
+    expect(find.text('Rapporto di intervento inviato'), findsOneWidget);
     // Unknown ordinal: rendered under "Altro" with the server's key, not dropped, not a crash.
     expect(find.text('ALTRO'), findsOneWidget);
     expect(find.text('BrandNewType'), findsOneWidget);
@@ -83,7 +83,7 @@ void main() {
     await tester.pumpWidget(_host(api));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Rapporto di lavoro inviato'));
+    await tester.tap(find.text('Rapporto di intervento inviato'));
     await tester.pumpAndSettle();
 
     expect(api.updates, [
