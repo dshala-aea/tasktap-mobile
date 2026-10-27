@@ -243,7 +243,22 @@ class KioskScanResult {
   /// `in` | `out` | `breakStart` | `breakEnd`.
   final String action;
   final String workLogId;
-  final DateTime? endTime;
+
+  /// The closed entry's end **as a time of day**, not as an instant: the server's
+  /// `ClockResult.EndTime` is a `TimeSpan`, so its value is a distance from midnight on the
+  /// worklog's own business date. Present only on `out` — `ClockResultToActionResult` omits the
+  /// key entirely for every other action.
+  ///
+  /// Parsed with [parseTimeSpan], never `DateTime.parse`: a `TimeSpan` reaches the wire as
+  /// `"17:00:00"`, and treating it as a date threw `FormatException` on every clock-out — a
+  /// failure the confirm screen could not catch, because it models [KioskScanException] and a
+  /// FormatException is not one. That is what left the technician on a spinner over a punch that
+  /// had already landed.
+  ///
+  /// Null when the server sent nothing, or something this build cannot read: the punch has
+  /// already happened by the time the body is parsed, so a malformed echo must never turn a
+  /// successful clock-out into a failure.
+  final Duration? endTime;
 }
 
 // ── Giornata (GET /api/WorkLog/today) ─────────────────────────────────────────
@@ -470,7 +485,7 @@ class WorklogApiClient {
       return KioskScanResult(
         action: data['action'] as String? ?? 'in',
         workLogId: data['workLogId'] as String? ?? '',
-        endTime: data['endTime'] != null ? DateTime.parse(data['endTime'] as String) : null,
+        endTime: parseTimeSpan(data['endTime']),
       );
     } on DioException catch (e) {
       throw _mapKioskScanError(e);
