@@ -56,6 +56,26 @@ Future<void> _teardown(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Opens the sheet and lets its enter transition finish.
+///
+/// `pumpAndSettle` can never be used while the sheet is on screen: its `CircularProgressIndicator`
+/// is indeterminate, i.e. it schedules a frame forever, so settling times out rather than
+/// finishing. Bounded pumps are the only way to advance past the dialog's own transition.
+Future<void> _openSheet(WidgetTester tester) async {
+  await tester.tap(find.text("Esci dall'account"));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+/// Advances a bounded slice of time — enough to run the route transitions a sign-out sets off,
+/// without asking the spinner to stop animating.
+Future<void> _pumpFrames(WidgetTester tester) async {
+  await tester.pump();
+  for (var i = 0; i < 6; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
 void main() {
   testWidgets('the progress sheet never pops the page the router has already navigated to', (
     tester,
@@ -65,8 +85,7 @@ void main() {
     addTearDown(router.dispose);
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    await tester.tap(find.text("Esci dall'account"));
-    await tester.pumpAndSettle();
+    await _openSheet(tester);
     expect(find.text('Invio in corso…'), findsOneWidget);
 
     // What sign-out does to the app: the auth stream emits null, the redirect answers /login, the
@@ -78,7 +97,7 @@ void main() {
 
     // The work finishes while the sheet is still animating out: still mounted, no longer current.
     pending.complete(const LogoutResult(signedOut: true));
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
 
     expect(
       find.text('LOGIN'),
@@ -100,12 +119,11 @@ void main() {
     addTearDown(router.dispose);
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    await tester.tap(find.text("Esci dall'account"));
-    await tester.pumpAndSettle();
+    await _openSheet(tester);
     expect(find.text('Invio in corso…'), findsOneWidget);
 
     pending.complete(const LogoutResult(signedOut: false, remaining: 2));
-    await tester.pumpAndSettle();
+    await _pumpFrames(tester);
 
     expect(find.text('Invio in corso…'), findsNothing);
     expect(find.text("Esci dall'account"), findsOneWidget);
