@@ -36,8 +36,18 @@ void main() {
     // the business day has already rolled over — every schedule seeded for this fixture's "today"
     // then fell outside the day the queue reads and the whole file went red for that one hour,
     // in whichever CI run happened to land inside it.
+    //
+    // The value is `businessToday()` itself: a civil date pinned at UTC midnight, which is the
+    // convention `schedules.activityDate` stores and the one `todaySchedulesProvider` compares
+    // against (`>= businessToday() & < +1 day`). Not the UTC instant that civil date starts at —
+    // `utcRangeForBusinessDate()` answers the other question, and for Rome in CET it returns
+    // 23:00Z of the previous day, an hour *before* the window the queue reads, so every seeded
+    // schedule fell outside it and the whole file went red at every hour of the day, not only
+    // across midnight. `tomorrow` is the next civil date for the same reason: in this convention
+    // there is no DST to step over.
     final bt = BusinessTime.fallback();
-    (today, tomorrow) = bt.utcRangeForBusinessDate(bt.businessToday());
+    today = bt.businessToday();
+    tomorrow = today.add(const Duration(days: 1));
   });
 
   tearDown(() async {
