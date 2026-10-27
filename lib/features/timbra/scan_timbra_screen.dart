@@ -152,7 +152,16 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
       _choice = null;
     });
 
-    final userId = _userId ?? await ref.read(internalUserIdProvider.future);
+    final String? userId;
+    try {
+      userId = _userId ?? await ref.read(internalUserIdProvider.future);
+    } catch (_) {
+      // The one await in here that is not already guarded, and `_begin` turned the spinner on
+      // before it: a failed session read has to land in the same error state as everything else,
+      // never in an indeterminate spinner nobody can dismiss.
+      if (mounted) _failWithUnexpected();
+      return;
+    }
     if (userId == null) {
       if (!mounted) return;
       setState(() {
@@ -195,13 +204,13 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
       _error = null;
     });
 
+    // The try covers the call and nothing else: once [kioskScan] returns, the punch has landed,
+    // and a toast or a pop that fails afterwards must not be reported as a failed punch.
+    final KioskScanResult result;
     try {
-      final result = await ref
+      result = await ref
           .read(worklogApiClientProvider)
           .kioskScan(token: widget.token, userId: userId, action: action);
-      if (!mounted) return;
-      showAppToast(context, message: _toastFor(result.action), tone: ToastTone.success);
-      Navigator.of(context).pop();
     } on KioskScanException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -237,8 +246,34 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
             _error = 'Errore imprevisto. Riprova.';
         }
       });
+      return;
+    } catch (_) {
+      // Anything the [KioskScanException] cases above do not model — and the one class of failure
+      // this screen must never let through regardless: `_submitting` drives an *indeterminate*
+      // spinner, so an escaping exception is a screen the technician can no longer leave. That is
+      // exactly the field regression this catch exists for: clock-out is the only response that
+      // carries `endTime`, the client parsed it as an ISO datetime while the server sends a
+      // `TimeSpan`, and the resulting FormatException escaped here and left the spinner up over a
+      // punch that had in fact succeeded.
+      if (!mounted) return;
+      _failWithUnexpected();
+      return;
     }
+
+    if (!mounted) return;
+    showAppToast(context, message: _toastFor(result.action), tone: ToastTone.success);
+    Navigator.of(context).pop();
   }
+
+  /// The unclassified-error state: same copy and same retry as
+  /// [KioskScanFailureReason.unknown], because from the technician's side the two are the same
+  /// thing — a result this build could not read.
+  void _failWithUnexpected() => setState(() {
+    _submitting = false;
+    _terminal = true;
+    _canRetry = true;
+    _error = 'Errore imprevisto. Riprova.';
+  });
 
   String _toastFor(String action) => switch (action) {
     'out' => 'Uscita registrata',

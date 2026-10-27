@@ -403,6 +403,38 @@ void main() {
       await _teardown(tester);
     });
 
+    // The regression that hung the screen in the field. Clock-out was the only response carrying
+    // `endTime`, and `kioskScan` parsed it as an ISO datetime while the server sends a TimeSpan
+    // (`"17:00:00"`) — so `DateTime.parse` threw a FormatException that is not a
+    // `KioskScanException`, no branch of the handler below matched it, and `_submitting` stayed
+    // true with an indeterminate spinner over a punch that had in fact succeeded. Whatever the
+    // failure, a screen showing a spinner must be able to leave it.
+    testWidgets('an exception the screen does not model ends in an error, never a stuck spinner', (
+      tester,
+    ) async {
+      final client = _ThrowingFakeWorklogApiClient(
+        error: const FormatException('Invalid date format'),
+        day: _day('Working', actions: [_available('StartBreak'), _available('ClockOut')]),
+      );
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      await tester.tap(find.widgetWithText(AppButton, 'Fine turno'));
+      // pump, not pumpAndSettle: on the broken build the spinner never settles, and this test
+      // must fail in milliseconds rather than sit out pumpAndSettle's timeout.
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.byType(CircularProgressIndicator),
+        findsNothing,
+        reason: 'the spinner is indeterminate — it may never be the last thing on screen',
+      );
+      expect(find.textContaining('Errore imprevisto'), findsOneWidget);
+      expect(find.widgetWithText(AppButton, 'Riprova'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
     testWidgets('a conflict offers Riprova, which re-reads the day instead of repeating it', (
       tester,
     ) async {
@@ -465,4 +497,32 @@ class _CountingFakeWorklogApiClient extends WorklogApiClient {
     required String userId,
     String? action,
   }) async => onCall();
+}
+
+/// Fails with an exception the screen's own `on KioskScanException` handler does not model —
+/// what the TimeSpan clock-out response produced before the client parsed it.
+class _ThrowingFakeWorklogApiClient extends WorklogApiClient {
+  _ThrowingFakeWorklogApiClient({required this.error, this.day}) : super(Dio());
+
+  final Object error;
+  final GiornataDto? day;
+
+  int calls = 0;
+
+  @override
+  Future<GiornataDto> getGiornata() async {
+    final d = day;
+    if (d == null) throw StateError('offline');
+    return d;
+  }
+
+  @override
+  Future<KioskScanResult> kioskScan({
+    required String token,
+    required String userId,
+    String? action,
+  }) async {
+    calls++;
+    throw error;
+  }
 }
