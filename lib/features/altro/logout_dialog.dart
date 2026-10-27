@@ -86,9 +86,8 @@ Future<LogoutIntent?> showUnsentWorkLogoutDialog(
 /// Runs [run] (the flush + sign-out of "Invia ora", or a plain sign-out) behind a
 /// non-dismissible progress sheet and returns its result — null if it failed.
 ///
-/// The sheet owns the await and pops *itself*: on success the router has already moved the page
-/// underneath to the login screen, so a caller that popped "its own" dialog afterwards would be
-/// popping from a disposed context (or would leave the sheet on top of the login screen).
+/// The sheet owns the await and closes *itself*, but only while it is still the navigator's
+/// current route — see [_LogoutProgressDialogState._run].
 Future<LogoutResult?> runLogoutWithProgress(
   BuildContext context,
   Future<LogoutResult> Function() run,
@@ -124,7 +123,24 @@ class _LogoutProgressDialogState extends State<_LogoutProgressDialog> {
       // Nothing to sign out around: the caller treats null as "not done" and stays put.
       result = null;
     }
-    if (mounted) Navigator.of(context).pop(result);
+
+    if (!mounted) return;
+
+    // Close the sheet only while it is still the route the navigator has on top.
+    //
+    // On a successful sign-out the router has already replaced the page underneath with
+    // /login, and the Navigator — not this widget — is the one taking the sheet down: the
+    // transition delegate pops the pageless sheet above the exiting page (`markForPop`), and
+    // that exit animation outlives the wipe this method was waiting for. By the time we get
+    // here the sheet is therefore still `mounted` but no longer `isCurrent`.
+    //
+    // `Navigator.pop()` does not pop "my" route; it pops the topmost *present* one. With the
+    // sheet already exiting, that is the /login page — it was popped out of a navigator whose
+    // router still believes it is there, leaving an empty navigator with nothing to rebuild
+    // it, i.e. the blank screen that only an app restart cleared.
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+    Navigator.of(context).pop(result);
   }
 
   @override
