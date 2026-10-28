@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/entitlements/entitlement_providers.dart' show refreshEntitlements;
 import '../../data/smart_working/smart_working_request_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -70,6 +71,10 @@ class _SmartWorkingListBody extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () => ref.refresh(mySmartWorkingRequestsProvider.future),
       child: CustomScrollView(
+        // Without this the empty state (shorter than the viewport) cannot be dragged at all, so
+        // pull-to-refresh silently does nothing exactly when the technician wants to re-ask the
+        // server. Same trap and fix as calendario_screen.dart's own list.
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           if (items.isEmpty)
             const SliverToBoxAdapter(
@@ -103,9 +108,16 @@ class _SmartWorkingRow extends ConsumerStatefulWidget {
 }
 
 class _SmartWorkingRowState extends ConsumerState<_SmartWorkingRow> {
+  /// True from the confirm tap to the server's answer. The control is replaced while it is set, so
+  /// a second confirm cannot re-POST a cancel that already succeeded and stack an error toast on
+  /// top of a success.
+  bool _busy = false;
+
   bool get _cancellable => _kCancellableSmartWorkingStatuses.contains(widget.item.status);
 
   Future<void> _confirmCancel() async {
+    if (_busy) return;
+
     final confirmed = await confirmDeleteDialog(
       context,
       title: 'Annullare la richiesta?',
@@ -115,22 +127,52 @@ class _SmartWorkingRowState extends ConsumerState<_SmartWorkingRow> {
     if (!confirmed) return;
     if (!mounted) return;
 
+    setState(() => _busy = true);
+
     // Cancelling is a server-side state change with no local mirror (see this file's own doc);
     // refuse offline before the round trip rather than after a confusing Dio failure.
-    if (!ensureOnlineOrWarn(context, ref)) return;
+    if (!ensureOnlineOrWarn(context, ref)) {
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
 
     try {
       await ref.read(smartWorkingRequestApiClientProvider).cancel(widget.item.id);
-      ref.invalidate(mySmartWorkingRequestsProvider);
-    } catch (_) {
-      if (mounted) {
-        showAppToast(
-          context,
-          message: 'Impossibile annullare la richiesta. Riprova.',
-          tone: ToastTone.error,
-        );
-      }
+    } catch (e) {
+      // The screen may be gone by now (`IconButton.onPressed` does not await this future, so an
+      // error escaping here would surface as an unhandled async error).
+      if (!mounted) return;
+      showAppToast(
+        context,
+        // `_guarded` turns a 400's Italian `detail` into [SmartWorkingValidationError] for cancel
+        // too. That text is the whole explanation (a row that went stale while the screen sat
+        // open says "already decided"), where the generic line tells the technician to retry
+        // something that can never succeed.
+        message: e is SmartWorkingValidationError
+            ? e.detail
+            : 'Impossibile annullare la richiesta. Riprova.',
+        tone: ToastTone.error,
+      );
+      setState(() => _busy = false);
+      return;
     }
+
+    // Using `ref` after an await on a disposed widget throws; the technician may have popped the
+    // screen while the POST was in flight.
+    if (!mounted) return;
+    ref.invalidate(mySmartWorkingRequestsProvider);
+
+    // A cancelled request can name TODAY, and `smartWorkingTodayProvider` is memory-only: without
+    // re-asking `/auth/me` the timbra chip (and Home's punch prompt) would keep claiming an
+    // approved remote day the technician just withdrew, until the next app resume. Same helper the
+    // regular entitlement refresh uses, so the two surfaces cannot disagree.
+    try {
+      await refreshEntitlements(ref);
+    } catch (_) {
+      // The cancel itself succeeded; a failed /auth/me refresh is not a cancel failure and must not
+      // be reported as one.
+    }
+    if (mounted) setState(() => _busy = false);
   }
 
   @override
@@ -159,12 +201,26 @@ class _SmartWorkingRowState extends ConsumerState<_SmartWorkingRow> {
                 StatusPill(stato: item.statusLabel),
                 // Same reasoning as ferie_permessi_list_screen.dart's cancel button: the action is
                 // a real button (not only a gesture) so mouse/keyboard/TalkBack/VoiceOver users can
-                // withdraw a request at all.
-                IconButton(
-                  icon: Icon(LucideIcons.x, size: 18, color: context.colors.inkMuted),
-                  tooltip: 'Annulla richiesta',
-                  onPressed: _confirmCancel,
-                ),
+                // withdraw a request at all. While the cancel is in flight the button gives way to
+                // a spinner of the same footprint, so it cannot be tapped twice.
+                if (_busy)
+                  const SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: Icon(LucideIcons.x, size: 18, color: context.colors.inkMuted),
+                    tooltip: 'Annulla richiesta',
+                    onPressed: _confirmCancel,
+                  ),
               ],
             )
           : StatusPill(stato: item.statusLabel),
