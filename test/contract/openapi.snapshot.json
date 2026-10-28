@@ -1341,6 +1341,297 @@
         }
       }
     },
+    "/api/badge/me": {
+      "get": {
+        "tags": [
+          "Badge"
+        ],
+        "summary": "Returns the caller\u0027s badge card with a freshly rotated token, creating the badge on first use.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadgeCard"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadgeCard"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadgeCard"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/badge/{userId}/revoke": {
+      "post": {
+        "tags": [
+          "Badge"
+        ],
+        "summary": "Office: revokes the worker\u0027s active badge (manual). Idempotent.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/badge/{userId}/reissue": {
+      "post": {
+        "tags": [
+          "Badge"
+        ],
+        "summary": "Office: revokes the worker\u0027s active badge and issues a new one. 204: the new token is never handed\nto the office; the worker obtains it only through \u0060GET /api/badge/me\u0060.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/cantieri/{cantiereId}/badge-scan": {
+      "post": {
+        "tags": [
+          "Badge"
+        ],
+        "summary": "Team leader: scans a worker\u0027s badge on a cantiere, toggling that worker\u0027s punch. Always 200 with\nthe outcome, rejected scans included (the leader\u0027s screen needs the reason).",
+        "parameters": [
+          {
+            "name": "cantiereId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BadgeScanRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BadgeScanRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/BadgeScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadgeScanOutcome"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadgeScanOutcome"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadgeScanOutcome"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cantieri/{cantiereId}/badge-scans": {
+      "get": {
+        "tags": [
+          "Badge"
+        ],
+        "summary": "Office: the scan log of one cantiere, newest first, ids only (no names). Rows are read-only here.\n\u0060from\u0060/\u0060to\u0060 are both inclusive on \u0060ScannedAtUtc\u0060 (the repo\u0027s list-filter convention). A\ndate-only \u0060to\u0060 (e.g. \u00602026-10-28\u0060) binds to midnight at the start of that day, so clients must\nsend an end-of-day timestamp (e.g. \u00602026-10-28T23:59:59.999Z\u0060) to include the whole day;\n\u0060result\u0060 is a strict enum name. Paged with the shared \u0060page\u0060/\u0060pageSize\u0060 (pageSize clamped to 1-100).",
+        "parameters": [
+          {
+            "name": "cantiereId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Page",
+            "in": "query",
+            "description": "1-based page number. Defaults to 1.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Items per page. Defaults to 20; clamped to 1\u2013100.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Sort",
+            "in": "query",
+            "description": "Sort field. Prefix with \u0027-\u0027 for descending (e.g. \u0022-nome\u0022).\nAllowed fields are defined per-endpoint via a whitelist; unknown values are rejected.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Q",
+            "in": "query",
+            "description": "Free-text search term (applied per-endpoint).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "SafePage",
+            "in": "query",
+            "description": "Page clamped to [1, \u221E).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "SafePageSize",
+            "in": "query",
+            "description": "PageSize clamped to [1, 100].",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfBadgeScanRow"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfBadgeScanRow"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfBadgeScanRow"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/billing/subscription": {
       "get": {
         "tags": [
@@ -16244,11 +16535,62 @@
         }
       }
     },
+    "/api/admin/SuperUser/tenants/lookups": {
+      "get": {
+        "tags": [
+          "SuperUser"
+        ],
+        "summary": "Static catalogue the tenant-management UI offers (tiers, grantable feature keys, modules per\ntier). A literal segment, so it wins over \u0060tenants/{id}\u0060 regardless of declaration order.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantLookups"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantLookups"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantLookups"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/SuperUser/tenants/{id}": {
       "get": {
         "tags": [
           "SuperUser"
         ],
+        "summary": "Operator detail of one tenant: billing, seats, modules, settings.",
         "parameters": [
           {
             "name": "id",
@@ -16262,7 +16604,547 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAdminDetail"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAdminDetail"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantAdminDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/SuperUser/tenants/{id}/billing/seats": {
+      "put": {
+        "tags": [
+          "SuperUser"
+        ],
+        "summary": "Sets a locally-billed tenant\u0027s seats (and optionally tier). Stripe-billed tenants are 409.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantSeatsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantSeatsRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantSeatsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/SuperUser/tenants/{id}/modules/extras": {
+      "put": {
+        "tags": [
+          "SuperUser"
+        ],
+        "summary": "Makes the tenant\u0027s operator-granted extra modules exactly the given set.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTenantExtraModulesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTenantExtraModulesRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTenantExtraModulesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/SuperUser/tenants/{id}/activate": {
+      "post": {
+        "tags": [
+          "SuperUser"
+        ],
+        "summary": "Re-activates a tenant.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/SuperUser/tenants/{id}/deactivate": {
+      "post": {
+        "tags": [
+          "SuperUser"
+        ],
+        "summary": "Deactivates a tenant. The operator\u0027s own home tenant is refused with 409.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/SuperUser/tenants/{id}/activity": {
+      "get": {
+        "tags": [
+          "SuperUser"
+        ],
+        "summary": "The tenant\u0027s \u0060superuser.*\u0060 audit trail, newest first.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfTenantActivityEntry"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfTenantActivityEntry"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfTenantActivityEntry"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -20774,7 +21656,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Generates a time-based HMAC token for the kiosk QR code (expires in 60 s). The device\nshows this as a QR; the technician scans it with their phone.",
+        "summary": "Generates a signed token for the kiosk QR code. It is accepted for the configured validity\n(Kiosk:TokenValiditySeconds, default 300 s) after it was issued, reported as expiresInSeconds;\nthe device refreshes it more often than that. The device shows this as a QR; the technician\nscans it with their phone.",
         "responses": {
           "200": {
             "description": "OK"
@@ -23512,6 +24394,197 @@
           }
         },
         "description": "One stored attachment, as returned to clients."
+      },
+      "BadgeCard": {
+        "required": [
+          "badgeId",
+          "token",
+          "expiresInSeconds",
+          "displayName",
+          "photoUrl",
+          "employerName",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "badgeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string"
+          },
+          "expiresInSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "photoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "employerName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "description": "What the worker\u0027s phone renders: identity, employer and a fresh rotating token."
+      },
+      "BadgeScanAction": {
+        "enum": [
+          "None",
+          "Opened",
+          "Closed"
+        ],
+        "description": "What an accepted scan did to the worker\u0027s cantiere session. Serialized as the member name."
+      },
+      "BadgeScanOutcome": {
+        "required": [
+          "result",
+          "action",
+          "workLogId",
+          "worker"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/BadgeScanResult"
+          },
+          "action": {
+            "$ref": "#/components/schemas/BadgeScanAction"
+          },
+          "workLogId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "worker": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BadgeWorker"
+              }
+            ]
+          }
+        },
+        "description": "The recorded result of one scan. Every result is a normal outcome (HTTP 200); the leader needs the reason."
+      },
+      "BadgeScanRequest": {
+        "required": [
+          "token",
+          "clientScanId"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "clientScanId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "A scan as the leader\u0027s phone sends it: the rotating token and an optional offline idempotency key."
+      },
+      "BadgeScanResult": {
+        "enum": [
+          "Accepted",
+          "NotAssigned",
+          "Revoked",
+          "Expired",
+          "Invalid",
+          "OpenElsewhere",
+          "PayrollLocked",
+          "Replayed"
+        ],
+        "description": "Outcome of a leader scanning a worker badge. Stored in the database and serialized on the wire as the\nmember name (e.g. \u0060Replayed\u0060); append only."
+      },
+      "BadgeScanRow": {
+        "required": [
+          "id",
+          "scannedAtUtc",
+          "workerUserId",
+          "leaderUserId",
+          "result",
+          "action",
+          "workLogId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scannedAtUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "workerUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "leaderUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "result": {
+            "$ref": "#/components/schemas/BadgeScanResult"
+          },
+          "action": {
+            "$ref": "#/components/schemas/BadgeScanAction"
+          },
+          "workLogId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "One recorded badge scan as the office sees it. Ids only: names are resolved by the client, never leaked here."
+      },
+      "BadgeWorker": {
+        "required": [
+          "displayName",
+          "photoUrl",
+          "employerName"
+        ],
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "photoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "employerName": {
+            "type": "string"
+          }
+        },
+        "description": "Identity shown on the leader\u0027s screen; only ever built for a badge that resolved to a real user of the tenant."
       },
       "BasicPkResponse": {
         "type": "object",
@@ -30567,6 +31640,57 @@
         "type": "integer",
         "description": "Defines the types of notifications in the system."
       },
+      "PagedResultOfTenantActivityEntry": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalItems",
+          "totalPages"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantActivityEntry"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalItems": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "Page of results. Same shape as the API layer\u0027s \u0060PaginatedResult\u0026lt;T\u0026gt;\u0060 (which lives in\n\u0060TaskTapAPI.Api\u0060 and so cannot be referenced from Application)."
+      },
       "PaginatedResultOfAiCallLog": {
         "type": "object",
         "properties": {
@@ -30574,6 +31698,55 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AiCallLog"
+            },
+            "description": "Items for current page."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Current page number.",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Number of items per page.",
+            "format": "int32"
+          },
+          "totalItems": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of items across all pages.",
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of pages.",
+            "format": "int32"
+          }
+        },
+        "description": "Paginated result wrapper."
+      },
+      "PaginatedResultOfBadgeScanRow": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BadgeScanRow"
             },
             "description": "Items for current page."
           },
@@ -34511,6 +35684,21 @@
           }
         }
       },
+      "SetTenantExtraModulesRequest": {
+        "type": "object",
+        "properties": {
+          "extraModules": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Body of \u0060PUT /api/admin/SuperUser/tenants/{id}/modules/extras\u0060."
+      },
       "SignatureOptionsDto": {
         "required": [
           "showCustomerSignature",
@@ -37907,6 +39095,273 @@
           null
         ]
       },
+      "TenantActivityEntry": {
+        "required": [
+          "at",
+          "userId",
+          "userName",
+          "action",
+          "oldValue",
+          "newValue"
+        ],
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "userId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "userName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "oldValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "newValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "TenantAdminDetail": {
+        "required": [
+          "id",
+          "name",
+          "domain",
+          "slug",
+          "isActive",
+          "createdAt",
+          "billingMode",
+          "tier",
+          "officeSeats",
+          "fieldSeats",
+          "officeSeatsInUse",
+          "fieldSeatsInUse",
+          "subscriptionStatus",
+          "hasStripeCustomer",
+          "hasStripeSubscription",
+          "stripeManaged",
+          "tierModules",
+          "extraModules",
+          "settings"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "billingMode": {
+            "type": "string"
+          },
+          "tier": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "officeSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fieldSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "officeSeatsInUse": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fieldSeatsInUse": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "subscriptionStatus": {
+            "type": "string"
+          },
+          "hasStripeCustomer": {
+            "type": "boolean"
+          },
+          "hasStripeSubscription": {
+            "type": "boolean"
+          },
+          "stripeManaged": {
+            "type": "boolean"
+          },
+          "tierModules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extraModules": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/TenantAdminSettings"
+          }
+        },
+        "description": "Full operator view of one tenant. \u0060BillingMode\u0060/\u0060SubscriptionStatus\u0060 are enum names."
+      },
+      "TenantAdminSettings": {
+        "required": [
+          "companyName",
+          "vatNumber",
+          "fiscalCode",
+          "pecEmail",
+          "sdiCode",
+          "billingName",
+          "billingEmail",
+          "billingAddressLine1",
+          "billingAddressLine2",
+          "billingCity",
+          "billingPostalCode",
+          "billingCountry",
+          "timeZoneId",
+          "primaryColor",
+          "clockInMethod"
+        ],
+        "type": "object",
+        "properties": {
+          "companyName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "vatNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fiscalCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pecEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sdiCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "billingName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "billingEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "billingAddressLine1": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "billingAddressLine2": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "billingCity": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "billingPostalCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "billingCountry": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timeZoneId": {
+            "type": "string"
+          },
+          "primaryColor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clockInMethod": {
+            "type": "string"
+          }
+        },
+        "description": "Tenant fields the operator detail view exposes (company, fiscal, billing contact, locale, brand)."
+      },
       "TenantDeletionRequest": {
         "type": "object",
         "properties": {
@@ -37915,6 +39370,37 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "TenantLookups": {
+        "required": [
+          "tiers",
+          "featureKeys",
+          "tierModules"
+        ],
+        "type": "object",
+        "properties": {
+          "tiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "featureKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tierModules": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -40843,9 +42329,62 @@
               "string"
             ],
             "description": "Tenant-wide clock-in method default: \u0022Both\u0022 (default)/\u0022QrOnly\u0022/\u0022ButtonOnly\u0022, case-insensitive.\nNull/absent leaves the current value unchanged. An unrecognized value is a 400."
+          },
+          "billingCountry": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Billing country as an ISO 3166-1 alpha-2 code from the allow-list in\n\u0060TenantSettingsRules\u0060 (case-insensitive, stored upper-case). Platform operators only \u2014\na tenant admin sending it gets 403. Absent leaves it unchanged; blank or unlisted is a 400."
+          },
+          "primaryColor": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Brand colour as strict \u0060#RRGGBB\u0060 hex. Absent leaves it unchanged; anything else is a 400."
           }
         },
         "description": "Request model for updating a tenant."
+      },
+      "UpdateTenantSeatsRequest": {
+        "type": "object",
+        "properties": {
+          "officeSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fieldSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tier": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional new tier; null keeps the tenant\u0027s granted tier."
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "confirmBelowUsage": {
+            "type": "boolean",
+            "description": "Apply even when the seats are below the tenant\u0027s active usage."
+          }
+        },
+        "description": "Body of \u0060PUT /api/admin/SuperUser/tenants/{id}/billing/seats\u0060."
       },
       "UpdateTenantSettingsRequest": {
         "type": "object",
@@ -42424,6 +43963,18 @@
               "string"
             ],
             "format": "int32"
+          },
+          "kioskDeviceName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kioskLocationName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "One worklog row of any kind, as the office correction screens see it. \u0060StartLocal/EndLocal\u0060 are\nISO local date-times without offset in \u0060TimeZoneId\u0060; the instants are null only for legacy rows\nwhose local time cannot be placed on the timeline (DST gap)."
@@ -42504,6 +44055,9 @@
     },
     {
       "name": "Auth"
+    },
+    {
+      "name": "Badge"
     },
     {
       "name": "Billing"
