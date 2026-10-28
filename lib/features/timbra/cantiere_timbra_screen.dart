@@ -37,6 +37,7 @@ import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:uuid/uuid.dart';
 
@@ -56,6 +57,7 @@ import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
+import '../../core/router/app_router.dart' show AppRoutes;
 import '../cantiere/cantiere_providers.dart';
 import 'chiudi_turno_screen.dart';
 import 'clock_disagreement_note.dart';
@@ -1358,6 +1360,16 @@ class _CheckInBody extends ConsumerWidget {
                 ),
               ),
             ],
+            const SizedBox(height: 16),
+          ],
+
+          // Lead-only: scan the crew's rotating badge QRs at the cantiere. The server re-checks.
+          if (isLead && cantiereId != null) ...[
+            AppButton.secondary(
+              label: 'Scansiona badge',
+              icon: const Icon(LucideIcons.scanLine),
+              onPressed: () => context.push(AppRoutes.cantiereBadgeScanPath(cantiereId!)),
+            ),
             const SizedBox(height: 16),
           ],
 

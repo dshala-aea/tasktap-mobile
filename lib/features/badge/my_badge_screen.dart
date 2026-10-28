@@ -106,7 +106,7 @@ class _ReadyView extends StatelessWidget {
     final c = context.colors;
     return Column(
       children: [
-        _Avatar(name: card.displayName, photoUrl: card.photoUrl),
+        BadgeAvatar(name: card.displayName, photoUrl: card.photoUrl),
         const SizedBox(height: AppSpacing.md),
         Text(
           card.displayName,
@@ -198,10 +198,13 @@ class _MessageView extends StatelessWidget {
   }
 }
 
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.name, required this.photoUrl});
+/// Round worker photo with an initials fallback. Public so the leader's scan result cards reuse it.
+class BadgeAvatar extends StatelessWidget {
+  const BadgeAvatar({super.key, required this.name, required this.photoUrl, this.size = 96});
 
-  static const double _size = 96;
+  final double size;
+
+  double get _size => size;
 
   final String name;
   final String? photoUrl;
@@ -216,7 +219,8 @@ class _Avatar extends StatelessWidget {
       color: context.colors.bg3,
       child: Text(
         _initials(name),
-        style: AppTextStyles.headlineLarge.copyWith(color: context.colors.ink),
+        style: (_size >= 64 ? AppTextStyles.headlineLarge : AppTextStyles.titleMedium)
+            .copyWith(color: context.colors.ink),
       ),
     );
     final url = photoUrl;

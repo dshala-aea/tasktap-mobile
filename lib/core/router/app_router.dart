@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../widgets/widgets.dart';
 import '../../features/altro/altro_hub_screen.dart';
 import '../../features/altro/i_miei_dati_screen.dart';
+import '../../features/badge/badge_scan_screen.dart';
 import '../../features/badge/my_badge_screen.dart';
 import '../../features/altro/impostazioni_screen.dart';
 import '../../features/altro/notifiche_screen.dart';
@@ -191,6 +192,11 @@ abstract final class AppRoutes {
         ? cantiereTimbra
         : '$cantiereTimbra?${params.join('&')}';
   }
+
+  /// The team leader's continuous badge scanner for one cantiere. Lead-only entry on
+  /// CantiereTimbraScreen; the server enforces the lead check regardless.
+  static String cantiereBadgeScanPath(String cantiereId) =>
+      '/cantiere-badge-scan/${Uri.encodeComponent(cantiereId)}';
 
   /// Path for the full-screen cantiere picker — the dashboard's generic "Timbra cantiere" quick
   /// action (no cantiere context yet) now lands here instead of on CantiereTimbraScreen's
@@ -502,6 +508,13 @@ GoRouter buildRouter(WidgetRef ref) {
             cantiereId: cantiereId,
           );
         },
+      ),
+
+      // ── Leader badge scan (pushed from CantiereTimbraScreen, lead-only) ──
+      GoRoute(
+        path: '/cantiere-badge-scan/:cantiereId',
+        builder: (context, state) =>
+            BadgeScanScreen(cantiereId: state.pathParameters['cantiereId']!),
       ),
 
       // ── Seleziona cantiere (pushed from the dashboard's generic "Timbra cantiere" action) ──

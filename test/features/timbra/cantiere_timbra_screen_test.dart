@@ -15,6 +15,7 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/drift.dart' as drift show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -204,6 +205,8 @@ Widget _buildScreen({
   // the client, so the pre-existing lead-branching tests (which all run through the fake client)
   // have to say they are online. The offline tests pass false and seed the mirror themselves.
   bool online = true,
+  // When set, the screen is mounted under this router so `context.push` works.
+  GoRouter? router,
 }) {
   return ProviderScope(
     overrides: [
@@ -221,13 +224,15 @@ Widget _buildScreen({
       // here since _testUser.id ('me') already IS what the fake assignment rows use as userId.
       internalUserIdProvider.overrideWith((ref) async => currentUser?.id),
     ],
-    child: MaterialApp(
-      home: CantiereTimbraScreen(
-        ticketId: ticketId,
-        customerId: customerId,
-        cantiereId: cantiereId,
-      ),
-    ),
+    child: router != null
+        ? MaterialApp.router(routerConfig: router)
+        : MaterialApp(
+            home: CantiereTimbraScreen(
+              ticketId: ticketId,
+              customerId: customerId,
+              cantiereId: cantiereId,
+            ),
+          ),
   );
 }
 
@@ -726,6 +731,51 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
     }
+
+    GoRouter badgeRouter() => GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const CantiereTimbraScreen(cantiereId: 'cant-1', customerId: 'cust-1'),
+        ),
+        GoRoute(
+          path: '/cantiere-badge-scan/:cantiereId',
+          builder: (_, state) => Text('SCANNER ${state.pathParameters['cantiereId']}'),
+        ),
+      ],
+    );
+
+    testWidgets('entry_point_hidden_for_non_lead', (tester) async {
+      await seedCantiere(db);
+      final api = _FakeApiClient(
+        assegnazioni: [CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: false)],
+      );
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, currentUser: _testUser, router: badgeRouter()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inizia timbratura'), findsOneWidget);
+      expect(find.text('Scansiona badge'), findsNothing);
+      await _teardown(tester);
+    });
+
+    testWidgets('entry_point_opens_scanner_for_lead', (tester) async {
+      await seedCantiere(db);
+      final api = _FakeApiClient(
+        assegnazioni: [CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true)],
+      );
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, currentUser: _testUser, router: badgeRouter()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Scansiona badge'), findsOneWidget);
+      await tester.tap(find.text('Scansiona badge'));
+      await tester.pumpAndSettle();
+      expect(find.text('SCANNER cant-1'), findsOneWidget);
+      await _teardown(tester);
+    });
 
     testWidgets('offline: the mirrored crew still makes the technician lead', (tester) async {
       await seedCantiere(db);
