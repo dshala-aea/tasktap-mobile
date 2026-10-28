@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
+import 'package:tasktap_mobile/data/badge/badge_models.dart';
+import 'package:tasktap_mobile/data/badge/badge_api_client.dart';
 import 'package:tasktap_mobile/data/clienti/customer_contact_api_client.dart';
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
@@ -1016,6 +1018,62 @@ void main() {
     contractTest('setting a stock-minimo threshold matches the server', () {
       final client = MagazzinoApiClient(dio);
       return capture(() => client.setStockMinimo(stockId: _id(55), stockMinimo: 4));
+    });
+  });
+
+  group('badge', () {
+    contractTest('a badge scan matches the server', () {
+      final client = BadgeApiClient(dio);
+      return capture(
+        () => client.scan(cantiereId: _id(60), token: 'tok-abc', clientScanId: _id(61)),
+        expect: (body) {
+          // The server's own required keys, sent exactly.
+          final requiredKeys = ((schemas['BadgeScanRequest'] as Map<String, dynamic>)['required']
+                  as List)
+              .cast<String>()
+              .toSet();
+          expect(body.keys.toSet(), requiredKeys);
+        },
+      );
+    });
+
+    test('the badge response DTOs read the keys the server declares', () {
+      Set<String> props(String schema) =>
+          ((schemas[schema] as Map<String, dynamic>)['properties'] as Map<String, dynamic>)
+              .keys
+              .toSet();
+
+      // Feed each DTO a body built from the SERVER's own property names, so a renamed key on
+      // either side fails here rather than reading as null at runtime.
+      final card = BadgeCard.fromJson({
+        for (final k in props('BadgeCard')) k: k == 'expiresInSeconds' ? 60 : 'v-$k',
+      });
+      expect(card.badgeId, 'v-badgeId');
+      expect(card.token, 'v-token');
+      expect(card.expiresInSeconds, 60);
+      expect(card.displayName, 'v-displayName');
+      expect(card.photoUrl, 'v-photoUrl');
+      expect(card.employerName, 'v-employerName');
+      expect(card.status, 'v-status');
+
+      final outcome = BadgeScanOutcome.fromJson({
+        'result': 'Replayed',
+        'action': 'Closed',
+        'workLogId': 'w',
+        'worker': {for (final k in props('BadgeWorker')) k: 'v-$k'},
+      });
+      expect(props('BadgeScanOutcome'), {'result', 'action', 'workLogId', 'worker'});
+      expect(outcome.worker!.displayName, 'v-displayName');
+      expect(outcome.worker!.employerName, 'v-employerName');
+      expect(outcome.worker!.photoUrl, 'v-photoUrl');
+
+      // Every server-declared enum name maps to a real member, never `unknown`.
+      for (final n in ((schemas['BadgeScanResult'] as Map<String, dynamic>)['enum'] as List)) {
+        expect(BadgeScanResult.fromWire(n as String), isNot(BadgeScanResult.unknown), reason: n);
+      }
+      for (final n in ((schemas['BadgeScanAction'] as Map<String, dynamic>)['enum'] as List)) {
+        expect(BadgeScanAction.fromWire(n as String), isNot(BadgeScanAction.unknown), reason: n);
+      }
     });
   });
 

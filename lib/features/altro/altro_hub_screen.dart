@@ -271,6 +271,14 @@ class _SistemaSection extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: Column(
         children: [
+          // Il mio badge — the worker's rotating QR for the cantiere scan.
+          ListRow(
+            leading: _sistemaTileIcon(LucideIcons.scanLine, context.colors.blue),
+            title: 'Il mio badge',
+            subtitle: 'Mostra il codice al caposquadra',
+            showDivider: true,
+            onTap: () => context.push(AppRoutes.altroBadge),
+          ),
           // I miei dati — the subject-access surface. Above Impostazioni rather than buried in it:
           // it is not a preference, it is the answer to "what do you know about me", and the
           // backend has served it since before this app shipped with nothing on the client asking.

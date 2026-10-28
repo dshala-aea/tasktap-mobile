@@ -108,6 +108,10 @@ dependencies:
   # CustomPainter, no native platform code, no network calls of its own.
   qr_flutter: ^4.1.0
 
+  # Keeps the screen awake while the worker badge QR is on screen (lib/features/badge) so the
+  # code does not dim out in front of the scanner. Enabled on mount, released on dispose.
+  wakelock_plus: ^1.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

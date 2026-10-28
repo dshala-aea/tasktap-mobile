@@ -8,6 +8,8 @@ import '../../features/altro/i_miei_dati_screen.dart';
 import '../../features/altro/impostazioni_screen.dart';
 import '../../features/altro/notifiche_screen.dart';
 import '../../features/altro/notification_preferences_screen.dart';
+import '../../features/badge/badge_scan_screen.dart';
+import '../../features/badge/my_badge_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
@@ -162,6 +164,9 @@ abstract final class AppRoutes {
   /// The subject-access surface: what the company has on record about this person.
   static const String altroIMieiDati = '/altro/i-miei-dati';
 
+  /// The worker's rotating badge QR, scanned by a team leader at the cantiere.
+  static const String altroBadge = '/altro/badge';
+
   /// Path for the shared "unavailable" placeholder; pass an
   /// `({String titolo, String motivo})` record as GoRouter extra so the
   /// screen can state a real reason instead of a "coming soon" promise.
@@ -187,6 +192,11 @@ abstract final class AppRoutes {
         ? cantiereTimbra
         : '$cantiereTimbra?${params.join('&')}';
   }
+
+  /// The team leader's continuous badge scanner for one cantiere. Lead-only entry on
+  /// CantiereTimbraScreen; the server enforces the lead check regardless.
+  static String cantiereBadgeScanPath(String cantiereId) =>
+      '/cantiere-badge-scan/${Uri.encodeComponent(cantiereId)}';
 
   /// Path for the full-screen cantiere picker — the dashboard's generic "Timbra cantiere" quick
   /// action (no cantiere context yet) now lands here instead of on CantiereTimbraScreen's
@@ -500,6 +510,13 @@ GoRouter buildRouter(WidgetRef ref) {
         },
       ),
 
+      // ── Leader badge scan (pushed from CantiereTimbraScreen, lead-only) ──
+      GoRoute(
+        path: '/cantiere-badge-scan/:cantiereId',
+        builder: (context, state) =>
+            BadgeScanScreen(cantiereId: state.pathParameters['cantiereId']!),
+      ),
+
       // ── Seleziona cantiere (pushed from the dashboard's generic "Timbra cantiere" action) ──
       GoRoute(
         path: AppRoutes.selezionaCantiere,
@@ -695,6 +712,10 @@ GoRouter buildRouter(WidgetRef ref) {
                   GoRoute(
                     path: 'i-miei-dati',
                     builder: (context, state) => const IMieiDatiScreen(),
+                  ),
+                  GoRoute(
+                    path: 'badge',
+                    builder: (context, state) => const MyBadgeScreen(),
                   ),
                   GoRoute(
                     path: 'ferie',
