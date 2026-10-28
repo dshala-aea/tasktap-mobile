@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../widgets/widgets.dart';
 import '../../features/altro/altro_hub_screen.dart';
 import '../../features/altro/i_miei_dati_screen.dart';
+import '../../features/badge/my_badge_screen.dart';
 import '../../features/altro/impostazioni_screen.dart';
 import '../../features/altro/notifiche_screen.dart';
 import '../../features/altro/notification_preferences_screen.dart';
@@ -161,6 +162,9 @@ abstract final class AppRoutes {
 
   /// The subject-access surface: what the company has on record about this person.
   static const String altroIMieiDati = '/altro/i-miei-dati';
+
+  /// The worker's rotating badge QR, scanned by a team leader at the cantiere.
+  static const String altroBadge = '/altro/badge';
 
   /// Path for the shared "unavailable" placeholder; pass an
   /// `({String titolo, String motivo})` record as GoRouter extra so the
@@ -695,6 +699,10 @@ GoRouter buildRouter(WidgetRef ref) {
                   GoRoute(
                     path: 'i-miei-dati',
                     builder: (context, state) => const IMieiDatiScreen(),
+                  ),
+                  GoRoute(
+                    path: 'badge',
+                    builder: (context, state) => const MyBadgeScreen(),
                   ),
                   GoRoute(
                     path: 'ferie',
