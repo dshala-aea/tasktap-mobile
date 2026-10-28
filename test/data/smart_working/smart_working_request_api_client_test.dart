@@ -4,9 +4,10 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart' show absenceStatusLabel;
 import 'package:tasktap_mobile/data/smart_working/smart_working_request_api_client.dart';
-import 'package:tasktap_mobile/presentation/providers/auth_providers.dart' show internalUserIdProvider;
 
 // The wire shape below is the entity the controller returns RAW (`SmartWorkingRequest`), which is
 // why there is no response schema in the snapshot to generate a DTO from — see the note above
@@ -16,7 +17,8 @@ import 'package:tasktap_mobile/presentation/providers/auth_providers.dart' show 
 // server answers a `GET` with **everyone's** rows when `userId` is omitted and the caller holds
 // `PresenzeAbsenceApprove`, so `mySmartWorkingRequestsProvider` must put the caller's own id on the
 // wire. That is asserted at the provider level, not just at the client method, because the provider
-// is what the screen reads.
+// is what the screen reads — and against the PERSISTED KEY rather than the cached
+// `internalUserIdProvider`, which on a shared device can still hold the previous technician's id.
 
 /// Answers with a canned status/body and keeps the request it was handed — the same adapter shape
 /// badge_api_client_test.dart uses.
@@ -116,15 +118,35 @@ void main() {
       expect(dto.statusLabel, absenceStatusLabel(dto.status));
       expect(dto.statusLabel, 'Annullata');
     });
+
+    test('fromJson_MissingOrEmptyId_Throws', () {
+      // `POST /api/smart-working-requests//cancel` is a 404 the screen can only report as a generic
+      // failure, so a row that cannot be identified never becomes a DTO.
+      final withoutId = Map<String, dynamic>.from(_row())..remove('id');
+      expect(() => SmartWorkingRequestDto.fromJson(withoutId), throwsFormatException);
+      expect(() => SmartWorkingRequestDto.fromJson(_row(id: '')), throwsFormatException);
+    });
+
+    test('fromJson_MissingStatus_Throws', () {
+      // Never default to 0: a missing field would render a decided request as "In attesa".
+      final withoutStatus = Map<String, dynamic>.from(_row())..remove('status');
+      expect(() => SmartWorkingRequestDto.fromJson(withoutStatus), throwsFormatException);
+    });
   });
 
   group('SmartWorkingRequestApiClient', () {
+    setUp(() {
+      // Every provider test below must get its identity from the persisted key; none of them
+      // overrides `internalUserIdProvider`, so a cached id cannot mask a stale read.
+      SharedPreferences.setMockInitialValues(const {});
+    });
+
     test('fetchMine_AlwaysSendsTheCallersOwnUserId', () async {
+      SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'user-1'});
       final adapter = _Adapter(body: jsonEncode([_row()]));
       final container = ProviderContainer(
         overrides: [
           smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter)),
-          internalUserIdProvider.overrideWith((ref) async => 'user-1'),
         ],
       );
       addTearDown(container.dispose);
@@ -149,37 +171,75 @@ void main() {
 
     test('unknownUserId_returnsEmpty_andNeverCallsTheApi', () async {
       // Before the first /auth/me there is no internal id to scope by — and an unscoped GET is
-      // "the whole tenant" for an approve-holder. Nothing goes on the wire at all.
+      // "the whole tenant" for an approve-holder. Nothing goes on the wire at all, for both shapes
+      // an unknown id takes: an absent key, and a key persisted as an empty string.
       final adapter = _Adapter(body: jsonEncode([_row()]));
       final container = ProviderContainer(
         overrides: [
           smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter)),
-          internalUserIdProvider.overrideWith((ref) async => null),
         ],
       );
       addTearDown(container.dispose);
       final sub = container.listen(mySmartWorkingRequestsProvider, (_, _) {});
       addTearDown(sub.close);
 
-      final items = await container.read(mySmartWorkingRequestsProvider.future);
+      for (final unknown in <String?>[null, '']) {
+        SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: ?unknown});
+        container.invalidate(mySmartWorkingRequestsProvider);
 
-      expect(items, isEmpty);
-      expect(
-        adapter.captured,
-        isNull,
-        reason:
-            'an unknown caller cannot be self-scoped: issue no request rather than an unscoped one',
-      );
+        expect(await container.read(mySmartWorkingRequestsProvider.future), isEmpty);
+        expect(
+          adapter.captured,
+          isNull,
+          reason:
+              'an unknown caller (${unknown == null ? 'absent key' : 'empty string'}) cannot be '
+              'self-scoped: issue no request rather than an unscoped one',
+        );
+      }
     });
 
-    test('fetchMine_WithoutAUserId_SendsNoFilter', () async {
+    test('provider_rereadsThePersistedUserId_onEveryRead', () async {
+      // A forced sign-out keeps prefs while the next account's /me rewrites the key, so a cached id
+      // would scope this screen to the PREVIOUS technician. The provider reads the key every time;
+      // pinning that means changing the pref under a live container and reading again.
+      SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'user-a'});
+      final adapter = _Adapter(body: jsonEncode(<dynamic>[]));
+      final container = ProviderContainer(
+        overrides: [
+          smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter)),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(mySmartWorkingRequestsProvider, (_, _) {});
+      addTearDown(sub.close);
+
+      await container.read(mySmartWorkingRequestsProvider.future);
+      expect(adapter.captured!.queryParameters, {'userId': 'user-a'});
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(internalUserIdPrefsKey, 'user-b');
+      container.invalidate(mySmartWorkingRequestsProvider);
+      await container.read(mySmartWorkingRequestsProvider.future);
+
+      expect(adapter.captured!.queryParameters, {'userId': 'user-b'});
+    });
+
+    test('fetchMine_withoutAUserId_sendsNoFilter_noUiPathTakesIt', () async {
       // The nullable parameter is a deliberate escape hatch on the client (a manager's queue would
-      // pass someone else's id); the technician's own screen never takes it — see the provider
-      // test above, which issues no request at all when the caller's id is unknown.
+      // pass someone else's id); no path in this app takes it — the provider test above issues no
+      // request at all when the caller's id is unknown.
       final adapter = _Adapter(body: jsonEncode(<dynamic>[]));
       await _client(adapter).fetchMine();
 
       expect(adapter.captured!.queryParameters, isEmpty);
+    });
+
+    test('fetchMine_EmptyBody_Throws', () async {
+      // A 200 with no body is a contract violation. Answering `[]` there would show "you have filed
+      // nothing" for a server that said nothing at all.
+      final adapter = _Adapter(body: 'null');
+
+      await expectLater(_client(adapter).fetchMine(), throwsFormatException);
     });
 
     test('create_SendsIsoCivilDatesAndOmitsAnEmptyReason', () async {

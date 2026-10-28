@@ -33,11 +33,30 @@
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/time/business_time.dart' show formatDateOnly, parseDateOnlyOrThrow;
-import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../api/dio_client.dart';
+import '../entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
 import '../ferie/absence_request_api_client.dart' show absenceStatusLabel;
+
+/// The entity's `id`, required and non-empty: a row without one can be neither cancelled nor
+/// matched, and the cancel route would be `POST /api/smart-working-requests//cancel` — a 404 the
+/// screen could only report as a generic failure. A payload missing it is broken, and it says so
+/// at the boundary, like the dates above it.
+String _requireId(Object? raw) {
+  if (raw is String && raw.isNotEmpty) return raw;
+  throw FormatException('SmartWorkingRequestDto.id is required', raw);
+}
+
+/// The status ordinal, required. A missing `status` is a broken payload, never "pending": defaulting
+/// to 0 would render a decided request as "In attesa". An unknown INTEGER is a different case — a
+/// server that grew a member — and still clamps to a label through
+/// [SmartWorkingRequestDto.statusLabel].
+int _requireStatus(Object? raw) {
+  if (raw is num) return raw.toInt();
+  throw FormatException('SmartWorkingRequestDto.status is required', raw);
+}
 
 /// One SmartWorkingRequest, as the server states it — raw entity JSON, camelCase.
 class SmartWorkingRequestDto {
@@ -80,13 +99,13 @@ class SmartWorkingRequestDto {
 
   factory SmartWorkingRequestDto.fromJson(Map<String, dynamic> json) =>
       SmartWorkingRequestDto(
-        id: json['id'] as String? ?? '',
+        id: _requireId(json['id']),
         requestedByUserId: json['requestedByUserId'] as String? ?? '',
         createdByUserId: json['createdByUserId'] as String? ?? '',
         startDate: parseDateOnlyOrThrow(json['startDate']),
         endDate: parseDateOnlyOrThrow(json['endDate']),
         reason: json['reason'] as String?,
-        status: (json['status'] as num?)?.toInt() ?? 0,
+        status: _requireStatus(json['status']),
         decidedByUserId: json['decidedByUserId'] as String?,
         decidedAt: json['decidedAt'] is String
             ? DateTime.tryParse(json['decidedAt'] as String)
@@ -128,14 +147,20 @@ class SmartWorkingRequestApiClient {
   ///
   /// [userId] is sent only when supplied. Omitting it means "my own" for a non-Approve caller —
   /// but **everyone's** for a caller holding `PresenzeAbsenceApprove`. The technician's screen is
-  /// titled "le mie richieste", so [mySmartWorkingRequestsProvider] always passes the caller's own
-  /// id; the nullable parameter exists for a manager's queue, not for self-scope.
+  /// titled "le mie richieste" and [mySmartWorkingRequestsProvider] always passes the caller's own
+  /// id; no path in this app sends an unscoped list today, and the parameter is nullable only for
+  /// a manager's queue that does not exist yet.
   Future<List<SmartWorkingRequestDto>> fetchMine({String? userId}) => _guarded(() async {
     final res = await _dio.get<List<dynamic>>(
       '/api/smart-working-requests',
       queryParameters: {if (userId != null && userId.isNotEmpty) 'userId': userId},
     );
-    final list = res.data ?? [];
+    final list = res.data;
+    // A 200 with no body is a contract violation, not "you have no requests": the provider's
+    // empty list is reserved for an unknown caller id, never for an answer that did not arrive.
+    if (list == null) {
+      throw const FormatException('GET /api/smart-working-requests answered 200 with no body');
+    }
     return list.cast<Map<String, dynamic>>().map(SmartWorkingRequestDto.fromJson).toList();
   });
 
@@ -173,15 +198,23 @@ final smartWorkingRequestApiClientProvider = Provider<SmartWorkingRequestApiClie
 ///
 /// The caller's own id goes on the wire every time. It is not decoration: with `userId` omitted the
 /// server answers an approve-holder with the whole tenant's requests, and a screen titled "le mie
-/// richieste" must never show those. The id comes from [internalUserIdProvider], which
-/// `EntitlementService.refresh` persists from `/api/Auth/me`.
+/// richieste" must never show those.
 ///
-/// An UNKNOWN id (before this device has ever reached the server, or after sign-out) is not a
-/// licence to ask anyway: an unknown caller cannot be self-scoped, and an omitted `userId` is
-/// "everything" for an approve-holder — so "we do not know who you are" resolves to nothing, never
-/// to everything. The provider answers `[]` and issues no request at all; there is no filter to
-/// apply, and the unscoped answer is the one answer this screen must never display. The id will
-/// arrive on the next entitlement refresh, which re-runs this provider.
+/// The id is read FRESH from the persisted key on every read — never from the cached
+/// [internalUserIdProvider] — because that provider is not autoDispose and nothing invalidates it.
+/// Two ways the cache is wrong here: a null resolved before the first `/api/Auth/me` would keep the
+/// screen empty for the process's lifetime, and after a forced sign-out (which deliberately keeps
+/// prefs) the cached id belongs to the PREVIOUS user, so the next technician's screen would list
+/// someone else's rows as if they were their own. See `_currentUserId` and the same reasoning in
+/// `notifiche_provider.dart`.
+///
+/// An UNKNOWN id (before this device has ever reached the server, or after a consented sign-out
+/// wiped prefs) is not a licence to ask anyway: an unknown caller cannot be self-scoped, and an
+/// omitted `userId` is "everything" for an approve-holder — so "we do not know who you are"
+/// resolves to nothing, never to everything. The provider answers `[]` and issues no request at
+/// all. Nothing re-runs it on its own: a new listen (autoDispose) after the id has been persisted
+/// asks for the right person's rows, and a screen already on display can `ref.invalidate` it on
+/// resume.
 ///
 /// Online-only, unlike [myAbsenceRequestsProvider]: there is no local mirror of this entity, so a
 /// failed or offline read — identity known — throws and the screen says so. An empty list is
@@ -189,7 +222,22 @@ final smartWorkingRequestApiClientProvider = Provider<SmartWorkingRequestApiClie
 final mySmartWorkingRequestsProvider = FutureProvider.autoDispose<List<SmartWorkingRequestDto>>((
   ref,
 ) async {
-  final userId = await ref.watch(internalUserIdProvider.future);
+  final userId = await _currentUserId();
   if (userId == null || userId.isEmpty) return const <SmartWorkingRequestDto>[];
   return ref.watch(smartWorkingRequestApiClientProvider).fetchMine(userId: userId);
 });
+
+/// The signed-in user's INTERNAL database id (`Users.Id`), read from the same SharedPreferences key
+/// `internalUserIdProvider` reads ([internalUserIdPrefsKey], persisted by
+/// `EntitlementService.refresh` from `/api/Auth/me`).
+///
+/// Deliberately not `ref.watch(internalUserIdProvider.future)`: that FutureProvider caches its
+/// first value for the container's lifetime and nothing invalidates it. On a shared device the key
+/// can change under it (forced sign-out keeps prefs; the next account's `/me` rewrites the key), so
+/// the cached id would scope this screen to the previous technician. The key stays the single
+/// source of truth — this just reads it again. Null before the first successful `/me`, or after a
+/// consented sign-out wiped prefs.
+Future<String?> _currentUserId() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString(internalUserIdPrefsKey);
+}
