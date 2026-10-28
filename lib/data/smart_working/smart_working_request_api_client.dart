@@ -174,16 +174,22 @@ final smartWorkingRequestApiClientProvider = Provider<SmartWorkingRequestApiClie
 /// The caller's own id goes on the wire every time. It is not decoration: with `userId` omitted the
 /// server answers an approve-holder with the whole tenant's requests, and a screen titled "le mie
 /// richieste" must never show those. The id comes from [internalUserIdProvider], which
-/// `EntitlementService.refresh` persists from `/api/Auth/me` — null only before this device has
-/// ever reached the server (or after sign-out), in which case the request goes out unscoped rather
-/// than blocking a screen behind an id that will arrive on the next refresh.
+/// `EntitlementService.refresh` persists from `/api/Auth/me`.
+///
+/// An UNKNOWN id (before this device has ever reached the server, or after sign-out) is not a
+/// licence to ask anyway: an unknown caller cannot be self-scoped, and an omitted `userId` is
+/// "everything" for an approve-holder — so "we do not know who you are" resolves to nothing, never
+/// to everything. The provider answers `[]` and issues no request at all; there is no filter to
+/// apply, and the unscoped answer is the one answer this screen must never display. The id will
+/// arrive on the next entitlement refresh, which re-runs this provider.
 ///
 /// Online-only, unlike [myAbsenceRequestsProvider]: there is no local mirror of this entity, so a
-/// failed or offline read throws and the screen says so. Nothing here may fall back to an empty
-/// list — "you have filed nothing" is a claim this client cannot make offline.
+/// failed or offline read — identity known — throws and the screen says so. An empty list is
+/// reserved for the unknown-id case above; it is never a stand-in for "the server did not answer".
 final mySmartWorkingRequestsProvider = FutureProvider.autoDispose<List<SmartWorkingRequestDto>>((
   ref,
 ) async {
   final userId = await ref.watch(internalUserIdProvider.future);
+  if (userId == null || userId.isEmpty) return const <SmartWorkingRequestDto>[];
   return ref.watch(smartWorkingRequestApiClientProvider).fetchMine(userId: userId);
 });

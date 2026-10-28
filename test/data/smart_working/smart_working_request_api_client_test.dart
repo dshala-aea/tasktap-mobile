@@ -147,9 +147,35 @@ void main() {
       expect(items.single.id, 'sw-1');
     });
 
+    test('unknownUserId_returnsEmpty_andNeverCallsTheApi', () async {
+      // Before the first /auth/me there is no internal id to scope by — and an unscoped GET is
+      // "the whole tenant" for an approve-holder. Nothing goes on the wire at all.
+      final adapter = _Adapter(body: jsonEncode([_row()]));
+      final container = ProviderContainer(
+        overrides: [
+          smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter)),
+          internalUserIdProvider.overrideWith((ref) async => null),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sub = container.listen(mySmartWorkingRequestsProvider, (_, _) {});
+      addTearDown(sub.close);
+
+      final items = await container.read(mySmartWorkingRequestsProvider.future);
+
+      expect(items, isEmpty);
+      expect(
+        adapter.captured,
+        isNull,
+        reason:
+            'an unknown caller cannot be self-scoped: issue no request rather than an unscoped one',
+      );
+    });
+
     test('fetchMine_WithoutAUserId_SendsNoFilter', () async {
-      // The nullable parameter is a deliberate escape hatch (a manager's queue would pass someone
-      // else's id); it is not what the technician's own screen uses.
+      // The nullable parameter is a deliberate escape hatch on the client (a manager's queue would
+      // pass someone else's id); the technician's own screen never takes it — see the provider
+      // test above, which issues no request at all when the caller's id is unknown.
       final adapter = _Adapter(body: jsonEncode(<dynamic>[]));
       await _client(adapter).fetchMine();
 
