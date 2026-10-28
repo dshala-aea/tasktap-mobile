@@ -61,15 +61,20 @@ final effectiveClockInMethodProvider = Provider<String>((ref) {
 
 /// Whether today is an approved smart-working day for the signed-in technician.
 ///
-/// null = unknown (never refreshed, the process restarted, or nobody is signed in). Callers must
-/// fail OPEN on null: unknown must neither hide the punch button nor claim an approved day.
+/// null = unknown (never refreshed, the process restarted, nobody is signed in, or the last answer
+/// belongs to a different user). Callers must fail OPEN on null: unknown must neither hide the punch
+/// button nor claim an approved day.
 ///
-/// In memory only — see `EntitlementRepository.smartWorkingToday`. The auth gate is load-bearing
-/// because of that: memory outlives a sign-out, so without it the next person to sign in on this
-/// device would read the previous user's answer until their own `/auth/me` answered.
+/// The identity gate — not merely the presence of a user — is load-bearing. The flag is
+/// memory-only, so it survives a sign-out (a cold start is the only thing that clears it), and this
+/// device can be a shared van/tablet where the next person belongs to another tenant
+/// (`SessionEnder`'s own class comment). Someone being signed in therefore proves nothing about
+/// whose answer is in hand; the repository records the session that answered and hands it back only
+/// to that same user, so this read is correct by construction, not by invalidating from outside.
 final smartWorkingTodayProvider = Provider<bool?>((ref) {
-  if (ref.watch(authStateProvider).valueOrNull == null) return null;
-  return ref.watch(entitlementRepositoryProvider).smartWorkingToday;
+  final signedIn = ref.watch(authStateProvider).valueOrNull;
+  if (signedIn == null) return null;
+  return ref.watch(entitlementRepositoryProvider).smartWorkingTodayFor(signedIn.id);
 });
 
 /// Fetches `/auth/me`'s entitlement answer now, and invalidates the cache-reading providers only

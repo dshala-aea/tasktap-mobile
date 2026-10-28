@@ -98,10 +98,13 @@ class EntitlementService {
       clockInMethod: clockInMethod,
     );
 
-    // Kept in memory, never persisted (see `EntitlementRepository.smartWorkingToday`): after the
-    // write above, so a failed cache write does not leave the two answers disagreeing. Null when the
+    // Kept in memory, never persisted (see `EntitlementRepository.smartWorkingTodayFor`). Re-checked
+    // immediately before applying rather than trusting the guard above it: an await has happened
+    // since, and an answer for a session that ended in flight must not leave its flag behind either
+    // (refresh() would then return false, so nobody would even be told it moved). Null when the
     // server omitted the key or sent something that is not a bool — unknown, never a guess.
-    _repository.setSmartWorkingToday(smartWorkingToday);
+    if (!_stillCurrent(sessionAtRequest)) return false;
+    _repository.setSmartWorkingToday(smartWorkingToday, ownerId: sessionAtRequest);
 
     // The response's `user.id` is the backend's internal Users.Id (a Guid) — distinct from the
     // OIDC sub that AuthUser.id carries. Persisted separately (not through EntitlementRepository,
