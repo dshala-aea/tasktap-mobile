@@ -60,6 +60,7 @@ import '../../features/admin/reports/admin_report_list_screen.dart';
 import '../../features/admin/reports/admin_report_detail_screen.dart';
 import '../../features/ferie/ferie_permessi_form_screen.dart';
 import '../../features/ferie/ferie_permessi_list_screen.dart';
+import '../../features/smart_working/smart_working_list_screen.dart';
 import '../../features/clienti/clienti_list_screen.dart';
 import '../../features/rapportino/ai_copilot_screen.dart';
 import '../../features/rapportino/ai_report/ai_sign_screen.dart';
@@ -218,6 +219,12 @@ abstract final class AppRoutes {
   /// queue on mobile; that lives only on web, gated behind PresenzeAbsenceApprove.
   static const String altroFerie = '/altro/ferie';
 
+  /// Self-service smart working against `/api/smart-working-requests` — a marker, never hours.
+  ///
+  /// The same `presenze` module as [altroFerie], and deliberately no approval queue: approving
+  /// belongs to the office and lives on web, gated behind PresenzeAbsenceApprove.
+  static const String altroSmartWorking = '/altro/smart-working';
+
   static const String altroClienti = '/altro/clienti';
   static const String altroClientiDetail = '/altro/clienti/:id';
   static const String altroMagazzino = '/altro/magazzino';
@@ -296,7 +303,8 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// (see `PermissionCatalogue.All`'s own comment — "a capability nothing requires governs
 /// nothing"), so there is nothing correct to check.
 ///
-/// The end-user/operational routes (`/ticket`, `/cantieri`, `/altro/rapportini`, `/altro/ferie`)
+/// The end-user/operational routes (`/ticket`, `/cantieri`, `/altro/rapportini`, `/altro/ferie`,
+/// `/altro/smart-working`)
 /// are a different, broader audience — anyone whose tenant has the module, not dispatcher-only —
 /// so those check module entitlement only, matching the web guard's equivalent split.
 ///
@@ -332,6 +340,7 @@ final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, Ro
     const RouteRequirement.capability('clienti.customer.write'),
   ),
   ('/altro/ferie', const RouteRequirement.module('presenze'), null),
+  ('/altro/smart-working', const RouteRequirement.module('presenze'), null),
   ('/ticket', const RouteRequirement.module('interventi'), null),
   ('/cantieri', const RouteRequirement.module('cantieri'), null),
 ];
@@ -729,6 +738,11 @@ GoRouter buildRouter(WidgetRef ref) {
                             const FeriePermessiFormScreen(),
                       ),
                     ],
+                  ),
+                  GoRoute(
+                    path: 'smart-working',
+                    builder: (context, state) =>
+                        const SmartWorkingListScreen(),
                   ),
                   GoRoute(
                     path: 'clienti',
