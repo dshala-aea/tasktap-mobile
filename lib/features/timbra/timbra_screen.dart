@@ -212,6 +212,15 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                       hasOpenShift: shiftState.isOnShift,
                     );
 
+                    // The one state the punch control cannot resolve on its own: an open shift on
+                    // a QrOnly tenant whose day is not a confirmed approved one. The button stays
+                    // (it may still be legal — the server's two-day rule covers a night shift
+                    // opened on an approved day), so the scanner has to stay reachable beside it.
+                    final showQrFallback =
+                        clockInMethod == 'QrOnly' &&
+                        shiftState.isOnShift &&
+                        smartWorking != true;
+
                     final content = <Widget>[
                       _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
                       const SizedBox(height: 24),
@@ -279,6 +288,18 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                             },
                           ),
                         ],
+                      ],
+                      // The button above has to stay while a shift is open (see `hidePunch`), and
+                      // on a QrOnly tenant one refusal it cannot resolve is left: the shift's own
+                      // row day was not an approved remote day. The server judges EndWork against
+                      // both that day and today (`EnsureClockInMethodAllowedAsync` takes the
+                      // candidate days), so a night shift opened on an approved day still closes
+                      // by button — but a cancelled approval on the row's day is refused, and the
+                      // scanner is how that shift gets closed. Hidden on a confirmed approved day,
+                      // where there is nothing to fall back to.
+                      if (showQrFallback) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        const _QrFallbackForOpenShift(),
                       ],
                       const SizedBox(height: AppSpacing.xl),
                     ];
@@ -779,11 +800,53 @@ class _QrRequiredNotice extends StatelessWidget {
           style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
         ),
         const SizedBox(height: AppSpacing.md),
-        AppButton(
-          label: 'Scansiona QR',
-          icon: const Icon(Icons.qr_code_scanner, size: 18),
-          onPressed: () => context.push(AppRoutes.timbraQr),
+        const _ScanQrButton(),
+      ],
+    );
+  }
+}
+
+/// The scanner action both the QrOnly notice and the open-shift fallback below use — one widget, so
+/// the label, the icon and the destination cannot drift between the two places that offer it.
+class _ScanQrButton extends StatelessWidget {
+  const _ScanQrButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppButton(
+      label: 'Scansiona QR',
+      icon: const Icon(Icons.qr_code_scanner, size: 18),
+      onPressed: () => context.push(AppRoutes.timbraQr),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _QrFallbackForOpenShift
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Sits under the punch control while a shift is open on a QrOnly tenant whose day is not a
+/// confirmed approved one.
+///
+/// Why both controls: the button has to stay — the server judges an end-of-shift punch against the
+/// row's own day *and* tenant-local today, so a night shift opened on an approved day is legal
+/// after midnight even when this screen's flag has already rolled over. The QR has to stay
+/// reachable for the one refusal the button cannot resolve: the row day's approval was cancelled.
+/// Without this line the only route to closing such a shift was the tracker row on Home.
+class _QrFallbackForOpenShift extends StatelessWidget {
+  const _QrFallbackForOpenShift();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          'Se il pulsante viene rifiutato, chiudi la giornata con il QR.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
         ),
+        const SizedBox(height: AppSpacing.sm),
+        const _ScanQrButton(),
       ],
     );
   }
