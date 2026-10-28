@@ -165,7 +165,17 @@ class _SmartWorkingRowState extends ConsumerState<_SmartWorkingRow> {
     // A cancelled request can name TODAY, and `smartWorkingTodayProvider` is memory-only: without
     // re-asking `/auth/me` the timbra chip (and Home's punch prompt) would keep claiming an
     // approved remote day the technician just withdrew, until the next app resume. Same helper the
-    // regular entitlement refresh uses, so the two surfaces cannot disagree.
+    // regular entitlement refresh uses, so the two surfaces agree on every path where this row is
+    // still mounted — which is the normal one, since the list keeps cancelled rows and this row's
+    // element survives the refetch.
+    //
+    // The exception is this row's own disposal during the `/auth/me` round trip (the technician
+    // popped the screen): the helper invalidates through this row's `ref`, so its `invalidate`
+    // would throw, and the swallow below would hide that the answer was never refreshed. The chip
+    // is then stale until the next resume — the same tolerated residual as a warm app resumed
+    // across midnight (a stale `true` costs one refused punch with a visible message; a stale
+    // `false` would cost the day's hours, and this path can only produce the former). Fixing it
+    // properly means refreshing off the container rather than a widget ref.
     try {
       await refreshEntitlements(ref);
     } catch (_) {
