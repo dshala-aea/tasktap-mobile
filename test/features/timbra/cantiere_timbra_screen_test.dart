@@ -777,6 +777,46 @@ void main() {
       await _teardown(tester);
     });
 
+    testWidgets('entry_point_visible_for_lead_during_active_shift', (tester) async {
+      await seedCantiere(db);
+      final api = _FakeApiClient(
+        activeLog: _activeLog(),
+        assegnazioni: [CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true)],
+      );
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, currentUser: _testUser, router: badgeRouter()),
+      );
+      // The elapsed ticker never settles: fixed pumps (see the active-session notes above).
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Timbra uscita cantiere'), findsOneWidget);
+      expect(find.text('Scansiona badge'), findsOneWidget);
+      await tester.tap(find.text('Scansiona badge'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('SCANNER cant-1'), findsOneWidget);
+      await _teardown(tester);
+    });
+
+    testWidgets('entry point hidden for a non-lead during an active shift', (tester) async {
+      await seedCantiere(db);
+      final api = _FakeApiClient(
+        activeLog: _activeLog(),
+        assegnazioni: [CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: false)],
+      );
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, currentUser: _testUser, router: badgeRouter()),
+      );
+      // The elapsed ticker never settles: fixed pumps (see the active-session notes above).
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Timbra uscita cantiere'), findsOneWidget);
+      expect(find.text('Scansiona badge'), findsNothing);
+      await _teardown(tester);
+    });
+
     testWidgets('offline: the mirrored crew still makes the technician lead', (tester) async {
       await seedCantiere(db);
       await db

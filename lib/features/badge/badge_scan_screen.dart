@@ -41,6 +41,7 @@ class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final entries = ref.watch(badgeScanControllerProvider(widget.cantiereId));
+    final inFlight = ref.watch(badgeScanInFlightProvider(widget.cantiereId));
     final cantiereName = ref.watch(cantiereByIdProvider(widget.cantiereId)).valueOrNull?.name;
     final source = widget.scanSource ?? _defaultScanSource;
     final height = MediaQuery.sizeOf(context).height;
@@ -72,7 +73,20 @@ class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(
+              height: 32,
+              child: inFlight
+                  ? Semantics(
+                      liveRegion: true,
+                      child: Center(
+                        child: Text(
+                          'Verifica in corso…',
+                          style: AppTextStyles.bodyMedium.copyWith(color: c.inkMuted),
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
             Expanded(
               child: entries.isEmpty
                   ? Center(

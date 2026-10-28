@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:tasktap_mobile/core/scanner/continuous_scan_view.dart';
 import 'package:tasktap_mobile/data/badge/badge_api_client.dart';
 import 'package:tasktap_mobile/data/badge/badge_models.dart';
 import 'package:tasktap_mobile/features/badge/badge_scan_controller.dart';
@@ -107,4 +110,35 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Nessuna connessione — riprova'), findsNWidgets(2));
   });
+
+  testWidgets('shows Verifica in corso while a request is pending', (t) async {
+    final gate = Completer<BadgeScanOutcome>();
+    await t.pumpWidget(app(_GatedApi(gate)));
+    emit('a');
+    await t.pump();
+    expect(find.text('Verifica in corso…'), findsOneWidget);
+    gate.complete(_ok('Mario Rossi', BadgeScanAction.opened));
+    await t.pumpAndSettle();
+    expect(find.text('Verifica in corso…'), findsNothing);
+    expect(find.text('ENTRATA registrata'), findsOneWidget);
+  });
+
+  testWidgets('camera unavailable shows the Italian message and does not crash', (t) async {
+    await t.pumpWidget(const MaterialApp(home: Scaffold(body: ScanUnavailable())));
+    expect(
+      find.text('Impossibile usare la fotocamera — controlla i permessi dell\'app'),
+      findsOneWidget,
+    );
+  });
+}
+
+class _GatedApi extends _FakeApi {
+  _GatedApi(this.gate) : super(const {});
+  final Completer<BadgeScanOutcome> gate;
+  @override
+  Future<BadgeScanOutcome> scan({
+    required String cantiereId,
+    required String token,
+    required String clientScanId,
+  }) => gate.future;
 }

@@ -38,6 +38,31 @@ class _ContinuousScanViewState extends State<ContinuousScanView> {
 
   @override
   Widget build(BuildContext context) {
-    return MobileScanner(controller: _controller, onDetect: _onDetect);
+    return MobileScanner(
+      controller: _controller,
+      onDetect: _onDetect,
+      errorBuilder: (context, error, child) => const ScanUnavailable(),
+    );
+  }
+}
+
+/// Shown instead of the preview when the camera cannot be used (permission denied, no camera).
+class ScanUnavailable extends StatelessWidget {
+  const ScanUnavailable({super.key});
+
+  static const message = 'Impossibile usare la fotocamera — controlla i permessi dell\'app';
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(16),
+      child: const Text(
+        message,
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+      ),
+    );
   }
 }

@@ -1365,11 +1365,7 @@ class _CheckInBody extends ConsumerWidget {
 
           // Lead-only: scan the crew's rotating badge QRs at the cantiere. The server re-checks.
           if (isLead && cantiereId != null) ...[
-            AppButton.secondary(
-              label: 'Scansiona badge',
-              icon: const Icon(LucideIcons.scanLine),
-              onPressed: () => context.push(AppRoutes.cantiereBadgeScanPath(cantiereId!)),
-            ),
+            _ScanBadgeButton(cantiereId: cantiereId!),
             const SizedBox(height: 16),
           ],
 
@@ -1699,6 +1695,12 @@ class _ActiveSessionBody extends ConsumerWidget {
 
           const SizedBox(height: 16),
 
+          // A lead who has clocked in must still be able to scan the crew's badges.
+          if (ref.watch(isLeadForCantiereProvider(local.cantiereId))) ...[
+            _ScanBadgeButton(cantiereId: local.cantiereId),
+            const SizedBox(height: 16),
+          ],
+
           AppButton.danger(
             label: 'Timbra uscita cantiere',
             icon: const Icon(LucideIcons.logOut),
@@ -1706,6 +1708,22 @@ class _ActiveSessionBody extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Lead-only entry to the continuous badge scanner (the server re-checks the lead role).
+class _ScanBadgeButton extends StatelessWidget {
+  const _ScanBadgeButton({required this.cantiereId});
+
+  final String cantiereId;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppButton.secondary(
+      label: 'Scansiona badge',
+      icon: const Icon(LucideIcons.scanLine),
+      onPressed: () => context.push(AppRoutes.cantiereBadgeScanPath(cantiereId)),
     );
   }
 }

@@ -17,6 +17,7 @@ class _FakeApi implements BadgeApiClient {
   final calls = <({String cantiereId, String token, String clientScanId})>[];
   Completer<BadgeScanOutcome>? gate;
   Object? throwOnScan;
+  BadgeScanOutcome reply = _outcome;
 
   @override
   Future<BadgeScanOutcome> scan({
@@ -27,7 +28,7 @@ class _FakeApi implements BadgeApiClient {
     calls.add((cantiereId: cantiereId, token: token, clientScanId: clientScanId));
     if (gate != null) return gate!.future;
     if (throwOnScan != null) throw throwOnScan!;
-    return _outcome;
+    return reply;
   }
 
   @override
@@ -52,19 +53,93 @@ void main() {
       ],
     );
     container.listen(badgeScanControllerProvider('c1'), (_, _) {});
+    container.listen(badgeScanInFlightProvider('c1'), (_, _) {});
   });
   tearDown(() => container.dispose());
 
+  Future<void> at(int ms, String code) async {
+    now = DateTime.utc(2026, 10, 28, 8).add(Duration(milliseconds: ms));
+    await ctl().onCode(code);
+  }
+
   test('same_code_in_frame_sends_one_request', () async {
-    await ctl().onCode('tok-A');
-    now = now.add(const Duration(seconds: 1));
-    await ctl().onCode('tok-A');
+    await at(0, 'tok-A');
+    await at(1000, 'tok-A');
     expect(api.calls, hasLength(1));
     expect(entries(), hasLength(1));
-    // After the window the same code is handled again.
-    now = now.add(const Duration(seconds: 3));
-    await ctl().onCode('tok-A');
+  });
+
+  test('lingering_code_after_success_sends_one_request', () async {
+    await at(0, 'tok-A');
+    await at(3000, 'tok-A');
+    await at(30000, 'tok-A');
+    await at(69999, 'tok-A');
+    expect(api.calls, hasLength(1));
+    expect(entries(), hasLength(1));
+  });
+
+  test('alternating_a_b_a_sends_two_requests', () async {
+    await at(0, 'tok-A');
+    await at(500, 'tok-B');
+    await at(1000, 'tok-A');
+    expect(api.calls.map((c) => c.token), ['tok-A', 'tok-B']);
+  });
+
+  test('failed_offline_attempt_retries_after_window', () async {
+    api.throwOnScan = const BadgeApiException(message: 'n', offline: true);
+    await at(0, 'tok-A');
+    await at(2999, 'tok-A');
+    expect(api.calls, hasLength(1), reason: 'just under the 3s window');
+    await at(3000, 'tok-A');
+    expect(api.calls, hasLength(2), reason: 'at the 3s boundary');
+  });
+
+  test('5xx and unexpected failures are retryable, 4xx answers are not', () async {
+    api.throwOnScan = const BadgeApiException(statusCode: 500, message: 's');
+    await at(0, 'tok-A');
+    await at(3000, 'tok-A');
     expect(api.calls, hasLength(2));
+    api.throwOnScan = StateError('x');
+    await at(0, 'tok-B');
+    await at(3000, 'tok-B');
+    expect(api.calls, hasLength(4));
+    api.throwOnScan = const BadgeApiException(statusCode: 403, code: 'NotLead', message: 'n');
+    await at(0, 'tok-C');
+    await at(10000, 'tok-C');
+    expect(api.calls, hasLength(5));
+  });
+
+  test('rejected_result_is_not_resent_within_token_life', () async {
+    api.reply = const BadgeScanOutcome(
+      result: BadgeScanResult.replayed,
+      action: BadgeScanAction.none,
+    );
+    await at(0, 'tok-A');
+    await at(5000, 'tok-A');
+    await at(60000, 'tok-A');
+    expect(api.calls, hasLength(1));
+  });
+
+  test('code_resent_after_token_life', () async {
+    await at(0, 'tok-A');
+    await at(70000, 'tok-A');
+    expect(api.calls, hasLength(2));
+  });
+
+  test('the handled map is pruned and keeps no raw token', () async {
+    await at(0, 'tok-A');
+    await at(71000, 'tok-B');
+    await at(72000, 'tok-A');
+    expect(api.calls, hasLength(3));
+  });
+
+  test('in-flight flag is reactive', () async {
+    api.gate = Completer<BadgeScanOutcome>();
+    final f = ctl().onCode('tok-A');
+    expect(container.read(badgeScanInFlightProvider('c1')), isTrue);
+    api.gate!.complete(_outcome);
+    await f;
+    expect(container.read(badgeScanInFlightProvider('c1')), isFalse);
   });
 
   test('next_code_scans_without_reopening', () async {
@@ -120,7 +195,7 @@ void main() {
     api.throwOnScan = TypeError();
     await ctl().onCode('tok-A');
     final e = entries().single;
-    expect(e.unexpectedError, isA<TypeError>());
+    expect(e.unexpectedError, 'TypeError');
     expect(e.outcome, isNull);
     expect(e.error, isNull);
     // The controller is not wedged: the next code still scans.

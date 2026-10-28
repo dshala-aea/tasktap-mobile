@@ -106,7 +106,7 @@ void main() {
   testWidgets('a 500 and an unexpected error render a generic non-success entry', (t) async {
     await _pump(t, BadgeScanEntry.failure(_at, const BadgeApiException(statusCode: 500, message: 's')));
     expect(find.text('Scansione non riuscita — riprova'), findsOneWidget);
-    await _pump(t, BadgeScanEntry.unexpected(_at, StateError('bad body')));
+    await _pump(t, BadgeScanEntry.unexpected(_at, 'StateError'));
     expect(find.text('Scansione non riuscita — riprova'), findsOneWidget);
     expect(find.byKey(const ValueKey('badge-scan-card-success')), findsNothing);
   });
