@@ -69,11 +69,17 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
   /// it was built around "past" — and a test that seeds its dates from the day it started must not
   /// flip on a midnight straddle. A form genuinely left open across midnight is settled by the
   /// server, whose `detail` reaches the technician verbatim (see [_rangeError]).
-  late final DateTime _openedOn = _today;
+  ///
+  /// Assigned unconditionally in [initState], not as a `late` field initialiser: a `late` field is
+  /// forced at its FIRST READ, which is `initState` only when no seeded date is passed — with the
+  /// test seam it would be read at submit instead, and "captured at open" would be false in exactly
+  /// the case the sentence above exists for.
+  late final DateTime _openedOn;
 
   @override
   void initState() {
     super.initState();
+    _openedOn = _today;
     _startDate = _dayOnly(widget.initialStartDate ?? _openedOn);
     _endDate = _dayOnly(widget.initialEndDate ?? _startDate);
   }
@@ -271,6 +277,9 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
             // length-check it, so anything longer comes back as a 500 the form can only report as
             // "riprova" — a retry that can never succeed. Cap it at the source instead.
             maxLength: 1000,
+            // No character counter: no other field in the app shows one, and a permanent "0/1000"
+            // under an optional note is noise. The cap still applies.
+            counterText: '',
           ),
           const SizedBox(height: 32),
           AppButton(

@@ -304,6 +304,10 @@ void main() {
     await tester.tap(find.text('Invia richiesta'));
     await tester.pumpAndSettle();
 
+    // The round trip really happened: the same sentence is also what the client's own rule 3
+    // emits, so without this the test would pass even if the local check fired first and the
+    // catch branch never ran.
+    expect(fake.creates, hasLength(1));
     expect(find.text(detail), findsOneWidget);
     expect(find.text('Impossibile inviare la richiesta. Riprova.'), findsNothing);
   });
