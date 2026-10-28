@@ -192,10 +192,10 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                     //   • QrOnly notice → ~84, where the punch button it replaces is 76;
                     //   • a shift open on a QrOnly day that is not confirmed approved → the
                     //     scanner fallback under the controls: 12 gap + a one-or-two-line 12px
-                    //     caption + 8 + a 48 AppButton ≈ 104, *on top of* the pause button
-                    //     (12 + 48) the open shift already adds.
-                    // The largest arrangement is therefore punch + pause + fallback ≈ 252dp of
-                    // controls, well inside the 640 budget below — and the largest that can be
+                    //     caption (~17/line) + 8 + a 44-tall AppButton, so ≈ 98 with two lines —
+                    //     *on top of* the pause button (12 gap + its own 64) the open shift adds.
+                    // The largest arrangement is therefore punch 76 + pause 76 + fallback ≈ 98 ≈
+                    // 250dp of controls, well inside the 640 budget below — and the largest that can be
                     // drawn at all, since the chip and the notice each need an answer the fallback
                     // rules out. The fixed-layout tests pin that at 390×844, the height a tall phone
                     // actually gives this box: once with the chip, once with an open shift and the

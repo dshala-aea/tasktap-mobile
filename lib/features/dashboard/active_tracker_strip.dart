@@ -61,10 +61,12 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// offer.
 ///
 /// On an *approved* smart-working day the server relaxes that gate
-/// (`WorkLogService.EnsureClockInMethodAllowedAsync`), so the row gets its Pausa/Ferma back. A
-/// running day must always keep a control that finishes it — see [isButtonPunchWithheld] — and the
-/// decision is that function's, never a local `== 'QrOnly'`, so this row and Home's prompt cannot
-/// drift apart.
+/// (`WorkLogService.EnsureClockInMethodAllowedAsync`), so the row gets its Pausa/Ferma back. An
+/// *unknown* answer — no `/auth/me` yet, a cold start, a body without the field — keeps them too:
+/// only an explicit "not approved today" withholds a button punch ([isButtonPunchWithheld]), and a
+/// stale `true` costs one refused punch while a stale `false` costs the day's hours. A running day
+/// must always keep a control that finishes it — see the same function — and the decision is that
+/// function's, never a local `== 'QrOnly'`, so this row and Home's prompt cannot drift apart.
 class ActiveTrackerStrip extends ConsumerWidget {
   const ActiveTrackerStrip({super.key, required this.trackers});
 
