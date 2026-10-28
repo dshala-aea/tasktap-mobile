@@ -51,7 +51,15 @@ class BadgeApiClient {
   /// The caller's badge with a fresh token. Each call rotates the token.
   Future<BadgeCard> getMyBadge() async {
     try {
-      final r = await _dio.get<Map<String, dynamic>>('/api/badge/me');
+      final r = await _dio.get<Map<String, dynamic>>(
+        '/api/badge/me',
+        // A badge fetch that takes longer than this is no use: the token it returns would
+        // already be near the end of its life.
+        options: Options(
+          sendTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
       return BadgeCard.fromJson(r.data!);
     } on DioException catch (e) {
       throw _map(e);

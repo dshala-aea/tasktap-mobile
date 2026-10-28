@@ -20,14 +20,14 @@ import 'package:tasktap_mobile/features/badge/badge_providers.dart';
 import 'package:tasktap_mobile/features/badge/my_badge_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
-BadgeCard _card(String token, {String? photoUrl}) => BadgeCard(
+BadgeCard _card(String token, {String? photoUrl, String status = 'Active'}) => BadgeCard(
   badgeId: 'b1',
   token: token,
   expiresInSeconds: 60,
   displayName: 'Mario Rossi',
   photoUrl: photoUrl,
   employerName: 'Edilizia Bianchi Srl',
-  status: 'Attivo',
+  status: status,
 );
 
 /// Hands out queued results one per call; the last one repeats.
@@ -136,6 +136,7 @@ void main() {
     expect(find.text('Mario Rossi'), findsOneWidget);
     expect(find.text('Edilizia Bianchi Srl'), findsOneWidget);
     expect(find.text('Attivo'), findsOneWidget);
+    expect(find.text('Active'), findsNothing);
     expect(find.byKey(const ValueKey('badge-photo')), findsOneWidget);
     expect(qrData(tester), 'tok-1');
     // The code sits on a white card whatever the theme.
@@ -181,18 +182,30 @@ void main() {
 
   group('offline_hides_qr_and_shows_offline_notice', () {
     const offlineText = 'Nessuna connessione — il badge richiede il segnale. Riprova';
+    const errorText = 'Impossibile aggiornare il badge. Riprova.';
 
     for (final entry in <String, Object>{
       'connection error': const BadgeApiException(message: 'net', offline: true),
       '503': const BadgeApiException(statusCode: 503, message: 'down'),
-      'malformed body (TypeError)': TypeError(),
-      'empty body (StateError)': StateError('empty'),
     }.entries) {
       testWidgets(entry.key, (tester) async {
         await pumpScreen(tester, _FakeBadgeApi([entry.value]));
         expect(find.text(offlineText), findsOneWidget);
-        expect(find.widgetWithText(ElevatedButton, 'Riprova').evaluate().isNotEmpty ||
-            find.text('Riprova').evaluate().isNotEmpty, isTrue);
+        expect(find.text('Riprova'), findsOneWidget);
+        expect(find.byType(QrImageView), findsNothing);
+      });
+    }
+
+    for (final entry in <String, Object>{
+      '400': const BadgeApiException(statusCode: 400, message: 'bad'),
+      'malformed body (TypeError)': TypeError(),
+      'empty body (StateError)': StateError('empty'),
+    }.entries) {
+      testWidgets('non-network: ${entry.key}', (tester) async {
+        await pumpScreen(tester, _FakeBadgeApi([entry.value]));
+        expect(find.text(errorText), findsOneWidget);
+        expect(find.textContaining('Nessuna connessione'), findsNothing);
+        expect(find.text('Riprova'), findsOneWidget);
         expect(find.byType(QrImageView), findsNothing);
       });
     }
@@ -273,6 +286,83 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(qrData(tester), 'tok-2');
+  });
+
+  testWidgets('unknown status is hidden, never shown in English', (tester) async {
+    await pumpScreen(tester, _FakeBadgeApi([_card('t', status: 'Suspended')]));
+    expect(find.text('Suspended'), findsNothing);
+    expect(find.text('Attivo'), findsNothing);
+    expect(qrData(tester), 't');
+  });
+
+  testWidgets('pending_refresh_past_expiry_hides_qr', (tester) async {
+    final api = _FakeBadgeApi([_card('tok-1')]); // expiresInSeconds 60 -> hidden at 55s
+    await pumpScreen(tester, api);
+    expect(qrData(tester), 'tok-1');
+
+    api.gate = Completer<BadgeCard>(); // the 25s refresh never completes
+    await tester.pump(_interval);
+    await tester.pump();
+    expect(api.calls, 2);
+    expect(qrData(tester), 'tok-1'); // still inside its life
+    await tester.pump(const Duration(seconds: 29));
+    expect(qrData(tester), 'tok-1');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(qrData(tester), isNull);
+    expect(find.text('Aggiornamento del badge…'), findsOneWidget);
+
+    // A late answer still wins.
+    api.gate!.complete(_card('tok-2'));
+    await tester.pump();
+    await tester.pump();
+    expect(qrData(tester), 'tok-2');
+  });
+
+  testWidgets('pause during an in-flight fetch drops the response', (tester) async {
+    final api = _FakeBadgeApi([_card('tok-old'), _card('tok-fresh')]);
+    await pumpScreen(tester, api);
+    final stale = Completer<BadgeCard>();
+    api.gate = stale;
+    await tester.pump(_interval);
+    await tester.pump();
+    expect(api.calls, 2);
+
+    await background(tester);
+    stale.complete(_card('tok-stale'));
+    await tester.pump();
+
+    api.gate = null;
+    await foreground(tester);
+    await tester.pump();
+    await tester.pump();
+    expect(qrData(tester), 'tok-fresh');
+    expect(api.calls, 3);
+  });
+
+  testWidgets('a response arriving after dispose is ignored', (tester) async {
+    final api = _FakeBadgeApi([_card('tok-1')]);
+    api.gate = Completer<BadgeCard>();
+    await pumpScreen(tester, api);
+    expect(api.calls, 1);
+    await tester.pumpWidget(const SizedBox());
+    api.gate!.complete(_card('late'));
+    await tester.pump();
+    await tester.pump(_interval * 3);
+    expect(tester.takeException(), isNull);
+    expect(api.calls, 1);
+  });
+
+  testWidgets('resume after revoked does not refetch', (tester) async {
+    final api = _FakeBadgeApi([
+      const BadgeApiException(statusCode: 409, code: 'badge_revoked', message: 'x'),
+    ]);
+    await pumpScreen(tester, api);
+    await background(tester);
+    await foreground(tester);
+    await tester.pump();
+    expect(api.calls, 1);
+    expect(find.text('Badge disattivato — contatta l\'ufficio'), findsOneWidget);
   });
 
   testWidgets('uses_semantics_for_status', (tester) async {

@@ -61,6 +61,10 @@ class BadgeError extends BadgeViewState {
 /// lifetime; overridden in tests.
 final badgeRefreshIntervalProvider = Provider<Duration>((ref) => const Duration(seconds: 25));
 
+/// How long before the token's server-side expiry a shown QR is pulled from the screen if no
+/// fresh one has arrived (a refresh may be stuck on a slow network). Overridden in tests.
+final badgeExpiryMarginProvider = Provider<Duration>((ref) => const Duration(seconds: 5));
+
 /// Keeps the screen awake while the badge is on display. A seam because the plugin has no
 /// platform in widget tests; every call swallows platform errors so a missing channel can never
 /// take the screen down.
@@ -88,6 +92,7 @@ final badgeWakelockProvider = Provider<BadgeWakelock>((ref) => const BadgeWakelo
 
 class BadgeController extends AutoDisposeNotifier<BadgeViewState> {
   Timer? _timer;
+  Timer? _expiryTimer;
   _LifecycleObserver? _observer;
   bool _disposed = false;
   bool _paused = false;
@@ -106,6 +111,8 @@ class BadgeController extends AutoDisposeNotifier<BadgeViewState> {
       _generation++;
       _timer?.cancel();
       _timer = null;
+      _expiryTimer?.cancel();
+      _expiryTimer = null;
       final o = _observer;
       if (o != null) WidgetsBinding.instance.removeObserver(o);
     });
@@ -123,7 +130,9 @@ class BadgeController extends AutoDisposeNotifier<BadgeViewState> {
     final gen = ++_generation;
     _timer?.cancel();
     _timer = null;
-    if (showLoading) state = const BadgeLoading();
+    // A silent refresh deliberately leaves the expiry timer running: if the response is slow the
+    // old QR must still be pulled before its token dies.
+    if (showLoading) _setState(const BadgeLoading());
 
     BadgeViewState next;
     try {
@@ -145,10 +154,27 @@ class BadgeController extends AutoDisposeNotifier<BadgeViewState> {
     }
 
     if (_disposed || gen != _generation) return;
-    state = next;
+    _setState(next);
     // Revoked / inactive are final: polling would only hammer the server with a doomed call.
     if (next is BadgeRevoked || next is BadgeInactive) return;
     _startTimer();
+  }
+
+  /// Every state write goes through here so the expiry timer always matches the current state.
+  void _setState(BadgeViewState next) {
+    _expiryTimer?.cancel();
+    _expiryTimer = null;
+    state = next;
+    if (next is BadgeReady) {
+      final margin = ref.read(badgeExpiryMarginProvider);
+      final life = Duration(seconds: next.card.expiresInSeconds) - margin;
+      final after = life < const Duration(seconds: 5) ? const Duration(seconds: 5) : life;
+      _expiryTimer = Timer(after, () {
+        if (_disposed || !identical(state, next)) return;
+        // The token is about to die and nothing fresher arrived: never show it.
+        state = const BadgeLoading();
+      });
+    }
   }
 
   static bool _isGatewayStatus(int? s) => s != null && s >= 500;
@@ -171,10 +197,12 @@ class BadgeController extends AutoDisposeNotifier<BadgeViewState> {
         _generation++;
         _timer?.cancel();
         _timer = null;
+        _expiryTimer?.cancel();
+        _expiryTimer = null;
         // Hide the code now: whatever comes back from the foreground must be a fresh one.
         final cur = state;
         if (cur is BadgeReady || cur is BadgeOffline || cur is BadgeError) {
-          state = const BadgeLoading();
+          _setState(const BadgeLoading());
         }
       case AppLifecycleState.resumed:
         if (!_paused) return;

@@ -38,6 +38,22 @@ class _Adapter implements HttpClientAdapter {
 BadgeApiClient _client(_Adapter a) => BadgeApiClient(Dio()..httpClientAdapter = a);
 
 void main() {
+  test('getMyBadge_SetsShortPerRequestTimeouts', () async {
+    final a = _Adapter(
+      body: jsonEncode({
+        'badgeId': 'b',
+        'token': 't',
+        'expiresInSeconds': 60,
+        'displayName': 'n',
+        'employerName': 'e',
+        'status': 'Active',
+      }),
+    );
+    await _client(a).getMyBadge();
+    expect(a.captured!.receiveTimeout, const Duration(seconds: 10));
+    expect(a.captured!.sendTimeout, const Duration(seconds: 10));
+  });
+
   test('getMyBadge_409_BadgeRevoked_IsRevoked', () async {
     final c = _client(
       _Adapter(status: 409, body: jsonEncode({'code': 'badge_revoked', 'detail': 'revoked'})),

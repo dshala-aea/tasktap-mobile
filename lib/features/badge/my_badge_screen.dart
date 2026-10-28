@@ -60,7 +60,7 @@ class _MyBadgeScreenState extends ConsumerState<MyBadgeScreen> {
                 child: switch (state) {
                   BadgeReady(:final card) => _ReadyView(card: card, maxQr: _maxQr),
                   BadgeLoading() => const _MessageView(
-                    message: 'Carico il badge…',
+                    message: 'Aggiornamento del badge…',
                     loading: true,
                   ),
                   BadgeRevoked() => const _MessageView(
@@ -69,8 +69,12 @@ class _MyBadgeScreenState extends ConsumerState<MyBadgeScreen> {
                   BadgeInactive() => const _MessageView(
                     message: 'Account disattivato — contatta l\'ufficio',
                   ),
-                  BadgeOffline() || BadgeError() => _MessageView(
+                  BadgeOffline() => _MessageView(
                     message: 'Nessuna connessione — il badge richiede il segnale. Riprova',
+                    onRetry: () => ref.read(badgeControllerProvider.notifier).refresh(),
+                  ),
+                  BadgeError() => _MessageView(
+                    message: 'Impossibile aggiornare il badge. Riprova.',
                     onRetry: () => ref.read(badgeControllerProvider.notifier).refresh(),
                   ),
                 },
@@ -82,6 +86,14 @@ class _MyBadgeScreenState extends ConsumerState<MyBadgeScreen> {
     );
   }
 }
+
+/// Server status (English enum name) -> Italian label. Unknown values return null and the status
+/// text is hidden rather than leaking an English word. Add new members here.
+const _statusLabels = <String, String>{'active': 'Attivo'};
+
+String? statusLabel(String status) => _statusLabels[status.trim().toLowerCase()];
+
+bool isActiveStatus(String status) => status.trim().toLowerCase() == 'active';
 
 class _ReadyView extends StatelessWidget {
   const _ReadyView({required this.card, required this.maxQr});
@@ -126,16 +138,20 @@ class _ReadyView extends StatelessWidget {
           },
         ),
         const SizedBox(height: AppSpacing.base),
-        Semantics(
-          liveRegion: true,
-          container: true,
-          child: Text(
-            card.status,
-            style: AppTextStyles.titleMedium.copyWith(color: c.green),
-            textAlign: TextAlign.center,
+        if (statusLabel(card.status) != null) ...[
+          Semantics(
+            liveRegion: true,
+            container: true,
+            child: Text(
+              statusLabel(card.status)!,
+              style: AppTextStyles.titleMedium.copyWith(
+                color: isActiveStatus(card.status) ? c.green : c.ink,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
-        ),
-        const SizedBox(height: AppSpacing.xs),
+          const SizedBox(height: AppSpacing.xs),
+        ],
         Text(
           'Mostra questo codice al caposquadra',
           style: AppTextStyles.bodySmall.copyWith(color: c.inkMuted),
@@ -204,6 +220,8 @@ class _Avatar extends StatelessWidget {
       ),
     );
     final url = photoUrl;
+    // `User.PhotoUrl` is a free string set by the admin/client (no upload endpoint, no API path),
+    // so it is an external public URL: plain Image.network, initials when it fails.
     return ClipOval(
       child: url == null || url.isEmpty
           ? placeholder
@@ -241,6 +259,7 @@ class BadgeQrCode extends StatelessWidget {
       data: data,
       size: size,
       version: QrVersions.auto,
+      errorCorrectionLevel: QrErrorCorrectLevel.M,
       backgroundColor: Colors.white,
       eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
       dataModuleStyle: const QrDataModuleStyle(
