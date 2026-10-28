@@ -401,6 +401,8 @@ class DeepLinkIntent {
       'Cantiere' => AppRoutes.cantieriDetailPath(entityId),
       // No per-request detail screen exists; the list is where the decision is visible.
       'AbsenceRequest' => AppRoutes.altroFerie,
+      // Same shape: no detail screen, so the request id is not part of the route.
+      'SmartWorkingRequest' => AppRoutes.altroSmartWorking,
       // WorkLog, ProdottoAssistenza, User, Magazzino, Tenant, License: admin-side, no mobile screen.
       _ => kNotificationTypeRoutes[entityType],
     };
