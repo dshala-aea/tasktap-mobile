@@ -459,30 +459,9 @@ void main() {
   // authorization on both the button and kiosk-QR clock-in endpoints.
 
   group('clock-in method gating', () {
-    testWidgets('shows a QR-required message instead of the punch button when method is qrOnly', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _buildApp(
-          db,
-          extraOverrides: [
-            effectiveClockInMethodProvider.overrideWithValue('QrOnly'),
-            // Only an explicit `false` hides the button now — an unknown flag fails open, so a
-            // QrOnly tenant is not enough on its own. The unknown case is pinned by
-            // smart_working_chip_test.dart.
-            smartWorkingTodayProvider.overrideWithValue(false),
-          ],
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(find.text('INIZIA TURNO'), findsNothing);
-      expect(find.text('FINE TURNO'), findsNothing);
-      expect(find.text('La tua azienda richiede la timbratura con QR.'), findsOneWidget);
-      expect(find.text('Scansiona QR'), findsOneWidget);
-
-      await _teardownTimer(tester);
-    });
+    // The QrOnly case moved to smart_working_chip_test.dart when the button became conditional on
+    // the smart-working flag too: the method alone no longer decides, so its assertions live
+    // beside the flag's own, in one place.
 
     testWidgets('hides the header QR icon when method is buttonOnly', (tester) async {
       await tester.pumpWidget(

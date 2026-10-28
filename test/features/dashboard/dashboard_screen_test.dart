@@ -16,6 +16,7 @@ import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/features/dashboard/id_plate_hero_comp.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart'
     show internalUserIdPrefsKey;
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -77,6 +78,7 @@ Widget _buildDashboardWithRouter({
   required AppDatabase db,
   required MockAuthRepository repo,
   required GoRouter router,
+  List<Override> extraOverrides = const [],
 }) {
   return ProviderScope(
     overrides: [
@@ -84,6 +86,7 @@ Widget _buildDashboardWithRouter({
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(MockDio()),
       locationServiceProvider.overrideWithValue(const DisabledLocationService()),
+      ...extraOverrides,
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -310,6 +313,69 @@ void main() {
       expect(find.byType(ActiveTrackerStrip), findsNothing);
       expect(find.textContaining('attiv'), findsNothing);
       expect(find.text('Timbra ingresso'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    // ── Smart working on the idle prompt ──────────────────────────────────────
+    //
+    // The hero's one slot starts work, so it reads the shared rule's `startOnly` surface: the
+    // scanner is an equally legal one-tap alternative on a QrOnly tenant, and only a confirmed
+    // approved day earns the punch. (The timbra panel fails open on an unknown answer because its
+    // button also ends the shift; see isButtonPunchWithheld.)
+
+    testWidgets('QrOnly on an approved smart-working day offers the punch, not the scanner', (
+      tester,
+    ) async {
+      final router = _makeQuickActionRouter();
+      await tester.pumpWidget(
+        _buildDashboardWithRouter(
+          db: db,
+          repo: repo,
+          router: router,
+          extraOverrides: [
+            effectiveClockInMethodProvider.overrideWithValue('QrOnly'),
+            smartWorkingTodayProvider.overrideWithValue(true),
+          ],
+        ),
+      );
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.text('Timbra ingresso'), findsOneWidget);
+      expect(
+        find.text('Timbra con QR'),
+        findsNothing,
+        reason: 'an approved remote worker has no totem to scan at',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('QrOnly with an unknown smart-working answer keeps the prompt on the scanner', (
+      tester,
+    ) async {
+      final router = _makeQuickActionRouter();
+      await tester.pumpWidget(
+        _buildDashboardWithRouter(
+          db: db,
+          repo: repo,
+          router: router,
+          extraOverrides: [
+            effectiveClockInMethodProvider.overrideWithValue('QrOnly'),
+            smartWorkingTodayProvider.overrideWithValue(null),
+          ],
+        ),
+      );
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.text('Timbra ingresso'), findsNothing);
+      expect(find.text('Timbra con QR'), findsOneWidget);
+
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

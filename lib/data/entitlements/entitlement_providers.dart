@@ -77,6 +77,50 @@ final smartWorkingTodayProvider = Provider<bool?>((ref) {
   return ref.watch(entitlementRepositoryProvider).smartWorkingTodayFor(signedIn.id);
 });
 
+/// What the button punch being drawn is used for on the surface asking.
+///
+/// Only the *finishing* half differs between surfaces — see [isButtonPunchWithheld].
+enum ButtonPunchSurface {
+  /// A control that only ever starts work, in a slot that can offer the kiosk scanner instead:
+  /// Home's idle prompt and the tracker row's action. Withheld unless the day is a confirmed
+  /// approved one. On a QrOnly tenant the scanner is always legal, so an unknown answer costs the
+  /// technician nothing here — one tap either way.
+  startOnly,
+
+  /// The timbra control panel, where the same button ends the shift as well as starting it.
+  /// Withheld only on an explicit non-approved answer with nothing open.
+  startOrFinish,
+}
+
+/// Whether the button punch must give way to the kiosk scanner right now.
+///
+/// The one place this is decided, so Home's prompt, the tracker row and the timbra panel cannot
+/// drift apart. The server relaxes a QrOnly tenant's gate for an approved smart-working day and for
+/// nothing else (`WorkLogService.EnsureClockInMethodAllowedAsync`), so `true` is relief — never
+/// `null`, which merely says nobody has answered yet (cold start, signed out, a different user,
+/// before /auth/me).
+///
+/// [ButtonPunchSurface.startOnly] withholds on anything short of a confirmed approved day.
+/// [ButtonPunchSurface.startOrFinish] withholds only when the answer is an explicit `false` *and*
+/// nothing is open: **the flag may remove a way to START something, never a way to finish it.** A
+/// mid-shift approval revocation (or a night shift crossing the business-day rollover) must not
+/// leave an open shift with no control to pause or end it, and an unknown answer must not leave the
+/// technician at a screen with no button at all — a stale `true` would be a lie, a stale `false`
+/// would strand the person this feature exists for.
+bool isButtonPunchWithheld({
+  required ButtonPunchSurface surface,
+  required String clockInMethod,
+  required bool? smartWorkingToday,
+  required bool hasOpenShift,
+}) {
+  if (smartWorkingToday == true) return false;
+  if (clockInMethod != 'QrOnly') return false;
+  return switch (surface) {
+    ButtonPunchSurface.startOnly => true,
+    ButtonPunchSurface.startOrFinish => smartWorkingToday == false && !hasOpenShift,
+  };
+}
+
 /// Fetches `/auth/me`'s entitlement answer now, and invalidates the cache-reading providers only
 /// on a real change — a failed refresh must not churn the UI into re-reading a cache that did not
 /// move.

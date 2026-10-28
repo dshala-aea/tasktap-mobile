@@ -227,12 +227,23 @@ class _ClockInPrompt extends ConsumerWidget {
     final punchState = ref.watch(punchNotifierProvider);
     final busy = punchState.isLoading;
 
-    // QrOnly: the tenant (or this user's override) requires a kiosk scan, and the server refuses
-    // a button punch outright (WorkLogService.EnsureClockInMethodAllowedAsync). Offering "Timbra
-    // ingresso" here would be a CTA whose only outcome is a refused request — the same defect
-    // TimbraScreen's own _QrRequiredNotice exists to avoid. Same primary-action language, same
-    // destination; the punch path below is simply unreachable.
-    if (ref.watch(effectiveClockInMethodProvider) == 'QrOnly') {
+    // QrOnly: the tenant (or this user's override) requires a kiosk scan, and the server refuses a
+    // button punch outright (WorkLogService.EnsureClockInMethodAllowedAsync) — unless today is an
+    // approved smart-working day, which is the one case that gate relaxes for and exactly when the
+    // technician has no totem to reach. Offering "Timbra ingresso" on any other day would be a CTA
+    // whose only outcome is a refused request.
+    //
+    // The rule itself is [isButtonPunchWithheld]'s, not a local copy: this slot starts work only and
+    // can always offer the scanner instead, so it is the `startOnly` surface — withheld unless the
+    // day is confirmed approved, which keeps an unknown answer on the scanner here. (The timbra
+    // panel fails open on unknown because its one button also ends the shift; see that enum.)
+    final withheld = isButtonPunchWithheld(
+      surface: ButtonPunchSurface.startOnly,
+      clockInMethod: ref.watch(effectiveClockInMethodProvider),
+      smartWorkingToday: ref.watch(smartWorkingTodayProvider),
+      hasOpenShift: false,
+    );
+    if (withheld) {
       return AppCard(
         padding: EdgeInsets.zero,
         backgroundColor: AppColors.Y,

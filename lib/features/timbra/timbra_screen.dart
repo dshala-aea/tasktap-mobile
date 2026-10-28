@@ -185,19 +185,32 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                     // about, so a screen that just fits would overflow the session card below it.
                     // With rejections present the page scrolls instead — the notice is the one
                     // thing here that must never be clipped.
+                    //
+                    // The controls themselves are not a fixed height either: an approved
+                    // smart-working day adds the chip (~26dp + a 12dp gap), and the QrOnly notice
+                    // stands about 84dp where the punch button it replaces is 76. That slack is
+                    // inside the 640 budget below — the chip-on-a-real-viewport test pins the
+                    // fixed branch with both present, at the height a tall phone actually gives
+                    // this box.
                     final fits = constraints.maxHeight >= _kFixedLayoutMinHeight && rejected.isEmpty;
                     final punchGuard = ref.watch(punchGuardProvider);
                     final clockDisagreement = ref.watch(timbraClockDisagreementProvider);
                     final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
-                    // Only an explicit `false` may take the button punch away. The flag is `null`
-                    // whenever nothing can be known — a cold start, nobody signed in, the last
-                    // answer belonging to a different user, or /auth/me not having answered yet.
-                    // Unknown must not be read as "not approved": a stale `true` would be a lie,
+                    // The one shared rule (entitlement_providers.dart's isButtonPunchWithheld): a
+                    // QrOnly tenant may only withhold the button on an explicit `false`, and never
+                    // while the shift is open — the flag may remove a way to START work, never a
+                    // way to finish it. An unknown answer (cold start, signed out, another user,
+                    // /auth/me not back yet) keeps the button too: a stale `true` would be a lie,
                     // but a stale `false` would strand exactly the technician this feature exists
-                    // for — on site, expected by the office, and unable to clock in. So the button
-                    // stays; the chip is the only thing that needs a positive answer.
-                    final hidePunch = clockInMethod == 'QrOnly' && smartWorking == false;
+                    // for. See the chip below, which needs a positive answer where the button does
+                    // not.
+                    final hidePunch = isButtonPunchWithheld(
+                      surface: ButtonPunchSurface.startOrFinish,
+                      clockInMethod: clockInMethod,
+                      smartWorkingToday: smartWorking,
+                      hasOpenShift: shiftState.isOnShift,
+                    );
 
                     final content = <Widget>[
                       _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
@@ -692,13 +705,16 @@ class _RejectedPunchRow extends ConsumerWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Pill for an approved smart-working day — rendered only for [smartWorkingTodayProvider]'s
-/// `true`, never for `null`. See the `hidePunch` predicate in the screen body for why an unknown
-/// answer may not be treated as "not approved".
+/// `true`, never for `null`. See [isButtonPunchWithheld] for why an unknown answer may not be
+/// treated as "not approved".
 ///
-/// Same pill language [_HeroStatus]'s state badge already uses (rounded-full, tint-on-tint, small
-/// caps type), in the positive half of [_GuardBanner]'s pair: `statusGood`/`statusGoodBg` instead
-/// of `statusWarn`/`statusWarnBg`. Nothing is wrong today — the technician is simply not expected
-/// on site, and that is what this says.
+/// Same pill language [_HeroStatus]'s state badge already uses (rounded-full, tint-on-tint, Archivo
+/// 11 w700 with a touch of tracking, sentence case), in the positive half of [_GuardBanner]'s pair:
+/// `statusGood`/`statusGoodBg` instead of `statusWarn`/`statusWarnBg`. Nothing is wrong today — the
+/// technician is simply not expected on site, and that is what this says.
+///
+/// `liveRegion`, like the state badge above it: /auth/me is re-read on every resume, so an approval
+/// that lands while the screen is open has to be announced, not silently drawn.
 class _SmartWorkingChip extends StatelessWidget {
   const _SmartWorkingChip();
 
@@ -707,6 +723,7 @@ class _SmartWorkingChip extends StatelessWidget {
     final v = context.vetro;
     return Semantics(
       label: 'Giornata di smart working approvata',
+      liveRegion: true,
       // The visible text says the same thing, so leaving it in the tree would have a screen
       // reader announce the chip twice ("… approvata, Smart working").
       child: ExcludeSemantics(
@@ -719,7 +736,10 @@ class _SmartWorkingChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.home, size: 13, color: v.statusGood),
+              // A place pin, not LucideIcons.home — that is the Dashboard tab's own glyph in
+              // bottom_nav.dart and would read as a navigation affordance here. `laptop` is not in
+              // the pinned lucide subset.
+              Icon(LucideIcons.mapPin, size: 13, color: v.statusGood),
               const SizedBox(width: 6),
               Text(
                 'Smart working',

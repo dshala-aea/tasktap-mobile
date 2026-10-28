@@ -1,11 +1,15 @@
 // Widget tests for the smart-working chip and the fail-open punch button on TimbraScreen.
 //
-// Uses in-memory Drift + Riverpod overrides; no network.
+// Uses in-memory Drift + Riverpod overrides. No request leaves the process: the stub API client
+// holds a bare `Dio` and is never called, and the screen's own `/worklog/today` and
+// `/worklog/active` reads are answered by the test binding with a 400 — the screen renders those as
+// its sessions error line, which nothing here asserts on.
 //
 // The rule these tests pin is the inversion the feature exists for: only an explicit `false` may
 // hide the punch button. `null` (unknown — cold start, signed out, another user, or before
 // /auth/me answers) must never take the control away from a technician who is standing on site
-// needing to clock in. See smartWorkingTodayProvider's own doc comment.
+// needing to clock in, and an open shift keeps its pause and stop controls whatever the flag says.
+// See isButtonPunchWithheld's own doc comment.
 //
 // The screen has a 1-second Timer.periodic for the live clock, disposed the same way as
 // timbra_screen_test.dart does (advance fake time, then unmount).
@@ -26,7 +30,7 @@ import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/features/timbra/timbra_screen.dart';
 
-// ── No-op stubs (prevent Dio from being constructed by providers) ─────────────
+// ── No-op stubs (punches never reach an API client) ──────────────────────────
 
 abstract class _StubRepo implements IWorkSessionRepository {
   @override
@@ -93,10 +97,14 @@ AppDatabase _makeDb() {
 
 /// [smartWorking] is the value the screen reads from `smartWorkingTodayProvider`:
 /// `true` approved, `false` explicitly not approved, `null` unknown.
+///
+/// Pass [liveFlag] instead to drive that value from a provider the test can change mid-flight —
+/// the mid-shift revocation case the flag's per-day nature makes possible.
 Widget _buildApp(
   AppDatabase db, {
   required String clockInMethod,
-  required bool? smartWorking,
+  bool? smartWorking,
+  ProviderListenable<bool?>? liveFlag,
 }) {
   return ProviderScope(
     overrides: [
@@ -106,7 +114,10 @@ Widget _buildApp(
       // mocks, and PunchNotifier calls it on every punch/pause.
       locationServiceProvider.overrideWithValue(const DisabledLocationService()),
       effectiveClockInMethodProvider.overrideWithValue(clockInMethod),
-      smartWorkingTodayProvider.overrideWithValue(smartWorking),
+      if (liveFlag == null)
+        smartWorkingTodayProvider.overrideWithValue(smartWorking)
+      else
+        smartWorkingTodayProvider.overrideWith((ref) => ref.watch(liveFlag)),
     ],
     child: const MaterialApp(home: TimbraScreen()),
   );
@@ -197,6 +208,85 @@ void main() {
       expect(find.text('INIZIA TURNO'), findsOneWidget);
       expect(find.text('Smart working'), findsNothing);
       expect(find.bySemanticsLabel(chipSemantics), findsNothing);
+
+      await _teardownTimer(tester);
+    });
+  });
+
+  group('an open shift is never left unendable', () {
+    testWidgets('qrOnly_approvalRevokedMidShift_keepsTheEndAndPauseControls', (tester) async {
+      // The flag is per-day and re-read on every resume, so it can flip under a technician's
+      // hands: the office revokes the approval, or a night shift crosses the business-day
+      // rollover. The punch button is the same control that ends the shift, so the rule may only
+      // ever remove a way to START work — never a way to finish it.
+      final liveFlag = StateProvider<bool?>((ref) => null);
+      await tester.pumpWidget(
+        _buildApp(db, clockInMethod: 'QrOnly', liveFlag: liveFlag),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Unknown keeps the button, which is how the shift gets started here.
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('FINE TURNO'), findsOneWidget);
+      expect(find.text('PAUSA'), findsOneWidget);
+
+      // The approval is withdrawn while the shift runs.
+      final container = ProviderScope.containerOf(tester.element(find.byType(TimbraScreen)));
+      container.read(liveFlag.notifier).state = false;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(
+        find.text('FINE TURNO'),
+        findsOneWidget,
+        reason: 'an open shift must still be endable',
+      );
+      expect(find.text('PAUSA'), findsOneWidget, reason: 'and still breakable');
+      expect(
+        find.text('La tua azienda richiede la timbratura con QR.'),
+        findsNothing,
+        reason: 'the start-only notice must not replace a finish control',
+      );
+      expect(find.text('Smart working'), findsNothing);
+
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('qrOnly_withFlagFalseAndNoShift_stillHidesTheStart', (tester) async {
+      // The other half of the same rule: with nothing open, the flag removes only a way to start,
+      // which is exactly what the tenant asked for.
+      await tester.pumpWidget(_buildApp(db, clockInMethod: 'QrOnly', smartWorking: false));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('INIZIA TURNO'), findsNothing);
+      expect(find.text('La tua azienda richiede la timbratura con QR.'), findsOneWidget);
+
+      await _teardownTimer(tester);
+    });
+  });
+
+  group('layout', () {
+    testWidgets('the chip renders in the fixed layout on a tall phone, with no overflow', (
+      tester,
+    ) async {
+      // The five flag tests above all run at the default 800×600, where the screen always takes
+      // its scrolling fallback. This pins the chip's own height in the branch that has a pixel
+      // budget — 390×844 is the tall-phone case timbra_screen_test.dart uses.
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(_buildApp(db, clockInMethod: 'Both', smartWorking: true));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('Smart working'), findsOneWidget);
+      expect(
+        find.ancestor(of: find.text('INIZIA TURNO'), matching: find.byType(SingleChildScrollView)),
+        findsNothing,
+        reason: 'the chip still fits inside _kFixedLayoutMinHeight on a tall phone',
+      );
+      expect(tester.takeException(), isNull);
 
       await _teardownTimer(tester);
     });
