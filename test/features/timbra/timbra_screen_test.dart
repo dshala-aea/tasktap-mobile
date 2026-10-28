@@ -463,7 +463,16 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        _buildApp(db, extraOverrides: [effectiveClockInMethodProvider.overrideWithValue('QrOnly')]),
+        _buildApp(
+          db,
+          extraOverrides: [
+            effectiveClockInMethodProvider.overrideWithValue('QrOnly'),
+            // Only an explicit `false` hides the button now — an unknown flag fails open, so a
+            // QrOnly tenant is not enough on its own. The unknown case is pinned by
+            // smart_working_chip_test.dart.
+            smartWorkingTodayProvider.overrideWithValue(false),
+          ],
+        ),
       );
       await tester.pump(const Duration(milliseconds: 100));
 

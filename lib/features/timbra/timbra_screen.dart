@@ -125,6 +125,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
     final punchState = ref.watch(punchNotifierProvider);
     final total = ref.watch(totalWorkedTodayProvider);
     final clockInMethod = ref.watch(effectiveClockInMethodProvider);
+    final smartWorking = ref.watch(smartWorkingTodayProvider);
 
     _updatePulse(shiftState.isOnShift);
 
@@ -189,6 +190,15 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                     final clockDisagreement = ref.watch(timbraClockDisagreementProvider);
                     final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
+                    // Only an explicit `false` may take the button punch away. The flag is `null`
+                    // whenever nothing can be known — a cold start, nobody signed in, the last
+                    // answer belonging to a different user, or /auth/me not having answered yet.
+                    // Unknown must not be read as "not approved": a stale `true` would be a lie,
+                    // but a stale `false` would strand exactly the technician this feature exists
+                    // for — on site, expected by the office, and unable to clock in. So the button
+                    // stays; the chip is the only thing that needs a positive answer.
+                    final hidePunch = clockInMethod == 'QrOnly' && smartWorking == false;
+
                     final content = <Widget>[
                       _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
                       const SizedBox(height: 24),
@@ -228,7 +238,13 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                               )
                             : const SizedBox.shrink(),
                       ),
-                      if (clockInMethod == 'QrOnly') ...[
+                      // An approved remote day, said before the control it explains: the same
+                      // slot as the guard banner, above the punch button, in both layouts.
+                      if (smartWorking == true) ...[
+                        const _SmartWorkingChip(),
+                        const SizedBox(height: AppSpacing.md),
+                      ],
+                      if (hidePunch) ...[
                         const _QrRequiredNotice(),
                       ] else ...[
                         _PunchButton(
@@ -666,6 +682,58 @@ class _RejectedPunchRow extends ConsumerWidget {
             style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _SmartWorkingChip
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Pill for an approved smart-working day — rendered only for [smartWorkingTodayProvider]'s
+/// `true`, never for `null`. See the `hidePunch` predicate in the screen body for why an unknown
+/// answer may not be treated as "not approved".
+///
+/// Same pill language [_HeroStatus]'s state badge already uses (rounded-full, tint-on-tint, small
+/// caps type), in the positive half of [_GuardBanner]'s pair: `statusGood`/`statusGoodBg` instead
+/// of `statusWarn`/`statusWarnBg`. Nothing is wrong today — the technician is simply not expected
+/// on site, and that is what this says.
+class _SmartWorkingChip extends StatelessWidget {
+  const _SmartWorkingChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final v = context.vetro;
+    return Semantics(
+      label: 'Giornata di smart working approvata',
+      // The visible text says the same thing, so leaving it in the tree would have a screen
+      // reader announce the chip twice ("… approvata, Smart working").
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.xs),
+          decoration: BoxDecoration(
+            color: v.statusGoodBg,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.home, size: 13, color: v.statusGood),
+              const SizedBox(width: 6),
+              Text(
+                'Smart working',
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: v.statusGood,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
