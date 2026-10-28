@@ -76,6 +76,7 @@ class EntitlementService {
     final capabilities = _stringList(body['capabilities']);
     final seatType = body['seatType'];
     final clockInMethod = body['clockInMethod'] as String?;
+    final smartWorkingToday = _boolOrNull(body['smartWorkingToday']);
     final subscription = body['subscription'];
     final subscriptionStatus = subscription is Map ? subscription['status'] as String? : null;
 
@@ -96,6 +97,11 @@ class EntitlementService {
       subscriptionStatus: subscriptionStatus,
       clockInMethod: clockInMethod,
     );
+
+    // Kept in memory, never persisted (see `EntitlementRepository.smartWorkingToday`): after the
+    // write above, so a failed cache write does not leave the two answers disagreeing. Null when the
+    // server omitted the key or sent something that is not a bool — unknown, never a guess.
+    _repository.setSmartWorkingToday(smartWorkingToday);
 
     // The response's `user.id` is the backend's internal Users.Id (a Guid) — distinct from the
     // OIDC sub that AuthUser.id carries. Persisted separately (not through EntitlementRepository,
@@ -143,4 +149,8 @@ class EntitlementService {
     if (value is! List) return null;
     return value.whereType<String>().toList();
   }
+
+  /// Null for anything that is not a JSON bool, including a missing key: "unknown" must not be
+  /// conflated with "no", because a wrong `false` is as costly as a wrong `true` here.
+  bool? _boolOrNull(Object? value) => value is bool ? value : null;
 }

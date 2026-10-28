@@ -98,6 +98,26 @@ class EntitlementRepository {
   /// See [fieldSeatBaselineModules].
   static const fieldSeatBaseline = fieldSeatBaselineModules;
 
+  /// Whether today is an approved smart-working day, as `/api/Auth/me` last said. Null = unknown:
+  /// this process has never had an answer, or has been restarted since the last one.
+  ///
+  /// **In memory only, on purpose.** It is not an `Entitlements` column, no migration adds it, and
+  /// [write] never persists it. A stale `true` would claim an approved day that ended overnight; a
+  /// stale `false` would hide the punch button from a technician who has one. Memory dies with the
+  /// process, which is exactly the lifetime this flag has — and it is also why the same field must
+  /// never outlive a sign-out: see `smartWorkingTodayProvider` for the auth gate.
+  bool? _smartWorkingToday;
+
+  /// Null means unknown — callers must fail OPEN, never treat it as "no smart working today".
+  bool? get smartWorkingToday => _smartWorkingToday;
+
+  /// Records what `/api/Auth/me` just said, including null when it did not say anything. Called
+  /// only by `EntitlementService` after a successful, still-current answer, so a failed refresh
+  /// leaves the previous answer alone rather than downgrading it.
+  void setSmartWorkingToday(bool? value) {
+    _smartWorkingToday = value;
+  }
+
   Future<Entitlement?> read() async {
     final row = await (_db.select(
       _db.entitlements,

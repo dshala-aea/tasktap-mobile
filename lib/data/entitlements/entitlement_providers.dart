@@ -59,6 +59,19 @@ final effectiveClockInMethodProvider = Provider<String>((ref) {
   return cached?.clockInMethod ?? 'Both';
 });
 
+/// Whether today is an approved smart-working day for the signed-in technician.
+///
+/// null = unknown (never refreshed, the process restarted, or nobody is signed in). Callers must
+/// fail OPEN on null: unknown must neither hide the punch button nor claim an approved day.
+///
+/// In memory only — see `EntitlementRepository.smartWorkingToday`. The auth gate is load-bearing
+/// because of that: memory outlives a sign-out, so without it the next person to sign in on this
+/// device would read the previous user's answer until their own `/auth/me` answered.
+final smartWorkingTodayProvider = Provider<bool?>((ref) {
+  if (ref.watch(authStateProvider).valueOrNull == null) return null;
+  return ref.watch(entitlementRepositoryProvider).smartWorkingToday;
+});
+
 /// Fetches `/auth/me`'s entitlement answer now, and invalidates the cache-reading providers only
 /// on a real change — a failed refresh must not churn the UI into re-reading a cache that did not
 /// move.
@@ -72,6 +85,8 @@ Future<void> refreshEntitlements(WidgetRef ref) async {
   if (updated) {
     ref.invalidate(cachedEntitlementProvider);
     ref.invalidate(hasFeatureProvider);
+    // Not backed by a FutureProvider, so nothing else would rebuild a reader after the refresh.
+    ref.invalidate(smartWorkingTodayProvider);
   }
 }
 
