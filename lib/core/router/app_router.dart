@@ -60,6 +60,7 @@ import '../../features/admin/reports/admin_report_list_screen.dart';
 import '../../features/admin/reports/admin_report_detail_screen.dart';
 import '../../features/ferie/ferie_permessi_form_screen.dart';
 import '../../features/ferie/ferie_permessi_list_screen.dart';
+import '../../features/smart_working/smart_working_form_screen.dart';
 import '../../features/smart_working/smart_working_list_screen.dart';
 import '../../features/clienti/clienti_list_screen.dart';
 import '../../features/rapportino/ai_copilot_screen.dart';
@@ -743,6 +744,19 @@ GoRouter buildRouter(WidgetRef ref) {
                     path: 'smart-working',
                     builder: (context, state) =>
                         const SmartWorkingListScreen(),
+                    routes: [
+                      // Same shape as the sibling `ferie` subtree above: the form is a full-screen
+                      // push on the ROOT navigator, deliberately outside the shell, so it is not
+                      // nested above the bottom nav. The list's own FAB pushes this exact path
+                      // (`smart_working_list_screen.dart`), and without this route that push
+                      // throws.
+                      GoRoute(
+                        path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) =>
+                            const SmartWorkingFormScreen(),
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: 'clienti',
