@@ -1,3 +1,11 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// BadgeScanScreen — the team leader's continuous badge scanner
+//
+// Camera on top (the leader keeps aiming), the newest result prominent below it, the session's
+// earlier results under that. Online-only; the list lives only while the screen is open. The
+// screen is kept awake while scanning (BadgeWakelock, shared with "Il mio badge").
+// ══════════════════════════════════════════════════════════════════════════════
+
 import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
@@ -10,6 +18,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/widgets.dart';
 import '../cantiere/cantiere_providers.dart';
 import 'badge_scan_controller.dart';
+import 'badge_providers.dart' show badgeWakelockProvider, BadgeWakelock;
 import 'badge_scan_result_card.dart';
 
 /// Builds the camera side of the screen and reports every detected code. Injectable so widget
@@ -33,6 +42,21 @@ class BadgeScanScreen extends ConsumerStatefulWidget {
 }
 
 class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
+  late final BadgeWakelock _wakelock;
+
+  @override
+  void initState() {
+    super.initState();
+    _wakelock = ref.read(badgeWakelockProvider);
+    unawaited(_wakelock.enable());
+  }
+
+  @override
+  void dispose() {
+    unawaited(_wakelock.disable());
+    super.dispose();
+  }
+
   void _onCode(String code) {
     unawaited(ref.read(badgeScanControllerProvider(widget.cantiereId).notifier).onCode(code));
   }

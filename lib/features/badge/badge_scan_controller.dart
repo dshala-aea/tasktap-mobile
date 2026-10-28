@@ -57,8 +57,12 @@ final badgeScanClockProvider = Provider<DateTime Function()>((ref) => DateTime.n
 final badgeScanInFlightProvider = StateProvider.autoDispose.family<bool, String>((ref, id) => false);
 
 class _Handled {
-  _Handled(this.at, {required this.answered});
+  _Handled(this.at, this.clientScanId, {required this.answered});
   final DateTime at;
+
+  /// Reused when the same code is retried after an attempt that got no answer: the server may
+  /// have processed it, and the same id makes it return the stored outcome instead of Replayed.
+  final String clientScanId;
   bool answered;
 }
 
@@ -83,7 +87,8 @@ class BadgeScanController extends AutoDisposeFamilyNotifier<List<BadgeScanEntry>
 
   static bool _answered(BadgeApiException e) {
     final s = e.statusCode;
-    return !e.isOffline && s != null && s < 500;
+    // 408/429 are transport / rate conditions, not an answer about the badge.
+    return !e.isOffline && s != null && s < 500 && s != 408 && s != 429;
   }
 
   Future<void> onCode(String code) async {
@@ -96,7 +101,9 @@ class BadgeScanController extends AutoDisposeFamilyNotifier<List<BadgeScanEntry>
       if (prior.answered) return;
       if (now.difference(prior.at) < badgeScanDedupeWindow) return;
     }
-    final mark = _Handled(now, answered: false);
+    // A retry of an unanswered attempt keeps its id; a new code or a re-scan after the
+    // suppression window (entry pruned) gets a fresh one.
+    final mark = _Handled(now, prior?.clientScanId ?? _uuid.v4(), answered: false);
     _handled[key] = mark;
     _inFlight = true;
     ref.read(badgeScanInFlightProvider(arg).notifier).state = true;
@@ -104,7 +111,7 @@ class BadgeScanController extends AutoDisposeFamilyNotifier<List<BadgeScanEntry>
     try {
       final outcome = await ref
           .read(badgeApiClientProvider)
-          .scan(cantiereId: arg, token: code, clientScanId: _uuid.v4());
+          .scan(cantiereId: arg, token: code, clientScanId: mark.clientScanId);
       mark.answered = true;
       entry = BadgeScanEntry.outcome(now, outcome);
     } on BadgeApiException catch (e) {

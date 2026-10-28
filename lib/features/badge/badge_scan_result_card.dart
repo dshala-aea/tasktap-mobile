@@ -81,7 +81,7 @@ BadgeScanPresentation presentBadgeScan(BadgeScanEntry entry) {
         );
       case BadgeScanResult.replayed:
         return const BadgeScanPresentation(
-          'Codice già usato — chiedi di aggiornare il badge',
+          'Codice già usato — se il lavoratore risulta già registrato non serve altro, altrimenti chiedi di aggiornare il badge',
           LucideIcons.clock,
           BadgeScanTone.warning,
         );

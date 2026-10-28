@@ -120,6 +120,47 @@ void main() {
     expect(api.calls, hasLength(1));
   });
 
+  test('retry_after_timeout_reuses_same_clientScanId', () async {
+    api.throwOnScan = const BadgeApiException(message: 't', offline: true);
+    await at(0, 'tok-A');
+    await at(3000, 'tok-A');
+    expect(api.calls, hasLength(2));
+    expect(api.calls[1].clientScanId, api.calls[0].clientScanId);
+  });
+
+  test('retry_after_5xx_reuses_same_clientScanId', () async {
+    api.throwOnScan = const BadgeApiException(statusCode: 503, message: 's');
+    await at(0, 'tok-A');
+    await at(3000, 'tok-A');
+    expect(api.calls[1].clientScanId, api.calls[0].clientScanId);
+  });
+
+  test('408 and 429 are not answers: retried after the window with the same id', () async {
+    for (final code in [408, 429]) {
+      api.calls.clear();
+      api.throwOnScan = BadgeApiException(statusCode: code, message: 'x');
+      await at(0, 'tok-$code');
+      await at(2999, 'tok-$code');
+      expect(api.calls, hasLength(1));
+      await at(3000, 'tok-$code');
+      expect(api.calls, hasLength(2));
+      expect(api.calls[1].clientScanId, api.calls[0].clientScanId);
+    }
+  });
+
+  test('different_code_gets_new_clientScanId', () async {
+    api.throwOnScan = const BadgeApiException(message: 't', offline: true);
+    await at(0, 'tok-A');
+    await at(3000, 'tok-B');
+    expect(api.calls[1].clientScanId, isNot(api.calls[0].clientScanId));
+  });
+
+  test('rescan_after_answer_window_gets_new_id', () async {
+    await at(0, 'tok-A');
+    await at(70000, 'tok-A');
+    expect(api.calls[1].clientScanId, isNot(api.calls[0].clientScanId));
+  });
+
   test('code_resent_after_token_life', () async {
     await at(0, 'tok-A');
     await at(70000, 'tok-A');

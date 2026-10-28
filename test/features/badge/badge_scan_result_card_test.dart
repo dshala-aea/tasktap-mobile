@@ -23,7 +23,7 @@ void main() {
     BadgeScanResult.notAssigned: 'Non assegnato a questo cantiere — segnalato all\'ufficio',
     BadgeScanResult.revoked: 'Badge non valido — contatta l\'ufficio',
     BadgeScanResult.expired: 'Badge scaduto — chiedi di riaprire il badge',
-    BadgeScanResult.replayed: 'Codice già usato — chiedi di aggiornare il badge',
+    BadgeScanResult.replayed: 'Codice già usato — se il lavoratore risulta già registrato non serve altro, altrimenti chiedi di aggiornare il badge',
     BadgeScanResult.invalid: 'Codice non riconosciuto',
     BadgeScanResult.openElsewhere: 'Ha un turno aperto su un altro cantiere',
     BadgeScanResult.payrollLocked: 'Periodo paghe chiuso — contatta l\'ufficio',

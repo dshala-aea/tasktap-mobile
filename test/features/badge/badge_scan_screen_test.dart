@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/scanner/continuous_scan_view.dart';
 import 'package:tasktap_mobile/data/badge/badge_api_client.dart';
 import 'package:tasktap_mobile/data/badge/badge_models.dart';
+import 'package:tasktap_mobile/features/badge/badge_providers.dart';
 import 'package:tasktap_mobile/features/badge/badge_scan_controller.dart';
 import 'package:tasktap_mobile/features/badge/badge_scan_screen.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_providers.dart';
@@ -111,6 +112,26 @@ void main() {
     expect(find.text('Nessuna connessione — riprova'), findsNWidgets(2));
   });
 
+  testWidgets('keeps the screen awake while scanning and releases it on leave', (t) async {
+    final wake = _FakeWakelock();
+    await t.pumpWidget(
+      ProviderScope(
+        overrides: [
+          badgeWakelockProvider.overrideWithValue(wake),
+          badgeApiClientProvider.overrideWithValue(_FakeApi(const {})),
+          cantiereByIdProvider.overrideWith((ref, id) => const Stream.empty()),
+        ],
+        child: MaterialApp(
+          home: BadgeScanScreen(cantiereId: 'c1', scanSource: (_, _) => const SizedBox()),
+        ),
+      ),
+    );
+    expect(wake.enables, 1);
+    expect(wake.disables, 0);
+    await t.pumpWidget(const SizedBox.shrink());
+    expect(wake.disables, 1);
+  });
+
   testWidgets('shows Verifica in corso while a request is pending', (t) async {
     final gate = Completer<BadgeScanOutcome>();
     await t.pumpWidget(app(_GatedApi(gate)));
@@ -130,6 +151,15 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+class _FakeWakelock implements BadgeWakelock {
+  int enables = 0;
+  int disables = 0;
+  @override
+  Future<void> enable() async => enables++;
+  @override
+  Future<void> disable() async => disables++;
 }
 
 class _GatedApi extends _FakeApi {

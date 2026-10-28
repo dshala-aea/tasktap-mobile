@@ -1,3 +1,10 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// MyBadgeScreen — "Il mio badge"
+//
+// The worker's identity card with a rotating QR a team leader scans at the cantiere. State and
+// token lifecycle live in badge_providers.dart; the QR is only ever drawn from a ready state.
+// ══════════════════════════════════════════════════════════════════════════════
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
