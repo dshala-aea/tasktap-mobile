@@ -14,6 +14,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart' show StatusPill;
@@ -88,6 +89,11 @@ Widget _buildScreen(_FakeSmartWorkingRequestApiClient fake) {
 }
 
 void main() {
+  setUpAll(() async {
+    // The row's label uses Italian month abbreviations, same as the ferie rows.
+    await initializeDateFormatting('it', null);
+  });
+
   setUp(() {
     // The real provider reads the signed-in user's internal id from prefs on every read.
     SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'user-1'});
@@ -112,8 +118,8 @@ void main() {
     await tester.pumpWidget(_buildScreen(fake));
     await tester.pumpAndSettle();
 
-    final newest = find.text('2026-10-12 – 2026-10-13');
-    final oldest = find.text('2026-09-01 – 2026-09-02');
+    final newest = find.text('12 ott – 13 ott');
+    final oldest = find.text('1 set – 2 set');
     expect(newest, findsOneWidget);
     expect(oldest, findsOneWidget);
     expect(
@@ -187,8 +193,9 @@ void main() {
     await tester.pumpWidget(_buildScreen(fake));
     await tester.pumpAndSettle();
 
-    // The civil dates as the server stated them — no zone conversion, no invented hours.
-    expect(find.text('2026-11-02 – 2026-11-04'), findsOneWidget);
+    // The window as the technician reads it, in Italian prose — and still the same civil days the
+    // server sent, because a UTC civil-date label formats on its own y/m/d fields.
+    expect(find.text('2 nov – 4 nov'), findsOneWidget);
     expect(find.byType(StatusPill), findsOneWidget);
     expect(find.text('IN ATTESA'), findsOneWidget);
     expect(find.text('Assistenza da remoto al cliente'), findsOneWidget);

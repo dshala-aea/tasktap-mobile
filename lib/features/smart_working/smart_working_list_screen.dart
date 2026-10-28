@@ -2,12 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
-import '../../core/time/business_time.dart' show formatDateOnly;
 import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/smart_working/smart_working_request_api_client.dart';
@@ -138,12 +138,19 @@ class _SmartWorkingRowState extends ConsumerState<_SmartWorkingRow> {
     final item = widget.item;
     final reason = item.reason?.trim();
 
+    // The window the request names, in the same Italian prose every other date in this app uses
+    // (`ferie_permessi_list_screen.dart`'s own subtitle). `startDate`/`endDate` are
+    // `DateTime.utc(y, m, d)` civil-date labels, and `DateFormat.format` reads THAT INSTANCE's own
+    // y/m/d fields — it does not convert the zone. Never "fix" this with `.toLocal()`: that would
+    // show the previous day west of UTC, and a smart-working marker naming a day early is exactly
+    // the mistake this screen cannot afford. No duration is computed — a smart-working request is
+    // a marker for a remote day, not a timesheet.
+    final start = DateFormat('d MMM', 'it').format(item.startDate);
+    final end = DateFormat('d MMM', 'it').format(item.endDate);
+
     return ListRow(
       leading: const RowIconTile(icon: LucideIcons.laptop, color: AppColors.Y),
-      // The window the request names, as civil dates: `formatDateOnly` reads the y/m/d fields and
-      // never converts a zone, so a marker can never name a day early. No duration is computed —
-      // a smart-working request is not a timesheet.
-      title: '${formatDateOnly(item.startDate)} – ${formatDateOnly(item.endDate)}',
+      title: '$start – $end',
       subtitle: reason == null || reason.isEmpty ? null : reason,
       meta: _cancellable
           ? Row(
