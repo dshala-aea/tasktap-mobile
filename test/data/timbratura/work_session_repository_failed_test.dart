@@ -37,6 +37,23 @@ void main() {
     expect((await repo.watchTodaySessions().first).map((s) => s.id), ['b']);
   });
 
+  // The whole-log read is what makes "there is a shift to finish" independent of the business-day
+  // window — and it must keep the same exclusions as today's view, or a refused punch would open a
+  // shift that nothing can ever close.
+  test('the whole-log view spans business days and still hides refused rows', () async {
+    final now = DateTime.now().toUtc();
+    await repo.addEvent(
+      id: 'two-days-ago',
+      eventTime: now.subtract(const Duration(days: 2)),
+      eventType: 'ingresso',
+    );
+    await repo.addEvent(id: 'refused', eventTime: now, eventType: 'ingresso');
+    await repo.markSyncFailed('refused');
+
+    expect((await repo.getAllSessions()).map((s) => s.id), ['two-days-ago']);
+    expect((await repo.watchAllSessions().first).map((s) => s.id), ['two-days-ago']);
+  });
+
   test('clearToday does not delete failed events', () async {
     await repo.addEvent(id: 'a', eventTime: DateTime.now().toUtc(), eventType: 'ingresso');
     await repo.addEvent(id: 'b', eventTime: DateTime.now().toUtc(), eventType: 'fine');

@@ -247,13 +247,12 @@ void main() {
 
       // A LOCAL DateTime: the form builds its dates from a picker, and the wire carries the day
       // the technician picked, not the UTC day of the instant that picker produced.
-      final id = await _client(adapter).create(
+      await _client(adapter).create(
         startDate: DateTime(2026, 9, 14),
         endDate: DateTime(2026, 9, 18),
         reason: '',
       );
 
-      expect(id, 'sw-1');
       expect(adapter.captured!.method, 'POST');
       expect(adapter.captured!.path, '/api/smart-working-requests');
       expect(adapter.captured!.data, {
@@ -279,6 +278,23 @@ void main() {
       // The server resolves a null requestedByUserId to the caller and explicitly does not trust
       // a client-supplied self-id, so the client never sends one.
       expect((adapter.captured!.data as Map).containsKey('requestedByUserId'), isFalse);
+    });
+
+    test('create_2xxWithoutTheIdKey_DoesNotThrow', () async {
+      // The POST declares no response schema, so a 200 with no body (or a renamed key) is a
+      // perfectly legal answer. Parsing an id nothing reads would throw AFTER the request had
+      // already been created, and the form's "Riprova" would file a second one — the server has no
+      // idempotency and no overlap rule.
+      final adapter = _Adapter(body: '');
+
+      await expectLater(
+        _client(adapter).create(
+          startDate: DateTime(2026, 9, 14),
+          endDate: DateTime(2026, 9, 18),
+        ),
+        completes,
+      );
+      expect(adapter.captured!.path, '/api/smart-working-requests');
     });
 
     test('create_400WithDetail_BecomesValidationError', () async {

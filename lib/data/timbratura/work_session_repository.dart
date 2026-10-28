@@ -52,6 +52,23 @@ abstract interface class IWorkSessionRepository {
   /// Snapshot of today's events in chronological order (one-shot).
   Future<List<WorkSession>> getTodaySessions();
 
+  /// Stream of every visible event on ANY business day, in chronological order.
+  ///
+  /// The day-independent counterpart of [watchTodaySessions]. A shift opened at 22:00 and not yet
+  /// closed belongs to yesterday's business day: a today-scoped read cannot see it, and the one
+  /// question that must never follow the day boundary is "is there a shift left to finish". Same
+  /// exclusions as today's view (permanently refused rows, [syncFailedMarker]); reconciler
+  /// corrections are INCLUDED, because they are the device's best knowledge of what the server
+  /// holds — a backfilled `ingresso` is an open shift like any other.
+  ///
+  /// The whole local log is read rather than a day: it is one person's punches on one device since
+  /// the last wipe, so it stays small — the same read `localCantiereTimersProvider` already makes
+  /// for site sessions.
+  Stream<List<WorkSession>> watchAllSessions();
+
+  /// Snapshot of [watchAllSessions] (one-shot).
+  Future<List<WorkSession>> getAllSessions();
+
   /// Every event still waiting to reach the server, on ANY business day, in chronological order.
   ///
   /// The upload queue is deliberately not day-scoped: a punch recorded offline before midnight
@@ -126,6 +143,19 @@ class WorkSessionRepository implements IWorkSessionRepository {
       ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
   }
 
+  /// Every visible row, with no day window at all — the day-independent shift view.
+  ///
+  /// Ordered exactly like [_todayQuery]: by `eventTime` and nothing else. Two punches written in
+  /// the same microsecond (a tap seconds apart on a phone whose clock is coarse — the widget tests
+  /// produce this routinely) then keep their insertion order, which is the only order that makes
+  /// "the last event" mean "the punch that happened last". Adding `id` as a tiebreak looks safer
+  /// and is not: ids are random UUIDs, so it reorders same-instant pairs and can put a pausa before
+  /// the ingresso it followed.
+  SimpleSelectStatement<$WorkSessionsTable, WorkSession> _allQuery() =>
+      _db.select(_db.workSessions)
+        ..where((s) => s.notes.isNull() | s.notes.equals(syncFailedMarker).not())
+        ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
+
   /// Every unsynced row, with no day window at all — the upload queue.
   SimpleSelectStatement<$WorkSessionsTable, WorkSession> _pendingQuery() =>
       _db.select(_db.workSessions)
@@ -166,6 +196,12 @@ class WorkSessionRepository implements IWorkSessionRepository {
 
   @override
   Future<List<WorkSession>> getTodaySessions() => _todayQuery().get();
+
+  @override
+  Stream<List<WorkSession>> watchAllSessions() => _allQuery().watch();
+
+  @override
+  Future<List<WorkSession>> getAllSessions() => _allQuery().get();
 
   @override
   Future<List<WorkSession>> getPendingSessions() => _pendingQuery().get();

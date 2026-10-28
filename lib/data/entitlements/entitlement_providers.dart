@@ -126,9 +126,19 @@ bool isButtonPunchWithheld({
   };
 }
 
-/// Fetches `/auth/me`'s entitlement answer now, and invalidates the cache-reading providers only
-/// on a real change — a failed refresh must not churn the UI into re-reading a cache that did not
-/// move.
+/// Fetches `/auth/me`'s entitlement answer now, and invalidates the cache-reading providers on
+/// every successful answer — not only on a change. A failed refresh answers `false`, so it does not
+/// churn the UI into re-reading a cache that did not move.
+///
+/// **That `updated` is "the server answered", not "the answer changed", is load-bearing — do not
+/// turn it into a change flag.** Today it is what makes the smart-working chip pick up an approval
+/// (or a cancellation) granted while the app sat sleeping: the flag is memory-only and per-day, so
+/// after a resume the cached value is yesterday's, and only this invalidation re-reads it. Gate the
+/// invalidation on "did it change" and a `false` written before a day boundary would survive the
+/// refresh that brought the approval — the chip would stay hidden and
+/// [isButtonPunchWithheld] would keep withholding a punch the server would now accept. That is the
+/// expensive direction: a stale `true` costs one refused punch with a visible message, a stale
+/// `false` costs the day's hours.
 ///
 /// Called by [initEntitlementRefreshWatcher] (app start + reconnect) and by HomeShell on every app
 /// resume: a tenant that changed this user's timbratura mode, seat type or modules while the app sat

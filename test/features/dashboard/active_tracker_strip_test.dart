@@ -80,6 +80,12 @@ class _FailingOnEventTypeRepo implements IWorkSessionRepository {
   Future<List<WorkSession>> getTodaySessions() => _inner.getTodaySessions();
 
   @override
+  Stream<List<WorkSession>> watchAllSessions() => _inner.watchAllSessions();
+
+  @override
+  Future<List<WorkSession>> getAllSessions() => _inner.getAllSessions();
+
+  @override
   Future<List<WorkSession>> getPendingSessions() => _inner.getPendingSessions();
 
   @override

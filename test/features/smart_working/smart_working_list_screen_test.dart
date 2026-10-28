@@ -20,7 +20,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:tasktap_mobile/core/widgets/widgets.dart' show StatusPill;
+import 'package:tasktap_mobile/core/widgets/widgets.dart' show ErrorState, StatusPill;
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart'
     show EntitlementService, internalUserIdPrefsKey;
@@ -44,9 +44,13 @@ class _FakeSmartWorkingRequestApiClient extends SmartWorkingRequestApiClient {
   Completer<void>? cancelGate;
   Object? throwOnCancel;
 
+  /// Makes the next read fail, so a test can break the refresh after the first successful one.
+  Object? throwOnFetch;
+
   @override
   Future<List<SmartWorkingRequestDto>> fetchMine({String? userId}) async {
     lastUserId = userId;
+    if (throwOnFetch != null) throw throwOnFetch!;
     return items;
   }
 
@@ -305,6 +309,39 @@ void main() {
     gate.complete();
     await tester.pumpAndSettle();
     expect(fake.cancelledCalls, ['sw-1']);
+  });
+
+  // ── Robustness around pull-to-refresh ────────────────────────────────────────
+
+  testWidgets('aFailedPullToRefresh_keepsTheRowsAndSaysSo', (tester) async {
+    // A failed read of a list the technician can already read must not replace it with an error
+    // card, and the failure must not be silent: `RefreshIndicator` does not catch the future it is
+    // handed, so an uncaught rejection here would tell the technician nothing at all.
+    final fake = _FakeSmartWorkingRequestApiClient([_request(id: 'sw-1')]);
+
+    await tester.pumpWidget(_buildScreen(fake, service: service));
+    await tester.pumpAndSettle();
+    expect(find.text('5 ott – 6 ott'), findsOneWidget);
+
+    fake.throwOnFetch = DioException(
+      requestOptions: RequestOptions(path: '/api/smart-working-requests'),
+    );
+
+    await tester.fling(find.byType(CustomScrollView), const Offset(0, 300), 1000);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Impossibile aggiornare. Riprova.'), findsOneWidget);
+    expect(
+      find.text('5 ott – 6 ott'),
+      findsOneWidget,
+      reason: 'the rows already on screen survive a failed refresh',
+    );
+    expect(find.byType(ErrorState), findsNothing);
+
+    // Disposes the toast, which cancels its auto-dismiss timer (flutter_test fails a test that
+    // leaves one pending).
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 
   testWidgets('aSuccessfulCancel_reasksTheEntitlementAnswer', (tester) async {

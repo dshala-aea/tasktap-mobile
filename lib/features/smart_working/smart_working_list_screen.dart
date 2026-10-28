@@ -46,7 +46,13 @@ class SmartWorkingListScreen extends ConsumerWidget {
       ),
       body: requestsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => ErrorState(onRetry: () => ref.invalidate(mySmartWorkingRequestsProvider)),
+        // A failed refresh is not a reason to throw away rows the technician can already read: the
+        // toast under the list says the update failed, and what was on screen stays. Only a screen
+        // that never had an answer gets the error card. (`loaded` is non-null exactly when a
+        // previous data value survived into this error state.)
+        error: (_, _) => loaded == null
+            ? ErrorState(onRetry: () => ref.invalidate(mySmartWorkingRequestsProvider))
+            : _SmartWorkingListBody(items: loaded),
         data: (items) => _SmartWorkingListBody(items: items),
       ),
       floatingActionButton: Padding(
@@ -69,7 +75,26 @@ class _SmartWorkingListBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return RefreshIndicator(
-      onRefresh: () => ref.refresh(mySmartWorkingRequestsProvider.future),
+      // `mySmartWorkingRequestsProvider` throws when the server cannot be reached, and
+      // `RefreshIndicator` does not catch the future it is handed: an uncaught rejection here is an
+      // unhandled async error, and the user is told nothing. Say it with the shared toast instead —
+      // the rows stay on screen (see the parent's error branch), the spinner stops, and the failure
+      // is not silent.
+      onRefresh: () async {
+        try {
+          // The result is used: awaiting it is the point — the spinner must last until the server
+          // answers, and the rejection is caught below. `@useResult` cannot see an `await`.
+          // ignore: unused_result
+          await ref.refresh(mySmartWorkingRequestsProvider.future);
+        } catch (_) {
+          if (!context.mounted) return;
+          showAppToast(
+            context,
+            message: 'Impossibile aggiornare. Riprova.',
+            tone: ToastTone.error,
+          );
+        }
+      },
       child: CustomScrollView(
         // Without this the empty state (shorter than the viewport) cannot be dragged at all, so
         // pull-to-refresh silently does nothing exactly when the technician wants to re-ask the

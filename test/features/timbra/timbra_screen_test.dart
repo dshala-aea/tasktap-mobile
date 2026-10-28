@@ -54,6 +54,12 @@ abstract class _StubRepo implements IWorkSessionRepository {
   Future<List<WorkSession>> getTodaySessions() async => [];
 
   @override
+  Stream<List<WorkSession>> watchAllSessions() => const Stream.empty();
+
+  @override
+  Future<List<WorkSession>> getAllSessions() async => [];
+
+  @override
   Future<List<WorkSession>> getPendingSessions() async => [];
 
   @override

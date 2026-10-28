@@ -135,7 +135,11 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
     return _run(() async {
       switch (t.kind) {
         case ActiveTrackerKind.attendance:
-          await ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider));
+          // The whole-log state, not today's: the same answer that drew "Ferma" decides whether
+          // this tap starts or ends the shift.
+          await ref.read(punchNotifierProvider.notifier).punch(
+            ref.read(actionableShiftStateProvider),
+          );
           _throwIfPunchFailed();
         case ActiveTrackerKind.cantiere:
           // A site session this device is holding locally (checked in with no signal) has no
@@ -193,7 +197,9 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
   Future<void> _togglePause() {
     if (_qrOnly) return _openScanner();
     return _run(() async {
-      await ref.read(punchNotifierProvider.notifier).togglePause(ref.read(timbraStateProvider));
+      await ref
+          .read(punchNotifierProvider.notifier)
+          .togglePause(ref.read(actionableShiftStateProvider));
       _throwIfPunchFailed();
     });
   }
@@ -203,16 +209,16 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
   /// technician's totem is on site, and this row may be the only control they have out in the
   /// field, so an unanswered /auth/me keeps the buttons and lets the server decide.
   ///
-  /// `hasOpenShift` is `true` because this row exists only while something is running — a fact
-  /// `startOnly` does not consult today, and deliberately so: on a QrOnly tenant the row's scanner
-  /// alternative is the sanctioned way to close a day the tenant has not approved, while the timbra
-  /// panel (whose button is the only control there) must never lose its finish. Stated rather than
-  /// passed as `false`, so a later move to `startOrFinish` cannot silently inherit a lie.
+  /// `hasOpenShift` is the same whole-log signal the timbra panel acts on
+  /// ([actionableShiftStateProvider]), not a hand-written `true`. `startOnly` does not consult it
+  /// today — this row's scanner is always the alternative, so a withheld button can never strand a
+  /// running day — but passing the real answer means a later move to `startOrFinish` cannot
+  /// silently inherit a lie.
   bool get _qrOnly => isButtonPunchWithheld(
     surface: ButtonPunchSurface.startOnly,
     clockInMethod: ref.read(effectiveClockInMethodProvider),
     smartWorkingToday: ref.read(smartWorkingTodayProvider),
-    hasOpenShift: true,
+    hasOpenShift: ref.read(actionableShiftStateProvider).isOnShift,
   );
 
   Future<void> _openScanner() async => context.push(AppRoutes.timbraQr);
@@ -236,8 +242,9 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
   Widget build(BuildContext context) {
     final t = widget.tracker;
     // The tracker's own `state` is authoritative (it may describe a break started on another
-    // device); rows without one (older servers) fall back to this device's local state.
-    final localOnPause = ref.watch(timbraStateProvider).isOnPause;
+    // device); rows without one (older servers) fall back to this device's local state — the
+    // whole-log one, so a break left open across midnight is still drawn as one.
+    final localOnPause = ref.watch(actionableShiftStateProvider).isOnPause;
     final onBreak =
         t.kind == ActiveTrackerKind.attendance &&
         (t.state == null ? localOnPause : t.state == ActiveTrackerState.onBreak);
@@ -260,7 +267,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
           surface: ButtonPunchSurface.startOnly,
           clockInMethod: ref.watch(effectiveClockInMethodProvider),
           smartWorkingToday: ref.watch(smartWorkingTodayProvider),
-          hasOpenShift: true,
+          hasOpenShift: ref.watch(actionableShiftStateProvider).isOnShift,
         );
     final canPause = t.kind == ActiveTrackerKind.attendance && !qrOnly;
     final pauseGuard = canPause ? ref.watch(pauseGuardProvider) : null;

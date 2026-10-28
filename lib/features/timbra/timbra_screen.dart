@@ -119,7 +119,11 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
   Widget build(BuildContext context) => WorkLogLiveRefresh(child: _buildScreen(context));
 
   Widget _buildScreen(BuildContext context) {
-    final shiftState = ref.watch(timbraStateProvider);
+    // The punch controls act on the whole-log state, not today's: a shift opened at 22:00 is still
+    // open at 00:01 and must keep both its finish and its "FINE TURNO" label. See
+    // actionableShiftStateProvider — the sessions card and "Ore lavorate oggi" below stay
+    // day-scoped through their own providers.
+    final shiftState = ref.watch(actionableShiftStateProvider);
     final sessionsAsync = ref.watch(todaySessionsProvider);
     final rejected = ref.watch(syncFailedSessionsProvider).valueOrNull ?? const <WorkSession>[];
     final punchState = ref.watch(punchNotifierProvider);

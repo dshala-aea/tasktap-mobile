@@ -164,16 +164,22 @@ class SmartWorkingRequestApiClient {
     return list.cast<Map<String, dynamic>>().map(SmartWorkingRequestDto.fromJson).toList();
   });
 
-  /// POST /api/smart-working-requests. Returns the new request's id.
+  /// POST /api/smart-working-requests.
+  ///
+  /// Returns nothing on purpose. The POST declares no response schema and no caller needs the new
+  /// row's id, so parsing one was the only way this method could fail **after** the request already
+  /// existed on the server: a 2xx with no body (or a renamed key) threw, the form said "Impossibile
+  /// inviare la richiesta. Riprova.", and the retry filed a SECOND request — nothing here is
+  /// idempotent and the backend has no overlap rule.
   ///
   /// `requestedByUserId` is never sent: null means "myself" and the server resolves it, explicitly
   /// not trusting a client-supplied self-id.
-  Future<String> create({
+  Future<void> create({
     required DateTime startDate,
     required DateTime endDate,
     String? reason,
   }) => _guarded(() async {
-    final res = await _dio.post<Map<String, dynamic>>(
+    await _dio.post<dynamic>(
       '/api/smart-working-requests',
       data: {
         'startDate': formatDateOnly(startDate)!,
@@ -181,7 +187,6 @@ class SmartWorkingRequestApiClient {
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       },
     );
-    return res.data!['id'] as String;
   });
 
   /// POST /api/smart-working-requests/{id}/cancel.

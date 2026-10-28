@@ -58,6 +58,12 @@ abstract class _StubRepo implements IWorkSessionRepository {
   Future<List<WorkSession>> getTodaySessions() async => [];
 
   @override
+  Stream<List<WorkSession>> watchAllSessions() => const Stream.empty();
+
+  @override
+  Future<List<WorkSession>> getAllSessions() async => [];
+
+  @override
   Future<List<WorkSession>> getPendingSessions() async => [];
 
   @override
@@ -291,6 +297,54 @@ void main() {
       expect(find.text('FINE TURNO'), findsOneWidget);
       expect(find.text('PAUSA'), findsOneWidget);
       expect(find.text('Scansiona QR'), findsNothing);
+
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('qrOnly_shiftOpenedBeforeMidnight_keepsTheFinishControlAndEndsIt', (tester) async {
+      // The business-day rollover is what the day-scoped `timbraStateProvider` cannot cross: a
+      // shift punched at 22:00 is in yesterday's window, so at 00:01 it reads as "no shift". The
+      // flag must not turn that into "no way to finish" — the server's own gate accepts a
+      // ButtonOnly end-of-shift punch when the ROW's WorkDate was approved, which is exactly the
+      // night shift this covers. Two days back is used, not "yesterday", so this test cannot rot
+      // at the Rome midnight it is about.
+      await WorkSessionRepository(db).addEvent(
+        id: 'night-opener',
+        eventTime: DateTime.now().toUtc().subtract(const Duration(days: 2)),
+        eventType: 'ingresso',
+      );
+
+      await tester.pumpWidget(_buildApp(db, clockInMethod: 'QrOnly', smartWorking: false));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('INIZIA TURNO'), findsNothing, reason: 'a shift IS open, yesterday or not');
+      expect(
+        find.text('FINE TURNO'),
+        findsOneWidget,
+        reason: 'an open shift keeps the control that finishes it, past midnight too',
+      );
+      expect(
+        find.text('La tua azienda richiede la timbratura con QR.'),
+        findsNothing,
+        reason: 'the start-only notice must not replace a finish control',
+      );
+      // And the scanner stays reachable beside it — the one refusal the two-day rule cannot
+      // resolve is a cancelled approval on the row's own day.
+      expect(find.text('Scansiona QR'), findsOneWidget);
+
+      await tester.tap(find.text('FINE TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // The tap ended the shift instead of attempting a ClockIn and 409ing against the open row.
+      final rows = await (db.select(db.workSessions)
+            ..orderBy([(s) => OrderingTerm.asc(s.eventTime), (s) => OrderingTerm.asc(s.id)]))
+          .get();
+      expect(rows.map((r) => r.eventType), ['ingresso', 'fine']);
+      // With nothing open any more the flag is back to removing only a way to START — the tenant's
+      // own rule, not a finish control stuck on screen.
+      expect(find.text('La tua azienda richiede la timbratura con QR.'), findsOneWidget);
+      expect(find.text('FINE TURNO'), findsNothing);
 
       await _teardownTimer(tester);
     });
