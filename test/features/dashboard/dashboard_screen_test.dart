@@ -319,10 +319,10 @@ void main() {
 
     // ── Smart working on the idle prompt ──────────────────────────────────────
     //
-    // The hero's one slot starts work, so it reads the shared rule's `startOnly` surface: the
-    // scanner is an equally legal one-tap alternative on a QrOnly tenant, and only a confirmed
-    // approved day earns the punch. (The timbra panel fails open on an unknown answer because its
-    // button also ends the shift; see isButtonPunchWithheld.)
+    // The hero's one slot starts work, so it reads the shared rule's `startOnly` surface — which
+    // differs from the timbra panel only while a shift is open. An explicit non-approved answer
+    // sends the technician to the scanner; an unknown one does not, because on an approved remote
+    // day the scanner is the one affordance that cannot work. See isButtonPunchWithheld.
 
     testWidgets('QrOnly on an approved smart-working day offers the punch, not the scanner', (
       tester,
@@ -354,7 +354,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('QrOnly with an unknown smart-working answer keeps the prompt on the scanner', (
+    testWidgets('QrOnly with an unknown smart-working answer keeps the punch, not the scanner', (
       tester,
     ) async {
       final router = _makeQuickActionRouter();
@@ -366,6 +366,34 @@ void main() {
           extraOverrides: [
             effectiveClockInMethodProvider.overrideWithValue('QrOnly'),
             smartWorkingTodayProvider.overrideWithValue(null),
+          ],
+        ),
+      );
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      // Nobody has answered yet — a cold start, another user's session, /auth/me still in flight.
+      // Guessing "not approved" here would send a remote worker to a totem that is not there.
+      expect(find.text('Timbra ingresso'), findsOneWidget);
+      expect(find.text('Timbra con QR'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('QrOnly with a non-approved smart-working answer keeps the prompt on the scanner', (
+      tester,
+    ) async {
+      final router = _makeQuickActionRouter();
+      await tester.pumpWidget(
+        _buildDashboardWithRouter(
+          db: db,
+          repo: repo,
+          router: router,
+          extraOverrides: [
+            effectiveClockInMethodProvider.overrideWithValue('QrOnly'),
+            smartWorkingTodayProvider.overrideWithValue(false),
           ],
         ),
       );

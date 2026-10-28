@@ -196,15 +196,21 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
     });
   }
 
-  /// Whether the button punch this row would fire is one the server would refuse — an approved
-  /// smart-working day earns the button, anything short of that on a `QrOnly` tenant has to scan.
-  /// `startOnly`: this row always has the scanner as its alternative action, so the withholding
-  /// never leaves a running day without a way to finish it.
+  /// Whether the button punch this row would fire is one the server would refuse — only an
+  /// explicit non-approved answer on a `QrOnly` tenant reaches this, never an unknown one: the
+  /// technician's totem is on site, and this row may be the only control they have out in the
+  /// field, so an unanswered /auth/me keeps the buttons and lets the server decide.
+  ///
+  /// `hasOpenShift` is `true` because this row exists only while something is running — a fact
+  /// `startOnly` does not consult today, and deliberately so: on a QrOnly tenant the row's scanner
+  /// alternative is the sanctioned way to close a day the tenant has not approved, while the timbra
+  /// panel (whose button is the only control there) must never lose its finish. Stated rather than
+  /// passed as `false`, so a later move to `startOrFinish` cannot silently inherit a lie.
   bool get _qrOnly => isButtonPunchWithheld(
     surface: ButtonPunchSurface.startOnly,
     clockInMethod: ref.read(effectiveClockInMethodProvider),
     smartWorkingToday: ref.read(smartWorkingTodayProvider),
-    hasOpenShift: false,
+    hasOpenShift: true,
   );
 
   Future<void> _openScanner() async => context.push(AppRoutes.timbraQr);
@@ -243,14 +249,16 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
     // change it.
     //
     // The rule is [isButtonPunchWithheld]'s, `startOnly` surface: the scanner below is always the
-    // row's alternative, so this is the swap that can never strand a running day.
+    // row's alternative, so this is the swap that can never strand a running day. Only an explicit
+    // non-approved answer swaps; an unknown one leaves Ferma/Pausa working, which is the same
+    // answer the timbra panel gives.
     final qrOnly =
         t.kind == ActiveTrackerKind.attendance &&
         isButtonPunchWithheld(
           surface: ButtonPunchSurface.startOnly,
           clockInMethod: ref.watch(effectiveClockInMethodProvider),
           smartWorkingToday: ref.watch(smartWorkingTodayProvider),
-          hasOpenShift: false,
+          hasOpenShift: true,
         );
     final canPause = t.kind == ActiveTrackerKind.attendance && !qrOnly;
     final pauseGuard = canPause ? ref.watch(pauseGuardProvider) : null;

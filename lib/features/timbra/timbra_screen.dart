@@ -186,12 +186,20 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                     // With rejections present the page scrolls instead — the notice is the one
                     // thing here that must never be clipped.
                     //
-                    // The controls themselves are not a fixed height either: an approved
-                    // smart-working day adds the chip (~26dp + a 12dp gap), and the QrOnly notice
-                    // stands about 84dp where the punch button it replaces is 76. That slack is
-                    // inside the 640 budget below — the chip-on-a-real-viewport test pins the
-                    // fixed branch with both present, at the height a tall phone actually gives
-                    // this box.
+                    // The controls themselves are not a fixed height either. Counting against the
+                    // bare punch button (76dp):
+                    //   • approved smart-working day → chip ~26 + a 12 gap;
+                    //   • QrOnly notice → ~84, where the punch button it replaces is 76;
+                    //   • a shift open on a QrOnly day that is not confirmed approved → the
+                    //     scanner fallback under the controls: 12 gap + a one-or-two-line 12px
+                    //     caption + 8 + a 48 AppButton ≈ 104, *on top of* the pause button
+                    //     (12 + 48) the open shift already adds.
+                    // The largest arrangement is therefore punch + pause + fallback ≈ 252dp of
+                    // controls, well inside the 640 budget below — and the largest that can be
+                    // drawn at all, since the chip and the notice each need an answer the fallback
+                    // rules out. The fixed-layout tests pin that at 390×844, the height a tall phone
+                    // actually gives this box: once with the chip, once with an open shift and the
+                    // fallback present.
                     final fits = constraints.maxHeight >= _kFixedLayoutMinHeight && rejected.isEmpty;
                     final punchGuard = ref.watch(punchGuardProvider);
                     final clockDisagreement = ref.watch(timbraClockDisagreementProvider);
@@ -757,10 +765,9 @@ class _SmartWorkingChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // A place pin, not LucideIcons.home — that is the Dashboard tab's own glyph in
-              // bottom_nav.dart and would read as a navigation affordance here. `laptop` is not in
-              // the pinned lucide subset.
-              Icon(LucideIcons.mapPin, size: 13, color: v.statusGood),
+              // A laptop, not LucideIcons.home — that is the Dashboard tab's own glyph in
+              // bottom_nav.dart and would read as a navigation affordance here.
+              Icon(LucideIcons.laptop, size: 13, color: v.statusGood),
               const SizedBox(width: 6),
               Text(
                 'Smart working',

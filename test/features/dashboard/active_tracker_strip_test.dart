@@ -458,6 +458,49 @@ void main() {
     },
   );
 
+  testWidgets(
+    'QrOnly with an unknown smart-working answer keeps Pausa/Ferma working on a running row',
+    (tester) async {
+      // `null` is "nobody has answered", not "not approved" (cold start, /auth/me still in
+      // flight, another user's cached answer). The timbra panel fails open on it, and this row is
+      // the same running day seen from Home: if it guessed "not approved" it would be the one place
+      // with no control that ends the shift, sending a remote worker to a totem that is not there.
+      final repo = WorkSessionRepository(db);
+      await repo.addEvent(
+        id: 'seed-ingresso',
+        eventTime: DateTime.now().toUtc(),
+        eventType: 'ingresso',
+      );
+      await tester.pumpWidget(
+        buildRoutedStrip(repo: repo, trackers: attendanceTrackers(), smartWorking: null),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Pausa'), findsOneWidget);
+      expect(find.text('Ferma'), findsOneWidget);
+      expect(find.text('Timbra con QR'), findsNothing);
+
+      await tester.tap(find.text('Ferma'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+
+      expect(
+        find.text('SCANNER QR'),
+        findsNothing,
+        reason: 'unknown must be treated as the timbra panel treats it: let the server decide',
+      );
+      final sessions = await repo.getTodaySessions();
+      expect(sessions.any((s) => s.eventType == 'fine'), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(Duration.zero);
+      }
+    },
+  );
+
   // ── Ticket clock ────────────────────────────────────────────────────────────
   //
   // The ticket branch used to call the API directly, alone among the three kinds: with no signal

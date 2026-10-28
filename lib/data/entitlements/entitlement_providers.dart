@@ -79,16 +79,17 @@ final smartWorkingTodayProvider = Provider<bool?>((ref) {
 
 /// What the button punch being drawn is used for on the surface asking.
 ///
-/// Only the *finishing* half differs between surfaces — see [isButtonPunchWithheld].
+/// Both surfaces follow the same rule — withhold only on an explicit `false` — and differ in one
+/// respect only: what an open shift does to it. See [isButtonPunchWithheld].
 enum ButtonPunchSurface {
-  /// A control that only ever starts work, in a slot that can offer the kiosk scanner instead:
-  /// Home's idle prompt and the tracker row's action. Withheld unless the day is a confirmed
-  /// approved one. On a QrOnly tenant the scanner is always legal, so an unknown answer costs the
-  /// technician nothing here — one tap either way.
+  /// A control whose fallback is the kiosk scanner: Home's idle prompt, and the tracker row's own
+  /// action button. An explicit `false` withholds it here whatever else is true — on a day the
+  /// tenant has not approved, the scanner is the sanctioned punch rather than a detour.
   startOnly,
 
   /// The timbra control panel, where the same button ends the shift as well as starting it.
-  /// Withheld only on an explicit non-approved answer with nothing open.
+  /// Same rule, except that an open shift keeps the control regardless of the answer, because
+  /// there it is also the way to pause and to finish.
   startOrFinish,
 }
 
@@ -100,24 +101,28 @@ enum ButtonPunchSurface {
 /// `null`, which merely says nobody has answered yet (cold start, signed out, a different user,
 /// before /auth/me).
 ///
-/// [ButtonPunchSurface.startOnly] withholds on anything short of a confirmed approved day.
-/// [ButtonPunchSurface.startOrFinish] withholds only when the answer is an explicit `false` *and*
-/// nothing is open: **the flag may remove a way to START something, never a way to finish it.** A
-/// mid-shift approval revocation (or a night shift crossing the business-day rollover) must not
-/// leave an open shift with no control to pause or end it, and an unknown answer must not leave the
-/// technician at a screen with no button at all — a stale `true` would be a lie, a stale `false`
-/// would strand the person this feature exists for.
+/// Only an explicit `false` withholds anything, and only on a QrOnly tenant; `null` never does. An
+/// unknown answer leaves the scanner as the one affordance that cannot work — there is no totem in
+/// the technician's kitchen — so guessing "not approved" there would strand exactly the person this
+/// feature exists for. A stale `true` would be a lie, but it costs one refused punch and a visible
+/// error; a stale `false` costs the day's hours.
+///
+/// The single exception is the finishing half: **the flag may remove a way to START work, never a
+/// way to finish it.** A mid-shift approval revocation (or a night shift crossing the business-day
+/// rollover) must not leave an open shift with no control to pause or end it, so
+/// [ButtonPunchSurface.startOrFinish] keeps its button while [hasOpenShift] is true.
 bool isButtonPunchWithheld({
   required ButtonPunchSurface surface,
   required String clockInMethod,
   required bool? smartWorkingToday,
   required bool hasOpenShift,
 }) {
-  if (smartWorkingToday == true) return false;
   if (clockInMethod != 'QrOnly') return false;
+  // `null` is not an answer, so it never withholds — see the doc comment above.
+  if (smartWorkingToday != false) return false;
   return switch (surface) {
     ButtonPunchSurface.startOnly => true,
-    ButtonPunchSurface.startOrFinish => smartWorkingToday == false && !hasOpenShift,
+    ButtonPunchSurface.startOrFinish => !hasOpenShift,
   };
 }
 

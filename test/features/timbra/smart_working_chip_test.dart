@@ -331,5 +331,36 @@ void main() {
 
       await _teardownTimer(tester);
     });
+
+    testWidgets('an open shift plus the qr fallback still fit the fixed layout on a tall phone', (
+      tester,
+    ) async {
+      // The tallest arrangement this task can draw: punch + pause + the scanner fallback, which
+      // the budget comment in timbra_screen.dart counts at ≈252dp of controls. Same 390×844 as the
+      // test above, so the fixed branch is the branch under test rather than the scrolling one.
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await WorkSessionRepository(db).addEvent(
+        id: 'seed-ingresso',
+        eventTime: DateTime.now().toUtc(),
+        eventType: 'ingresso',
+      );
+
+      await tester.pumpWidget(_buildApp(db, clockInMethod: 'QrOnly', smartWorking: false));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.text('FINE TURNO'), findsOneWidget);
+      expect(find.text('PAUSA'), findsOneWidget);
+      expect(find.text('Scansiona QR'), findsOneWidget);
+      expect(
+        find.ancestor(of: find.text('FINE TURNO'), matching: find.byType(SingleChildScrollView)),
+        findsNothing,
+        reason: 'the fallback still fits inside _kFixedLayoutMinHeight on a tall phone',
+      );
+      expect(tester.takeException(), isNull);
+
+      await _teardownTimer(tester);
+    });
   });
 }

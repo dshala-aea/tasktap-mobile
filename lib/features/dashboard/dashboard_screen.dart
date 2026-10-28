@@ -234,9 +234,10 @@ class _ClockInPrompt extends ConsumerWidget {
     // whose only outcome is a refused request.
     //
     // The rule itself is [isButtonPunchWithheld]'s, not a local copy: this slot starts work only and
-    // can always offer the scanner instead, so it is the `startOnly` surface — withheld unless the
-    // day is confirmed approved, which keeps an unknown answer on the scanner here. (The timbra
-    // panel fails open on unknown because its one button also ends the shift; see that enum.)
+    // can always offer the scanner instead, so it is the `startOnly` surface. An explicit `false`
+    // sends the technician to the scanner; `null` does not — nobody has answered yet (cold start,
+    // another user, /auth/me still in flight), and on an approved remote day the scanner is the one
+    // affordance that cannot work. Same fail-open answer as the timbra panel.
     final withheld = isButtonPunchWithheld(
       surface: ButtonPunchSurface.startOnly,
       clockInMethod: ref.watch(effectiveClockInMethodProvider),
