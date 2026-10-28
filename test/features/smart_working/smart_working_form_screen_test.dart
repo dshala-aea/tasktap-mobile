@@ -10,6 +10,8 @@
 // is the tenant's civil day on the server and the device's locally — the server's 400 `detail`
 // must reach the technician unchanged.
 
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +20,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
 import 'package:tasktap_mobile/data/smart_working/smart_working_request_api_client.dart';
@@ -37,6 +40,9 @@ class _FakeSmartWorkingRequestApiClient extends SmartWorkingRequestApiClient {
   int fetchCalls = 0;
   Object? throwOnCreate;
 
+  /// Holds `create` open so a test can back out of the screen while the POST is still on the wire.
+  Completer<void>? createGate;
+
   @override
   Future<List<SmartWorkingRequestDto>> fetchMine({String? userId}) async {
     fetchCalls++;
@@ -49,6 +55,7 @@ class _FakeSmartWorkingRequestApiClient extends SmartWorkingRequestApiClient {
     required DateTime endDate,
     String? reason,
   }) async {
+    if (createGate != null) await createGate!.future;
     creates.add({'startDate': startDate, 'endDate': endDate, 'reason': reason});
     if (throwOnCreate != null) throw throwOnCreate!;
     // What the server does on success: a new pending row, newest first.
@@ -175,12 +182,15 @@ void main() {
     // Opened from the FAB, the form offers a single-day request starting today: the common case
     // the technician should be able to send with one tap and no picker at all.
     final fake = _FakeSmartWorkingRequestApiClient();
+    // Captured BEFORE the form is built: the form takes its reference day when it opens, and a run
+    // straddling local midnight must not compare a "today" read after the submit against a form
+    // seeded a moment earlier (the repo's Rome-midnight flake class).
+    final today = _today();
     await _openForm(tester, fake);
 
     await tester.tap(find.text('Invia richiesta'));
     await tester.pumpAndSettle();
 
-    final today = _today();
     expect(fake.creates, hasLength(1));
     expect(fake.creates.single['startDate'], today);
     expect(fake.creates.single['endDate'], today);
@@ -283,9 +293,10 @@ void main() {
   });
 
   testWidgets('serverDetail_isShownVerbatim', (tester) async {
-    // The one case the client cannot decide: the server resolves "today" in the TENANT's zone.
-    // Its sentence must reach the snackbar untouched — never replaced by a retry line.
-    const detail = 'La richiesta si sovrappone a un periodo già approvato.';
+    // The one case the client cannot decide: the server resolves "today" in the TENANT's zone, so
+    // a window this device believes starts today can already be past there. Its sentence must
+    // reach the snackbar untouched — never replaced by a retry line.
+    const detail = 'Non è possibile richiedere smart working per una data passata.';
     final fake = _FakeSmartWorkingRequestApiClient()
       ..throwOnCreate = const SmartWorkingValidationError(detail);
     await _openForm(tester, fake);
@@ -327,5 +338,51 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fake.creates.single['reason'], 'Lavoro da casa');
+  });
+
+  testWidgets('theNoteCannotExceedTheServersColumn', (tester) async {
+    // `SmartWorkingRequest.Reason` is varchar(1000) and the create endpoint does not length-check
+    // it, so a longer note would come back as an error the form can only report as "riprova" — a
+    // retry that can never succeed. The field caps it instead.
+    final fake = _FakeSmartWorkingRequestApiClient();
+    await _openForm(tester, fake);
+
+    await tester.enterText(find.byType(TextField).last, 'x' * 1001);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Invia richiesta'));
+    await tester.pumpAndSettle();
+
+    expect(fake.creates.single['reason'], hasLength(1000));
+  });
+
+  testWidgets('backingOutMidPost_stillRefreshesTheList', (tester) async {
+    // The request is already created server-side; the list underneath must not keep claiming the
+    // stale state just because the form (and its `ref`) is gone. The invalidate goes through the
+    // provider CONTAINER, which outlives the route.
+    final fake = _FakeSmartWorkingRequestApiClient();
+    final gate = Completer<void>();
+    fake.createGate = gate;
+    await _openForm(tester, fake);
+
+    final fetchesBeforeSubmit = fake.fetchCalls;
+
+    await tester.tap(find.text('Invia richiesta'));
+    await tester.pump();
+
+    // Back out while the POST is still on the wire (the header chevron the form actually shows).
+    await tester.tap(find.byIcon(LucideIcons.chevronLeft));
+    await tester.pumpAndSettle();
+    expect(find.text('Invia richiesta'), findsNothing, reason: 'the form was popped');
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(fake.creates, hasLength(1));
+    expect(
+      fake.fetchCalls,
+      greaterThan(fetchesBeforeSubmit),
+      reason: 'the created request must reach the list even though the form is gone',
+    );
+    expect(find.text('richieste: 1'), findsOneWidget);
   });
 }

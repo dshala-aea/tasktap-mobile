@@ -40,6 +40,7 @@ import 'package:tasktap_mobile/features/admin/magazzini/admin_magazzino_list_scr
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_list_screen.dart';
 import 'package:tasktap_mobile/features/altro/forbidden_screen.dart';
 import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
+import 'package:tasktap_mobile/features/smart_working/smart_working_form_screen.dart';
 import 'package:tasktap_mobile/main.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/kiosk_providers.dart';
@@ -207,7 +208,6 @@ void main() {
   // Proves the permission-gate sweep's new table rows use the same generic mechanism as
   // pianificazione above, not something pianificazione-specific — one capability-gated admin
   // subtree (magazzino.warehouse.read) and one module-gated operational route (cantieri).
-
   testWidgets(
     'denied magazzino.warehouse.read capability redirects /altro/magazzino/magazzini to /forbidden',
     (tester) async {
@@ -317,6 +317,65 @@ void main() {
 
       expect(find.byType(ForbiddenScreen), findsNothing);
       expect(find.byType(AdminCustomerFormScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  // The smart-working form is a real route, not just a `context.push` the list makes and hopes
+  // for: `/altro/smart-working/nuovo` is registered as a child of the list (app_router.dart). Until
+  // it was, the list's FAB threw. Deleting that `routes:` entry must fail the positive case below.
+  testWidgets(
+    'holder of the presenze module reaches /altro/smart-working/nuovo, not /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'presenze'},
+        capabilities: const {},
+        seatType: 'field',
+        fetchedAt: DateTime.utc(2026, 10, 28),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/smart-working/nuovo');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsNothing);
+      expect(find.byType(SmartWorkingFormScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'without the presenze module /altro/smart-working/nuovo redirects to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'interventi'},
+        capabilities: const {},
+        seatType: 'field',
+        fetchedAt: DateTime.utc(2026, 10, 28),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/smart-working/nuovo');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+      expect(find.byType(SmartWorkingFormScreen), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

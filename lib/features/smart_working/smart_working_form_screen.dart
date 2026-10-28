@@ -62,11 +62,19 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
   late DateTime _endDate;
   bool _isSaving = false;
 
+  /// The civil day this form was opened on, captured once.
+  ///
+  /// The pickers read a fresh [_today] each time they open, but the submit-time range check uses
+  /// THIS value. A form opened at 23:59 and submitted at 00:01 must not suddenly call the window
+  /// it was built around "past" — and a test that seeds its dates from the day it started must not
+  /// flip on a midnight straddle. A form genuinely left open across midnight is settled by the
+  /// server, whose `detail` reaches the technician verbatim (see [_rangeError]).
+  late final DateTime _openedOn = _today;
+
   @override
   void initState() {
     super.initState();
-    final today = _today;
-    _startDate = _dayOnly(widget.initialStartDate ?? today);
+    _startDate = _dayOnly(widget.initialStartDate ?? _openedOn);
     _endDate = _dayOnly(widget.initialEndDate ?? _startDate);
   }
 
@@ -96,9 +104,9 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
   ///
   /// Rule 3 is the one rule the client cannot decide exactly, and the handling is deliberate: the
   /// server resolves "today" through the TENANT's configured time zone, which this device has no
-  /// way to know. So the comparison below uses the DEVICE-local today (`DateTime.now()`'s y/m/d —
-  /// never UTC, never `DateTime.now().toUtc()`), and the server stays the authority: if the two
-  /// disagree, in either direction, the server's 400 `detail` is what the technician reads,
+  /// way to know. So the comparison below uses the DEVICE-local civil day ([_openedOn]: local
+  /// y/m/d — never UTC, never `DateTime.now().toUtc()`), and the server stays the authority: if the
+  /// two disagree, in either direction, the server's 400 `detail` is what the technician reads,
   /// verbatim (see `_save`'s `SmartWorkingValidationError` branch). This check is therefore a
   /// courtesy that spares an obvious round trip, not a second source of truth.
   static String? _rangeError({
@@ -150,12 +158,25 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
     return value;
   }
 
+  /// Invalidates the list through the container rather than the (possibly disposed) widget ref.
+  ///
+  /// Only the "container itself is gone" case is swallowed: that means the whole app was torn down
+  /// and there is no list left to refresh, whereas letting it escape would surface as an unhandled
+  /// async error (`onPressed` does not await [_save]).
+  static void _refreshList(ProviderContainer container) {
+    try {
+      container.invalidate(mySmartWorkingRequestsProvider);
+    } on StateError {
+      // Container already disposed — nothing left to refresh.
+    }
+  }
+
   Future<void> _save() async {
     if (_isSaving) return;
 
     // Local, certain facts about the form first: an invalid window is refused before the round
     // trip, with the very sentence the server would have answered.
-    final error = _rangeError(start: _startDate, end: _endDate, today: _today);
+    final error = _rangeError(start: _startDate, end: _endDate, today: _openedOn);
     if (error != null) {
       showAppToast(context, message: error, tone: ToastTone.error);
       return;
@@ -168,6 +189,14 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
     if (!ensureOnlineOrWarn(context, ref)) return;
 
     final reason = _reasonCtrl.text.trim();
+
+    // Captured BEFORE the await, deliberately. If the technician backs out mid-POST this screen's
+    // `ref` is disposed, and the request has still been created — the list underneath must not
+    // keep showing rows that no longer describe the server's state (this entity has no local
+    // mirror, so nothing else would correct it). The container outlives the route. The list
+    // screen's cancel path names this as the proper fix; this is that fix.
+    final container = ProviderScope.containerOf(context, listen: false);
+
     setState(() => _isSaving = true);
 
     try {
@@ -179,11 +208,11 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
             reason: reason.isEmpty ? null : reason,
           );
 
-      // Using `ref` after an await on a disposed widget throws; the technician may have backed
-      // out while the POST was in flight.
-      if (!mounted) return;
-      ref.invalidate(mySmartWorkingRequestsProvider);
+      // Through the container, not `ref`: on the back-tap path the element is gone after the await
+      // and `ref.invalidate` would throw. See [_refreshList].
+      _refreshList(container);
 
+      if (!mounted) return;
       showAppToast(
         context,
         message: 'Richiesta di smart working inviata',
@@ -191,10 +220,9 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
       );
       context.pop(true);
     } on SmartWorkingValidationError catch (e) {
-      // The server's `detail` is the whole explanation of what to change (a window that overlaps
-      // an existing request, a date past in the tenant's zone the device thought was today…).
-      // Showing a generic "riprova" instead would tell the technician to retry something only an
-      // edit can fix.
+      // The server's `detail` is the whole explanation of what to change (a date the tenant's zone
+      // already calls past although the device's did not, for instance). Showing a generic
+      // "riprova" instead would tell the technician to retry something only an edit can fix.
       if (mounted) showAppToast(context, message: e.detail, tone: ToastTone.error);
     } catch (_) {
       if (mounted) {
@@ -239,6 +267,10 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
             label: 'Motivo (facoltativo)',
             controller: _reasonCtrl,
             maxLines: 2,
+            // `SmartWorkingRequest.Reason` is varchar(1000) and the create endpoint does not
+            // length-check it, so anything longer comes back as a 500 the form can only report as
+            // "riprova" — a retry that can never succeed. Cap it at the source instead.
+            maxLength: 1000,
           ),
           const SizedBox(height: 32),
           AppButton(
