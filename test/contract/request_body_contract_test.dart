@@ -13,6 +13,7 @@ import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_preferences_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
+import 'package:tasktap_mobile/data/smart_working/smart_working_request_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/ticket_timer_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
@@ -416,6 +417,56 @@ void main() {
     contractTest('cancelling an absence request matches the server', () {
       final client = AbsenceRequestApiClient(dio);
       return capture(() => client.cancel(_id(19)));
+    });
+  });
+
+  group('smart working', () {
+    contractTest('a smart-working request matches the server', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(
+        () => client.create(
+          startDate: DateTime.utc(2026, 9, 14),
+          endDate: DateTime.utc(2026, 9, 18),
+          reason: 'lavoro da casa',
+        ),
+      );
+    });
+
+    /// `userId` omitted means "self" only for a non-Approve caller — for an approve-holder it
+    /// means the whole tenant. The screen titled "le mie richieste" sends its own id, and that
+    /// only works if the route still declares the parameter under that name.
+    contractTest('the list carries the caller’s own id as a declared query parameter', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(() => client.fetchMine(userId: _id(20)));
+    });
+
+    contractTest('cancelling a smart-working request matches the server', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(() => client.cancel(_id(20)));
+    });
+
+    /// The subset check above can only flag keys the schema does not declare, so a key the client
+    /// stopped sending is invisible to it. Stated here because `requestedByUserId` is the one key
+    /// of this schema the client must *never* send: null means "myself", and the server
+    /// deliberately does not trust a client-supplied self-id.
+    test('the create body is exactly the window and an optional reason, never a self-id', () async {
+      final client = SmartWorkingRequestApiClient(dio);
+      final sent = await capture(
+        () => client.create(
+          startDate: DateTime.utc(2026, 9, 14),
+          endDate: DateTime.utc(2026, 9, 18),
+          reason: 'lavoro da casa',
+        ),
+      );
+
+      final schema = schemas['CreateSmartWorkingRequestBody'] as Map<String, dynamic>;
+      final declared = (schema['properties'] as Map<String, dynamic>).keys.toSet();
+
+      expect(sent.body!.keys.toSet(), {'startDate', 'endDate', 'reason'});
+      expect(sent.body!.keys.toSet().difference(declared), isEmpty);
+      expect(sent.body!.containsKey('requestedByUserId'), isFalse);
+      expect(sent.body!['startDate'], '2026-09-14');
+      expect(sent.body!['endDate'], '2026-09-18');
     });
   });
 

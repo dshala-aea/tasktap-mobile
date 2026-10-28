@@ -15369,6 +15369,236 @@
         }
       }
     },
+    "/api/smart-working-requests": {
+      "post": {
+        "tags": [
+          "SmartWorkingRequests"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSmartWorkingRequestBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSmartWorkingRequestBody"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSmartWorkingRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "SmartWorkingRequests"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "Null means \u0022self\u0022 for a non-Approve caller, and \u0022everyone\u0022 for an Approve-holder.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AbsenceRequestStatusEnum"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "First day of the window, inclusive; null means unbounded.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Last day of the window, inclusive; null means unbounded.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/smart-working-requests/{id}": {
+      "get": {
+        "tags": [
+          "SmartWorkingRequests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/smart-working-requests/{id}/approve": {
+      "post": {
+        "tags": [
+          "SmartWorkingRequests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideSmartWorkingRequestBody"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideSmartWorkingRequestBody"
+                  }
+                ]
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideSmartWorkingRequestBody"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/smart-working-requests/{id}/reject": {
+      "post": {
+        "tags": [
+          "SmartWorkingRequests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideSmartWorkingRequestBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideSmartWorkingRequestBody"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideSmartWorkingRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/smart-working-requests/{id}/cancel": {
+      "post": {
+        "tags": [
+          "SmartWorkingRequests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Smtp": {
       "get": {
         "tags": [
@@ -21521,7 +21751,7 @@
           "WorkLog"
         ],
         "summary": "A month of hours as worker \u00D7 day cells, for the presenze grid.",
-        "description": "     The summary endpoint below answers \u0022how much did each person work this month\u0022; this answers\n     \u0022which days did they work, and how\u0022. Both come from one aggregation pass, so a cell and the\n     total above it cannot disagree.\n\n     Every day of the month is present, worked or not \u2014 a grid with holes is a grid whose columns\nstop lining up, and an absent day is information the person approving hours needs to see.\nUsers are those with at least one log in the month: a roster of everyone who ever existed is\na different question, and one the caller can already answer.",
+        "description": "     The summary endpoint below answers \u0022how much did each person work this month\u0022; this answers\n     \u0022which days did they work, and how\u0022. Both come from one aggregation pass, so a cell and the\n     total above it cannot disagree.\n\n     Every day of the month is present, worked or not \u2014 a grid with holes is a grid whose columns\nstop lining up, and an absent day is information the person approving hours needs to see.\nUsers are those with at least one log, approved absence, or approved remote day in the month:\na month spent entirely remote (or entirely on ferie) produces no logs, yet must still get a\nblock of its own rather than vanishing from the grid. A roster of everyone who ever existed\nis a different question, and one the caller can already answer.",
         "parameters": [
           {
             "name": "year",
@@ -27594,6 +27824,33 @@
           }
         }
       },
+      "CreateSmartWorkingRequestBody": {
+        "type": "object",
+        "properties": {
+          "requestedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null means \u0022myself\u0022 \u2014 resolved server-side, never trust a client-supplied self-id.",
+            "format": "uuid"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CreateSquadraRequest": {
         "required": [
           "nome",
@@ -28311,6 +28568,17 @@
         "type": "integer"
       },
       "DecideAbsenceRequestBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "DecideSmartWorkingRequestBody": {
         "type": "object",
         "properties": {
           "reason": {
@@ -31035,7 +31303,8 @@
           "orePausa",
           "oreNotturno",
           "festivo",
-          "assenza"
+          "assenza",
+          "smartWorking"
         ],
         "type": "object",
         "properties": {
@@ -31080,6 +31349,10 @@
               "string"
             ],
             "description": "The approved absence covering this day, e.g. \u0022Ferie\u0022 or \u0022Permesso retribuito 4h\u0022; null when the\nperson was expected at work. Only approved requests are marked \u2014 see\n\u0060IWorkLogAggregator\u0060\u0027s \u0060WorkLogUserDayAbsence\u0060 for why a pending one is not."
+          },
+          "smartWorking": {
+            "type": "boolean",
+            "description": "True when an approved smart-working request covers this day. A location marker only: it changes\nno hour figure and does not suppress Assenza \u2014 a day can be both remote and\ncarry a partial-day absence."
           }
         },
         "description": "One person on one day."
@@ -44172,6 +44445,9 @@
     },
     {
       "name": "Signup"
+    },
+    {
+      "name": "SmartWorkingRequests"
     },
     {
       "name": "Smtp"
