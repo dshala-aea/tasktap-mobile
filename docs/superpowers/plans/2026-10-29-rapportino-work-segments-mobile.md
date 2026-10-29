@@ -373,14 +373,14 @@ with the field docs:
 
 - [ ] **Step 4: Mirror them in the applier**
 
-In `lib/data/sync/sync_service.dart`'s report-aggregate block, add a `segments` grouping beside `staff`, delete the table for `replace` beside the other children, and insert after the staff loop:
+**The segments are nested, not a sibling list.** The server projects them separately but stitches
+them into each `SyncReportStaffDto` before serializing (`MobileUserSyncService.cs:681-695`), and
+`MobileUserSyncResult` has no `reportSegments` member — only `ReportStaff`. So there is no new
+payload property to add: `payload.reportStaff` already carries them, once `SyncReportStaffDto`
+parses `segments` in Step 3.
 
-```dart
-      final segments = <String, List<SyncReportSegmentDto>>{};
-      for (final g in payload.reportSegments) {
-        (segments[g.reportId] ??= []).add(g);
-      }
-```
+In `lib/data/sync/sync_service.dart`'s report-aggregate block, delete the table for `replace` beside
+the other children, then insert each staff row's own intervals right after that row:
 
 ```dart
         await (db.delete(
@@ -389,7 +389,7 @@ In `lib/data/sync/sync_service.dart`'s report-aggregate block, add a `segments` 
 ```
 
 ```dart
-          for (final g in segments[reportId] ?? const <SyncReportSegmentDto>[]) {
+          for (final g in s.segments) {
             await db
                 .into(db.reportStaffSegments)
                 .insert(
@@ -408,7 +408,13 @@ In `lib/data/sync/sync_service.dart`'s report-aggregate block, add a `segments` 
           }
 ```
 
-The payload needs a `reportSegments` list: add the property to the sync response DTO beside `reportStaff`, parsed the same way (`_list(j['reportSegments'], SyncReportSegmentDto.fromJson)`). Read the surrounding class before editing — `carriesReportAggregate` is derived from `j.containsKey('reportStaff')`, so the new list arrives under its own key without changing that check's meaning. Mirror whatever the server actually sends; confirm the key name in the refreshed snapshot (`reportSegments` on `MobileUserSyncResult`/the response DTO) rather than guessing.
+Place it inside the existing `for (final s in staff[reportId] ...)` loop, immediately after that
+row's `reportStaffTable` insert, so a reader sees the row and the intervals that justify its hours
+in one place.
+
+The delete for `report_staff_segments` keys on `replace`, exactly like `reportStaffTable` and the
+other children, and runs in the same delete batch — a report in the payload's in-scope set with no
+segments genuinely has none, and the local-only working copy is already excluded by `owned`.
 
 - [ ] **Step 5: Run the contract and sync tests**
 
@@ -510,7 +516,11 @@ class StaffSegment {
         : [
             ...row.segments,
             StaffSegment(
-              id: 'seg-${now.microsecondsSinceEpoch}',
+              // A UUID, not a readable `seg-<epoch>`: the server binds `Id` and `ClientId` as
+              // `Guid`, so any other string fails to deserialize and the whole submit 400s. The
+              // local id and the claimed `ClientId` are the same value, so a replayed tap
+              // collapses onto the row it already wrote instead of recording the hours twice.
+              id: const Uuid().v4(),
               startUtc: startedAt,
               endUtc: now,
             ),
