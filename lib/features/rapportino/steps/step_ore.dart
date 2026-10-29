@@ -546,14 +546,10 @@ class _StaffTileState extends State<_StaffTile> {
   Widget build(BuildContext context) {
     final row = widget.row;
     final suggestion = widget.worklogSuggestion;
-    // What the tap destroys: the recorded intervals, or the start→end range of a row the
-    // suggestion carries no range of its own to replace. Either way the technician should hear it
-    // before it happens — a dropped "Inizio/Fine" is just as invisible afterwards as deleted
-    // intervals.
-    final discardsTiming =
-        suggestion != null &&
-        (row.segments.isNotEmpty ||
-            (suggestion.startTime == null && (row.startTime != null || row.endTime != null)));
+    // What the tap destroys, for the chip's own words. The confirmation re-reads the predicate
+    // from the row as it stands at gate time; here it is only a label, and a label may lag a
+    // rebuild — it cannot act.
+    final discardsTiming = suggestion != null && _discardsTiming(row, suggestion);
     // The same reading of the row, in the chip's own words. An interval is the timer's, so that
     // tap replaces the timer; a dropped start→end range is not — a row the office sent with
     // 08:00→12:00 never had a timer to replace, and the chip must not claim one.
@@ -662,7 +658,7 @@ class _StaffTileState extends State<_StaffTile> {
               suggestion: suggestion,
               businessTime: widget.businessTime,
               replaceLabel: replaceLabel,
-              onApply: () => _applySuggestion(suggestion, discardsTiming: discardsTiming),
+              onApply: () => _applySuggestion(suggestion),
             ),
           ],
 
@@ -691,6 +687,13 @@ class _StaffTileState extends State<_StaffTile> {
 
   String _fmtTime(DateTime dt) => widget.businessTime.formatInZone(dt, 'HH:mm');
 
+  /// Whether applying [suggestion] to [row] throws away timing the technician can currently see —
+  /// the recorded intervals, or a start→end range the suggestion carries no range of its own to
+  /// replace. Shared by the chip's label and the confirmation, so the two cannot drift.
+  bool _discardsTiming(StaffRow row, WorklogHoursSuggestion suggestion) =>
+      row.segments.isNotEmpty ||
+      (suggestion.startTime == null && (row.startTime != null || row.endTime != null));
+
   /// Applies the chip, asking first when the tap would discard recorded timing.
   ///
   /// The chip already says so, but it is a small target on a card full of controls, and what it
@@ -698,13 +701,14 @@ class _StaffTileState extends State<_StaffTile> {
   /// recovered from this phone once gone. The confirmation reuses the app's own destructive
   /// dialog, so it reads as the same gesture as every other "this deletes something" in the app.
   ///
-  /// [discardsTiming] is passed rather than re-derived here: the chip's own label is drawn from
-  /// the same expression, so a tap and its warning cannot say two different things.
-  Future<void> _applySuggestion(
-    WorklogHoursSuggestion suggestion, {
-    required bool discardsTiming,
-  }) async {
-    if (discardsTiming) {
+  /// The predicate is read from [widget] HERE, not from the build that drew the chip: the apply
+  /// path re-resolves the row after this dialog (`overrideStaffHours`), so an interval that arrived
+  /// in between would otherwise be deleted having been shown no warning. One window remains — a
+  /// sync landing while the modal itself is open — and it is accepted rather than guarded with a
+  /// second dialog: the message the technician already confirmed names the hours and the times it
+  /// deletes, and that is true of an interval that arrived a moment ago too.
+  Future<void> _applySuggestion(WorklogHoursSuggestion suggestion) async {
+    if (_discardsTiming(widget.row, suggestion)) {
       final confirmed = await confirmDeleteDialog(
         context,
         title: 'Sostituire gli orari registrati?',

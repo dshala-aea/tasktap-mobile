@@ -972,7 +972,11 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     // `effectiveHours` falls through to `endTime - startTime` once `hoursWorked` is null, so
     // leaving the end behind would not clear the row: it would quietly replace the typed 3 h with
     // the 8 h the old span happens to cover, and `_staffToCompanion` would persist that.
-    final discarding = row.segments.isEmpty && row.hoursWorked != null;
+    //
+    // `endTime` is half the test, not a detail: a row with a null total but a span is one whose
+    // hours still come from that span, so the span is the number being discarded. Requiring a
+    // total would leave that row keeping its end, and the next save would persist the span.
+    final discarding = row.segments.isEmpty && (row.hoursWorked != null || row.endTime != null);
     final started = row.copyWith(
       timerRunning: true,
       timerStartedAt: now,

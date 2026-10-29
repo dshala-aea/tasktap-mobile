@@ -475,6 +475,35 @@ void main() {
       expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
     });
 
+    test('starting the timer drops a span whose row carries no total at all', () async {
+      // Same defect, one shape further out: with `hoursWorked` already null, a row that still has
+      // start/end takes its hours from the span (`effectiveHours`), so the span is the number the
+      // start is discarding — not a detail the predicate can key on the total alone.
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      final earlierStart = DateTime.utc(2026, 6, 21, 8);
+      final earlierEnd = DateTime.utc(2026, 6, 21, 12);
+      await notifier.addStaff(
+        StaffRow(
+          id: 's-1',
+          userId: 'u-1',
+          startTime: earlierStart,
+          endTime: earlierEnd,
+          segments: const [],
+        ),
+      );
+
+      await notifier.startTimer('s-1');
+
+      final row = notifier.state.staffRows.first;
+      expect(row.endTime, isNull);
+      expect(row.startTime, isNot(earlierStart));
+      expect(row.timerRunning, isTrue);
+      // The value, not just the column: the 4 h span is what a surviving `endTime` would persist.
+      expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
+    });
+
     test('stopTimer sets timerRunning=false and endTime', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = await _makeEditor(db);
@@ -494,14 +523,17 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      // Already started once today, so `startTime` (pinned to the first start) is hours away from
-      // this run. An implementation that recorded `startTime` instead of the live
-      // `timerStartedAt` would put the interval at 08:00 and fail below.
+      // A run started earlier and never stopped: the start is on the row, the total and the end
+      // are not (timer state is not persisted across a restart). Nothing here is being discarded,
+      // so `startTimer` keeps that 08:00 start while this run begins at `now` — two instants hours
+      // apart, which is the whole point. An implementation that recorded `startTime` instead of
+      // the live `timerStartedAt` would put the interval at 08:00 and fail below. (A fixture with a
+      // total would be discarding, and `startTimer` pins the start to that same `now`, collapsing
+      // the two instants and letting the bug through.)
       await notifier.addStaff(
         StaffRow(
           id: 's-1',
           userId: 'u-1',
-          hoursWorked: 0.0,
           startTime: DateTime.utc(2026, 6, 21, 8),
         ),
       );
