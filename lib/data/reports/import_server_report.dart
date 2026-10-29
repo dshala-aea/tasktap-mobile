@@ -211,6 +211,11 @@ Future<void> importServerReport({
         );
 
     await (db.delete(db.reportStaffTable)..where((s) => s.reportId.equals(reportId))).go();
+    // The staff rows are recreated below with new ids but the same user ids, so any interval that
+    // survived would re-attach to a colleague whose hours now come from the server — and
+    // `effectiveHours` prefers those intervals over the server's own number. Nothing imports
+    // intervals here on purpose: this payload does not carry them.
+    await (db.delete(db.reportStaffSegments)..where((g) => g.reportId.equals(reportId))).go();
     await (db.delete(db.reportMateriali)..where((m) => m.reportId.equals(reportId))).go();
     await (db.delete(db.reportControlli)..where((c) => c.reportId.equals(reportId))).go();
 

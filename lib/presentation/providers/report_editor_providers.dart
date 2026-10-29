@@ -69,9 +69,9 @@ class StaffRow {
 
   /// The intervals this row's hours were measured from, in no particular order (the sum does not
   /// care). Empty for a row whose hours came from the office, a manual edit, or a client older
-  /// than this table — and that emptiness is exactly the signal the read-only rule keys off
-  /// (`segments.isNotEmpty`): where there is no interval there is nothing this device could have
-  /// measured, so the hours were not its to re-derive.
+  /// than this table. Emptiness is meant to be the editor's only evidence that these hours were
+  /// not measured here — where there is no interval there is nothing this device could have timed,
+  /// so the hours are not its to re-derive.
   final List<StaffSegment> segments;
 
   // Live timer fields (transient — not in Drift)
@@ -124,8 +124,10 @@ class StaffRow {
   /// everywhere it's actually used (the total, the DB save, the submit payload).
   double get effectiveHours {
     if (segments.isNotEmpty) {
-      final minutes = segments.fold<int>(0, (sum, s) => sum + s.duration.inMinutes);
-      return minutes / 60.0;
+      // Summed in milliseconds and divided once: `inMinutes` truncates per interval, so k
+      // sub-minute runs would otherwise contribute nothing at all — silently unpaid time.
+      final millis = segments.fold<int>(0, (sum, s) => sum + s.duration.inMilliseconds);
+      return millis / 3600000.0;
     }
     if (hoursWorked != null) return hoursWorked!;
     if (startTime != null && endTime != null) {
@@ -684,8 +686,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
         : null;
     final metadata = _parseMetadataJson(draft.metadataJson);
     // The intervals are one collection for the whole report, so they hang off `userId`, exactly
-    // like the staff rows do. Grouping here (rather than a query per row) keeps the row's own
-    // segments beside it, which is what `effectiveHours` and the submit builder read.
+    // like the staff rows do. Grouping here (rather than a query per row) is what puts each
+    // technician's own intervals beside their row, which is where both `effectiveHours` and
+    // anything building a submit body will look for them.
     final segmentsByUser = <String, List<StaffSegment>>{};
     for (final g in segments) {
       (segmentsByUser[g.userId] ??= []).add(
@@ -962,10 +965,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     final row = state.staffRows.firstWhere((r) => r.id == staffId);
     final now = DateTime.now().toUtc();
     final startedAt = row.timerStartedAt;
-    final newSegments = startedAt == null
-        ? row.segments
+    final added = startedAt == null
+        ? const <StaffSegment>[]
         : [
-            ...row.segments,
             StaffSegment(
               // A UUID, not a readable `seg-<epoch>`: the server binds `Id` and `ClientId` as
               // `Guid`, so any other string fails to deserialize and the whole submit 400s. The
@@ -976,6 +978,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
               endUtc: now,
             ),
           ];
+    final newSegments = [...row.segments, ...added];
     final stopped = row.copyWith(
       timerRunning: false,
       endTime: now,
@@ -987,12 +990,17 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     await updateStaff(
       newSegments.isEmpty ? stopped : stopped.copyWith(hoursWorked: stopped.effectiveHours),
     );
+    // Only the interval THIS stop measured, never the hydrated ones. Sync writes a server
+    // interval's `clientId` from the payload — a different uuid from its `id`, and null for one
+    // recorded by an older client. Re-upserting those rows would overwrite that claim with our own
+    // id and reset `createdAt`, so the device would afterwards claim a client id it never sent and
+    // the server's replay key would stop matching.
     await _repo.upsertSegments([
-      for (final s in newSegments)
+      for (final s in added)
         ReportStaffSegmentsCompanion.insert(
           id: s.id,
           tenantId: state.tenantId,
-          createdAt: DateTime.now().toUtc(),
+          createdAt: now,
           reportId: state.reportId,
           userId: row.userId,
           startUtc: s.startUtc,

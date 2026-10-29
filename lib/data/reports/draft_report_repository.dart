@@ -177,8 +177,14 @@ class DraftReportRepository {
   // every report in its payload's version set (see `_applyReportAggregate`). No merge path here on
   // purpose — the payload is the authority once the report is server-known.
 
+  /// A report's intervals, oldest first. Ordered here rather than relying on rowid: a hydrated
+  /// list only looks chronological by luck otherwise, and the order it arrives in is the order the
+  /// editor holds and a submit body would serialise.
   Future<List<ReportStaffSegment>> getSegments(String reportId) =>
-      (_db.select(_db.reportStaffSegments)..where((s) => s.reportId.equals(reportId))).get();
+      (_db.select(_db.reportStaffSegments)
+            ..where((s) => s.reportId.equals(reportId))
+            ..orderBy([(s) => OrderingTerm.asc(s.startUtc), (s) => OrderingTerm.asc(s.id)]))
+          .get();
 
   Future<void> upsertSegments(List<ReportStaffSegmentsCompanion> rows) async {
     await _db.batch((b) => b.insertAllOnConflictUpdate(_db.reportStaffSegments, rows));

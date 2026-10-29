@@ -443,31 +443,137 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      // Already started once today, so `startTime` (pinned to the first start) is hours away from
+      // this run. An implementation that recorded `startTime` instead of the live
+      // `timerStartedAt` would put the interval at 08:00 and fail below.
+      await notifier.addStaff(
+        StaffRow(
+          id: 's-1',
+          userId: 'u-1',
+          hoursWorked: 0.0,
+          startTime: DateTime.utc(2026, 6, 21, 8),
+        ),
+      );
       await notifier.startTimer('s-1');
-      // Drift's `dateTime()` keeps whole seconds (`millisecondsSinceEpoch ~/ 1000`), so an
-      // immediate stop would round-trip to a zero-length interval — a real run, but one this
-      // assertion could not distinguish from a placeholder.
-      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      final runStart = notifier.state.staffRows.first.timerStartedAt!;
       await notifier.stopTimer('s-1');
 
       final stored = await repo.getSegments('draft-1');
       expect(stored, hasLength(1));
-      expect(stored.single.endUtc.isAfter(stored.single.startUtc), isTrue);
+      // Whole seconds is the only precision Drift's `dateTime()` keeps (`millisecondsSinceEpoch
+      // ~/ 1000`), so the round trip legitimately drops the fraction.
+      expect(
+        stored.single.startUtc.millisecondsSinceEpoch ~/ 1000,
+        runStart.millisecondsSinceEpoch ~/ 1000,
+      );
     });
 
     test('two runs record two intervals, not one span', () async {
-      // start/stop, start/stop — the gap between them is not worked time.
+      // start/stop, start/stop — the gap between them is not worked time, so the second interval
+      // begins at the second run's own start rather than stretching the first one over the break.
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.addStaff(
+        StaffRow(
+          id: 's-1',
+          userId: 'u-1',
+          hoursWorked: 0.0,
+          startTime: DateTime.utc(2026, 6, 21, 8),
+        ),
+      );
+      await notifier.startTimer('s-1');
+      final firstRun = notifier.state.staffRows.first.timerStartedAt!;
+      await notifier.stopTimer('s-1');
+      await notifier.startTimer('s-1');
+      final secondRun = notifier.state.staffRows.first.timerStartedAt!;
+      expect(secondRun.isAfter(firstRun), isTrue);
+      await notifier.stopTimer('s-1');
+
+      final stored = await repo.getSegments('draft-1');
+      expect(stored, hasLength(2));
+      // Oldest first (getSegments orders by startUtc), each anchored on its own run.
+      expect(
+        stored[0].startUtc.millisecondsSinceEpoch ~/ 1000,
+        firstRun.millisecondsSinceEpoch ~/ 1000,
+      );
+      expect(
+        stored[1].startUtc.millisecondsSinceEpoch ~/ 1000,
+        secondRun.millisecondsSinceEpoch ~/ 1000,
+      );
+      // The break between the two runs belongs to neither interval.
+      expect(stored[1].startUtc.isBefore(stored[0].endUtc), isFalse);
+    });
+
+    test('a stop does not rewrite an interval that came down from the server', () async {
+      // Sync writes a server interval's `clientId` from the payload — a different uuid from its
+      // `id`, and null for one recorded by an older client. Re-upserting that row on the next stop
+      // would overwrite the claim with our own id and reset `createdAt`: the device would then
+      // assert a client id it never sent, and the server's replay key would stop matching.
+      await _seedDraft(db, 'draft-1');
+      await db
+          .into(db.reportStaffTable)
+          .insert(
+            ReportStaffTableCompanion.insert(
+              id: 's-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 21, 7),
+              reportId: 'draft-1',
+              userId: 'u-1',
+              hoursWorked: const Value(1.0),
+            ),
+          );
+      await db
+          .into(db.reportStaffSegments)
+          .insert(
+            ReportStaffSegmentsCompanion.insert(
+              id: 'server-seg-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 21, 7),
+              reportId: 'draft-1',
+              userId: 'u-1',
+              startUtc: DateTime.utc(2026, 6, 21, 7),
+              endUtc: DateTime.utc(2026, 6, 21, 8),
+              clientId: const Value('a-different-uuid'),
+            ),
+          );
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.startTimer('s-1');
+      await notifier.stopTimer('s-1');
+
+      final stored = await repo.getSegments('draft-1');
+      expect(stored, hasLength(2));
+      final serverRow = stored.firstWhere((s) => s.id == 'server-seg-1');
+      expect(serverRow.clientId, 'a-different-uuid');
+      // `.toUtc()` on the value: `dateTime()` decodes local-kinded (same shape as migration_v60).
+      expect(serverRow.createdAt.toUtc(), DateTime.utc(2026, 6, 21, 7));
+    });
+
+    test('stopTimer still writes the interval-derived total onto hoursWorked', () async {
+      // The office web and every older client read this column and nothing else, so after a stop
+      // it must hold the intervals' own sum rather than survive as whatever was there before —
+      // leaving it stale is exactly what made the two sides disagree.
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 5.0));
       await notifier.startTimer('s-1');
       await notifier.stopTimer('s-1');
       await notifier.startTimer('s-1');
       await notifier.stopTimer('s-1');
 
-      expect(await repo.getSegments('draft-1'), hasLength(2));
+      final stored = await repo.getSegments('draft-1');
+      final intervalHours =
+          stored.fold<int>(
+            0,
+            (sum, s) => sum + s.endUtc.difference(s.startUtc).inMilliseconds,
+          ) /
+          3600000.0;
+
+      final staffRow = (await repo.getStaff('draft-1')).single;
+      expect(staffRow.hoursWorked, closeTo(intervalHours, 0.01));
+      expect(staffRow.hoursWorked, isNot(closeTo(5.0, 0.01)));
     });
 
     test('a recorded interval claims the same id as its wire clientId', () async {

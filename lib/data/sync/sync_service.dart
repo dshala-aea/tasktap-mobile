@@ -580,6 +580,9 @@ class SyncService {
     // Report child rows first — none has a foreign key, but a child whose report is gone is a
     // read path with nothing to resolve against.
     await (db.delete(db.reportStaffTable)..where((r) => r.reportId.isIn(drop))).go();
+    // The intervals hang off the same report as the staff rows above: a report the server has
+    // deleted must not leave the hours that justified it behind as orphans nothing can attribute.
+    await (db.delete(db.reportStaffSegments)..where((g) => g.reportId.isIn(drop))).go();
     await (db.delete(db.reportMateriali)..where((r) => r.reportId.isIn(drop))).go();
     await (db.delete(db.reportControlli)..where((r) => r.reportId.isIn(drop))).go();
     await (db.delete(db.reportStrumenti)..where((r) => r.reportId.isIn(drop))).go();
