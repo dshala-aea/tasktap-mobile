@@ -6,8 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart'
+    show internalUserIdPrefsKey;
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
@@ -22,8 +25,13 @@ class _FakeAbsenceRequestApiClient extends AbsenceRequestApiClient {
   Object? throwOnCancel;
   Object? throwOnFetch;
 
+  /// What the last read put on the wire: the screen is the technician's own history, so this must
+  /// be their internal id — an unscoped read is the whole tenant for an approve-holder.
+  String? lastUserId;
+
   @override
-  Future<List<AbsenceRequestDto>> fetchMine() async {
+  Future<List<AbsenceRequestDto>> fetchMine({String? userId}) async {
+    lastUserId = userId;
     if (throwOnFetch != null) throw throwOnFetch!;
     return _items;
   }
@@ -127,6 +135,11 @@ void main() {
     await initializeDateFormatting('it', null);
   });
 
+  setUp(() {
+    // The real provider reads the signed-in user's internal id from prefs on every read.
+    SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'user-1'});
+  });
+
   testWidgets('renders requests the client returns', (tester) async {
     final fake = _FakeAbsenceRequestApiClient([_request(id: 'ar-1'), _request(id: 'ar-2', type: 1)]);
 
@@ -135,6 +148,31 @@ void main() {
 
     expect(find.text('Ferie'), findsOneWidget);
     expect(find.text('Permesso'), findsOneWidget);
+    expect(
+      fake.lastUserId,
+      'user-1',
+      reason: 'the list is always scoped to the caller: an omitted userId is the whole tenant for '
+          'an approve-holder, rendered with no requester per row',
+    );
+    await _disposeScreen(tester);
+  });
+
+  testWidgets('an unknown caller id never asks unscoped', (tester) async {
+    // Before the device has ever reached /api/Auth/me (or after a consented sign-out wiped prefs)
+    // there is no self to scope to. Issuing the request anyway would be answered with the tenant,
+    // so the provider must answer from the device's own mirror instead.
+    SharedPreferences.setMockInitialValues({});
+    final fake = _FakeAbsenceRequestApiClient([_request(id: 'ar-1')]);
+
+    await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
+    await tester.pumpAndSettle();
+
+    expect(
+      fake.lastUserId,
+      isNull,
+      reason: 'no request may go out for an unknown caller — omitted userId means "everyone" here',
+    );
+    expect(find.text('Ferie'), findsNothing);
     await _disposeScreen(tester);
   });
 
