@@ -436,6 +436,114 @@ void main() {
       expect(row.timerRunning, isFalse);
       expect(row.endTime, isNotNull);
     });
+
+    test('stopTimer records the interval it just measured', () async {
+      // A stop is evidence: the run's two instants are what the server bills from. The accumulated
+      // `hoursWorked` alone cannot say when the technician stopped for lunch.
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.startTimer('s-1');
+      // Drift's `dateTime()` keeps whole seconds (`millisecondsSinceEpoch ~/ 1000`), so an
+      // immediate stop would round-trip to a zero-length interval — a real run, but one this
+      // assertion could not distinguish from a placeholder.
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await notifier.stopTimer('s-1');
+
+      final stored = await repo.getSegments('draft-1');
+      expect(stored, hasLength(1));
+      expect(stored.single.endUtc.isAfter(stored.single.startUtc), isTrue);
+    });
+
+    test('two runs record two intervals, not one span', () async {
+      // start/stop, start/stop — the gap between them is not worked time.
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.startTimer('s-1');
+      await notifier.stopTimer('s-1');
+      await notifier.startTimer('s-1');
+      await notifier.stopTimer('s-1');
+
+      expect(await repo.getSegments('draft-1'), hasLength(2));
+    });
+
+    test('a recorded interval claims the same id as its wire clientId', () async {
+      // The server binds both as a Guid and the phone's id is what a replayed submit collapses
+      // onto; a readable `seg-<epoch>` would 400 the whole rapportino.
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.startTimer('s-1');
+      await notifier.stopTimer('s-1');
+
+      final stored = await repo.getSegments('draft-1');
+      expect(stored.single.clientId, stored.single.id);
+      expect(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        ).hasMatch(stored.single.id),
+        isTrue,
+        reason: 'the server deserializes this as a Guid; anything else 400s the submit',
+      );
+    });
+
+    test('effectiveHours prefers the interval sum over hoursWorked', () {
+      final start = DateTime.utc(2026, 6, 21, 8, 0);
+      final row = StaffRow(
+        id: 's-1',
+        userId: 'u-1',
+        // 4h of accumulated/manual hours, but the two runs actually measured 2h in total.
+        hoursWorked: 4.0,
+        segments: [
+          StaffSegment(
+            id: 'a',
+            startUtc: start,
+            endUtc: start.add(const Duration(minutes: 60)),
+          ),
+          StaffSegment(
+            id: 'b',
+            startUtc: start.add(const Duration(hours: 5)),
+            endUtc: start.add(const Duration(hours: 6)),
+          ),
+        ],
+      );
+
+      expect(row.effectiveHours, closeTo(2.0, 0.01));
+    });
+
+    test('removeStaff deletes that colleague\'s intervals', () async {
+      // Intervals belong to (reportId, userId): a re-added colleague must not inherit the
+      // previous person's taps.
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.startTimer('s-1');
+      await notifier.stopTimer('s-1');
+      expect(await repo.getSegments('draft-1'), hasLength(1));
+
+      await notifier.removeStaff('s-1');
+
+      expect(await repo.getSegments('draft-1'), isEmpty);
+    });
+
+    test('deleting the draft deletes its intervals too', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.startTimer('s-1');
+      await notifier.stopTimer('s-1');
+      expect(await repo.getSegments('draft-1'), hasLength(1));
+
+      await repo.deleteDraft('draft-1');
+
+      expect(await repo.getSegments('draft-1'), isEmpty);
+    });
   });
 
   // ── Materiali step ─────────────────────────────────────────────────────────
