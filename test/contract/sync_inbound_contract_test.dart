@@ -109,6 +109,10 @@ void main() {
     'SyncReportControlloDto': SyncReportControlloDto.wireKeys,
     'SyncReportAllegatoDto': SyncReportAllegatoDto.wireKeys,
     'SyncReportVersionDto': SyncReportVersionDto.wireKeys,
+    // The technician's real work intervals, mirrored so a report resumed on another device — or
+    // re-opened after a reinstall — still knows what the timer recorded. Child of the staff row,
+    // carried inside the report aggregate.
+    'SyncReportSegmentDto': SyncReportSegmentDto.wireKeys,
     // O-9: the caller's own ticket timer sessions. `SyncScopeDto.ticketWorkLogs` is the prune
     // manifest for the same rows, so both sides of the loop are pinned here.
     'SyncTicketWorkLogDto': SyncTicketWorkLogDto.wireKeys,
