@@ -24,6 +24,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/time/work_time.dart';
+import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -256,8 +257,77 @@ void main() {
       expect(row.endTime!.difference(row.startTime!).isNegative, isFalse);
     });
 
-    testWidgets('a still-running session is never suggested', (tester) async {
+    // A row the timer measured has its hours derived from the recorded intervals, and the next
+    // save writes that derived total back over anything typed. A suggestion applied on top of it
+    // therefore has to replace the evidence, not sit beside it: the intervals go, the Ore field
+    // comes back editable, and the row ends up with exactly one total.
+    testWidgets('applying a suggestion over recorded intervals replaces them in the same gesture', (
+      tester,
+    ) async {
+      final repo = DraftReportRepository(db);
+      await repo.upsertSegments([
+        ReportStaffSegmentsCompanion.insert(
+          id: 'seg-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 8, 31, 6),
+          reportId: _reportId,
+          userId: 'user-1',
+          startUtc: DateTime.utc(2026, 8, 31, 6),
+          endUtc: DateTime.utc(2026, 8, 31, 8),
+        ),
+      ]);
+
       final container = _buildContainer(
+        db: db,
+        staffRows: [
+          StaffRow(
+            id: 'staff-1',
+            userId: 'user-1',
+            startTime: DateTime.utc(2026, 8, 31, 6),
+            endTime: DateTime.utc(2026, 8, 31, 8),
+            segments: [
+              StaffSegment(
+                id: 'seg-1',
+                startUtc: DateTime.utc(2026, 8, 31, 6),
+                endUtc: DateTime.utc(2026, 8, 31, 8),
+              ),
+            ],
+          ),
+        ],
+        worklogEntries: [
+          _entry(
+            userId: 'user-1',
+            workDate: DateTime.utc(2026, 8, 31),
+            startTime: const Duration(hours: 8),
+            endTime: const Duration(hours: 11, minutes: 45),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Calcolate dal timer'), findsOneWidget);
+
+      await tester.tap(find.textContaining('Da worklog:'));
+      await tester.pumpAndSettle();
+
+      final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
+      expect(row.segments, isEmpty);
+      expect(row.hoursWorked, closeTo(3.75, 0.01));
+      expect(await repo.getSegments(_reportId), isEmpty, reason: 'the Drift rows are gone too');
+
+      // Editable again, holding the suggested hours rather than the timer's.
+      expect(
+        find.byWidgetPredicate((w) => w is AppTextField && w.label == 'Ore'),
+        findsOneWidget,
+      );
+      expect(find.text('3.8'), findsOneWidget);
+      expect(find.textContaining('Calcolate dal timer'), findsNothing);
+    });
+
+    testWidgets('a still-running session is never suggested', (tester) async {      final container = _buildContainer(
         db: db,
         staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
         worklogEntries: [

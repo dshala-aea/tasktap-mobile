@@ -121,6 +121,15 @@ class StepOre extends ConsumerWidget {
                   worklogSuggestion: suggestion,
                   businessTime: businessTime,
                   onUpdate: (updated) => notifier.updateStaff(updated),
+                  // Not updateStaff: a suggestion applied over recorded intervals has to take
+                  // the intervals with it, or the row would carry two totals and the derived one
+                  // would win on the next save.
+                  onApplySuggestion: (s) => notifier.overrideStaffHours(
+                    row,
+                    hoursWorked: s.hours,
+                    startTime: s.startTime,
+                    endTime: s.endTime,
+                  ),
                   onRemove: () => notifier.removeStaff(row.id),
                   onStartTimer: () => notifier.startTimer(row.id),
                   onStopTimer: () => notifier.stopTimer(row.id),
@@ -308,9 +317,14 @@ class WorklogHoursSuggestion {
 /// TicketWorkLogDto.isRunning — and suggesting hours from a clock that hasn't stopped yet would
 /// be actively wrong). A multi-session sum is suppressed when the row already has its own
 /// start/end range (from this report's own timer): StaffRow.copyWith has no way to clear
-/// startTime/endTime, and effectiveHours prefers that range over hoursWorked whenever both are
-/// set — so setting hoursWorked alongside an existing range would silently do nothing visible,
-/// which is worse than not offering the suggestion at all.
+/// startTime/endTime, so the summed hours would be written while the tile kept displaying the
+/// old range beside them — the same row claiming two different stories about the same day, with
+/// nothing on screen to say which one is meant.
+///
+/// `effectiveHours` is not the obstacle it once looked like: intervals win first, then
+/// `hoursWorked`, and only then this span — so hours written here are visible. Applying is still
+/// a deliberate gesture, and over a row with intervals it replaces them (see
+/// ReportEditorNotifier.overrideStaffHours).
 ///
 /// Times are real instants: the legacy `workDate` + `HH:mm:ss` label is a Rome wall-clock label
 /// (plan Ruling 3, whatever the tenant zone), turned into an instant by
@@ -480,6 +494,7 @@ class _StaffTile extends StatefulWidget {
     this.worklogSuggestion,
     required this.businessTime,
     required this.onUpdate,
+    required this.onApplySuggestion,
     required this.onRemove,
     required this.onStartTimer,
     required this.onStopTimer,
@@ -489,6 +504,7 @@ class _StaffTile extends StatefulWidget {
   final StaffRow row;
   final WorklogHoursSuggestion? worklogSuggestion;
   final ValueChanged<StaffRow> onUpdate;
+  final ValueChanged<WorklogHoursSuggestion> onApplySuggestion;
   final VoidCallback onRemove;
   final VoidCallback onStartTimer;
   final VoidCallback onStopTimer;
@@ -517,7 +533,12 @@ class _StaffTileState extends State<_StaffTile> {
     // worklog suggestion (no time range, so the "Ore effettive" readout below never renders to
     // show it) is the only path that does this today. Without resyncing here, tapping the
     // suggestion chip would persist the value but show no visible change at all.
-    if (widget.row.hoursWorked != oldWidget.row.hoursWorked) {
+    //
+    // The second half is the same field coming back: applying a suggestion over recorded
+    // intervals clears them, and the box that reappears must hold the suggested hours rather
+    // than whatever the controller was left holding while the timer readout stood in its place.
+    if (widget.row.hoursWorked != oldWidget.row.hoursWorked ||
+        (oldWidget.row.segments.isNotEmpty && widget.row.segments.isEmpty)) {
       final text = widget.row.hoursWorked?.toStringAsFixed(1) ?? '';
       if (_hoursCtrl.text != text) _hoursCtrl.text = text;
     }
@@ -580,18 +601,26 @@ class _StaffTileState extends State<_StaffTile> {
           const SizedBox(height: 12),
 
           // HH / MM tiles
+          //
+          // Ore is a readout, not a field, once the timer has recorded intervals: those hours
+          // are measured, and a typed number would be silently reverted on the next save
+          // (`_staffToCompanion` persists `effectiveHours`, which sums the intervals). Km has no
+          // such twin and stays editable in every case.
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _NumField(
-                  controller: _hoursCtrl,
-                  label: 'Ore',
-                  suffix: 'h',
-                  onChanged: (v) {
-                    final h = double.tryParse(v);
-                    widget.onUpdate(row.copyWith(hoursWorked: h));
-                  },
-                ),
+                child: row.segments.isEmpty
+                    ? _NumField(
+                        controller: _hoursCtrl,
+                        label: 'Ore',
+                        suffix: 'h',
+                        onChanged: (v) {
+                          final h = double.tryParse(v);
+                          widget.onUpdate(row.copyWith(hoursWorked: h));
+                        },
+                      )
+                    : _ReadOnlyHours(hours: row.effectiveHours),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -608,17 +637,23 @@ class _StaffTileState extends State<_StaffTile> {
             ],
           ),
 
+          // Full width, under both tiles: in the half-width slot beside Km this sentence wraps
+          // to five lines and drags the pair out of shape.
+          if (row.segments.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Calcolate dal timer: le ore non sono modificabili perché il timer ha registrato '
+              'gli orari.',
+              style: TextStyle(color: context.colors.inkMuted, fontSize: 11, height: 1.35),
+            ),
+          ],
+
           if (widget.worklogSuggestion != null) ...[
             const SizedBox(height: 8),
             _WorklogSuggestionChip(
               suggestion: widget.worklogSuggestion!,
               businessTime: widget.businessTime,
-              onApply: () {
-                final s = widget.worklogSuggestion!;
-                widget.onUpdate(
-                  row.copyWith(hoursWorked: s.hours, startTime: s.startTime, endTime: s.endTime),
-                );
-              },
+              onApply: () => widget.onApplySuggestion(widget.worklogSuggestion!),
             ),
           ],
 
@@ -631,7 +666,8 @@ class _StaffTileState extends State<_StaffTile> {
               style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
             ),
             Text(
-              'Ore effettive: ${row.effectiveHours.toStringAsFixed(2)}h',
+              'Ore effettive: ${row.effectiveHours.toStringAsFixed(2)}h'
+              '${row.segments.length > 1 ? ' · ${row.segments.length} intervalli' : ''}',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
@@ -783,6 +819,57 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
 }
 
 // ── Numeric input field ────────────────────────────────────────────────────────
+
+/// The timer's own total, in the footprint the editable Ore field occupies.
+///
+/// A readout rather than a disabled text field: a greyed-out box still looks like a box waiting
+/// for a tap, and "disabled" reads as a missing permission. Nothing is being withheld from the
+/// technician here — these hours were measured for them, and the row below says so.
+class _ReadOnlyHours extends StatelessWidget {
+  const _ReadOnlyHours({required this.hours});
+
+  final double hours;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppFieldShell(
+      label: 'Ore',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.md,
+        ),
+        decoration: BoxDecoration(
+          color: context.colors.bg3,
+          borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
+          border: Border.all(color: context.colors.borderLight),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                // Comma decimal, like every other hours string the technician sees on this
+                // screen (the suggestion chip's "3,8h"). The span line below keeps its own
+                // toFixed(2) with a dot, unchanged.
+                hours.toStringAsFixed(1).replaceAll('.', ','),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.ink,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            Text('h', style: TextStyle(color: context.colors.inkMuted)),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _NumField extends StatelessWidget {
   const _NumField({

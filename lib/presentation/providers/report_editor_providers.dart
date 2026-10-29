@@ -67,8 +67,8 @@ class StaffRow {
   final DateTime? endTime;
   final int pauseMinutes;
 
-  /// The intervals this row's hours were measured from, in no particular order (the sum does not
-  /// care). Empty for a row whose hours came from the office, a manual edit, or a client older
+  /// The intervals this row's hours were measured from, oldest first as `getSegments` returns
+  /// them. Empty for a row whose hours came from the office, a manual edit, or a client older
   /// than this table. Emptiness is meant to be the editor's only evidence that these hours were
   /// not measured here — where there is no interval there is nothing this device could have timed,
   /// so the hours are not its to re-derive.
@@ -1008,6 +1008,31 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
           clientId: Value(s.id),
         ),
     ]);
+  }
+
+  /// Replaces a row's recorded intervals with hours the technician chose by hand.
+  ///
+  /// A worklog suggestion applied over the timer is a manual correction, not an addition: the
+  /// server derives `HoursWorked` from the intervals on submit, so a row holding both would
+  /// disagree with itself and the next save would quietly undo the correction. The intervals are
+  /// deleted from Drift, not merely dropped from state — the rows outlive this notifier, and a
+  /// later hydrate or submit would resurrect the total just overridden. Clearing them also makes
+  /// the Ore field editable again, in the same gesture.
+  Future<void> overrideStaffHours(
+    StaffRow row, {
+    required double hoursWorked,
+    DateTime? startTime,
+    DateTime? endTime,
+  }) async {
+    await _repo.deleteSegmentsForStaff(state.reportId, row.userId);
+    await updateStaff(
+      row.copyWith(
+        segments: const [],
+        hoursWorked: hoursWorked,
+        startTime: startTime,
+        endTime: endTime,
+      ),
+    );
   }
 
   // ── Step 3: Materiali ──────────────────────────────────────────────────────
