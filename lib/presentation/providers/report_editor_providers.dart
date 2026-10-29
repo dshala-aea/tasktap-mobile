@@ -961,15 +961,24 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// recomputes `HoursWorked` from the intervals on submit, so a total no interval explains cannot
   /// survive the first stop anyway — clearing it at the start is the only moment where the number
   /// goes away while the technician is looking at it, instead of at the next save.
+  ///
+  /// After this the row shows a running timer and no total, which is exactly what the office will
+  /// see once the first interval is submitted.
   Future<void> startTimer(String staffId) async {
     final row = state.staffRows.firstWhere((r) => r.id == staffId);
+    final now = DateTime.now().toUtc();
+    // A row typed by hand, or corrected by the office and re-imported, arrives with a total and
+    // nothing measuring it. The start discards that total — and the end of its span too, because
+    // `effectiveHours` falls through to `endTime - startTime` once `hoursWorked` is null, so
+    // leaving the end behind would not clear the row: it would quietly replace the typed 3 h with
+    // the 8 h the old span happens to cover, and `_staffToCompanion` would persist that.
+    final discarding = row.segments.isEmpty && row.hoursWorked != null;
     final started = row.copyWith(
       timerRunning: true,
-      timerStartedAt: DateTime.now().toUtc(),
-      startTime: row.startTime ?? DateTime.now().toUtc(),
-      // Only when there is nothing measured yet: with intervals in hand the box is already a
-      // readout and `hoursWorked` is theirs, so there is nothing typed left to discard.
-      clearHoursWorked: row.segments.isEmpty && row.hoursWorked != null,
+      timerStartedAt: now,
+      startTime: discarding ? now : (row.startTime ?? now),
+      clearEndTime: discarding,
+      clearHoursWorked: discarding,
     );
     await updateStaff(started);
   }
@@ -1042,9 +1051,14 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     DateTime? startTime,
     DateTime? endTime,
   }) async {
-    await _repo.deleteSegmentsForStaff(state.reportId, row.userId);
+    // Re-resolved, not used as passed: the caller holds the row it built its tile from, and a sync
+    // may have landed while a confirmation dialog was open. Only the identity is taken from the
+    // argument.
+    final matches = state.staffRows.where((r) => r.id == row.id);
+    final current = matches.isEmpty ? row : matches.first;
+    await _repo.deleteSegmentsForStaff(state.reportId, current.userId);
     await updateStaff(
-      row.copyWith(
+      current.copyWith(
         segments: const [],
         hoursWorked: hoursWorked,
         startTime: startTime,

@@ -441,6 +441,40 @@ void main() {
       expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
     });
 
+    test('starting the timer on a re-imported row also drops the span its stale end would revive', () async {
+      // The shape `import_server_report.dart` stores: the office's 3 h, an 08:00→16:00 range, and
+      // no segments. Clearing only `hoursWorked` would not clear the row — `effectiveHours` falls
+      // through to the span and `_staffToCompanion` persists 8.0, so a button press would rewrite
+      // a payroll number the office set.
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      final officeStart = DateTime.utc(2026, 6, 21, 8);
+      final officeEnd = DateTime.utc(2026, 6, 21, 16);
+      await notifier.addStaff(
+        StaffRow(
+          id: 's-1',
+          userId: 'u-1',
+          hoursWorked: 3.0,
+          startTime: officeStart,
+          endTime: officeEnd,
+          segments: const [],
+        ),
+      );
+
+      await notifier.startTimer('s-1');
+
+      final row = notifier.state.staffRows.first;
+      expect(row.hoursWorked, isNull);
+      expect(row.endTime, isNull);
+      expect(row.startTime, isNot(officeStart));
+      expect(row.startTime!.isAfter(officeStart), isTrue);
+      expect(row.timerRunning, isTrue);
+
+      // The value, not just the column: 8.0 is the span this fix is about.
+      expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
+    });
+
     test('stopTimer sets timerRunning=false and endTime', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = await _makeEditor(db);
@@ -666,6 +700,32 @@ void main() {
       await repo.deleteDraft('draft-1');
 
       expect(await repo.getSegments('draft-1'), isEmpty);
+    });
+
+    test('overrideStaffHours writes onto the row as it stands, not the copy the caller held', () async {
+      // The chip's caller holds the row it built its tile from and awaits a confirmation dialog
+      // before calling back. A sync landing during that dialog would be reverted by a write onto
+      // the stale copy — the technician would confirm replacing the hours and lose the office's
+      // correction with them.
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', notes: 'prima'));
+      final stale = notifier.state.staffRows.first;
+
+      // What a hydrate/sync does while the dialog is open.
+      await notifier.updateStaff(stale.copyWith(notes: 'dal server', kmTraveled: 42));
+
+      await notifier.overrideStaffHours(stale, hoursWorked: 3.5);
+
+      final row = notifier.state.staffRows.single;
+      expect(row.hoursWorked, closeTo(3.5, 0.01));
+      expect(row.notes, 'dal server');
+      expect(row.kmTraveled, 42);
+      final persisted = (await repo.getStaff('draft-1')).single;
+      expect(persisted.hoursWorked, closeTo(3.5, 0.01));
+      expect(persisted.notes, 'dal server');
+      expect(persisted.kmTraveled, 42);
     });
   });
 

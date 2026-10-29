@@ -171,6 +171,20 @@ void main() {
       final node = tester.getSemantics(find.bySemanticsLabel('Ore'));
       expect(node.label, 'Ore');
       expect(node.value, '2,0 h');
+
+      // ...and ONE node, which means the visible "Ore" label has to be inside it, not beside it.
+      // A node that merely exists says nothing: wrapping only the shell's child leaves the label a
+      // sibling that announces a second, nameless "ORE" right after this one.
+      final readout = find.byWidgetPredicate(
+        (w) => w is Semantics && w.container && w.properties.label == 'Ore',
+      );
+      expect(readout, findsOneWidget);
+      expect(
+        find.descendant(of: readout, matching: find.byType(AppFieldLabel)),
+        findsOneWidget,
+        reason: 'the label must be folded into the node, not left outside it',
+      );
+
       // Disposed inline, not in a tearDown: the framework checks for leaks before tearDowns run.
       handle.dispose();
     });

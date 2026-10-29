@@ -545,6 +545,15 @@ class _StaffTileState extends State<_StaffTile> {
   @override
   Widget build(BuildContext context) {
     final row = widget.row;
+    final suggestion = widget.worklogSuggestion;
+    // What the tap destroys: the recorded intervals, or the start→end range of a row the
+    // suggestion carries no range of its own to replace. Either way the technician should hear it
+    // before it happens — a dropped "Inizio/Fine" is just as invisible afterwards as deleted
+    // intervals.
+    final discardsTiming =
+        suggestion != null &&
+        (row.segments.isNotEmpty ||
+            (suggestion.startTime == null && (row.startTime != null || row.endTime != null)));
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.base),
@@ -638,13 +647,16 @@ class _StaffTileState extends State<_StaffTile> {
             ),
           ],
 
-          if (widget.worklogSuggestion != null) ...[
+          // A chip inside a running timer would overwrite the total the next stop is about to
+          // write from the interval, so it is withheld until the run is stopped. A suggestion is a
+          // way to fill a row nobody is timing; over a live run it can only compete with the clock.
+          if (suggestion != null && !row.timerRunning) ...[
             const SizedBox(height: 8),
             _WorklogSuggestionChip(
-              suggestion: widget.worklogSuggestion!,
+              suggestion: suggestion,
               businessTime: widget.businessTime,
-              replacesTimer: row.segments.isNotEmpty,
-              onApply: () => _applySuggestion(widget.worklogSuggestion!),
+              replacesTimer: discardsTiming,
+              onApply: () => _applySuggestion(suggestion, discardsTiming: discardsTiming),
             ),
           ],
 
@@ -673,20 +685,26 @@ class _StaffTileState extends State<_StaffTile> {
 
   String _fmtTime(DateTime dt) => widget.businessTime.formatInZone(dt, 'HH:mm');
 
-  /// Applies the chip, asking first when the tap would delete recorded intervals.
+  /// Applies the chip, asking first when the tap would discard recorded timing.
   ///
-  /// The chip already says "Sostituisci il timer", but it is a small target on a card full of
-  /// controls, and what it destroys — what the timer saw on site — cannot be recovered from this
-  /// phone once gone. The confirmation reuses the app's own destructive dialog, so it reads as
-  /// the same gesture as every other "this deletes something" in the app.
-  Future<void> _applySuggestion(WorklogHoursSuggestion suggestion) async {
-    if (widget.row.segments.isNotEmpty) {
+  /// The chip already says so, but it is a small target on a card full of controls, and what it
+  /// destroys — what the timer saw on site, or the "Inizio/Fine" the office sent — cannot be
+  /// recovered from this phone once gone. The confirmation reuses the app's own destructive
+  /// dialog, so it reads as the same gesture as every other "this deletes something" in the app.
+  ///
+  /// [discardsTiming] is passed rather than re-derived here: the chip's own label is drawn from
+  /// the same expression, so a tap and its warning cannot say two different things.
+  Future<void> _applySuggestion(
+    WorklogHoursSuggestion suggestion, {
+    required bool discardsTiming,
+  }) async {
+    if (discardsTiming) {
       final confirmed = await confirmDeleteDialog(
         context,
-        title: 'Sostituire il timer?',
+        title: 'Sostituire gli orari registrati?',
         message:
-            'Le ore registrate dal timer verranno cancellate e la riga userà le ore del '
-            'worklog.',
+            'Le ore e gli orari registrati su questa riga verranno cancellati e sostituiti da '
+            'quelli del worklog.',
         confirmLabel: 'Sostituisci',
       );
       if (!confirmed || !mounted) return;
@@ -708,8 +726,9 @@ class _WorklogSuggestionChip extends StatelessWidget {
   final WorklogHoursSuggestion suggestion;
   final BusinessTime businessTime;
 
-  /// True when the row being written has recorded intervals, so this tap deletes them. The chip
-  /// says so before it is tapped: "Usa" understates a tap that throws the timer's evidence away.
+  /// True when the row being written has timing this tap discards — recorded intervals, or a
+  /// start→end range the suggestion carries no range of its own to replace. The chip says so
+  /// before it is tapped: "Usa" understates a tap that throws the timer's evidence away.
   final bool replacesTimer;
   final VoidCallback onApply;
 
@@ -855,18 +874,20 @@ class _ReadOnlyHours extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final value = _formatHours(hours);
-    return AppFieldShell(
+    return Semantics(
+      // One node named and valued like the editable field this replaces. AppTextField merges its
+      // label into the input's own node; a bare container does not, so the visible "Ore" label has
+      // to be INSIDE this subtree for `excludeSemantics` to fold it in — wrapping only the shell's
+      // child leaves it a sibling announcing a second, nameless "ORE".
+      //
+      // Three loose Texts would read as "ORE", "2,0", "h" — a value with no name, reached by a
+      // swipe and then another.
+      container: true,
+      excludeSemantics: true,
       label: 'Ore',
-      child: Semantics(
-        // One node named and valued like the field this replaces. AppTextField merges its label
-        // into the input's own node, so "Ore" is announced as that field's name; three loose
-        // Texts would read as "ORE", "2,0", "h" — a value with no name, reached by a swipe and
-        // then another. excludeSemantics drops the visible label from the tree, which would
-        // otherwise repeat itself inside the merged node.
-        container: true,
-        excludeSemantics: true,
+      value: '$value h',
+      child: AppFieldShell(
         label: 'Ore',
-        value: '$value h',
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(
