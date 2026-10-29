@@ -34,6 +34,13 @@
 // is still pending (and is not one of our own marked corrections) the reconciler does nothing
 // this round; the next pass, after the push, converges.
 //
+// That guard is deliberately DAY-SCOPED, unlike every other judgement in this file. A day the
+// server refused is held with `isPendingSync = true` until it is accepted (timbra_sync_service's
+// `_syncOnce`), and today's events are in every run. Judged on the whole log, one permanently held
+// event would silently disable reconciliation on every later day too. Day-scoped, it blocks its own
+// day and ages out; the day-independent part is the shift verdict, which is what the punch control
+// acts on. See `_reconcileWithSessions`.
+//
 // Resurrection guard: every event written here is marked with `reconciledOrphanMarker` (an
 // existing, previously-unused `notes` column — no schema migration needed); TimbraSyncService
 // excludes marked events from its push, so a correction that only changes what this device
@@ -131,6 +138,11 @@ class WorkLogReconciler {
   /// landed) the answer was computed against a world that no longer exists — acting on it could
   /// close or re-open a shift that was just changed — so it is discarded and re-fetched.
   ///
+  /// Both reads are the WHOLE log, not today's: the shift verdict this correction acts on is the
+  /// day-independent one (`actionableShiftStateProvider`), so a shift opened before midnight must
+  /// still be visible here. The before/after signature is taken over that same horizon — compare
+  /// it against a day-scoped read and a change to an older row goes undetected.
+  ///
   /// Network/parse errors are swallowed, matching every other sync path in this app: offline is
   /// the normal condition of a phone in the field, not a failure to report. Without a server
   /// answer there is nothing safe to correct.
@@ -146,15 +158,19 @@ class WorkLogReconciler {
         _rerun = false;
         passes++;
         try {
-          final before = _signature(await _repo.getTodaySessions());
+          final before = _signature(await _repo.getAllSessions());
           final trackers = await _fetchActive();
           final snapshot = ServerWorkLogSnapshot.fromActiveTrackers(trackers);
-          final now = await _repo.getTodaySessions();
-          if (_signature(now) != before) {
+          final all = await _repo.getAllSessions();
+          if (_signature(all) != before) {
             _rerun = true; // stale answer: discard, fetch again
             continue;
           }
-          await _reconcileWithSessions(snapshot, now);
+          await _reconcileWithSessions(
+            snapshot,
+            all: all,
+            today: await _repo.getTodaySessions(),
+          );
         } catch (_) {
           // Swallow — see doc comment above.
         }
@@ -171,24 +187,31 @@ class WorkLogReconciler {
   ///
   /// Exposed separately from [reconcile] so the correction logic is testable without a network
   /// round trip. Not reentrancy-guarded itself (only [reconcile] is).
-  Future<void> reconcileWith(ServerWorkLogSnapshot server) async =>
-      _reconcileWithSessions(server, await _repo.getTodaySessions());
+  Future<void> reconcileWith(ServerWorkLogSnapshot server) async => _reconcileWithSessions(
+    server,
+    all: await _repo.getAllSessions(),
+    today: await _repo.getTodaySessions(),
+  );
 
+  /// [all] is the whole local log — the horizon the shift verdict is derived from, and the one
+  /// every write below is ordered against. [today] is this business day's rows, used ONLY for the
+  /// unsynced guard (see the header for why that one judgement must stay day-scoped).
   Future<void> _reconcileWithSessions(
-    ServerWorkLogSnapshot server,
-    List<WorkSession> sessions,
-  ) async {
+    ServerWorkLogSnapshot server, {
+    required List<WorkSession> all,
+    required List<WorkSession> today,
+  }) async {
     // Local unsynced events win — see header. Our own marked corrections are excluded: they are
     // pending by construction but never pushed, and must not freeze reconciliation forever.
-    final hasUnsynced = sessions.any((s) => s.isPendingSync && s.notes != reconciledOrphanMarker);
+    final hasUnsynced = today.any((s) => s.isPendingSync && s.notes != reconciledOrphanMarker);
     if (hasUnsynced) return;
 
-    final local = deriveShiftState(sessions);
-    final last = sessions.isEmpty ? null : sessions.last.eventTime;
+    final local = deriveShiftState(all);
+    final last = all.isEmpty ? null : all.last.eventTime;
 
     if (server.isOnShift) {
       if (!local.isOnShift) {
-        await _backfillMissingShift(server, sessions);
+        await _backfillMissingShift(server, all);
         return;
       }
       if (server.isOnPause && !local.isOnPause) {
@@ -202,10 +225,11 @@ class WorkLogReconciler {
     }
 
     // Local still thinks a shift is open that the server has already closed (clocked out from
-    // another surface, same account).
+    // another surface, same account). Judged on the whole log: an opener from before midnight is
+    // still an open shift, and the punch control draws FINE TURNO for it.
     if (!local.isOnShift) return;
 
-    final opener = _findOpenOpener(sessions);
+    final opener = _findOpenOpener(all);
     if (opener != null) {
       await _repo.markReconciledOrphan(opener.id);
     }
@@ -225,7 +249,7 @@ class WorkLogReconciler {
   ///   newest event, hence always effective (this also absorbs a phone clock that is behind or
   ///   ahead of the server, and a Ripresa the server refused and the app retired);
   /// - an ingresso is anchored at the business-day midnight when the server start is earlier (overnight
-  ///   shift; else it falls outside `getTodaySessions`). If it would still sort before the last
+  ///   shift; else it belongs to an earlier business day). If it would still sort before the last
   ///   local event it is skipped — that is a stale server view of a stop this device just made
   ///   (writing a ghost shift would be wrong) — EXCEPT after a Fine that the server refused on a
   ///   remote-origin shift, where the shift really is still open and is re-opened after the stop.

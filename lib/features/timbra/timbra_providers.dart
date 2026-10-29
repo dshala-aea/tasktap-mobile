@@ -341,10 +341,14 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
   /// stamps its own clock, so an offline tap would be recorded at delivery time. See
   /// remote_shift.dart (incl. the backend follow-up). Throws [OfflineRemoteShiftException] so the
   /// caller records nothing and local state stays unchanged.
+  ///
+  /// The whole log, not today's: a shift opened before midnight is still a remote shift, and the
+  /// control that hands this tap over draws from [actionableShiftStateProvider] (whole log).
+  /// Reading today's rows here would let an offline tap through on the shift the button shows.
   Future<void> _requireOnlineForRemoteShift() async {
     final probe = _confirmOnline;
     if (probe == null) return;
-    final remote = analyseRemoteShifts(await _repo.getTodaySessions()).openShiftIsRemote;
+    final remote = analyseRemoteShifts(await _repo.getAllSessions()).openShiftIsRemote;
     if (!remote) return;
     if (!await probe()) throw const OfflineRemoteShiftException();
   }
@@ -392,9 +396,11 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
         await _requireOnlineForRemoteShift();
         var stop = DateTime.now().toUtc();
         // A remote shift's opener carries the SERVER's start; a phone clock that is behind would
-        // stamp the stop before it and leave a negative interval. Keep it at least 1s after.
+        // stamp the stop before it and leave a negative interval. Keep it at least 1s after. The
+        // whole log again: an opener from a previous business day is exactly the one a day-scoped
+        // read would miss, leaving the clamp inert.
         final opener =
-            analyseRemoteShifts(await _repo.getTodaySessions()).openRemoteOpenerTime;
+            analyseRemoteShifts(await _repo.getAllSessions()).openRemoteOpenerTime;
         if (opener != null && !stop.isAfter(opener)) stop = opener.add(const Duration(seconds: 1));
         await _repo.addEvent(id: _uuid.v4(), eventTime: stop, eventType: _kFine);
       }
