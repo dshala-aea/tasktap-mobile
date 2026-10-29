@@ -1145,6 +1145,131 @@
         }
       }
     },
+    "/api/approval-history": {
+      "get": {
+        "tags": [
+          "ApprovalHistory"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "description": "1-based page number. Defaults to 1.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Items per page. Defaults to 20; clamped to 1\u2013100.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Sort",
+            "in": "query",
+            "description": "Sort field. Prefix with \u0027-\u0027 for descending (e.g. \u0022-nome\u0022).\nAllowed fields are defined per-endpoint via a whitelist; unknown values are rejected.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Q",
+            "in": "query",
+            "description": "Free-text search term (applied per-endpoint).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "SafePage",
+            "in": "query",
+            "description": "Page clamped to [1, \u221E).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "SafePageSize",
+            "in": "query",
+            "description": "PageSize clamped to [1, 100].",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "string ApprovalHistoryController.AbsenceKind or string ApprovalHistoryController.SmartWorkingKind; omitted means both. Any other\nvalue is a 400 \u2014 silently ignoring it would return a wider register than asked for.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Omitted means the two decided states (AbsenceRequestStatusEnum.Approved and\nAbsenceRequestStatusEnum.Rejected) \u2014 this is the approvals register.\nAbsenceRequestStatusEnum.Pending or\nAbsenceRequestStatusEnum.Cancelled are honoured when the caller asks for them.",
+            "schema": {
+              "$ref": "#/components/schemas/AbsenceRequestStatusEnum"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "The \u003Cb\u003Erequester\u003C/b\u003E, not the decider.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "First \u0060StartDate\u0060, inclusive; null means unbounded.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Last \u0060StartDate\u0060, inclusive; null means unbounded.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/audit-log": {
       "get": {
         "tags": [
@@ -21276,6 +21401,48 @@
           "WorkLog"
         ],
         "summary": "Start break.",
+        "description": "The body is optional, not required: requiring it would answer a body-less POST with 415 during\nmodel binding \u2014 before the action, before the permission filter \u2014 which is the trap documented\non \u0060/worklog/start\u0060. Every client written before this parameter existed posts no body and\nmust keep working.",
+        "requestBody": {
+          "description": "Optional, and empty on every online tap. A phone replaying its offline queue sends the tap\u0027s\nown instant so the break opens when the technician paused, not when the queue drained.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BreakPunchRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BreakPunchRequest"
+                  }
+                ]
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BreakPunchRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Created break work log entry."
@@ -21289,6 +21456,47 @@
           "WorkLog"
         ],
         "summary": "End break and resume work.",
+        "requestBody": {
+          "description": "Optional, as on Task\u0026lt;IActionResult\u0026gt; WorkLogController.StartBreak(BreakPunchRequest? request = null). On this half a replayed tap is what makes the\nbreak\u0027s duration \u2014 and therefore its short/long classification \u2014 the real one.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BreakPunchRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BreakPunchRequest"
+                  }
+                ]
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BreakPunchRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Created work log entry."
@@ -25110,6 +25318,20 @@
           }
         },
         "description": "Per-template branding overrides, as exposed over the wire."
+      },
+      "BreakPunchRequest": {
+        "type": "object",
+        "properties": {
+          "occurredAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When the technician actually tapped, as the device recorded it (UTC). Absent means \u0022now, as\nfar as this server is concerned\u0022. Out-of-bounds values are refused rather than clamped \u2014 see\nBreakPunchInstant.",
+            "format": "date-time"
+          }
+        },
+        "description": "Optional body of the two break punches. Empty \u2014 no body at all \u2014 on every button and kiosk tap,\nwhich is the overwhelming majority of them: those are made while online and the server\u0027s own\nclock is the truth."
       },
       "BulkObservationRequest": {
         "required": [
@@ -29381,6 +29603,10 @@
         },
         "description": "Ready-to-render payload for the office-web landing page (\u0060GET /api/app/home\u0060).\nApplication-tier contract (docs/patterns/application-api.md \u00A74): Italian property names,\nowned by the web app, no external compatibility promise. Replaces nine canonical calls\n(four queue counts, today\u0027s schedules, stock sotto-minimo, contracts in scadenza,\ncontrol-room KPIs) with one aggregate."
       },
+      "HoursSourceEnum": {
+        "type": "integer",
+        "description": "Which number a ReportStaff row\u0027s hours come from."
+      },
       "IFormFile": {
         "type": "string",
         "format": "binary"
@@ -31448,6 +31674,7 @@
           "fullName",
           "oreOrdinarie",
           "orePausa",
+          "orePausaBreve",
           "oreNotturno",
           "giorniFestivo",
           "oreStraordinario",
@@ -31473,6 +31700,14 @@
             "format": "double"
           },
           "orePausa": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "orePausaBreve": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
             "type": [
               "number",
@@ -34819,6 +35054,26 @@
             "description": "Total break minutes within the working window (subtracted from gross duration).",
             "format": "int32"
           },
+          "hoursSource": {
+            "description": "Which number this row\u0027s hours come from, and therefore what gets billed. See\nHoursSourceEnum for what each value means.",
+            "$ref": "#/components/schemas/HoursSourceEnum"
+          },
+          "hoursSourceSetAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "When HoursSourceEnum ReportStaff.HoursSource last changed to HoursSourceEnum.Manual.",
+            "format": "date-time"
+          },
+          "hoursSourceSetByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who made that change, so an override is attributable from the day it ships.",
+            "format": "uuid"
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -34855,7 +35110,10 @@
           "startTime",
           "endTime",
           "pauseMinutes",
-          "notes"
+          "notes",
+          "hoursSource",
+          "segments",
+          "hours"
         ],
         "type": "object",
         "properties": {
@@ -34917,8 +35175,56 @@
               "null",
               "string"
             ]
+          },
+          "hoursSource": {
+            "$ref": "#/components/schemas/HoursSourceEnum"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportStaffSegmentDto"
+            }
+          },
+          "hours": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
+      },
+      "ReportStaffSegmentDto": {
+        "required": [
+          "id",
+          "startUtc",
+          "endUtc",
+          "clientId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "clientId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "One work interval of a staff line, as stored. Read-only on this projection: the office edits\na report\u0027s hours through the staff row, and the intervals are what the timer recorded."
       },
       "ReportStatoEnum": {
         "type": "integer"
@@ -35036,7 +35342,9 @@
       "RoundingConfigDto": {
         "required": [
           "mode",
-          "minutes"
+          "minutes",
+          "shortBreakMaxMinutes",
+          "shortBreakPaid"
         ],
         "type": "object",
         "properties": {
@@ -35050,9 +35358,24 @@
               "string"
             ],
             "format": "int32"
+          },
+          "shortBreakMaxMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "shortBreakPaid": {
+            "type": "boolean"
+          },
+          "timeFormat": {
+            "type": "string",
+            "default": "Decimal"
           }
         },
-        "description": "Mode is one of \u0022Nearest\u0022/\u0022Floor\u0022/\u0022Ceil\u0022 \u2014 RoundingMode\u0027s names, as a string so the\n    JSON contract doesn\u0027t depend on the enum\u0027s underlying int values."
+        "description": "Mode is one of \u0022Nearest\u0022/\u0022Floor\u0022/\u0022Ceil\u0022 \u2014 RoundingMode\u0027s names, as a string so the\n    JSON contract doesn\u0027t depend on the enum\u0027s underlying int values. \u0060TimeFormat\u0060 likewise\n    carries \u0022Decimal\u0022 or \u0022HoursMinutes\u0022."
       },
       "ScheduleCalendarDto": {
         "required": [
@@ -37039,6 +37362,30 @@
         },
         "description": "Canonical response returned by \u0060POST /api/reports/submit\u0060.\nStrongly typed so the generated TS/Dart client surfaces the full shape\n(header \u002B persisted children) rather than an opaque object."
       },
+      "SubmitReportSegmentDto": {
+        "type": "object",
+        "properties": {
+          "startTime": {
+            "type": "string",
+            "description": "When the run started. Must precede DateTime SubmitReportSegmentDto.EndTime.",
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": "string",
+            "description": "When the run ended.",
+            "format": "date-time"
+          },
+          "clientId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The phone\u0027s own id for this tap, echoed on a replayed submit so the same tap cannot be\nwritten twice. Null is allowed: a client that does not replay can omit it.",
+            "format": "uuid"
+          }
+        },
+        "description": "One continuous interval the technician actually worked."
+      },
       "SubmitReportStaffDto": {
         "type": "object",
         "properties": {
@@ -37105,6 +37452,13 @@
               "string"
             ],
             "format": "int32"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubmitReportSegmentDto"
+            },
+            "description": "The technician\u0027s real work intervals, one per run of the rapportino timer. Optional, and\nabsent or empty means the row is not timer-recorded \u2014 every client that predates this\nfield keeps working, and its rows stay \u0060Legacy\u0060."
           }
         },
         "description": "One technician\u0027s time \u002B travel contribution to the report."
@@ -38380,6 +38734,65 @@
         },
         "description": "One material actually consumed / installed on a report in scope (not the ticket\u0027s fabbisogno,\nwhich travels as TicketMateriale), so a submitted rapportino\u0027s\nmaterials section is readable offline.\n\nA DTO rather than ReportMateriale for the same reason\nSyncMaterialeBarcodeDto is one: this payload serialises \u0060Report\u0060 and\n\u0060Materiale\u0060 as entities, and a navigation added between either and this row would be filled\nby EF fixup because all of them are tracked in this request \u2014 a serialisation cycle. A SQL\nprojection tracks nothing and pins the wire shape the phone already parses.\n\nGuid SyncReportMaterialeDto.TenantId, DateTime SyncReportMaterialeDto.CreatedAt and DateTime? SyncReportMaterialeDto.UpdatedAt are carried because\nthe device\u0027s mirror row parses them unconditionally; a missing member throws on the device and\nkills the whole sync, it does not merely blank a column."
       },
+      "SyncReportSegmentDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "reportId",
+          "userId",
+          "startUtc",
+          "endUtc",
+          "clientId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "reportId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "clientId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "             One work interval of a SyncReportStaffDto, mirrored onto the phone.\n\n             Carries Guid SyncReportSegmentDto.TenantId/DateTime SyncReportSegmentDto.CreatedAt/DateTime? SyncReportSegmentDto.UpdatedAt for the same\nreason the staff DTO does: the device\u0027s mirror row parses them unconditionally, and the two\nsides have no shared compiler \u2014 omitting one throws on the phone and fails the whole sync."
+      },
       "SyncReportStaffDto": {
         "required": [
           "id",
@@ -38395,7 +38808,9 @@
           "notes",
           "startTime",
           "endTime",
-          "pauseMinutes"
+          "pauseMinutes",
+          "hoursSource",
+          "segments"
         ],
         "type": "object",
         "properties": {
@@ -38485,6 +38900,15 @@
               "string"
             ],
             "format": "int32"
+          },
+          "hoursSource": {
+            "$ref": "#/components/schemas/HoursSourceEnum"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncReportSegmentDto"
+            }
           }
         },
         "description": "One staff row (time and distance contributed by one technician) of a report in scope, so the\nphone can render a submitted rapportino\u0027s staff section offline.\n\nA DTO rather than ReportStaff for the same reason\nSyncMaterialeBarcodeDto is one: this payload already serialises \u0060Report\u0060 as\nan entity, and EF relationship fixup fills any navigation that exists between the two once both\nare tracked in the same request \u2014 today \u0060ReportStaff\u0060 carries no navigation, so the cycle is\nlatent rather than live, which is exactly the kind of \u0022it works until someone adds a property\u0022\nshape a wire contract must not depend on. Projecting in SQL never tracks either side, and it\npins the member set the device parses instead of letting an entity change reshape the payload.\n\nGuid SyncReportStaffDto.TenantId, DateTime SyncReportStaffDto.CreatedAt and DateTime? SyncReportStaffDto.UpdatedAt are carried because\nthe device\u0027s mirror row parses them unconditionally: omitting one would not blank a field, it\nwould throw on the device and fail the whole sync. The two sides have no shared compiler."
@@ -42175,8 +42599,30 @@
               "string"
             ],
             "format": "int32"
+          },
+          "shortBreakMaxMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "shortBreakPaid": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "timeFormat": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
-        }
+        },
+        "description": "\u0060ShortBreakMaxMinutes\u0060/\u0060ShortBreakPaid\u0060/\u0060TimeFormat\u0060 are optional on the wire so a\nclient that has not been taught about break classification or the hours format yet (an older\nweb build, a mobile release) can keep PUTting only Mode\u002BMinutes without silently resetting a\ntenant\u0027s break policy and display format to the defaults. Absent means \u0022leave as configured\u0022."
       },
       "UpdateScheduleRequest": {
         "type": "object",
@@ -43264,7 +43710,7 @@
               "null",
               "string"
             ],
-            "description": "UTC timestamp when the technician started working. Together with DateTime? UpsertReportStaffRequest.EndTime\nthis is what makes a \u0060ReportStaff\u0060 row a \u0022tracked\u0022 row per ADR-006 \u00A75-6 \u2014 it is\nclassified per-interval by \u0060ITimeClassificationService\u0060 instead of falling back to\nthe declared decimal UpsertReportStaffRequest.HoursWorked. Mobile-only before entity-coverage audit finding #1.",
+            "description": "UTC timestamp when the technician started working. Together with DateTime? UpsertReportStaffRequest.EndTime this\nis the window a row is classified in by \u0060ITimeClassificationService\u0060 \u2014 but only as a\nFALLBACK, for a row that carries no total of its own. A row with recorded intervals is the\nsum of those intervals; a row with a declared decimal UpsertReportStaffRequest.HoursWorked is billed as\ndeclared. The window is still stored so it can be shown and so it survives a later save\nthat does not know about it. Mobile-only before entity-coverage audit finding #1.",
             "format": "date-time"
           },
           "endTime": {
@@ -44322,6 +44768,9 @@
     },
     {
       "name": "AiConversations"
+    },
+    {
+      "name": "ApprovalHistory"
     },
     {
       "name": "AuditLog"

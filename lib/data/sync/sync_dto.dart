@@ -1973,11 +1973,12 @@ class SyncMaintenanceTemplateDto {
 
 // ── Report aggregate (O-8a) ───────────────────────────────────────────────────
 //
-// The child rows of a report, plus its version and its files. Five classes, one per backend
+// The child rows of a report, plus its version and its files. Six classes, one per backend
 // `SyncReport*Dto`; every one of them is a straight wire mirror — no device-side interpretation,
 // because the same values already exist in these tables for reports authored here
-// (`ReportStaffTable`, `ReportMateriali`, `ReportControlli`, `ReportAllegati`), and the point of
-// the mirror is that the two origins become indistinguishable to every reader.
+// (`ReportStaffTable`, `ReportStaffSegments`, `ReportMateriali`, `ReportControlli`,
+// `ReportAllegati`), and the point of the mirror is that the two origins become indistinguishable
+// to every reader.
 
 /// One technician's line on a report: hours, kilometres, vehicle and pause.
 class SyncReportStaffDto {
@@ -1996,6 +1997,20 @@ class SyncReportStaffDto {
   final DateTime? endTime;
   final int pauseMinutes;
 
+  /// Where this row's hours come from: `Legacy` (0), `Timer` (1), `Manual` (2). Carried so the UI
+  /// can say why a number is what it is.
+  ///
+  /// NOT persisted: `report_staff` has no column for it and the applier drops it, so nothing here
+  /// can read it back after a sync — only a freshly parsed payload has it. The editor's read-only
+  /// rule keys off [segments] instead, which is safe even though a `Manual` row keeps its
+  /// intervals: a corrected figure only exists on a report past Bozza, and `_hydrateBody`
+  /// (`report_editor_providers.dart:623`) refuses to hydrate a server-known non-`Bozza` report at
+  /// all, so one never reaches an editable form.
+  final int hoursSource;
+
+  /// The intervals recorded for this row, oldest first. Always a list, empty when none.
+  final List<SyncReportSegmentDto> segments;
+
   static const Set<String> wireKeys = {
     'id',
     'tenantId',
@@ -2011,6 +2026,8 @@ class SyncReportStaffDto {
     'startTime',
     'endTime',
     'pauseMinutes',
+    'hoursSource',
+    'segments',
   };
 
   const SyncReportStaffDto({
@@ -2028,6 +2045,8 @@ class SyncReportStaffDto {
     this.startTime,
     this.endTime,
     this.pauseMinutes = 0,
+    this.hoursSource = 0,
+    this.segments = const [],
   });
 
   factory SyncReportStaffDto.fromJson(Map<String, dynamic> j) =>
@@ -2046,7 +2065,62 @@ class SyncReportStaffDto {
         startTime: _dt(j['startTime']),
         endTime: _dt(j['endTime']),
         pauseMinutes: _intOrNull(j['pauseMinutes']) ?? 0,
+        hoursSource: _intOrNull(j['hoursSource']) ?? 0,
+        segments: _list(j['segments'], SyncReportSegmentDto.fromJson),
       );
+}
+
+/// One work interval of a `SyncReportStaffDto` — the mirror of the server's
+/// `SyncReportSegmentDto`, and the reason a rapportino shows the hours the timer recorded instead
+/// of the span from first start to last stop.
+class SyncReportSegmentDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String reportId;
+  final String userId;
+  final DateTime startUtc;
+  final DateTime endUtc;
+
+  /// The phone's own id for the tap, when this interval originated on a device that sent one.
+  final String? clientId;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'reportId',
+    'userId',
+    'startUtc',
+    'endUtc',
+    'clientId',
+  };
+
+  const SyncReportSegmentDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.reportId,
+    required this.userId,
+    required this.startUtc,
+    required this.endUtc,
+    this.clientId,
+  });
+
+  factory SyncReportSegmentDto.fromJson(Map<String, dynamic> j) => SyncReportSegmentDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    reportId: j['reportId'] as String,
+    userId: j['userId'] as String,
+    startUtc: DateTime.parse(j['startUtc'] as String),
+    endUtc: DateTime.parse(j['endUtc'] as String),
+    clientId: j['clientId'] as String?,
+  );
 }
 
 /// One material used on a report — either a catalogue reference or free text.

@@ -84,13 +84,13 @@ final assetNameProvider = FutureProvider.autoDispose.family<String?, String>((
 
 /// Sums the hours actually worked across staff rows, in minutes.
 ///
-/// `hoursWorked` wins whenever it's set, matching `StaffRow.effectiveHours` (the same value these
-/// rows were persisted with by `ReportEditorNotifier._staffToCompanion`) — not just as a no-timer
-/// fallback. Once a timer has been stopped at least once, `hoursWorked` holds the per-segment
-/// accumulated total, while the raw startTime→endTime span also covers any idle gap between a
-/// stop and a later restart (startTime is pinned to the first start). Falling back to the span
-/// here would double-count that gap in the list's own total even though the fix in
-/// `StaffRow.effectiveHours` already keeps it out of what gets saved.
+/// The stored `hoursWorked` *is* `StaffRow.effectiveHours`: `ReportEditorNotifier._staffToCompanion`
+/// persists that value on every write, and it sums the recorded intervals when the row has any and
+/// otherwise takes the declared total. This column therefore holds the same figure the editor
+/// shows — the same rule, not a coincidence — and only a row nothing has ever timed falls through
+/// to the raw startTime→endTime span. That span also covers any idle gap between a stop and a later
+/// restart (startTime is pinned to the first start), which is why reading it in preference to the
+/// stored total would double-count the gap in the list's own total.
 double totalOreMinutes(List<ReportStaffTableData> rows) {
   return rows.fold<double>(0, (acc, r) {
     if (r.hoursWorked != null) return acc + (r.hoursWorked! * 60.0);

@@ -132,9 +132,11 @@ void main() {
   /// the ones nobody edits. The seventh is v16 (schema 59): the ticket's covered-product ids and the
   /// rapportino's `numero`. Both are filled for every row only by a full sync, and a rapportino is
   /// delta-filtered on `UpdatedAt` exactly like a ticket, so a draft nobody edits would otherwise
-  /// keep a null number forever. This test is the record that no release moved the generation
-  /// silently.
+  /// keep a null number forever. The eighth is v17 (schema 60): `report_staff_segments`, which
+  /// travels inside the report aggregate — a device whose cursor is already past a report would
+  /// never receive that report's intervals, and every rapportino on the phone would open with an
+  /// empty list. This test is the record that no release moved the generation silently.
   test('the sync cursor generation is the one the current release set', () {
-    expect(AppDatabase.syncCursorGeneration, 'v16');
+    expect(AppDatabase.syncCursorGeneration, 'v17');
   });
 }

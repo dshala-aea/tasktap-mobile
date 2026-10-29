@@ -580,6 +580,9 @@ class SyncService {
     // Report child rows first — none has a foreign key, but a child whose report is gone is a
     // read path with nothing to resolve against.
     await (db.delete(db.reportStaffTable)..where((r) => r.reportId.isIn(drop))).go();
+    // The intervals hang off the same report as the staff rows above: a report the server has
+    // deleted must not leave the hours that justified it behind as orphans nothing can attribute.
+    await (db.delete(db.reportStaffSegments)..where((g) => g.reportId.isIn(drop))).go();
     await (db.delete(db.reportMateriali)..where((r) => r.reportId.isIn(drop))).go();
     await (db.delete(db.reportControlli)..where((r) => r.reportId.isIn(drop))).go();
     await (db.delete(db.reportStrumenti)..where((r) => r.reportId.isIn(drop))).go();
@@ -1084,8 +1087,8 @@ class SyncService {
     }
   }
 
-  /// The full aggregate of every report in scope: staff lines, materials, answered checklist
-  /// items, attachment metadata and row versions (O-8a).
+  /// The full aggregate of every report in scope: staff lines, the work intervals inside them,
+  /// materials, answered checklist items, attachment metadata and row versions (O-8a).
   ///
   /// Two independent guards, both deliberate:
   ///
@@ -1135,6 +1138,13 @@ class SyncService {
         await (db.delete(
           db.reportStaffTable,
         )..where((r) => r.reportId.isIn(replace))).go();
+        // The intervals hang off the same report as the staff rows above, so `replace` — the
+        // payload's in-scope AND owned set — is the authority that clears them too. Residual: an
+        // interval recorded here but not yet submitted is unsent work the payload cannot know
+        // about, and it goes with the rest.
+        await (db.delete(
+          db.reportStaffSegments,
+        )..where((g) => g.reportId.isIn(replace))).go();
         await (db.delete(
           db.reportMateriali,
         )..where((r) => r.reportId.isIn(replace))).go();
@@ -1164,6 +1174,25 @@ class SyncService {
                     pauseMinutes: Value(s.pauseMinutes),
                   ),
                 );
+            // The intervals that justify this row's hours. Written here, beside their staff row,
+            // because the server nests them: they are never a sibling collection of the payload.
+            for (final g in s.segments) {
+              await db
+                  .into(db.reportStaffSegments)
+                  .insert(
+                    ReportStaffSegmentsCompanion.insert(
+                      id: g.id,
+                      tenantId: g.tenantId,
+                      createdAt: g.createdAt,
+                      updatedAt: Value(g.updatedAt),
+                      reportId: reportId,
+                      userId: g.userId,
+                      startUtc: g.startUtc,
+                      endUtc: g.endUtc,
+                      clientId: Value(g.clientId),
+                    ),
+                  );
+            }
           }
           for (final m in materiali[reportId] ?? const <SyncReportMaterialeDto>[]) {
             await db

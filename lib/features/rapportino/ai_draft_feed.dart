@@ -914,7 +914,16 @@ class AiDraftFeed {
     final id = row.rowId!;
     switch (row.kind) {
       case _Kind.worker:
+        // Read the row before deleting it: its intervals are keyed by `(reportId, userId)` and
+        // there is nothing left to look them up from afterwards. A later turn of this feed can
+        // re-add the same technician, who would otherwise inherit the removed person's hours.
+        final staff = await (_db.select(
+          _db.reportStaffTable,
+        )..where((t) => t.id.equals(id))).getSingleOrNull();
         await (_db.delete(_db.reportStaffTable)..where((t) => t.id.equals(id))).go();
+        if (staff != null) {
+          await DraftReportRepository(_db).deleteSegmentsForStaff(staff.reportId, staff.userId);
+        }
       case _Kind.material:
         await (_db.delete(_db.reportMateriali)..where((t) => t.id.equals(id))).go();
       case _Kind.control:

@@ -909,6 +909,37 @@ class ReportStaffTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── report_staff_segments ─────────────────────────────────────────────────────
+/// One work interval of one technician on one report — what the timer actually recorded.
+///
+/// Mirrors the server's `ReportStaffSegment`: it hangs off `(reportId, userId)` exactly like the
+/// `report_staff` row it describes, and carries the phone's own id for the tap in [clientId] so a
+/// replayed submit collapses onto the rows it already wrote instead of counting the hours twice.
+class ReportStaffSegments extends Table {
+  @override
+  String get tableName => 'report_staff_segments';
+
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get reportId => text()();
+  TextColumn get userId => text()();
+
+  /// The run's real instants, UTC.
+  DateTimeColumn get startUtc => dateTime()();
+  DateTimeColumn get endUtc => dateTime()();
+
+  /// The phone's id for this tap — a UUID, like everything else the server accepts as a Guid —
+  /// stable across a retried submit so a replay collapses onto the rows it already wrote. Null for
+  /// an interval that only ever came down from the server for a row written by an older client.
+  TextColumn get clientId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── report_materiali ──────────────────────────────────────────────────────────
 class ReportMateriali extends Table {
   TextColumn get id => text()();
@@ -1668,6 +1699,7 @@ class ChecklistOmittedTickets extends Table {
     MaterialeBarcodes,
     DraftReports,
     ReportStaffTable,
+    ReportStaffSegments,
     ReportMateriali,
     ReportControlli,
     ReportAllegati,
@@ -1705,7 +1737,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 59;
+  int get schemaVersion => 60;
 
   @override
   MigrationStrategy get migration {
@@ -1719,6 +1751,7 @@ class AppDatabase extends _$AppDatabase {
         await _createTicketHistoryIndexes();
         await _createCantiereWorkLogIndexes();
         await _createAbsenceRequestIndexes();
+        await _createReportStaffSegmentIndexes();
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -2444,6 +2477,25 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(draftReports, draftReports.numero);
           }
         }
+        if (from < 60) {
+          // The technician's real work intervals — one row per start/stop, the thing the
+          // rapportino's hours are supposed to be. `report_staff` gets no new column: exactly as
+          // server-side, segments are a child collection of the staff row.
+          //
+          // A NEW table, so `createTable` is additive on its own and drift emits
+          // `CREATE TABLE IF NOT EXISTS`, which keeps the older-schema fixtures working when they
+          // rewind `user_version` on a current-schema database (the `from < 52`/`53`/`54`
+          // branches' reasoning).
+          //
+          // The cursor bump to v17 is NOT optional here: report children travel inside the report
+          // aggregate, and `MobileUserSyncService` delta-filters reports on
+          // `(UpdatedAt ?? CreatedAt) > cutoff` exactly like everything else. A device whose
+          // cursor already sits past a report would never receive that report's intervals until
+          // somebody touched it, so every rapportino already on the phone would open with no
+          // segments at all and the Ore field would stay editable on a timer row.
+          await m.createTable(reportStaffSegments);
+          await _createReportStaffSegmentIndexes();
+        }
       },
     );
   }
@@ -2575,7 +2627,13 @@ class AppDatabase extends _$AppDatabase {
   ///      ships (the server even fills the covered-asset list for every synced ticket), and both
   ///      tables are delta-filtered, so an untouched ticket or rapportino would keep its null
   ///      forever — the same blind spot as v3/v4/v6/v8/v10/v12/v13/v15.
-  static const String syncCursorGeneration = 'v16';
+  /// v17 — 2026-10-29, schema 60 added `report_staff_segments`. The intervals travel inside the
+  ///      report aggregate, which is delta-filtered by report, so a device whose cursor already
+  ///      sits past a report would never receive that report's segments — every rapportino already
+  ///      on the phone would open with an empty interval list. Same blind spot as
+  ///      v3/v4/v6/v8/v10/v12/v13/v15. Bumping the generation only invalidates the cursor; the
+  ///      reports themselves are re-requested and arrive whole with their children.
+  static const String syncCursorGeneration = 'v17';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 
@@ -2657,6 +2715,15 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS absence_requests_owner '
       'ON absence_requests (requested_by_user_id, created_at)',
+    );
+  }
+
+  /// Intervals are read per report (the editor) and per report+technician (the submit payload and
+  /// any later correction), never by id alone.
+  Future<void> _createReportStaffSegmentIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS report_staff_segments_report '
+      'ON report_staff_segments (report_id, user_id)',
     );
   }
 

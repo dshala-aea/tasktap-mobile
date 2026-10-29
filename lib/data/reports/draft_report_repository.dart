@@ -64,6 +64,9 @@ class DraftReportRepository {
   Future<void> deleteDraft(String reportId) async {
     await _db.transaction(() async {
       await (_db.delete(_db.reportStaffTable)..where((s) => s.reportId.equals(reportId))).go();
+      // The segments hang off the same report as the staff rows above — a deleted rapportino must
+      // not leave the intervals that justified its hours behind.
+      await (_db.delete(_db.reportStaffSegments)..where((g) => g.reportId.equals(reportId))).go();
       await (_db.delete(_db.reportMateriali)..where((m) => m.reportId.equals(reportId))).go();
       await (_db.delete(_db.reportControlli)..where((c) => c.reportId.equals(reportId))).go();
       await (_db.delete(_db.reportStrumenti)..where((s) => s.reportId.equals(reportId))).go();
@@ -165,6 +168,34 @@ class DraftReportRepository {
           ..where((s) => s.reportId.equals(reportId))
           ..orderBy([(s) => OrderingTerm.asc(s.createdAt)]))
         .watch();
+  }
+
+  // ── Staff segments ─────────────────────────────────────────────────────────
+  //
+  // The intervals a staff row's hours were measured from. They are keyed by `(reportId, userId)`,
+  // matching the server's own row, and are shared with SyncService: a sync replaces them for
+  // every report in its payload's version set (see `_applyReportAggregate`). No merge path here on
+  // purpose — the payload is the authority once the report is server-known.
+
+  /// A report's intervals, oldest first. Ordered here rather than relying on rowid: a hydrated
+  /// list only looks chronological by luck otherwise, and the order it arrives in is the order the
+  /// editor holds and a submit body would serialise.
+  Future<List<ReportStaffSegment>> getSegments(String reportId) =>
+      (_db.select(_db.reportStaffSegments)
+            ..where((s) => s.reportId.equals(reportId))
+            ..orderBy([(s) => OrderingTerm.asc(s.startUtc), (s) => OrderingTerm.asc(s.id)]))
+          .get();
+
+  Future<void> upsertSegments(List<ReportStaffSegmentsCompanion> rows) async {
+    await _db.batch((b) => b.insertAllOnConflictUpdate(_db.reportStaffSegments, rows));
+  }
+
+  /// Intervals belong to `(reportId, userId)`, so removing the technician removes their taps —
+  /// a re-added colleague must not inherit the previous person's intervals.
+  Future<void> deleteSegmentsForStaff(String reportId, String userId) async {
+    await (_db.delete(
+      _db.reportStaffSegments,
+    )..where((s) => s.reportId.equals(reportId) & s.userId.equals(userId))).go();
   }
 
   // ── Materiali ──────────────────────────────────────────────────────────────

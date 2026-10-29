@@ -199,6 +199,27 @@ class SubmitReportRequest {
   };
 }
 
+/// One recorded work interval. Mirror of backend `SubmitReportSegmentDto`: the two instants and
+/// the phone's own id for the tap. The id is what makes a retried submit a no-op instead of a
+/// double-billed second set of hours.
+class SubmitReportSegmentDto {
+  const SubmitReportSegmentDto({
+    required this.startTime,
+    required this.endTime,
+    this.clientId,
+  });
+
+  final DateTime startTime;
+  final DateTime endTime;
+  final String? clientId;
+
+  Map<String, dynamic> toJson() => {
+    'startTime': startTime.toUtc().toIso8601String(),
+    'endTime': endTime.toUtc().toIso8601String(),
+    if (clientId != null) 'clientId': clientId,
+  };
+}
+
 /// One technician's time + travel contribution. Mirror of SubmitReportStaffDto.cs.
 class SubmitReportStaffDto {
   const SubmitReportStaffDto({
@@ -211,6 +232,7 @@ class SubmitReportStaffDto {
     this.startTime,
     this.endTime,
     this.pauseMinutes = 0,
+    this.segments = const [],
   });
 
   final String userId;
@@ -223,6 +245,11 @@ class SubmitReportStaffDto {
   final DateTime? endTime;
   final int pauseMinutes;
 
+  /// The intervals this row's hours were measured from, oldest first. Omitted when empty: the
+  /// server reads absent-or-empty as "not timer-recorded", which is exactly the pre-segments
+  /// wire shape, and replacing the stored set with nothing would downgrade the row to `Legacy`.
+  final List<SubmitReportSegmentDto> segments;
+
   Map<String, dynamic> toJson() => {
     'userId': userId,
     if (hoursWorked != null) 'hoursWorked': hoursWorked,
@@ -233,6 +260,7 @@ class SubmitReportStaffDto {
     if (startTime != null) 'startTime': startTime!.toUtc().toIso8601String(),
     if (endTime != null) 'endTime': endTime!.toUtc().toIso8601String(),
     'pauseMinutes': pauseMinutes,
+    if (segments.isNotEmpty) 'segments': segments.map((s) => s.toJson()).toList(),
   };
 }
 

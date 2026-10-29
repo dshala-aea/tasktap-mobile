@@ -109,8 +109,17 @@ void main() {
       customerSignoffText: 'accettato',
       materialiNotRequired: false,
       photoAllegatoIds: const ['00000000-0000-0000-0000-000000000007'],
-      staff: const [
-        SubmitReportStaffDto(userId: '00000000-0000-0000-0000-000000000008'),
+      staff: [
+        SubmitReportStaffDto(
+          userId: '00000000-0000-0000-0000-000000000008',
+          segments: [
+            SubmitReportSegmentDto(
+              startTime: DateTime.utc(2026, 6, 15, 8),
+              endTime: DateTime.utc(2026, 6, 15, 10),
+              clientId: '00000000-0000-0000-0000-00000000000a',
+            ),
+          ],
+        ),
       ],
       materiali: const [SubmitReportMaterialeDto(quantity: 2)],
       controlli: const [
@@ -187,6 +196,8 @@ void main() {
       final json =
           (fullRequest.toJson()['staff'] as List).first as Map<String, dynamic>;
       expectNoUnknownKeys('SubmitReportStaffDto', json);
+      final segment = (json['segments'] as List).first as Map<String, dynamic>;
+      expectNoUnknownKeys('SubmitReportSegmentDto', segment);
     });
 
     /// The regression itself, stated against the server's schema rather than against our own class.

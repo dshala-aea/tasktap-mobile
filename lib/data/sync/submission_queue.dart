@@ -408,6 +408,15 @@ class SubmissionQueue {
 
   Future<SubmitReportRequest> _buildRequest(DraftReport draft) async {
     final staff = await _repo.getStaff(draft.id);
+    // The intervals the timer recorded on this phone, already ordered `start_utc, id`. The server
+    // replaces the report's whole stored interval set on submit and derives `HoursWorked` from
+    // what arrives, so a row that holds intervals must send them: sending none is not neutral, it
+    // deletes the server's copy and downgrades the row to `Legacy`.
+    final segments = await _repo.getSegments(draft.id);
+    final segmentsByUser = <String, List<ReportStaffSegment>>{};
+    for (final g in segments) {
+      (segmentsByUser[g.userId] ??= []).add(g);
+    }
     final materiali = await _repo.getMateriali(draft.id);
     final controlli = await _repo.getControlli(draft.id);
     final allegati = await _repo.getAllegati(draft.id);
@@ -491,8 +500,10 @@ class SubmissionQueue {
       photoAllegatoIds: photoIds,
       strumenti: strumenti,
       staff: staff
-          .map(
-            (s) => SubmitReportStaffDto(
+          .map((s) {
+            final segmentsForRow =
+                segmentsByUser[s.userId] ?? const <ReportStaffSegment>[];
+            return SubmitReportStaffDto(
               userId: s.userId,
               hoursWorked: s.hoursWorked,
               kmTraveled: s.kmTraveled,
@@ -501,9 +512,24 @@ class SubmissionQueue {
               notes: s.notes,
               startTime: s.startTime,
               endTime: s.endTime,
-              pauseMinutes: s.pauseMinutes,
-            ),
-          )
+              // The intervals are authoritative: the server ignores `pauseMinutes` beside them and
+              // logs a warning when it sees both, so send a pause only when there is no interval
+              // for it to contradict. The phone has no pause editor, so a pause on a timer row can
+              // only have come down from the server — never something the technician chose.
+              pauseMinutes: segmentsForRow.isEmpty ? s.pauseMinutes : 0,
+              // The intervals this technician's hours came from. `clientId` is the phone's own id
+              // for each tap, passed verbatim: it is what lets a replayed submit collapse onto
+              // the rows it already wrote instead of counting the hours twice.
+              segments: [
+                for (final g in segmentsForRow)
+                  SubmitReportSegmentDto(
+                    startTime: g.startUtc,
+                    endTime: g.endUtc,
+                    clientId: g.clientId,
+                  ),
+              ],
+            );
+          })
           .toList(),
       materiali: materiali
           .map(

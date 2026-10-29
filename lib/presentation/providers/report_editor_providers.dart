@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
 import '../../data/local/app_database.dart';
@@ -22,6 +23,20 @@ import '../../domain/reports/draft_validation.dart';
 /// Which step is currently shown in the multi-step editor.
 enum RapportinoStep { dati, staff, materiali, controlli, firme, allegati, review }
 
+/// One recorded work interval, as the device holds it.
+///
+/// [id] doubles as the wire `clientId`: it is the phone's own name for this tap, so a replayed
+/// submit collapses server-side instead of counting the hours twice.
+class StaffSegment {
+  const StaffSegment({required this.id, required this.startUtc, required this.endUtc});
+
+  final String id;
+  final DateTime startUtc;
+  final DateTime endUtc;
+
+  Duration get duration => endUtc.difference(startUtc);
+}
+
 /// Represents one staff/technician row being edited.
 class StaffRow {
   const StaffRow({
@@ -35,6 +50,7 @@ class StaffRow {
     this.startTime,
     this.endTime,
     this.pauseMinutes = 0,
+    this.segments = const [],
     // Timer state (not persisted; recalculated on resume)
     this.timerRunning = false,
     this.timerStartedAt,
@@ -51,6 +67,13 @@ class StaffRow {
   final DateTime? endTime;
   final int pauseMinutes;
 
+  /// The intervals this row's hours were measured from, oldest first as `getSegments` returns
+  /// them. Empty for a row whose hours came from the office, a manual edit, or a client older
+  /// than this table. Emptiness is meant to be the editor's only evidence that these hours were
+  /// not measured here — where there is no interval there is nothing this device could have timed,
+  /// so the hours are not its to re-derive.
+  final List<StaffSegment> segments;
+
   // Live timer fields (transient — not in Drift)
   final bool timerRunning;
   final DateTime? timerStartedAt;
@@ -65,38 +88,53 @@ class StaffRow {
     DateTime? startTime,
     DateTime? endTime,
     int? pauseMinutes,
+    List<StaffSegment>? segments,
     bool? timerRunning,
     DateTime? timerStartedAt,
     bool clearTimer = false,
+    // null means "keep" for every parameter above, which cannot express a deliberate erase.
+    // These three are the erases a row actually needs: a total no interval can explain, and a
+    // start→end range a range-less worklog suggestion no longer describes.
+    bool clearHoursWorked = false,
+    bool clearStartTime = false,
+    bool clearEndTime = false,
   }) {
     return StaffRow(
       id: id,
       userId: userId ?? this.userId,
       displayName: displayName ?? this.displayName,
-      hoursWorked: hoursWorked ?? this.hoursWorked,
+      hoursWorked: clearHoursWorked ? null : (hoursWorked ?? this.hoursWorked),
       kmTraveled: kmTraveled ?? this.kmTraveled,
       vehicle: vehicle ?? this.vehicle,
       notes: notes ?? this.notes,
-      startTime: startTime ?? this.startTime,
-      endTime: endTime ?? this.endTime,
+      startTime: clearStartTime ? null : (startTime ?? this.startTime),
+      endTime: clearEndTime ? null : (endTime ?? this.endTime),
       pauseMinutes: pauseMinutes ?? this.pauseMinutes,
+      segments: segments ?? this.segments,
       timerRunning: timerRunning ?? this.timerRunning,
       timerStartedAt: clearTimer ? null : (timerStartedAt ?? this.timerStartedAt),
     );
   }
 
-  /// Effective hours: `hoursWorked` when set, else the timer's start→end span minus pauses.
+  /// Effective hours: the sum of the recorded intervals when there are any, else `hoursWorked`,
+  /// else the timer's start→end span minus pauses.
   ///
-  /// `hoursWorked` wins whenever it's set — not just as a no-timer fallback — for two reasons:
-  /// [ReportEditorNotifier.stopTimer] already accumulates it per-segment (each stop adds just
-  /// that run's duration), so once a timer has been stopped at least once, the raw
-  /// startTime→endTime span covers every segment PLUS any idle gap between a stop and a later
-  /// restart (startTime is pinned to the very first start; only [pauseMinutes] — never surfaced
-  /// in the UI — could subtract it). And a manual "Ore" edit after using the timer only ever
-  /// touches `hoursWorked` (see step_ore.dart) — if the span won instead, that edit would render
-  /// in the field but be silently ignored everywhere it's actually used (the total, the DB save,
-  /// the submit payload).
+  /// The intervals outrank `hoursWorked` because they are the evidence it is merely summarising:
+  /// they are what the timer actually measured, so they exclude the idle gap between a stop and a
+  /// later restart that the raw span would include (startTime is pinned to the very first start,
+  /// and only [pauseMinutes] — never surfaced in the UI — could subtract it).
+  ///
+  /// `hoursWorked` still wins over the span whenever there are no intervals, and not just as a
+  /// no-timer fallback: a manual "Ore" edit only ever touches `hoursWorked` (see step_ore.dart) —
+  /// if the span won instead, that edit would render in the field but be silently ignored
+  /// everywhere it's actually used (the total, the DB save, the submit payload).
   double get effectiveHours {
+    if (segments.isNotEmpty) {
+      // Summed in milliseconds and divided once: `inMinutes` truncates per interval, so k
+      // sub-minute runs would otherwise contribute nothing at all — silently unpaid time.
+      final millis = segments.fold<int>(0, (sum, s) => sum + s.duration.inMilliseconds);
+      return millis / 3600000.0;
+    }
     if (hoursWorked != null) return hoursWorked!;
     if (startTime != null && endTime != null) {
       final worked = endTime!.difference(startTime!).inMinutes - pauseMinutes;
@@ -627,6 +665,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     }
 
     final staff = await _repo.getStaff(draft.id);
+    final segments = await _repo.getSegments(draft.id);
     final materiali = await _repo.getMateriali(draft.id);
     final controlli = await _repo.getControlli(draft.id);
     final allegati = await _repo.getAllegati(draft.id);
@@ -652,6 +691,16 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
         ? technicianSignatureRows.first.storagePath
         : null;
     final metadata = _parseMetadataJson(draft.metadataJson);
+    // The intervals are one collection for the whole report, so they hang off `userId`, exactly
+    // like the staff rows do. Grouping here (rather than a query per row) is what puts each
+    // technician's own intervals beside their row, which is where both `effectiveHours` and
+    // anything building a submit body will look for them.
+    final segmentsByUser = <String, List<StaffSegment>>{};
+    for (final g in segments) {
+      (segmentsByUser[g.userId] ??= []).add(
+        StaffSegment(id: g.id, startUtc: g.startUtc, endUtc: g.endUtc),
+      );
+    }
     if (!mounted) return;
 
     state = state.copyWith(
@@ -684,6 +733,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
             startTime: s.startTime,
             endTime: s.endTime,
             pauseMinutes: s.pauseMinutes,
+            segments: segmentsByUser[s.userId] ?? const [],
           ),
       ],
       materialeRows: [
@@ -892,36 +942,135 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> removeStaff(String staffId) async {
+    // Read the userId before dropping the row: the intervals are keyed by
+    // `(reportId, userId)`, not by the staff row's own id, so that is the only handle that can
+    // still find them once the row is gone.
+    final removed = state.staffRows.where((r) => r.id == staffId).toList();
     final updated = state.staffRows.where((r) => r.id != staffId).toList();
     state = state.copyWith(staffRows: updated);
     await _repo.deleteStaff(staffId);
+    if (removed.isNotEmpty) {
+      await _repo.deleteSegmentsForStaff(state.reportId, removed.first.userId);
+    }
     await _autosaveHeader();
   }
 
   /// Start on-screen travel/work timer for a staff row.
+  ///
+  /// A row that carries a typed total and no recorded intervals loses that total here. The server
+  /// recomputes `HoursWorked` from the intervals on submit, so a total no interval explains cannot
+  /// survive the first stop anyway — clearing it at the start is the only moment where the number
+  /// goes away while the technician is looking at it, instead of at the next save.
+  ///
+  /// After this the row shows a running timer and no total, which is exactly what the office will
+  /// see once the first interval is submitted.
   Future<void> startTimer(String staffId) async {
     final row = state.staffRows.firstWhere((r) => r.id == staffId);
+    final now = DateTime.now().toUtc();
+    // A row typed by hand, or corrected by the office and re-imported, arrives with a total and
+    // nothing measuring it. The start discards that total — and the end of its span too, because
+    // `effectiveHours` falls through to `endTime - startTime` once `hoursWorked` is null, so
+    // leaving the end behind would not clear the row: it would quietly replace the typed 3 h with
+    // the 8 h the old span happens to cover, and `_staffToCompanion` would persist that.
+    //
+    // `endTime` is half the test, not a detail: a row with a null total but a span is one whose
+    // hours still come from that span, so the span is the number being discarded. Requiring a
+    // total would leave that row keeping its end, and the next save would persist the span.
+    final discarding = row.segments.isEmpty && (row.hoursWorked != null || row.endTime != null);
     final started = row.copyWith(
       timerRunning: true,
-      timerStartedAt: DateTime.now().toUtc(),
-      startTime: row.startTime ?? DateTime.now().toUtc(),
+      timerStartedAt: now,
+      startTime: discarding ? now : (row.startTime ?? now),
+      clearEndTime: discarding,
+      clearHoursWorked: discarding,
     );
     await updateStaff(started);
   }
 
-  /// Stop on-screen timer and compute hoursWorked.
+  /// Stop on-screen timer, record the interval, and recompute hoursWorked from the intervals.
   Future<void> stopTimer(String staffId) async {
     final row = state.staffRows.firstWhere((r) => r.id == staffId);
     final now = DateTime.now().toUtc();
+    final startedAt = row.timerStartedAt;
+    final added = startedAt == null
+        ? const <StaffSegment>[]
+        : [
+            StaffSegment(
+              // A UUID, not a readable `seg-<epoch>`: the server binds `Id` and `ClientId` as
+              // `Guid`, so any other string fails to deserialize and the whole submit 400s. The
+              // local id and the claimed `ClientId` are the same value, so a replayed tap
+              // collapses onto the row it already wrote instead of recording the hours twice.
+              id: const Uuid().v4(),
+              startUtc: startedAt,
+              endUtc: now,
+            ),
+          ];
+    final newSegments = [...row.segments, ...added];
     final stopped = row.copyWith(
       timerRunning: false,
       endTime: now,
-      hoursWorked:
-          row.effectiveHours +
-          (row.timerStartedAt != null ? now.difference(row.timerStartedAt!).inMinutes / 60.0 : 0.0),
+      segments: newSegments,
       clearTimer: true,
     );
-    await updateStaff(stopped);
+    // Hours go on the row too, derived from the intervals: the office web and every older client
+    // read `hoursWorked` and nothing else, so leaving it stale is what made the two disagree.
+    await updateStaff(
+      newSegments.isEmpty ? stopped : stopped.copyWith(hoursWorked: stopped.effectiveHours),
+    );
+    // Only the interval THIS stop measured, never the hydrated ones. Sync writes a server
+    // interval's `clientId` from the payload — a different uuid from its `id`, and null for one
+    // recorded by an older client. Re-upserting those rows would overwrite that claim with our own
+    // id and reset `createdAt`, so the device would afterwards claim a client id it never sent and
+    // the server's replay key would stop matching.
+    await _repo.upsertSegments([
+      for (final s in added)
+        ReportStaffSegmentsCompanion.insert(
+          id: s.id,
+          tenantId: state.tenantId,
+          createdAt: now,
+          reportId: state.reportId,
+          userId: row.userId,
+          startUtc: s.startUtc,
+          endUtc: s.endUtc,
+          clientId: Value(s.id),
+        ),
+    ]);
+  }
+
+  /// Replaces a row's recorded intervals with hours the technician chose by hand.
+  ///
+  /// A worklog suggestion applied over the timer is a manual correction, not an addition: the
+  /// server derives `HoursWorked` from the intervals on submit, so a row holding both would
+  /// disagree with itself and the next save would quietly undo the correction. The intervals are
+  /// deleted from Drift, not merely dropped from state — the rows outlive this notifier, and a
+  /// later hydrate or submit would resurrect the total just overridden. Clearing them also makes
+  /// the Ore field editable again, in the same gesture.
+  ///
+  /// The row's start→end span is cleared when the suggestion has none of its own: a sum over
+  /// several sessions describes no single range, and leaving yesterday's "Inizio/Fine" beside it
+  /// would label the total with hours it does not describe.
+  Future<void> overrideStaffHours(
+    StaffRow row, {
+    required double hoursWorked,
+    DateTime? startTime,
+    DateTime? endTime,
+  }) async {
+    // Re-resolved, not used as passed: the caller holds the row it built its tile from, and a sync
+    // may have landed while a confirmation dialog was open. Only the identity is taken from the
+    // argument.
+    final matches = state.staffRows.where((r) => r.id == row.id);
+    final current = matches.isEmpty ? row : matches.first;
+    await _repo.deleteSegmentsForStaff(state.reportId, current.userId);
+    await updateStaff(
+      current.copyWith(
+        segments: const [],
+        hoursWorked: hoursWorked,
+        startTime: startTime,
+        endTime: endTime,
+        clearStartTime: startTime == null,
+        clearEndTime: endTime == null,
+      ),
+    );
   }
 
   // ── Step 3: Materiali ──────────────────────────────────────────────────────

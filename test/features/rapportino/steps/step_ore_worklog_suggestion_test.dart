@@ -24,6 +24,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/time/work_time.dart';
+import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -161,6 +162,8 @@ void main() {
 
       expect(find.textContaining('Da worklog:'), findsOneWidget);
       expect(find.textContaining('3,8h'), findsOneWidget);
+      // Nothing on this row is discarded: no intervals, and no span the suggestion cannot describe.
+      expect(find.text('· Usa'), findsOneWidget);
 
       await tester.tap(find.textContaining('Da worklog:'));
       await tester.pumpAndSettle();
@@ -254,6 +257,334 @@ void main() {
       // The suggested end must land on the day AFTER start, not the same day.
       expect(row.endTime!.isAfter(row.startTime!), isTrue);
       expect(row.endTime!.difference(row.startTime!).isNegative, isFalse);
+    });
+
+    // A row the timer measured has its hours derived from the recorded intervals, and the next
+    // save writes that derived total back over anything typed. A suggestion applied on top of it
+    // therefore has to replace the evidence, not sit beside it: the intervals go, the Ore field
+    // comes back editable, and the row ends up with exactly one total.
+    testWidgets('applying a suggestion over recorded intervals replaces them in the same gesture', (
+      tester,
+    ) async {
+      final repo = DraftReportRepository(db);
+      await repo.upsertSegments([
+        ReportStaffSegmentsCompanion.insert(
+          id: 'seg-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 8, 31, 6),
+          reportId: _reportId,
+          userId: 'user-1',
+          startUtc: DateTime.utc(2026, 8, 31, 6),
+          endUtc: DateTime.utc(2026, 8, 31, 8),
+        ),
+      ]);
+
+      final container = _buildContainer(
+        db: db,
+        staffRows: [
+          StaffRow(
+            id: 'staff-1',
+            userId: 'user-1',
+            startTime: DateTime.utc(2026, 8, 31, 6),
+            endTime: DateTime.utc(2026, 8, 31, 8),
+            segments: [
+              StaffSegment(
+                id: 'seg-1',
+                startUtc: DateTime.utc(2026, 8, 31, 6),
+                endUtc: DateTime.utc(2026, 8, 31, 8),
+              ),
+            ],
+          ),
+        ],
+        worklogEntries: [
+          _entry(
+            userId: 'user-1',
+            workDate: DateTime.utc(2026, 8, 31),
+            startTime: const Duration(hours: 8),
+            endTime: const Duration(hours: 11, minutes: 45),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Calcolate dal timer'), findsOneWidget);
+      // The chip must not read "Usa" over a tap that deletes the timer's evidence.
+      expect(find.text('· Sostituisci il timer'), findsOneWidget);
+      expect(find.text('· Usa'), findsNothing);
+
+      await tester.tap(find.textContaining('Da worklog:'));
+      await tester.pumpAndSettle();
+
+      // Nothing is deleted until the technician confirms.
+      expect(find.text('Sostituire gli orari registrati?'), findsOneWidget);
+      expect(container.read(reportEditorProvider(_reportId)).staffRows.single.segments, hasLength(1));
+      expect(await repo.getSegments(_reportId), hasLength(1));
+
+      await tester.tap(find.text('Sostituisci'));
+      await tester.pumpAndSettle();
+
+      final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
+      expect(row.segments, isEmpty);
+      expect(row.hoursWorked, closeTo(3.75, 0.01));
+      expect(await repo.getSegments(_reportId), isEmpty, reason: 'the Drift rows are gone too');
+      // What the submit queue and the office actually read: the persisted column, not just the
+      // in-memory row.
+      expect((await repo.getStaff(_reportId)).single.hoursWorked, closeTo(3.75, 0.01));
+
+      // Editable again, holding the suggested hours rather than the timer's.
+      expect(
+        find.byWidgetPredicate((w) => w is AppTextField && w.label == 'Ore'),
+        findsOneWidget,
+      );
+      expect(find.text('3.8'), findsOneWidget);
+      expect(find.textContaining('Calcolate dal timer'), findsNothing);
+    });
+
+    testWidgets('cancelling the confirmation leaves the timer and the row untouched', (
+      tester,
+    ) async {
+      final repo = DraftReportRepository(db);
+      await repo.upsertSegments([
+        ReportStaffSegmentsCompanion.insert(
+          id: 'seg-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 8, 31, 6),
+          reportId: _reportId,
+          userId: 'user-1',
+          startUtc: DateTime.utc(2026, 8, 31, 6),
+          endUtc: DateTime.utc(2026, 8, 31, 8),
+        ),
+      ]);
+
+      final container = _buildContainer(
+        db: db,
+        staffRows: [
+          StaffRow(
+            id: 'staff-1',
+            userId: 'user-1',
+            startTime: DateTime.utc(2026, 8, 31, 6),
+            endTime: DateTime.utc(2026, 8, 31, 8),
+            segments: [
+              StaffSegment(
+                id: 'seg-1',
+                startUtc: DateTime.utc(2026, 8, 31, 6),
+                endUtc: DateTime.utc(2026, 8, 31, 8),
+              ),
+            ],
+          ),
+        ],
+        worklogEntries: [
+          _entry(
+            userId: 'user-1',
+            workDate: DateTime.utc(2026, 8, 31),
+            startTime: const Duration(hours: 8),
+            endTime: const Duration(hours: 11, minutes: 45),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('Da worklog:'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Annulla'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(reportEditorProvider(_reportId)).staffRows.single.segments, hasLength(1));
+      expect(await repo.getSegments(_reportId), hasLength(1));
+      expect(find.textContaining('Calcolate dal timer'), findsOneWidget);
+    });
+
+    // A chip over a live run can only compete with the clock: applying it writes the worklog
+    // total, but `copyWith` never touches `timerRunning`/`timerStartedAt`, so the badge keeps
+    // counting and the next stop builds its interval from the original start and overwrites the
+    // total again — the correction is destroyed and a wrong interval is submitted.
+    //
+    // Two sessions, so the suggestion carries no range of its own — the case the multi-session
+    // suppression used to cover by accident.
+    List<TicketWorkLogDto> twoSessions() => [
+      _entry(
+        userId: 'user-1',
+        workDate: DateTime.utc(2026, 8, 31),
+        startTime: const Duration(hours: 8),
+        endTime: const Duration(hours: 10),
+      ),
+      _entry(
+        userId: 'user-1',
+        workDate: DateTime.utc(2026, 8, 31).add(const Duration(days: 1)),
+        startTime: const Duration(hours: 9),
+        endTime: const Duration(hours: 10, minutes: 30),
+      ),
+    ];
+
+    StaffRow timedRow({required bool timerRunning}) => StaffRow(
+      id: 'staff-1',
+      userId: 'user-1',
+      startTime: DateTime.utc(2026, 8, 31, 6),
+      timerRunning: timerRunning,
+      timerStartedAt: timerRunning ? DateTime.utc(2026, 8, 31, 6) : null,
+    );
+
+    testWidgets('a running timer withholds the worklog chip', (tester) async {
+      final container = _buildContainer(
+        db: db,
+        staffRows: [timedRow(timerRunning: true)],
+        worklogEntries: twoSessions(),
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      // The running badge ticks every frame, so `pumpAndSettle` would never return here.
+      await tester.pump();
+      await tester.pump();
+
+      // The row really is mid-run: the start button is gone, the stop badge is in its place.
+      // Without this, "no chip" could just as well mean the suggestion never existed.
+      expect(find.byTooltip('Avvia timer'), findsNothing);
+      expect(
+        find.textContaining('Da worklog:'),
+        findsNothing,
+        reason: 'a chip over a live run would be overwritten by the next stop',
+      );
+    });
+
+    // The other half: the predicate has to be the timer, not the suggestion disappearing for
+    // everyone. The same row, stopped, still gets its chip.
+    testWidgets('the same row shows the chip once its timer is stopped', (tester) async {
+      final container = _buildContainer(
+        db: db,
+        staffRows: [timedRow(timerRunning: false)],
+        worklogEntries: twoSessions(),
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Avvia timer'), findsOneWidget);
+      expect(find.textContaining('Da worklog: 3,5h'), findsOneWidget);
+    });
+
+    // A row the office sent carries a span but no intervals. A two-session suggestion keeps no
+    // range, so it erases "Inizio/Fine" — as destructive as deleting intervals, and just as
+    // invisible afterwards.
+    testWidgets('a span-only row asks before a range-less suggestion drops its Inizio/Fine', (
+      tester,
+    ) async {
+      final workDate = DateTime.utc(2026, 8, 31);
+      final container = _buildContainer(
+        db: db,
+        staffRows: [
+          StaffRow(
+            id: 'staff-1',
+            userId: 'user-1',
+            startTime: DateTime.utc(2026, 8, 31, 6),
+            endTime: DateTime.utc(2026, 8, 31, 10),
+          ),
+        ],
+        worklogEntries: [
+          _entry(
+            userId: 'user-1',
+            workDate: workDate,
+            startTime: const Duration(hours: 8),
+            endTime: const Duration(hours: 10),
+          ),
+          _entry(
+            userId: 'user-1',
+            workDate: workDate.add(const Duration(days: 1)),
+            startTime: const Duration(hours: 9),
+            endTime: const Duration(hours: 10, minutes: 30),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Inizio:'), findsOneWidget);
+      // The chip must not promise a plain "Usa" for a tap that drops the span...
+      expect(find.text('· Sostituisci gli orari'), findsOneWidget);
+      expect(find.text('· Usa'), findsNothing);
+      // ...and must not claim a timer this row never had: 08:00→12:00 was typed, not measured.
+      expect(find.text('· Sostituisci il timer'), findsNothing);
+
+      await tester.tap(find.textContaining('Da worklog:'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sostituire gli orari registrati?'), findsOneWidget);
+
+      await tester.tap(find.text('Annulla'));
+      await tester.pumpAndSettle();
+
+      final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
+      expect(row.startTime, DateTime.utc(2026, 8, 31, 6));
+      expect(row.endTime, DateTime.utc(2026, 8, 31, 10));
+      expect(find.textContaining('Inizio:'), findsOneWidget);
+    });
+
+    // The sum of several sessions describes no single start→end. Now that the apply path can
+    // clear a span, the row does not have to keep a range it cannot explain — it drops it.
+    testWidgets('a multi-session sum applies to a timed row and clears the span it cannot explain', (
+      tester,
+    ) async {
+      final workDate = DateTime.utc(2026, 8, 31);
+      final container = _buildContainer(
+        db: db,
+        staffRows: [
+          StaffRow(
+            id: 'staff-1',
+            userId: 'user-1',
+            startTime: DateTime.utc(2026, 8, 31, 6),
+            endTime: DateTime.utc(2026, 8, 31, 8),
+            segments: [
+              StaffSegment(
+                id: 'seg-1',
+                startUtc: DateTime.utc(2026, 8, 31, 6),
+                endUtc: DateTime.utc(2026, 8, 31, 8),
+              ),
+            ],
+          ),
+        ],
+        worklogEntries: [
+          _entry(
+            userId: 'user-1',
+            workDate: workDate,
+            startTime: const Duration(hours: 8),
+            endTime: const Duration(hours: 10),
+          ),
+          _entry(
+            userId: 'user-1',
+            workDate: workDate.add(const Duration(days: 1)),
+            startTime: const Duration(hours: 9),
+            endTime: const Duration(hours: 10, minutes: 30),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Da worklog: 3,5h'), findsOneWidget);
+      expect(find.textContaining('Inizio:'), findsOneWidget);
+
+      await tester.tap(find.textContaining('Da worklog:'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sostituisci'));
+      await tester.pumpAndSettle();
+
+      final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
+      expect(row.hoursWorked, closeTo(3.5, 0.01));
+      expect(row.segments, isEmpty);
+      expect(row.startTime, isNull);
+      expect(row.endTime, isNull);
+      expect(find.textContaining('Inizio:'), findsNothing);
     });
 
     testWidgets('a still-running session is never suggested', (tester) async {

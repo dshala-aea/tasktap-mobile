@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/sync_dto.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 
 /// O-8a/O-8b: the report aggregate reaches the device.
@@ -73,7 +74,12 @@ Map<String, dynamic> _payload({
   if (!identical(reportVersions, _absent)) 'reportVersions': reportVersions,
 };
 
-Map<String, dynamic> _staffJson(String id, String reportId) => {
+Map<String, dynamic> _staffJson(
+  String id,
+  String reportId, {
+  int hoursSource = 0,
+  List<Map<String, dynamic>> segments = const [],
+}) => {
   'id': id,
   'tenantId': 'tenant-1',
   'createdAt': '2026-10-20T08:00:00Z',
@@ -82,6 +88,26 @@ Map<String, dynamic> _staffJson(String id, String reportId) => {
   'hoursWorked': 2.5,
   'kmTraveled': 12,
   'pauseMinutes': 15,
+  'hoursSource': hoursSource,
+  'segments': segments,
+};
+
+Map<String, dynamic> _segmentJson(
+  String id, {
+  required String reportId,
+  required String startUtc,
+  required String endUtc,
+  String? clientId,
+}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-10-20T08:00:00Z',
+  'updatedAt': null,
+  'reportId': reportId,
+  'userId': 'user-1',
+  'startUtc': startUtc,
+  'endUtc': endUtc,
+  'clientId': clientId,
 };
 
 Map<String, dynamic> _materialeJson(String id, String reportId) => {
@@ -215,6 +241,33 @@ void main() {
     return rows.map((r) => r.id).toList();
   }
 
+  Future<void> seedSegment(
+    String id,
+    String reportId, {
+    String startUtc = '2026-10-20T08:00:00Z',
+    String endUtc = '2026-10-20T09:00:00Z',
+  }) => db
+      .into(db.reportStaffSegments)
+      .insert(
+        ReportStaffSegmentsCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 10, 20),
+          reportId: reportId,
+          userId: 'user-1',
+          startUtc: DateTime.parse(startUtc),
+          endUtc: DateTime.parse(endUtc),
+        ),
+      );
+
+  Future<List<String>> segmentIds(String reportId) async {
+    final rows = await (db.select(
+        db.reportStaffSegments,
+      )..where((g) => g.reportId.equals(reportId)))
+        .get();
+    return rows.map((g) => g.id).toList();
+  }
+
   test('children of an in-scope report land in the mirror', () async {
     await seedReport('r-1');
     respond(
@@ -241,11 +294,89 @@ void main() {
     expect(report.expectedVersion, '42');
   });
 
+  test('the intervals nested in a staff row land with that row', () async {
+    await seedReport('r-1');
+    respond(
+      _payload(
+        reportStaff: [
+          _staffJson(
+            's-1',
+            'r-1',
+            hoursSource: 1,
+            segments: [
+              _segmentJson(
+                'g-1',
+                reportId: 'r-1',
+                startUtc: '2026-10-20T08:00:00Z',
+                endUtc: '2026-10-20T09:00:00Z',
+                clientId: 'c-1',
+              ),
+              _segmentJson(
+                'g-2',
+                reportId: 'r-1',
+                startUtc: '2026-10-20T10:00:00Z',
+                endUtc: '2026-10-20T11:30:00Z',
+              ),
+              // A nested interval is written under the report being replaced, never under the one
+              // its own body claims: a disagreeing `reportId` must not be able to hang a segment
+              // on a report this pass knows nothing about.
+              _segmentJson(
+                'g-3',
+                reportId: 'r-other',
+                startUtc: '2026-10-20T12:00:00Z',
+                endUtc: '2026-10-20T12:30:00Z',
+              ),
+            ],
+          ),
+        ],
+        reportVersions: [_versionJson('r-1', '42')],
+      ),
+    );
+
+    await svc.sync();
+
+    // The intervals are a child of the staff row on the wire, not a payload collection of their
+    // own: they land under the report the loop is replacing, with the staff row's technician.
+    final rows =
+        await (db.select(db.reportStaffSegments)
+              ..orderBy([(g) => OrderingTerm(expression: g.startUtc)]))
+            .get();
+    expect(rows.map((g) => g.id), ['g-1', 'g-2', 'g-3']);
+    expect(rows.first.reportId, 'r-1');
+    expect(rows.first.userId, 'user-1');
+    expect(
+      rows.last.reportId,
+      'r-1',
+      reason: 'the nested body does not get to choose the report',
+    );
+    // `.toUtc()` on the value, not on the expectation: `dateTime()` decodes local-kinded.
+    expect(rows.first.startUtc.toUtc(), DateTime.utc(2026, 10, 20, 8));
+    expect(rows.first.endUtc.toUtc(), DateTime.utc(2026, 10, 20, 9));
+    expect(
+      rows.first.clientId,
+      'c-1',
+      reason: 'a replayed submit collapses onto the rows the phone already wrote',
+    );
+    expect(rows.last.clientId, isNull);
+
+    // The row also carries WHY its hours are what they are. It is an int on the wire, read through
+    // the same helper as `pauseMinutes` with Legacy (0) as the fallback, so pin the value: a
+    // renamed key would otherwise fall back to 0 in silence while `wireKeys` still matched.
+    expect(
+      SyncReportStaffDto.fromJson(
+        _staffJson('s-1', 'r-1', hoursSource: 1),
+      ).hoursSource,
+      1,
+    );
+  });
+
   test('a child the office deleted is removed, and only that report\'s', () async {
     await seedReport('r-1');
     await seedReport('r-2');
     await seedStaffRow('s-old', 'r-1');
     await seedStaffRow('s-keep', 'r-2');
+    await seedSegment('g-old', 'r-1');
+    await seedSegment('g-keep', 'r-2');
 
     // r-1 is still in scope but has no staff line any more; r-2 is absent from the in-scope set
     // entirely, which is no evidence of a deletion.
@@ -260,15 +391,33 @@ void main() {
 
     expect(await staffIds('r-1'), isEmpty);
     expect(await staffIds('r-2'), ['s-keep']);
+    expect(await segmentIds('r-1'), isEmpty);
+    expect(await segmentIds('r-2'), ['g-keep']);
   });
 
   test('a locally-owned draft keeps its own children', () async {
     await seedReport('r-1', isLocalOnly: true);
     await seedStaffRow('s-local', 'r-1');
+    await seedSegment('g-local', 'r-1');
 
     respond(
       _payload(
-        reportStaff: [_staffJson('s-server', 'r-1')],
+        // The server's own row carries an interval of its own, so the assertion below also proves
+        // the INSERT skips this report and not merely that the delete does.
+        reportStaff: [
+          _staffJson(
+            's-server',
+            'r-1',
+            segments: [
+              _segmentJson(
+                'g-server',
+                reportId: 'r-1',
+                startUtc: '2026-10-20T08:00:00Z',
+                endUtc: '2026-10-20T09:00:00Z',
+              ),
+            ],
+          ),
+        ],
         reportVersions: [_versionJson('r-1', '43')],
       ),
     );
@@ -276,6 +425,11 @@ void main() {
     await svc.sync();
 
     expect(await staffIds('r-1'), ['s-local']);
+    expect(
+      await segmentIds('r-1'),
+      ['g-local'],
+      reason: 'the timer intervals of unsent work are this device\'s own, like the row itself',
+    );
     final report = await (db.select(
       db.draftReports,
     )..where((r) => r.id.equals('r-1'))).getSingle();
