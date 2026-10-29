@@ -118,6 +118,33 @@ Future<void> _insertDraft(
   }
 }
 
+/// One recorded timer interval, as the timer appends it locally: its own row id, the phone's id
+/// for the tap, and the two UTC instants.
+Future<void> _insertSegment(
+  AppDatabase db, {
+  required String id,
+  String reportId = 'report-1',
+  String userId = 'user-1',
+  required DateTime startUtc,
+  required DateTime endUtc,
+  String? clientId,
+}) async {
+  await db
+      .into(db.reportStaffSegments)
+      .insert(
+        ReportStaffSegmentsCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          reportId: reportId,
+          userId: userId,
+          startUtc: startUtc,
+          endUtc: endUtc,
+          clientId: Value(clientId),
+        ),
+      );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Tests
 // ══════════════════════════════════════════════════════════════════════════════
@@ -429,6 +456,77 @@ void main() {
       expect(capturedRequest!.materiali.first.freeTextName, 'Vite');
       // Defaults to false — flagging a follow-up is an explicit technician decision.
       expect(capturedRequest!.richiedeSecondoIntervento, isFalse);
+      // No stored interval means no `segments` key at all: an empty list would be read as
+      // "nothing to send" too, but omitting it keeps the wire byte-identical to a pre-segments
+      // client, which is what a report that was never timer-recorded is.
+      expect(capturedRequest!.staff.first.segments, isEmpty);
+      expect(
+        ((capturedRequest!.toJson()['staff'] as List).first
+            as Map<String, dynamic>)
+            .containsKey('segments'),
+        isFalse,
+      );
+    });
+
+    test('submit carries every stored interval, oldest first, keyed by the phone id of its tap', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+      // Inserted out of order on purpose: the payload's order is the repository's, not the
+      // insertion order, so a list built straight from the table would fail here.
+      await _insertSegment(
+        db,
+        id: 'seg-2',
+        startUtc: DateTime.utc(2026, 1, 1, 14),
+        endUtc: DateTime.utc(2026, 1, 1, 16),
+        clientId: 'client-b',
+      );
+      await _insertSegment(
+        db,
+        id: 'seg-1',
+        startUtc: DateTime.utc(2026, 1, 1, 8),
+        endUtc: DateTime.utc(2026, 1, 1, 11, 30),
+        clientId: 'client-a',
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await queue.processAll();
+
+      final segments = capturedRequest!.staff.first.segments;
+      expect(segments.length, 2);
+      // Drift hands a `dateTime()` column back local-kinded, so compare instants, not kinds.
+      expect(segments.map((s) => s.startTime.toUtc()).toList(), [
+        DateTime.utc(2026, 1, 1, 8),
+        DateTime.utc(2026, 1, 1, 14),
+      ]);
+      expect(segments.first.endTime.toUtc(), DateTime.utc(2026, 1, 1, 11, 30));
+      // The id the phone claimed for each tap, verbatim: re-keying it here would make a retried
+      // submit write the same hours a second time.
+      expect(segments.map((s) => s.clientId).toList(), ['client-a', 'client-b']);
+
+      final wire =
+          ((capturedRequest!.toJson()['staff'] as List).first
+                  as Map<String, dynamic>)['segments']
+              as List;
+      expect(wire.length, 2);
+      expect((wire.first as Map<String, dynamic>)['clientId'], 'client-a');
+      expect(
+        (wire.first as Map<String, dynamic>)['startTime'],
+        '2026-01-01T08:00:00.000Z',
+      );
     });
 
     test('submit carries richiedeSecondoIntervento=true from draft onto the request', () async {
@@ -1133,6 +1231,27 @@ void main() {
       expect(json['kmTraveled'], 120.0);
       expect(json['vehicle'], 'Furgone');
       expect(json['pauseMinutes'], 30);
+    });
+
+    test('segment toJson sends the instants as UTC ISO and omits an absent clientId', () {
+      final local = SubmitReportSegmentDto(
+        startTime: DateTime.utc(2026, 1, 1, 8).toLocal(),
+        endTime: DateTime.utc(2026, 1, 1, 10).toLocal(),
+      );
+      final json = local.toJson();
+      expect(json['startTime'], '2026-01-01T08:00:00.000Z');
+      expect(json['endTime'], '2026-01-01T10:00:00.000Z');
+      // A server-only interval has no phone id; sending `clientId: null` is legal on the wire but
+      // the key is meaningless, so it stays off.
+      expect(json.containsKey('clientId'), isFalse);
+      expect(
+        SubmitReportSegmentDto(
+          startTime: DateTime.utc(2026, 1, 1, 8),
+          endTime: DateTime.utc(2026, 1, 1, 10),
+          clientId: 'client-a',
+        ).toJson()['clientId'],
+        'client-a',
+      );
     });
 
     test('materiale toJson mirrors backend SubmitReportMaterialeDto fields', () {

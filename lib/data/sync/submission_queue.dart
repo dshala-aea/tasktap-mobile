@@ -408,6 +408,15 @@ class SubmissionQueue {
 
   Future<SubmitReportRequest> _buildRequest(DraftReport draft) async {
     final staff = await _repo.getStaff(draft.id);
+    // The intervals the timer recorded on this phone, already ordered `start_utc, id`. The server
+    // replaces the report's whole stored interval set on submit and derives `HoursWorked` from
+    // what arrives, so a row that holds intervals must send them: sending none is not neutral, it
+    // deletes the server's copy and downgrades the row to `Legacy`.
+    final segments = await _repo.getSegments(draft.id);
+    final segmentsByUser = <String, List<ReportStaffSegment>>{};
+    for (final g in segments) {
+      (segmentsByUser[g.userId] ??= []).add(g);
+    }
     final materiali = await _repo.getMateriali(draft.id);
     final controlli = await _repo.getControlli(draft.id);
     final allegati = await _repo.getAllegati(draft.id);
@@ -502,6 +511,18 @@ class SubmissionQueue {
               startTime: s.startTime,
               endTime: s.endTime,
               pauseMinutes: s.pauseMinutes,
+              // The intervals this technician's hours came from. `clientId` is the phone's own id
+              // for each tap, passed verbatim: it is what lets a replayed submit collapse onto
+              // the rows it already wrote instead of counting the hours twice.
+              segments: [
+                for (final g
+                    in segmentsByUser[s.userId] ?? const <ReportStaffSegment>[])
+                  SubmitReportSegmentDto(
+                    startTime: g.startUtc,
+                    endTime: g.endUtc,
+                    clientId: g.clientId,
+                  ),
+              ],
             ),
           )
           .toList(),
