@@ -2,10 +2,12 @@
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/time/business_time.dart' show parseDateOnlyOrThrow;
 import '../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../api/dio_client.dart';
+import '../entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
 import '../sync/connectivity_provider.dart';
 import '../sync/sync_service.dart' show appDatabaseProvider;
 
@@ -155,10 +157,19 @@ class AbsenceRequestApiClient {
     }
   }
 
-  /// GET /api/absence-requests — no userId means "my own" for a non-Approve caller
-  /// (server-enforced; this client never sends userId).
-  Future<List<AbsenceRequestDto>> fetchMine() => _guarded(() async {
-    final res = await _dio.get<List<dynamic>>('/api/absence-requests');
+  /// GET /api/absence-requests.
+  ///
+  /// [userId] is sent only when supplied. Omitting it means "my own" for a non-Approve caller —
+  /// but **everyone's** for a caller holding `PresenzeAbsenceApprove` (AbsenceRequestsController
+  /// List: `canSeeEveryone && !userId.HasValue` selects the whole tenant). This screen is the
+  /// technician's own history, so [myAbsenceRequestsProvider] always puts the caller's own id on
+  /// the wire. An office user who opened it used to be shown every request in the tenant, with no
+  /// column saying whose each row was.
+  Future<List<AbsenceRequestDto>> fetchMine({String? userId}) => _guarded(() async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/absence-requests',
+      queryParameters: {if (userId != null && userId.isNotEmpty) 'userId': userId},
+    );
     final list = res.data ?? [];
     return list.cast<Map<String, dynamic>>().map(AbsenceRequestDto.fromJson).toList();
   });
@@ -222,9 +233,26 @@ final myAbsenceRequestsProvider = FutureProvider.autoDispose<MyAbsenceRequests>(
 
   if (!ref.watch(isOnlineProvider)) return fromDevice();
 
+  // The caller's own id goes on the wire every time, and it is not decoration: with `userId`
+  // omitted the server answers an approve-holder with the WHOLE TENANT's requests — every ferie,
+  // permesso and malattia filed by anyone, on a screen that lists no requester per row. Same trap
+  // `mySmartWorkingRequestsProvider` documents and closes the same way.
+  //
+  // Read from the persisted key on every read rather than from the cached
+  // `internalUserIdProvider`: that FutureProvider is not autoDispose and nothing invalidates it, so
+  // a value resolved before the first `/api/Auth/me` would pin this screen to "empty" for the
+  // process's lifetime, and after a forced sign-out (which keeps prefs) it would name the PREVIOUS
+  // user. The key stays the single source of truth; this just reads it again.
+  final userId = await _currentUserId();
+
+  // Unknown caller: an omitted `userId` is "everything" for an approve-holder, so "we do not know
+  // who you are" must resolve to the device's own mirror — never to an unscoped request whose
+  // answer would be the tenant.
+  if (userId == null || userId.isEmpty) return fromDevice();
+
   try {
     return (
-      items: await ref.watch(absenceRequestApiClientProvider).fetchMine(),
+      items: await ref.watch(absenceRequestApiClientProvider).fetchMine(userId: userId),
       fromDevice: false,
     );
   } catch (e) {
@@ -232,6 +260,15 @@ final myAbsenceRequestsProvider = FutureProvider.autoDispose<MyAbsenceRequests>(
     return fromDevice();
   }
 });
+
+/// The signed-in user's INTERNAL database id (`Users.Id`), read from the same SharedPreferences key
+/// `internalUserIdProvider` reads ([internalUserIdPrefsKey], persisted by `EntitlementService.refresh`
+/// from `/api/Auth/me`). Null before the first successful `/me`, or after a consented sign-out
+/// wiped prefs. See `myAbsenceRequestsProvider` for why the cached provider is not used here.
+Future<String?> _currentUserId() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString(internalUserIdPrefsKey);
+}
 
 /// The device's own copy of the caller's requests, shaped exactly like the wire rows so the list
 /// cannot tell a mirrored request from a fetched one.
