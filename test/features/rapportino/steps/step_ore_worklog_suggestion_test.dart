@@ -162,6 +162,8 @@ void main() {
 
       expect(find.textContaining('Da worklog:'), findsOneWidget);
       expect(find.textContaining('3,8h'), findsOneWidget);
+      // Nothing on this row is discarded: no intervals, and no span the suggestion cannot describe.
+      expect(find.text('· Usa'), findsOneWidget);
 
       await tester.tap(find.textContaining('Da worklog:'));
       await tester.pumpAndSettle();
@@ -506,9 +508,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Inizio:'), findsOneWidget);
-      // The chip must not promise a plain "Usa" for a tap that drops the span.
-      expect(find.text('· Sostituisci il timer'), findsOneWidget);
+      // The chip must not promise a plain "Usa" for a tap that drops the span...
+      expect(find.text('· Sostituisci gli orari'), findsOneWidget);
       expect(find.text('· Usa'), findsNothing);
+      // ...and must not claim a timer this row never had: 08:00→12:00 was typed, not measured.
+      expect(find.text('· Sostituisci il timer'), findsNothing);
 
       await tester.tap(find.textContaining('Da worklog:'));
       await tester.pumpAndSettle();

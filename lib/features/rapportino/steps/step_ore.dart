@@ -554,6 +554,12 @@ class _StaffTileState extends State<_StaffTile> {
         suggestion != null &&
         (row.segments.isNotEmpty ||
             (suggestion.startTime == null && (row.startTime != null || row.endTime != null)));
+    // The same reading of the row, in the chip's own words. An interval is the timer's, so that
+    // tap replaces the timer; a dropped start→end range is not — a row the office sent with
+    // 08:00→12:00 never had a timer to replace, and the chip must not claim one.
+    final replaceLabel = row.segments.isNotEmpty
+        ? '· Sostituisci il timer'
+        : (discardsTiming ? '· Sostituisci gli orari' : null);
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.base),
@@ -655,7 +661,7 @@ class _StaffTileState extends State<_StaffTile> {
             _WorklogSuggestionChip(
               suggestion: suggestion,
               businessTime: widget.businessTime,
-              replacesTimer: discardsTiming,
+              replaceLabel: replaceLabel,
               onApply: () => _applySuggestion(suggestion, discardsTiming: discardsTiming),
             ),
           ],
@@ -719,17 +725,20 @@ class _WorklogSuggestionChip extends StatelessWidget {
   const _WorklogSuggestionChip({
     required this.suggestion,
     required this.businessTime,
-    required this.replacesTimer,
+    required this.replaceLabel,
     required this.onApply,
   });
 
   final WorklogHoursSuggestion suggestion;
   final BusinessTime businessTime;
 
-  /// True when the row being written has timing this tap discards — recorded intervals, or a
-  /// start→end range the suggestion carries no range of its own to replace. The chip says so
-  /// before it is tapped: "Usa" understates a tap that throws the timer's evidence away.
-  final bool replacesTimer;
+  /// What this tap replaces, phrased for the row it sits on: the timer's intervals, or only the
+  /// start→end range the suggestion no longer describes. Null means nothing is discarded and the
+  /// chip stays a plain "Usa".
+  ///
+  /// The wording is derived by the caller, from the same expression that gates the confirmation
+  /// dialog, so the promise and the warning cannot disagree.
+  final String? replaceLabel;
   final VoidCallback onApply;
 
   String _fmtTime(DateTime dt) => businessTime.formatInZone(dt, 'HH:mm');
@@ -774,7 +783,7 @@ class _WorklogSuggestionChip extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            replacesTimer ? '· Sostituisci il timer' : '· Usa',
+            replaceLabel ?? '· Usa',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 12,
