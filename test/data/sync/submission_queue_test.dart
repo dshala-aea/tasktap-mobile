@@ -118,6 +118,29 @@ Future<void> _insertDraft(
   }
 }
 
+/// One technician's row, for the cases the draft helper's lone `user-1` row cannot express: a
+/// colleague on the same rapportino, or a server-hydrated row that still carries a pause.
+Future<void> _insertStaffRow(
+  AppDatabase db, {
+  required String id,
+  required String userId,
+  String reportId = 'report-1',
+  int pauseMinutes = 0,
+}) async {
+  await db
+      .into(db.reportStaffTable)
+      .insert(
+        ReportStaffTableCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          reportId: reportId,
+          userId: userId,
+          pauseMinutes: Value(pauseMinutes),
+        ),
+      );
+}
+
 /// One recorded timer interval, as the timer appends it locally: its own row id, the phone's id
 /// for the tap, and the two UTC instants.
 Future<void> _insertSegment(
@@ -470,6 +493,10 @@ void main() {
 
     test('submit carries every stored interval, oldest first, keyed by the phone id of its tap', () async {
       await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+      // A second technician with their own interval: grouping the intervals by `userId` is the one
+      // piece of logic this payload adds, and with a single row a bucket keyed by anything at all
+      // would pass while billing one person's hours to another.
+      await _insertStaffRow(db, id: 'staff-2', userId: 'user-2');
       // Inserted out of order on purpose: the payload's order is the repository's, not the
       // insertion order, so a list built straight from the table would fail here.
       await _insertSegment(
@@ -485,6 +512,14 @@ void main() {
         startUtc: DateTime.utc(2026, 1, 1, 8),
         endUtc: DateTime.utc(2026, 1, 1, 11, 30),
         clientId: 'client-a',
+      );
+      await _insertSegment(
+        db,
+        id: 'seg-3',
+        userId: 'user-2',
+        startUtc: DateTime.utc(2026, 1, 1, 9),
+        endUtc: DateTime.utc(2026, 1, 1, 10),
+        clientId: 'client-c',
       );
 
       SubmitReportRequest? capturedRequest;
@@ -505,7 +540,12 @@ void main() {
 
       await queue.processAll();
 
-      final segments = capturedRequest!.staff.first.segments;
+      final byUser = {
+        for (final s in capturedRequest!.staff) s.userId: s,
+      };
+      expect(byUser.keys, unorderedEquals(['user-1', 'user-2']));
+
+      final segments = byUser['user-1']!.segments;
       expect(segments.length, 2);
       // Drift hands a `dateTime()` column back local-kinded, so compare instants, not kinds.
       expect(segments.map((s) => s.startTime.toUtc()).toList(), [
@@ -516,16 +556,122 @@ void main() {
       // The id the phone claimed for each tap, verbatim: re-keying it here would make a retried
       // submit write the same hours a second time.
       expect(segments.map((s) => s.clientId).toList(), ['client-a', 'client-b']);
+      // Exact lists, not `isNotEmpty`: a bucket that handed every interval to every row would
+      // still be non-empty on both, and would bill one technician's hours to the other.
+      expect(byUser['user-2']!.segments.map((s) => s.clientId).toList(), [
+        'client-c',
+      ]);
 
+      final wireStaff = (capturedRequest!.toJson()['staff'] as List)
+          .cast<Map<String, dynamic>>();
       final wire =
-          ((capturedRequest!.toJson()['staff'] as List).first
-                  as Map<String, dynamic>)['segments']
-              as List;
+          wireStaff.firstWhere((r) => r['userId'] == 'user-1')['segments'] as List;
       expect(wire.length, 2);
       expect((wire.first as Map<String, dynamic>)['clientId'], 'client-a');
       expect(
         (wire.first as Map<String, dynamic>)['startTime'],
         '2026-01-01T08:00:00.000Z',
+      );
+      expect(
+        (wireStaff.firstWhere((r) => r['userId'] == 'user-2')['segments'] as List)
+            .single,
+        {'startTime': '2026-01-01T09:00:00.000Z', 'endTime': '2026-01-01T10:00:00.000Z', 'clientId': 'client-c'},
+      );
+    });
+
+    test('a timer-recorded row sends no pause for the intervals to contradict', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+      // A server-hydrated row that already carried a pause and then got a timer run: the server
+      // ignores the pause beside intervals and logs a warning, and the phone has no pause editor,
+      // so sending one is this client's defect to avoid.
+      await _insertStaffRow(
+        db,
+        id: 'staff-2',
+        userId: 'user-2',
+        pauseMinutes: 30,
+      );
+      await _insertSegment(
+        db,
+        id: 'seg-1',
+        userId: 'user-2',
+        startUtc: DateTime.utc(2026, 1, 1, 8),
+        endUtc: DateTime.utc(2026, 1, 1, 10),
+        clientId: 'client-a',
+      );
+      await _insertSegment(
+        db,
+        id: 'seg-2',
+        userId: 'user-2',
+        startUtc: DateTime.utc(2026, 1, 1, 14),
+        endUtc: DateTime.utc(2026, 1, 1, 16),
+        clientId: 'client-b',
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await queue.processAll();
+
+      final recorded = capturedRequest!.staff.firstWhere(
+        (s) => s.userId == 'user-2',
+      );
+      expect(recorded.segments.length, 2);
+      expect(
+        recorded.pauseMinutes,
+        0,
+        reason:
+            'the intervals are authoritative; a pause beside them is a contradiction the server '
+            'drops with a warning',
+      );
+    });
+
+    test('a row with no intervals keeps the pause the server stored', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+      await _insertStaffRow(
+        db,
+        id: 'staff-2',
+        userId: 'user-2',
+        pauseMinutes: 30,
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await queue.processAll();
+
+      final row = capturedRequest!.staff.firstWhere((s) => s.userId == 'user-2');
+      expect(row.segments, isEmpty);
+      expect(
+        row.pauseMinutes,
+        30,
+        reason:
+            'nothing contradicts the pause, and zeroing it would silently discard a stored value',
       );
     });
 
