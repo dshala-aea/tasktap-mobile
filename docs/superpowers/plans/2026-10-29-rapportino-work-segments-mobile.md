@@ -557,9 +557,15 @@ Hours are still written on the row, derived from the intervals: the office web a
 `DraftReportRepository`:
 
 ```dart
-  Future<List<ReportStaffSegmentsData>> getSegments(String reportId) =>
-      (_db.select(_db.reportStaffSegments)..where((s) => s.reportId.equals(reportId))).get();
+  /// Oldest first: a staff row's intervals are read positionally by the submit slice.
+  Future<List<ReportStaffSegment>> getSegments(String reportId) => (_db.select(
+    _db.reportStaffSegments,
+  )..where((s) => s.reportId.equals(reportId))
+   ..orderBy([(s) => OrderingTerm.asc(s.startUtc)])).get();
 
+  /// Upsert only the rows the caller just created. Rewriting a hydrated row would overwrite the
+  /// server's own `clientId` and `createdAt` with this device's values, and the claimed idempotency
+  /// key would stop matching the interval the server already holds.
   Future<void> upsertSegments(List<ReportStaffSegmentsCompanion> rows) async {
     await _db.batch((b) => b.insertAllOnConflictUpdate(_db.reportStaffSegments, rows));
   }
@@ -623,21 +629,37 @@ In `_StaffTileState.build`, the Ore field becomes conditional on `row.segments.i
 
 Keep the Km field editable and keep the `didUpdateWidget` resync for the editable branch.
 
-- [ ] **Step 4: Fix the span readout**
+- [ ] **Step 4: The worklog suggestion cannot write what the field cannot**
 
-`totalOre` already folds `effectiveHours`, which now sums intervals — verify with the same test. Keep the "Inizio / Fine" line, and append the interval count to "Ore effettive" when there is more than one:
+The same tile has a second writer `_staffToCompanion` (`report_editor_providers.dart:1415`) will clobber:
+the worklog-suggestion apply. When the row has intervals, applying a suggestion must not silently set
+`hoursWorked` and then have the row's own derived total overwrite it on the next save. Either hide the
+apply action for a row with intervals, or make it clear the intervals first (a deliberate manual
+override, `deleteSegmentsForStaff` then `copyWith(segments: const [], hoursWorked: …)`), and say in one
+line which you chose and why. A technician who overrides a timer with a suggestion is making a manual
+correction — that is the reading this plan expects, so prefer clearing over hiding, and let the Ore
+field become editable again in the same gesture.
+
+- [ ] **Step 5: Fix the span readout and the stale claim**
+
+`totalOre` already folds `effectiveHours`, which now sums intervals — verify with the same test. Keep
+the "Inizio / Fine" line, and append the interval count to "Ore effettive" when there is more than one:
 
 ```dart
 'Ore effettive: ${row.effectiveHours.toStringAsFixed(2)}h'
 '${row.segments.length > 1 ? ' · ${row.segments.length} intervalli' : ''}'
 ```
 
-- [ ] **Step 5: Run the tests**
+`step_ore.dart:310-313` claims `effectiveHours` "prefers that range over `hoursWorked` whenever both
+are set". That was already false before this plan and is false in a different way now. Rewrite it to
+the precedence that actually holds — intervals, then `hoursWorked`, then the span minus pauses.
+
+- [ ] **Step 6: Run the tests**
 
 Run: `flutter test test/features/rapportino/`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add lib/features/rapportino/steps/step_ore.dart test/features/rapportino/
