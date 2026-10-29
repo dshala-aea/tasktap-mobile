@@ -92,17 +92,23 @@ class StaffRow {
     bool? timerRunning,
     DateTime? timerStartedAt,
     bool clearTimer = false,
+    // null means "keep" for every parameter above, which cannot express a deliberate erase.
+    // These three are the erases a row actually needs: a total no interval can explain, and a
+    // start→end range a range-less worklog suggestion no longer describes.
+    bool clearHoursWorked = false,
+    bool clearStartTime = false,
+    bool clearEndTime = false,
   }) {
     return StaffRow(
       id: id,
       userId: userId ?? this.userId,
       displayName: displayName ?? this.displayName,
-      hoursWorked: hoursWorked ?? this.hoursWorked,
+      hoursWorked: clearHoursWorked ? null : (hoursWorked ?? this.hoursWorked),
       kmTraveled: kmTraveled ?? this.kmTraveled,
       vehicle: vehicle ?? this.vehicle,
       notes: notes ?? this.notes,
-      startTime: startTime ?? this.startTime,
-      endTime: endTime ?? this.endTime,
+      startTime: clearStartTime ? null : (startTime ?? this.startTime),
+      endTime: clearEndTime ? null : (endTime ?? this.endTime),
       pauseMinutes: pauseMinutes ?? this.pauseMinutes,
       segments: segments ?? this.segments,
       timerRunning: timerRunning ?? this.timerRunning,
@@ -950,12 +956,20 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   /// Start on-screen travel/work timer for a staff row.
+  ///
+  /// A row that carries a typed total and no recorded intervals loses that total here. The server
+  /// recomputes `HoursWorked` from the intervals on submit, so a total no interval explains cannot
+  /// survive the first stop anyway — clearing it at the start is the only moment where the number
+  /// goes away while the technician is looking at it, instead of at the next save.
   Future<void> startTimer(String staffId) async {
     final row = state.staffRows.firstWhere((r) => r.id == staffId);
     final started = row.copyWith(
       timerRunning: true,
       timerStartedAt: DateTime.now().toUtc(),
       startTime: row.startTime ?? DateTime.now().toUtc(),
+      // Only when there is nothing measured yet: with intervals in hand the box is already a
+      // readout and `hoursWorked` is theirs, so there is nothing typed left to discard.
+      clearHoursWorked: row.segments.isEmpty && row.hoursWorked != null,
     );
     await updateStaff(started);
   }
@@ -1018,6 +1032,10 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// deleted from Drift, not merely dropped from state — the rows outlive this notifier, and a
   /// later hydrate or submit would resurrect the total just overridden. Clearing them also makes
   /// the Ore field editable again, in the same gesture.
+  ///
+  /// The row's start→end span is cleared when the suggestion has none of its own: a sum over
+  /// several sessions describes no single range, and leaving yesterday's "Inizio/Fine" beside it
+  /// would label the total with hours it does not describe.
   Future<void> overrideStaffHours(
     StaffRow row, {
     required double hoursWorked,
@@ -1031,6 +1049,8 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
         hoursWorked: hoursWorked,
         startTime: startTime,
         endTime: endTime,
+        clearStartTime: startTime == null,
+        clearEndTime: endTime == null,
       ),
     );
   }

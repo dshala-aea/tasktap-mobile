@@ -315,16 +315,9 @@ class WorklogHoursSuggestion {
 ///
 /// Only completed sessions count (a still-running entry has no endTime — see
 /// TicketWorkLogDto.isRunning — and suggesting hours from a clock that hasn't stopped yet would
-/// be actively wrong). A multi-session sum is suppressed when the row already has its own
-/// start/end range (from this report's own timer): StaffRow.copyWith has no way to clear
-/// startTime/endTime, so the summed hours would be written while the tile kept displaying the
-/// old range beside them — the same row claiming two different stories about the same day, with
-/// nothing on screen to say which one is meant.
-///
-/// `effectiveHours` is not the obstacle it once looked like: intervals win first, then
-/// `hoursWorked`, and only then this span — so hours written here are visible. Applying is still
-/// a deliberate gesture, and over a row with intervals it replaces them (see
-/// ReportEditorNotifier.overrideStaffHours).
+/// be actively wrong). A sum over several sessions carries no range of its own: no single
+/// start→end describes them, and inventing one would be a lie the office could not see through.
+/// Applying it clears the row's own span instead (see ReportEditorNotifier.overrideStaffHours).
 ///
 /// Times are real instants: the legacy `workDate` + `HH:mm:ss` label is a Rome wall-clock label
 /// (plan Ruling 3, whatever the tenant zone), turned into an instant by
@@ -355,7 +348,6 @@ WorklogHoursSuggestion? worklogSuggestionFor(
     );
   }
 
-  if (row.startTime != null || row.endTime != null) return null;
   final totalMinutes = completed.fold<int>(0, (sum, e) => sum + e.duration!.inMinutes);
   return WorklogHoursSuggestion(hours: totalMinutes / 60.0);
 }
@@ -393,7 +385,6 @@ WorklogHoursSuggestion? cantiereWorklogSuggestionFor(
     );
   }
 
-  if (row.startTime != null || row.endTime != null) return null;
   final totalMinutes = completed.fold<int>(0, (sum, e) => sum + e.duration!.inMinutes);
   return WorklogHoursSuggestion(hours: totalMinutes / 60.0);
 }
@@ -642,8 +633,7 @@ class _StaffTileState extends State<_StaffTile> {
           if (row.segments.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              'Calcolate dal timer: le ore non sono modificabili perché il timer ha registrato '
-              'gli orari.',
+              'Calcolate dal timer: le ore si modificano solo sostituendo il timer.',
               style: TextStyle(color: context.colors.inkMuted, fontSize: 11, height: 1.35),
             ),
           ],
@@ -653,7 +643,8 @@ class _StaffTileState extends State<_StaffTile> {
             _WorklogSuggestionChip(
               suggestion: widget.worklogSuggestion!,
               businessTime: widget.businessTime,
-              onApply: () => widget.onApplySuggestion(widget.worklogSuggestion!),
+              replacesTimer: row.segments.isNotEmpty,
+              onApply: () => _applySuggestion(widget.worklogSuggestion!),
             ),
           ],
 
@@ -666,7 +657,7 @@ class _StaffTileState extends State<_StaffTile> {
               style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
             ),
             Text(
-              'Ore effettive: ${row.effectiveHours.toStringAsFixed(2)}h'
+              'Ore effettive: ${_formatHours(row.effectiveHours)}h'
               '${row.segments.length > 1 ? ' · ${row.segments.length} intervalli' : ''}',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
@@ -681,6 +672,27 @@ class _StaffTileState extends State<_StaffTile> {
   }
 
   String _fmtTime(DateTime dt) => widget.businessTime.formatInZone(dt, 'HH:mm');
+
+  /// Applies the chip, asking first when the tap would delete recorded intervals.
+  ///
+  /// The chip already says "Sostituisci il timer", but it is a small target on a card full of
+  /// controls, and what it destroys — what the timer saw on site — cannot be recovered from this
+  /// phone once gone. The confirmation reuses the app's own destructive dialog, so it reads as
+  /// the same gesture as every other "this deletes something" in the app.
+  Future<void> _applySuggestion(WorklogHoursSuggestion suggestion) async {
+    if (widget.row.segments.isNotEmpty) {
+      final confirmed = await confirmDeleteDialog(
+        context,
+        title: 'Sostituire il timer?',
+        message:
+            'Le ore registrate dal timer verranno cancellate e la riga userà le ore del '
+            'worklog.',
+        confirmLabel: 'Sostituisci',
+      );
+      if (!confirmed || !mounted) return;
+    }
+    widget.onApplySuggestion(suggestion);
+  }
 }
 
 // ── Worklog suggestion chip ─────────────────────────────────────────────────────
@@ -689,11 +701,16 @@ class _WorklogSuggestionChip extends StatelessWidget {
   const _WorklogSuggestionChip({
     required this.suggestion,
     required this.businessTime,
+    required this.replacesTimer,
     required this.onApply,
   });
 
   final WorklogHoursSuggestion suggestion;
   final BusinessTime businessTime;
+
+  /// True when the row being written has recorded intervals, so this tap deletes them. The chip
+  /// says so before it is tapped: "Usa" understates a tap that throws the timer's evidence away.
+  final bool replacesTimer;
   final VoidCallback onApply;
 
   String _fmtTime(DateTime dt) => businessTime.formatInZone(dt, 'HH:mm');
@@ -738,7 +755,7 @@ class _WorklogSuggestionChip extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            '· Usa',
+            replacesTimer ? '· Sostituisci il timer' : '· Usa',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 12,
@@ -820,6 +837,11 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
 
 // ── Numeric input field ────────────────────────────────────────────────────────
 
+/// One decimal, comma separator — the app's hours figure everywhere on this screen (the
+/// suggestion chip's "3,8h", the readout, the "Ore effettive" line), so no two values on one tile
+/// are written in two different styles.
+String _formatHours(double hours) => hours.toStringAsFixed(1).replaceAll('.', ',');
+
 /// The timer's own total, in the footprint the editable Ore field occupies.
 ///
 /// A readout rather than a disabled text field: a greyed-out box still looks like a box waiting
@@ -832,39 +854,48 @@ class _ReadOnlyHours extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final value = _formatHours(hours);
     return AppFieldShell(
       label: 'Ore',
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.md,
-        ),
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-          border: Border.all(color: context.colors.borderLight),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                // Comma decimal, like every other hours string the technician sees on this
-                // screen (the suggestion chip's "3,8h"). The span line below keeps its own
-                // toFixed(2) with a dot, unchanged.
-                hours.toStringAsFixed(1).replaceAll('.', ','),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.ink,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+      child: Semantics(
+        // One node named and valued like the field this replaces. AppTextField merges its label
+        // into the input's own node, so "Ore" is announced as that field's name; three loose
+        // Texts would read as "ORE", "2,0", "h" — a value with no name, reached by a swipe and
+        // then another. excludeSemantics drops the visible label from the tree, which would
+        // otherwise repeat itself inside the merged node.
+        container: true,
+        excludeSemantics: true,
+        label: 'Ore',
+        value: '$value h',
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.md,
+          ),
+          decoration: BoxDecoration(
+            color: context.colors.bg3,
+            borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
+            border: Border.all(color: context.colors.borderLight),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.ink,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
-            ),
-            Text('h', style: TextStyle(color: context.colors.inkMuted)),
-          ],
+              Text('h', style: TextStyle(color: context.colors.inkMuted)),
+            ],
+          ),
         ),
       ),
     );

@@ -424,6 +424,23 @@ void main() {
       expect(row.timerStartedAt, isNotNull);
     });
 
+    test('starting the timer clears a typed total no interval will explain', () async {
+      // The server recomputes HoursWorked from the intervals on submit, so a total typed before
+      // the first run cannot survive it. Clearing it at the start — while the box is still on
+      // screen — is the only moment the technician watches the number go, instead of finding it
+      // gone after the save.
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 3.0));
+      expect(notifier.state.staffRows.first.hoursWorked, 3.0);
+
+      await notifier.startTimer('s-1');
+
+      expect(notifier.state.staffRows.first.hoursWorked, isNull);
+      expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
+    });
+
     test('stopTimer sets timerRunning=false and endTime', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = await _makeEditor(db);

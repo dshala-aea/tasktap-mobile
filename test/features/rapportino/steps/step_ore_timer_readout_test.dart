@@ -14,6 +14,7 @@
 //   - a row with no intervals keeps its editable Ore box (office-entered or manually corrected
 //     hours are not the timer's to overwrite)
 //   - the "Ore effettive" line names the interval count when the timer recorded more than one
+//   - the readout is one semantics node named "Ore", like the field it replaces
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -103,7 +104,7 @@ void main() {
 
       // 2,0 h — the measured runs. Not the 4 h span, and not the 4 h the office typed.
       expect(find.text('2,0'), findsOneWidget);
-      expect(find.text('Ore effettive: 2.00h · 2 intervalli'), findsOneWidget);
+      expect(find.text('Ore effettive: 2,0h · 2 intervalli'), findsOneWidget);
       // The bottom card folds effectiveHours too, so the total agrees with the row.
       expect(find.text('2.0 h'), findsOneWidget);
 
@@ -152,7 +153,26 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('3,0'), findsOneWidget);
-      expect(find.text('Ore effettive: 3.00h'), findsOneWidget);
+      expect(find.text('Ore effettive: 3,0h'), findsOneWidget);
+    });
+
+    // AppTextField merges its label into the input's own semantics node, so "Ore" is that
+    // field's name. A readout made of loose Texts would announce "ORE", then "2,0", then "h" —
+    // three swipes for one value, with no name on it.
+    testWidgets('the readout announces as one node named Ore, carrying the value', (tester) async {
+      final handle = tester.ensureSemantics();
+
+      final container = _buildContainer(db: db, staffRows: [_twoRuns]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      final node = tester.getSemantics(find.bySemanticsLabel('Ore'));
+      expect(node.label, 'Ore');
+      expect(node.value, '2,0 h');
+      // Disposed inline, not in a tearDown: the framework checks for leaks before tearDowns run.
+      handle.dispose();
     });
   });
 }
