@@ -249,4 +249,20 @@ void main() {
       );
     });
   });
+
+  /// The smart-working client hand-writes its DTO — the list and GET-by-id answers declare no
+  /// response schema at all (the controller returns the raw entity, so the snapshot says
+  /// `content?: never`). These three names are therefore the whole contract surface it has: the
+  /// create body it sends, the decide body it deliberately does not (approve/reject belong to the
+  /// office), and the enum its `status` ordinals are read against.
+  group('smart-working', () {
+    test('the schemas the client writes against are all in the snapshot', () {
+      expect(
+        propertiesOf('CreateSmartWorkingRequestBody'),
+        containsAll(['startDate', 'endDate', 'reason']),
+      );
+      expect(propertiesOf('DecideSmartWorkingRequestBody'), contains('reason'));
+      expect(schemas, contains('AbsenceRequestStatusEnum'));
+    });
+  });
 }

@@ -238,6 +238,12 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  // A day spent working remotely, in the smart-working chip.
+  static const IconData laptop = IconData(
+    0xf382,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData link = IconData(
     0xf397,
     fontFamily: 'Lucide',

@@ -130,6 +130,44 @@ final timbraStateProvider = Provider.autoDispose<TimbraState>((ref) {
   return deriveShiftState(sessions);
 });
 
+/// Every visible punch on any business day — the base for the day-independent shift answer.
+///
+/// Reactive like [todaySessionsProvider] (both watch the same table), just not day-scoped. See
+/// [IWorkSessionRepository.watchAllSessions] for why the whole log is read.
+final allSessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref) {
+  return ref.watch(workSessionRepositoryProvider).watchAllSessions();
+});
+
+/// The shift state a punch control may ACT on: [timbraStateProvider]'s answer, widened by the whole
+/// local punch log.
+///
+/// Why a second state rather than making [timbraStateProvider] day-independent: everything else on
+/// the Timbra screen is genuinely about *today* — "Sessioni di oggi", "Ore lavorate oggi", the
+/// unsent-events count — and widening the one provider would silently redefine all of them (plus
+/// every test that seeds state through `todaySessionsProvider`) for a question none of them ask.
+///
+/// The question this answers is the one that must not follow the business-day boundary: a shift
+/// opened at 22:00 is still open at 00:01, and the technician has to be able to finish it. So the
+/// answer comes from the whole log ALONE, through ONE stream:
+///
+/// - whole log delivered → `deriveShiftState` over it. Open there is open, closed is closed — it
+///   covers the cross-midnight shift and carries its real opener time and break state;
+/// - not yet delivered (first frame) or errored → [timbraStateProvider], the day-scoped answer.
+///
+/// Merging the two answers instead — either "prefer whichever says open" — makes the control flap,
+/// because the two drift streams over the same table re-emit in no guaranteed order: on a pause the
+/// stale-but-open whole log would override the fresh paused day (IN TURNO right after tapping
+/// PAUSA), and on a finish the stale-but-open day would override the fresh closed whole log (the
+/// pause button lingering after FINE TURNO). One source cannot disagree with itself.
+///
+/// The flag in [isButtonPunchWithheld] may remove a way to START work, never a way to finish it —
+/// this is what keeps that promise true past midnight.
+final actionableShiftStateProvider = Provider.autoDispose<TimbraState>((ref) {
+  final all = ref.watch(allSessionsProvider).valueOrNull;
+  if (all == null) return ref.watch(timbraStateProvider);
+  return deriveShiftState(all);
+});
+
 // ── Computed total (minutes worked today, excluding pauses) ───────────────────
 
 /// Returns the total minutes worked today (wall-clock minus pauses).
@@ -253,8 +291,13 @@ TimbraGuard resolveGuard({
 }
 
 /// The guard for the punch button, whose action depends on whether a shift is open.
+///
+/// Reads [actionableShiftStateProvider], not [timbraStateProvider]: the guard has to explain the
+/// transition the button will actually attempt. A shift opened before midnight makes the button a
+/// ClockOut, and asking the server about a ClockIn there would disable the one control that can
+/// finish that shift ("Risulti già in servizio").
 final punchGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
-  final shift = ref.watch(timbraStateProvider);
+  final shift = ref.watch(actionableShiftStateProvider);
   return resolveGuard(
     giornata: ref.watch(giornataProvider).valueOrNull,
     hasPendingSync: ref.watch(hasPendingSyncProvider),
@@ -267,7 +310,9 @@ final punchGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
 /// Mirrors [punchGuardProvider] exactly — same `resolveGuard` merge rule, different action pair
 /// (`StartBreak` / `EndBreak` instead of `ClockIn` / `ClockOut`).
 final pauseGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
-  final shift = ref.watch(timbraStateProvider);
+  // Same whole-log state as [punchGuardProvider], for the same reason: a break left open across
+  // midnight must still be told "not on break"/"on break" from what the server holds.
+  final shift = ref.watch(actionableShiftStateProvider);
   return resolveGuard(
     giornata: ref.watch(giornataProvider).valueOrNull,
     hasPendingSync: ref.watch(hasPendingSyncProvider),
@@ -296,10 +341,14 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
   /// stamps its own clock, so an offline tap would be recorded at delivery time. See
   /// remote_shift.dart (incl. the backend follow-up). Throws [OfflineRemoteShiftException] so the
   /// caller records nothing and local state stays unchanged.
+  ///
+  /// The whole log, not today's: a shift opened before midnight is still a remote shift, and the
+  /// control that hands this tap over draws from [actionableShiftStateProvider] (whole log).
+  /// Reading today's rows here would let an offline tap through on the shift the button shows.
   Future<void> _requireOnlineForRemoteShift() async {
     final probe = _confirmOnline;
     if (probe == null) return;
-    final remote = analyseRemoteShifts(await _repo.getTodaySessions()).openShiftIsRemote;
+    final remote = analyseRemoteShifts(await _repo.getAllSessions()).openShiftIsRemote;
     if (!remote) return;
     if (!await probe()) throw const OfflineRemoteShiftException();
   }
@@ -322,6 +371,11 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
+  /// [current] must be the state the control was DRAWN from — [actionableShiftStateProvider], not
+  /// the day-scoped [timbraStateProvider]. Its `isOnShift` decides start vs finish, and the two
+  /// must never disagree: a button that says "FINE TURNO" has to end the shift, and one that says
+  /// "INIZIA TURNO" has to start one (a shift opened before midnight would otherwise take the
+  /// ClockIn branch and 409 against the still-open row).
   Future<void> punch(TimbraState current) async {
     state = const AsyncLoading();
     try {
@@ -342,9 +396,11 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
         await _requireOnlineForRemoteShift();
         var stop = DateTime.now().toUtc();
         // A remote shift's opener carries the SERVER's start; a phone clock that is behind would
-        // stamp the stop before it and leave a negative interval. Keep it at least 1s after.
+        // stamp the stop before it and leave a negative interval. Keep it at least 1s after. The
+        // whole log again: an opener from a previous business day is exactly the one a day-scoped
+        // read would miss, leaving the clamp inert.
         final opener =
-            analyseRemoteShifts(await _repo.getTodaySessions()).openRemoteOpenerTime;
+            analyseRemoteShifts(await _repo.getAllSessions()).openRemoteOpenerTime;
         if (opener != null && !stop.isAfter(opener)) stop = opener.add(const Duration(seconds: 1));
         await _repo.addEvent(id: _uuid.v4(), eventTime: stop, eventType: _kFine);
       }

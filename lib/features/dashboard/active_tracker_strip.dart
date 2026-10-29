@@ -56,8 +56,17 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// This row did not, so under `QrOnly` the same technician could start and end a break from Home
 /// without ever scanning (the app allowed it; only the server refused the *button* punch, and the
 /// pause path never reached the wire) while "Ferma" — which does hit the wire — failed. Both are
-/// now the one action that can complete on a `QrOnly` tenant: open the scanner, where the server's
-/// `availableActions` decide which transition to offer.
+/// now the one action that can complete on a `QrOnly` tenant that has not approved today as a
+/// remote day: open the scanner, where the server's `availableActions` decide which transition to
+/// offer.
+///
+/// On an *approved* smart-working day the server relaxes that gate
+/// (`WorkLogService.EnsureClockInMethodAllowedAsync`), so the row gets its Pausa/Ferma back. An
+/// *unknown* answer — no `/auth/me` yet, a cold start, a body without the field — keeps them too:
+/// only an explicit "not approved today" withholds a button punch ([isButtonPunchWithheld]), and a
+/// stale `true` costs one refused punch while a stale `false` costs the day's hours. A running day
+/// must always keep a control that finishes it — see the same function — and the decision is that
+/// function's, never a local `== 'QrOnly'`, so this row and Home's prompt cannot drift apart.
 class ActiveTrackerStrip extends ConsumerWidget {
   const ActiveTrackerStrip({super.key, required this.trackers});
 
@@ -118,14 +127,19 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
 
   Future<void> _stop() {
     final t = widget.tracker;
-    // Not reachable from the UI — under QrOnly the row draws one scanner action instead of these
-    // two — but a punch the server is guaranteed to refuse must not be reachable at all, and the
-    // guard costs nothing.
+    // Under a QrOnly tenant that has not approved today, the row draws one scanner action instead
+    // of these two — but a punch the server is guaranteed to refuse must not be reachable at all,
+    // and a mid-session revocation can flip the row under a technician's finger. The guard costs
+    // nothing and turns that into the scanner, which is the transition the server will accept.
     if (t.kind == ActiveTrackerKind.attendance && _qrOnly) return _openScanner();
     return _run(() async {
       switch (t.kind) {
         case ActiveTrackerKind.attendance:
-          await ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider));
+          // The whole-log state, not today's: the same answer that drew "Ferma" decides whether
+          // this tap starts or ends the shift.
+          await ref.read(punchNotifierProvider.notifier).punch(
+            ref.read(actionableShiftStateProvider),
+          );
           _throwIfPunchFailed();
         case ActiveTrackerKind.cantiere:
           // A site session this device is holding locally (checked in with no signal) has no
@@ -183,12 +197,29 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
   Future<void> _togglePause() {
     if (_qrOnly) return _openScanner();
     return _run(() async {
-      await ref.read(punchNotifierProvider.notifier).togglePause(ref.read(timbraStateProvider));
+      await ref
+          .read(punchNotifierProvider.notifier)
+          .togglePause(ref.read(actionableShiftStateProvider));
       _throwIfPunchFailed();
     });
   }
 
-  bool get _qrOnly => ref.read(effectiveClockInMethodProvider) == 'QrOnly';
+  /// Whether the button punch this row would fire is one the server would refuse — only an
+  /// explicit non-approved answer on a `QrOnly` tenant reaches this, never an unknown one: the
+  /// technician's totem is on site, and this row may be the only control they have out in the
+  /// field, so an unanswered /auth/me keeps the buttons and lets the server decide.
+  ///
+  /// `hasOpenShift` is the same whole-log signal the timbra panel acts on
+  /// ([actionableShiftStateProvider]), not a hand-written `true`. `startOnly` does not consult it
+  /// today — this row's scanner is always the alternative, so a withheld button can never strand a
+  /// running day — but passing the real answer means a later move to `startOrFinish` cannot
+  /// silently inherit a lie.
+  bool get _qrOnly => isButtonPunchWithheld(
+    surface: ButtonPunchSurface.startOnly,
+    clockInMethod: ref.read(effectiveClockInMethodProvider),
+    smartWorkingToday: ref.read(smartWorkingTodayProvider),
+    hasOpenShift: ref.read(actionableShiftStateProvider).isOnShift,
+  );
 
   Future<void> _openScanner() async => context.push(AppRoutes.timbraQr);
 
@@ -211,8 +242,9 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
   Widget build(BuildContext context) {
     final t = widget.tracker;
     // The tracker's own `state` is authoritative (it may describe a break started on another
-    // device); rows without one (older servers) fall back to this device's local state.
-    final localOnPause = ref.watch(timbraStateProvider).isOnPause;
+    // device); rows without one (older servers) fall back to this device's local state — the
+    // whole-log one, so a break left open across midnight is still drawn as one.
+    final localOnPause = ref.watch(actionableShiftStateProvider).isOnPause;
     final onBreak =
         t.kind == ActiveTrackerKind.attendance &&
         (t.state == null ? localOnPause : t.state == ActiveTrackerState.onBreak);
@@ -220,12 +252,23 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
     // Pause exists for the working day only. The guard is the server's, so a payroll-locked month
     // states its reason instead of failing on tap.
     //
-    // Neither control is drawn under QrOnly: see this class's own doc comment. The elapsed clock,
-    // the "in pausa" badge and the label still come from the tracker, so the row keeps telling the
-    // technician what is running while it sends them to the totem to change it.
+    // Neither control is drawn while the button punch would be refused: see this class's own doc
+    // comment. The elapsed clock, the "in pausa" badge and the label still come from the tracker,
+    // so the row keeps telling the technician what is running while it sends them to the totem to
+    // change it.
+    //
+    // The rule is [isButtonPunchWithheld]'s, `startOnly` surface: the scanner below is always the
+    // row's alternative, so this is the swap that can never strand a running day. Only an explicit
+    // non-approved answer swaps; an unknown one leaves Ferma/Pausa working, which is the same
+    // answer the timbra panel gives.
     final qrOnly =
         t.kind == ActiveTrackerKind.attendance &&
-        ref.watch(effectiveClockInMethodProvider) == 'QrOnly';
+        isButtonPunchWithheld(
+          surface: ButtonPunchSurface.startOnly,
+          clockInMethod: ref.watch(effectiveClockInMethodProvider),
+          smartWorkingToday: ref.watch(smartWorkingTodayProvider),
+          hasOpenShift: ref.watch(actionableShiftStateProvider).isOnShift,
+        );
     final canPause = t.kind == ActiveTrackerKind.attendance && !qrOnly;
     final pauseGuard = canPause ? ref.watch(pauseGuardProvider) : null;
 

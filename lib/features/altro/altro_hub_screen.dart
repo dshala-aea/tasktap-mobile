@@ -172,6 +172,14 @@ class AltroHubScreen extends ConsumerWidget {
         module: 'presenze',
         onTap: () => context.push(AppRoutes.altroFerie),
       ),
+      // Smart working is the same `presenze` module as Ferie: a request is a marker for a remote
+      // day, not a timesheet entry, so it belongs beside the absences rather than under Timbra.
+      (
+        icon: LucideIcons.laptop,
+        label: 'Smart working',
+        module: 'presenze',
+        onTap: () => context.push(AppRoutes.altroSmartWorking),
+      ),
     ];
 
     return [

@@ -54,6 +54,10 @@ class _StubRepo implements IWorkSessionRepository {
   @override
   Future<List<WorkSession>> getTodaySessions() async => [];
   @override
+  Stream<List<WorkSession>> watchAllSessions() => const Stream.empty();
+  @override
+  Future<List<WorkSession>> getAllSessions() async => [];
+  @override
   Future<List<WorkSession>> getPendingSessions() async => [];
   @override
   Future<int> getPendingCount() async => 0;
@@ -116,6 +120,10 @@ class _DelayedRepo implements IWorkSessionRepository {
   Stream<List<WorkSession>> watchTodaySessions() => _inner.watchTodaySessions();
   @override
   Future<List<WorkSession>> getTodaySessions() => _inner.getTodaySessions();
+  @override
+  Stream<List<WorkSession>> watchAllSessions() => _inner.watchAllSessions();
+  @override
+  Future<List<WorkSession>> getAllSessions() => _inner.getAllSessions();
   @override
   Future<List<WorkSession>> getPendingSessions() => _inner.getPendingSessions();
   @override
@@ -377,6 +385,32 @@ void main() {
       expect(sessions.length, equals(2));
       expect(sessions[0].eventType, equals('ingresso'));
       expect(sessions[1].eventType, equals('fine'));
+    });
+
+    test('actionableShiftStateProvider sees a shift opened on an earlier business day', () async {
+      // The cross-midnight case the flag must never break: the opener is real and still open, but
+      // outside today's window. Two days back keeps this independent of the wall clock (the Rome
+      // midnight flake class).
+      final repo = container.read(workSessionRepositoryProvider);
+      await repo.addEvent(
+        id: 'night-opener',
+        eventTime: DateTime.now().toUtc().subtract(const Duration(days: 2)),
+        eventType: 'ingresso',
+      );
+
+      // Today's view — the sessions card and the "Ore lavorate oggi" total use it — cannot see it.
+      final today = deriveShiftState(await container.read(todaySessionsProvider.future));
+      expect(today.isOnShift, isFalse);
+
+      // The state a punch control acts on can. `listen` keeps both autoDispose streams alive
+      // between the read and the assertion.
+      final sub = container.listen(actionableShiftStateProvider, (_, _) {});
+      addTearDown(sub.close);
+      await container.read(allSessionsProvider.future);
+      final actionable = container.read(actionableShiftStateProvider);
+
+      expect(actionable.isOnShift, isTrue);
+      expect(actionable.shiftStartTime, isNotNull);
     });
 
     test('timbraStateProvider: sessions after punch derive correct state', () async {

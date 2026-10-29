@@ -80,6 +80,12 @@ class _FailingOnEventTypeRepo implements IWorkSessionRepository {
   Future<List<WorkSession>> getTodaySessions() => _inner.getTodaySessions();
 
   @override
+  Stream<List<WorkSession>> watchAllSessions() => _inner.watchAllSessions();
+
+  @override
+  Future<List<WorkSession>> getAllSessions() => _inner.getAllSessions();
+
+  @override
   Future<List<WorkSession>> getPendingSessions() => _inner.getPendingSessions();
 
   @override
@@ -125,6 +131,7 @@ void main() {
     bool online = true,
     Dio? dio,
     String clockInMethod = 'Both',
+    bool? smartWorking = false,
   }) {
     final mockDio = dio ?? MockDio();
     // The queued ticket-timer push runs unawaited behind every close; stub the batch endpoint so
@@ -151,6 +158,10 @@ void main() {
         isOnlineProvider.overrideWithValue(online),
         internalUserIdProvider.overrideWith((ref) async => 'user-1'),
         effectiveClockInMethodProvider.overrideWithValue(clockInMethod),
+        // Explicit, not the real provider: the row's scanner swap is decided by the shared
+        // isButtonPunchWithheld now, and a test that left it to auth/me would be asserting on
+        // whatever the un-signed-in default happens to be.
+        smartWorkingTodayProvider.overrideWithValue(smartWorking),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -177,6 +188,7 @@ void main() {
     required IWorkSessionRepository repo,
     required List<ActiveTracker> trackers,
     String clockInMethod = 'QrOnly',
+    bool? smartWorking = false,
   }) {
     final router = GoRouter(
       initialLocation: '/',
@@ -201,6 +213,7 @@ void main() {
         isOnlineProvider.overrideWithValue(true),
         internalUserIdProvider.overrideWith((ref) async => 'user-1'),
         effectiveClockInMethodProvider.overrideWithValue(clockInMethod),
+        smartWorkingTodayProvider.overrideWithValue(smartWorking),
       ],
       child: MaterialApp.router(routerConfig: router),
     );
@@ -412,6 +425,87 @@ void main() {
       await tester.pump(Duration.zero);
     }
   });
+
+  testWidgets(
+    'an approved smart-working day gives the attendance row Pausa/Ferma back, and Ferma punches '
+    'instead of opening the scanner',
+    (tester) async {
+      // The flag is per-day: the server relaxes the QrOnly gate for exactly this case, so the row
+      // must not keep sending an approved remote worker to a totem that is not there.
+      final repo = WorkSessionRepository(db);
+      await repo.addEvent(
+        id: 'seed-ingresso',
+        eventTime: DateTime.now().toUtc(),
+        eventType: 'ingresso',
+      );
+      await tester.pumpWidget(
+        buildRoutedStrip(repo: repo, trackers: attendanceTrackers(), smartWorking: true),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Pausa'), findsOneWidget);
+      expect(find.text('Ferma'), findsOneWidget);
+      expect(find.text('Timbra con QR'), findsNothing);
+
+      await tester.tap(find.text('Ferma'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+
+      expect(find.text('SCANNER QR'), findsNothing, reason: 'the button punch is legal today');
+      final sessions = await repo.getTodaySessions();
+      expect(sessions.any((s) => s.eventType == 'fine'), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(Duration.zero);
+      }
+    },
+  );
+
+  testWidgets(
+    'QrOnly with an unknown smart-working answer keeps Pausa/Ferma working on a running row',
+    (tester) async {
+      // `null` is "nobody has answered", not "not approved" (cold start, /auth/me still in
+      // flight, another user's cached answer). The timbra panel fails open on it, and this row is
+      // the same running day seen from Home: if it guessed "not approved" it would be the one place
+      // with no control that ends the shift, sending a remote worker to a totem that is not there.
+      final repo = WorkSessionRepository(db);
+      await repo.addEvent(
+        id: 'seed-ingresso',
+        eventTime: DateTime.now().toUtc(),
+        eventType: 'ingresso',
+      );
+      await tester.pumpWidget(
+        buildRoutedStrip(repo: repo, trackers: attendanceTrackers(), smartWorking: null),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Pausa'), findsOneWidget);
+      expect(find.text('Ferma'), findsOneWidget);
+      expect(find.text('Timbra con QR'), findsNothing);
+
+      await tester.tap(find.text('Ferma'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+
+      expect(
+        find.text('SCANNER QR'),
+        findsNothing,
+        reason: 'unknown must be treated as the timbra panel treats it: let the server decide',
+      );
+      final sessions = await repo.getTodaySessions();
+      expect(sessions.any((s) => s.eventType == 'fine'), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(Duration.zero);
+      }
+    },
+  );
 
   // ── Ticket clock ────────────────────────────────────────────────────────────
   //

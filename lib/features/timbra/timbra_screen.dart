@@ -119,12 +119,17 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
   Widget build(BuildContext context) => WorkLogLiveRefresh(child: _buildScreen(context));
 
   Widget _buildScreen(BuildContext context) {
-    final shiftState = ref.watch(timbraStateProvider);
+    // The punch controls act on the whole-log state, not today's: a shift opened at 22:00 is still
+    // open at 00:01 and must keep both its finish and its "FINE TURNO" label. See
+    // actionableShiftStateProvider — the sessions card and "Ore lavorate oggi" below stay
+    // day-scoped through their own providers.
+    final shiftState = ref.watch(actionableShiftStateProvider);
     final sessionsAsync = ref.watch(todaySessionsProvider);
     final rejected = ref.watch(syncFailedSessionsProvider).valueOrNull ?? const <WorkSession>[];
     final punchState = ref.watch(punchNotifierProvider);
     final total = ref.watch(totalWorkedTodayProvider);
     final clockInMethod = ref.watch(effectiveClockInMethodProvider);
+    final smartWorking = ref.watch(smartWorkingTodayProvider);
 
     _updatePulse(shiftState.isOnShift);
 
@@ -184,10 +189,49 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                     // about, so a screen that just fits would overflow the session card below it.
                     // With rejections present the page scrolls instead — the notice is the one
                     // thing here that must never be clipped.
+                    //
+                    // The controls themselves are not a fixed height either. Counting against the
+                    // bare punch button (76dp):
+                    //   • approved smart-working day → chip ~26 + a 12 gap;
+                    //   • QrOnly notice → ~84, where the punch button it replaces is 76;
+                    //   • a shift open on a QrOnly day that is not confirmed approved → the
+                    //     scanner fallback under the controls: 12 gap + a one-or-two-line 12px
+                    //     caption (~17/line) + 8 + a 44-tall AppButton, so ≈ 98 with two lines —
+                    //     *on top of* the pause button (12 gap + its own 64) the open shift adds.
+                    // The largest arrangement is therefore punch 76 + pause 76 + fallback ≈ 98 ≈
+                    // 250dp of controls, well inside the 640 budget below — and the largest that can be
+                    // drawn at all, since the chip and the notice each need an answer the fallback
+                    // rules out. The fixed-layout tests pin that at 390×844, the height a tall phone
+                    // actually gives this box: once with the chip, once with an open shift and the
+                    // fallback present.
                     final fits = constraints.maxHeight >= _kFixedLayoutMinHeight && rejected.isEmpty;
                     final punchGuard = ref.watch(punchGuardProvider);
                     final clockDisagreement = ref.watch(timbraClockDisagreementProvider);
                     final reducedMotion = MediaQuery.disableAnimationsOf(context);
+
+                    // The one shared rule (entitlement_providers.dart's isButtonPunchWithheld): a
+                    // QrOnly tenant may only withhold the button on an explicit `false`, and never
+                    // while the shift is open — the flag may remove a way to START work, never a
+                    // way to finish it. An unknown answer (cold start, signed out, another user,
+                    // /auth/me not back yet) keeps the button too: a stale `true` would be a lie,
+                    // but a stale `false` would strand exactly the technician this feature exists
+                    // for. See the chip below, which needs a positive answer where the button does
+                    // not.
+                    final hidePunch = isButtonPunchWithheld(
+                      surface: ButtonPunchSurface.startOrFinish,
+                      clockInMethod: clockInMethod,
+                      smartWorkingToday: smartWorking,
+                      hasOpenShift: shiftState.isOnShift,
+                    );
+
+                    // The one state the punch control cannot resolve on its own: an open shift on
+                    // a QrOnly tenant whose day is not a confirmed approved one. The button stays
+                    // (it may still be legal — the server's two-day rule covers a night shift
+                    // opened on an approved day), so the scanner has to stay reachable beside it.
+                    final showQrFallback =
+                        clockInMethod == 'QrOnly' &&
+                        shiftState.isOnShift &&
+                        smartWorking != true;
 
                     final content = <Widget>[
                       _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
@@ -228,7 +272,13 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                               )
                             : const SizedBox.shrink(),
                       ),
-                      if (clockInMethod == 'QrOnly') ...[
+                      // An approved remote day, said before the control it explains: the same
+                      // slot as the guard banner, above the punch button, in both layouts.
+                      if (smartWorking == true) ...[
+                        const _SmartWorkingChip(),
+                        const SizedBox(height: AppSpacing.md),
+                      ],
+                      if (hidePunch) ...[
                         const _QrRequiredNotice(),
                       ] else ...[
                         _PunchButton(
@@ -250,6 +300,18 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                             },
                           ),
                         ],
+                      ],
+                      // The button above has to stay while a shift is open (see `hidePunch`), and
+                      // on a QrOnly tenant one refusal it cannot resolve is left: the shift's own
+                      // row day was not an approved remote day. The server judges EndWork against
+                      // both that day and today (`EnsureClockInMethodAllowedAsync` takes the
+                      // candidate days), so a night shift opened on an approved day still closes
+                      // by button — but a cancelled approval on the row's day is refused, and the
+                      // scanner is how that shift gets closed. Hidden on a confirmed approved day,
+                      // where there is nothing to fall back to.
+                      if (showQrFallback) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        const _QrFallbackForOpenShift(),
                       ],
                       const SizedBox(height: AppSpacing.xl),
                     ];
@@ -672,6 +734,64 @@ class _RejectedPunchRow extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// _SmartWorkingChip
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Pill for an approved smart-working day — rendered only for [smartWorkingTodayProvider]'s
+/// `true`, never for `null`. See [isButtonPunchWithheld] for why an unknown answer may not be
+/// treated as "not approved".
+///
+/// Same pill language [_HeroStatus]'s state badge already uses (rounded-full, tint-on-tint, Archivo
+/// 11 w700 with a touch of tracking, sentence case), in the positive half of [_GuardBanner]'s pair:
+/// `statusGood`/`statusGoodBg` instead of `statusWarn`/`statusWarnBg`. Nothing is wrong today — the
+/// technician is simply not expected on site, and that is what this says.
+///
+/// `liveRegion`, like the state badge above it: /auth/me is re-read on every resume, so an approval
+/// that lands while the screen is open has to be announced, not silently drawn.
+class _SmartWorkingChip extends StatelessWidget {
+  const _SmartWorkingChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final v = context.vetro;
+    return Semantics(
+      label: 'Giornata di smart working approvata',
+      liveRegion: true,
+      // The visible text says the same thing, so leaving it in the tree would have a screen
+      // reader announce the chip twice ("… approvata, Smart working").
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.xs),
+          decoration: BoxDecoration(
+            color: v.statusGoodBg,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // A laptop, not LucideIcons.home — that is the Dashboard tab's own glyph in
+              // bottom_nav.dart and would read as a navigation affordance here.
+              Icon(LucideIcons.laptop, size: 13, color: v.statusGood),
+              const SizedBox(width: 6),
+              Text(
+                'Smart working',
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: v.statusGood,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // _QrRequiredNotice
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -691,11 +811,53 @@ class _QrRequiredNotice extends StatelessWidget {
           style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
         ),
         const SizedBox(height: AppSpacing.md),
-        AppButton(
-          label: 'Scansiona QR',
-          icon: const Icon(Icons.qr_code_scanner, size: 18),
-          onPressed: () => context.push(AppRoutes.timbraQr),
+        const _ScanQrButton(),
+      ],
+    );
+  }
+}
+
+/// The scanner action both the QrOnly notice and the open-shift fallback below use — one widget, so
+/// the label, the icon and the destination cannot drift between the two places that offer it.
+class _ScanQrButton extends StatelessWidget {
+  const _ScanQrButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppButton(
+      label: 'Scansiona QR',
+      icon: const Icon(Icons.qr_code_scanner, size: 18),
+      onPressed: () => context.push(AppRoutes.timbraQr),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _QrFallbackForOpenShift
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Sits under the punch control while a shift is open on a QrOnly tenant whose day is not a
+/// confirmed approved one.
+///
+/// Why both controls: the button has to stay — the server judges an end-of-shift punch against the
+/// row's own day *and* tenant-local today, so a night shift opened on an approved day is legal
+/// after midnight even when this screen's flag has already rolled over. The QR has to stay
+/// reachable for the one refusal the button cannot resolve: the row day's approval was cancelled.
+/// Without this line the only route to closing such a shift was the tracker row on Home.
+class _QrFallbackForOpenShift extends StatelessWidget {
+  const _QrFallbackForOpenShift();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          'Se il pulsante viene rifiutato, chiudi la giornata con il QR.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
         ),
+        const SizedBox(height: AppSpacing.sm),
+        const _ScanQrButton(),
       ],
     );
   }

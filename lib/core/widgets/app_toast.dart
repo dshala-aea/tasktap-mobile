@@ -258,14 +258,22 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        widget.message,
-                        style: TextStyle(
-                          fontFamily: 'Archivo',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.ink,
-                          height: 1.3,
+                      // A toast is the app's only surface for a refused write on several screens
+                      // (the smart-working form's range rules and offline refusal, for one), and
+                      // a bare `Text` is painted but never announced — a screen-reader user would
+                      // see nothing happen at all. `liveRegion` is how the repo marks text that
+                      // changes and must be read (my_badge_screen, timbra_screen).
+                      child: Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          widget.message,
+                          style: TextStyle(
+                            fontFamily: 'Archivo',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: context.colors.ink,
+                            height: 1.3,
+                          ),
                         ),
                       ),
                     ),
