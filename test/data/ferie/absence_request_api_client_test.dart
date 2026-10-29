@@ -29,11 +29,10 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProv
 // `smart_working_request_api_client_test.dart` and `badge_api_client_test.dart` use. No
 // Dio-mocking package is added.
 
-/// Answers with a canned status/body and keeps the request it was handed.
+/// Answers with a canned body and keeps the request it was handed.
 class _Adapter implements HttpClientAdapter {
-  _Adapter({this.status = 200, this.body = '[]'});
+  _Adapter({this.body = '[]'});
 
-  final int status;
   final String body;
   RequestOptions? captured;
 
@@ -49,7 +48,7 @@ class _Adapter implements HttpClientAdapter {
     captured = options;
     return ResponseBody.fromString(
       body,
-      status,
+      200,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },
