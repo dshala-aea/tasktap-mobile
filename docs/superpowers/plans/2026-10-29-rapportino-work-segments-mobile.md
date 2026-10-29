@@ -629,6 +629,15 @@ In `_StaffTileState.build`, the Ore field becomes conditional on `row.segments.i
 
 Keep the Km field editable and keep the `didUpdateWidget` resync for the editable branch.
 
+- [ ] **Step 3b: A typed total cannot outlive the timer**
+
+`startTimer` must clear `hoursWorked` on a row that has a typed total and no intervals. The reason is
+not local taste: `ReportSubmitService.cs:552` derives `HoursWorked` from the intervals whenever any are
+present, so a total no interval explains is discarded server-side on submit anyway. Clearing it at the
+press of start makes that visible and undoable (the technician can retype before starting) instead of
+letting it vanish at the next save. Rows with no intervals keep their typed total, and the server honours
+it.
+
 - [ ] **Step 4: The worklog suggestion cannot write what the field cannot**
 
 The same tile has a second writer `_staffToCompanion` (`report_editor_providers.dart:1415`) will clobber:
