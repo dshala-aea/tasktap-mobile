@@ -931,8 +931,9 @@ class ReportStaffSegments extends Table {
   DateTimeColumn get startUtc => dateTime()();
   DateTimeColumn get endUtc => dateTime()();
 
-  /// The phone's id for this tap, stable across a retried submit. Null for an interval that only
-  /// ever came down from the server for a row written by an older client.
+  /// The phone's id for this tap — a UUID, like everything else the server accepts as a Guid —
+  /// stable across a retried submit so a replay collapses onto the rows it already wrote. Null for
+  /// an interval that only ever came down from the server for a row written by an older client.
   TextColumn get clientId => text().nullable()();
 
   @override
