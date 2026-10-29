@@ -9,13 +9,16 @@
 // never act on it. Fine / Pausa / Ripresa taps on it go to the plain REST endpoints instead
 // (see TimbraSyncService).
 //
-// PRODUCT NOTE — proper fix is server-side. Those endpoints stamp the SERVER's clock and accept no
-// client timestamp, so a tap delivered late is recorded late: an offline Fine would stretch paid
-// time, a Pausa+Ripresa delivered back to back would create a zero-length paid break, and a tap
-// crossing midnight would flip the WorkDate. Until the backend accepts an optional client
-// timestamp on end / break/start / break/end, the app is conservative: these taps are ONLINE-ONLY
-// (refused offline), executed immediately, retried only within [remoteCommandTtl], re-validated against GET /worklog/active before any send that is not the instance's first fresh one, and never sent
-// as a Pausa+Ripresa pair. Backend follow-up for the product owner.
+// PRODUCT NOTE — the honest fix is server-side, and for the two break punches it has landed:
+// break/start and break/end now take an optional `occurredAtUtc`, so a replayed Pausa/Ripresa pair
+// records the instants the technician actually tapped instead of collapsing to a zero-length paid
+// break (the duration also decides short-vs-long pay, so this was a payroll bug). The server refuses
+// a replayed instant older than five minutes, which is why [remoteCommandTtl] stays. `end` is still
+// unfixed: it takes no client timestamp, so a late Fine is still recorded late and can still stretch
+// paid time or flip the WorkDate across midnight. Until it does, these taps are ONLINE-ONLY
+// (refused offline), executed immediately, retried only within [remoteCommandTtl], re-validated
+// against GET /worklog/active before any send that is not the instance's first fresh one, and never
+// sent as a Pausa+Ripresa pair. Backend follow-up for the product owner: `end`.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import '../local/app_database.dart' show WorkSession;

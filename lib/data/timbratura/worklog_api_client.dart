@@ -384,14 +384,35 @@ class WorklogApiClient {
   }
 
   /// POST /api/worklog/break/start — 400 unless an ordinary (non-break) row is open.
-  Future<void> startBreak() async {
-    await _dio.post<dynamic>('/api/worklog/break/start');
+  ///
+  /// [occurredAtUtc] is set only when a queued tap is being replayed: the server then opens the
+  /// break at the instant the technician actually paused, instead of at the instant the queue
+  /// reached it. A live tap sends no body at all — the body is optional on the server for exactly
+  /// that reason — and an older backend that ignores an unexpected body keeps working unchanged.
+  ///
+  /// Deliberately not `deviceUtc`: that is this phone's clock at SEND time, which for a replayed
+  /// tap is the replay. This is the tap's own time, so there is no second reading to compare it
+  /// with and no clock disagreement to report.
+  Future<void> startBreak({DateTime? occurredAtUtc}) async {
+    await _dio.post<dynamic>(
+      '/api/worklog/break/start',
+      data: _breakPunchBody(occurredAtUtc),
+    );
   }
 
-  /// POST /api/worklog/break/end — 404 unless a break is open.
-  Future<void> endBreak() async {
-    await _dio.post<dynamic>('/api/worklog/break/end');
+  /// POST /api/worklog/break/end — 404 unless a break is open. See [startBreak] for
+  /// [occurredAtUtc]; on this half it is what makes the break's duration — and so its short/long
+  /// classification — the real one rather than the gap between two replays.
+  Future<void> endBreak({DateTime? occurredAtUtc}) async {
+    await _dio.post<dynamic>(
+      '/api/worklog/break/end',
+      data: _breakPunchBody(occurredAtUtc),
+    );
   }
+
+  /// Null, not `{}`, when there is nothing to say: a live tap stays identical on the wire.
+  static Map<String, dynamic>? _breakPunchBody(DateTime? occurredAtUtc) =>
+      occurredAtUtc == null ? null : {'occurredAtUtc': occurredAtUtc.toUtc().toIso8601String()};
 
   /// GET /api/WorkLog?userId=&dateFrom=&dateTo=
   ///

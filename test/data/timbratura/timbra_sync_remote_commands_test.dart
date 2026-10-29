@@ -111,10 +111,20 @@ class _Api extends WorklogApiClient {
     await _rest('end');
     return null;
   }
+  /// The instant each break punch told the server the tap happened, in call order.
+  final breakInstants = <DateTime?>[];
+
   @override
-  Future<void> startBreak() => _rest('break/start');
+  Future<void> startBreak({DateTime? occurredAtUtc}) {
+    breakInstants.add(occurredAtUtc);
+    return _rest('break/start');
+  }
+
   @override
-  Future<void> endBreak() => _rest('break/end');
+  Future<void> endBreak({DateTime? occurredAtUtc}) {
+    breakInstants.add(occurredAtUtc);
+    return _rest('break/end');
+  }
 
   @override
   Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
@@ -207,10 +217,14 @@ void main() {
   });
 
   test('Pausa alone => break/start', () async {
-    final repo = _Repo([_remoteIngresso(), _cmd('p', 'pausa', _ago(3))]);
+    final tapped = _ago(3);
+    final repo = _Repo([_remoteIngresso(), _cmd('p', 'pausa', tapped)]);
     await svc(repo).syncNow();
     expect(api.calls, ['break/start']);
     expect(repo.isPending('p'), isFalse);
+    // The tap's own instant travels with it: without it the break would start when the queue
+    // drained, and its duration — which decides paid vs unpaid — would be the queue's latency.
+    expect(api.breakInstants, [tapped]);
   });
 
   test('a Pausa and a Ripresa queued together are never sent (they cancel out)', () async {
@@ -227,14 +241,18 @@ void main() {
   });
 
   test('a backfilled (marked) pausa is not a command; only the tap after it is', () async {
+    final tapped = _ago(3);
     final repo = _Repo([
       _remoteIngresso(),
       _remoteMarked('bp', 'pausa', _t0.add(const Duration(hours: 1))),
-      _cmd('r', 'ripresa', _ago(3)),
+      _cmd('r', 'ripresa', tapped),
     ]);
     active = [_srv(ActiveTrackerState.onBreak, _t0, startedAt: _ago(3000))];
     await svc(repo).syncNow();
     expect(api.calls, ['break/end']);
+    // The ripresa closes the break at the instant it was tapped, so the break measures the rest the
+    // technician actually took rather than the time it spent queued.
+    expect(api.breakInstants, [tapped]);
   });
 
   test('offline tap stays queued, then executes once on the next sync', () async {

@@ -1138,10 +1138,14 @@ void main() {
     const unguarded = <String, String>{
       'POST /api/worklog/end':
           'optional body, app sends none',
+      // Optional `occurredAtUtc`, sent only when a queued tap is replayed; a live tap sends no
+      // body at all. Promote both to a real case once the snapshot here is refreshed from a
+      // merged backend — it predates BreakPunchRequest, so there is nothing to compare against
+      // yet (copying a branch snapshot would delete schemas this gate asserts).
       'POST /api/worklog/break/start':
-          'no body',
+          'optional body, sent only on offline replay',
       'POST /api/worklog/break/end':
-          'no body',
+          'optional body, sent only on offline replay',
       'POST /api/reports/submit':
           'covered by openapi_contract_test.dart, which also checks the three nested DTOs',
       'POST /api/reports/{}/attachments':
