@@ -26,13 +26,13 @@ class _Api extends WorklogApiClient {
   }
 
   @override
-  Future<void> startBreak() async {
+  Future<void> startBreak({DateTime? occurredAtUtc}) async {
     calls.add('break/start');
     if (error != null) throw error!;
   }
 
   @override
-  Future<void> endBreak() async {
+  Future<void> endBreak({DateTime? occurredAtUtc}) async {
     calls.add('break/end');
     if (error != null) throw error!;
   }

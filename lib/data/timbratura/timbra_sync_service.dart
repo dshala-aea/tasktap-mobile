@@ -366,8 +366,12 @@ class TimbraSyncService {
   /// Fine → `end` (ends the open row; in a break that closes the day), Pausa → `break/start`,
   /// Ripresa → `break/end`.
   ///
-  /// The endpoints stamp the SERVER clock, so a tap is only worth sending while it is fresh — see
-  /// remote_shift.dart for why (payroll) and the backend follow-up. Rules, in order:
+  /// Each break tap carries its own `eventTime`, so the server records the instant the technician
+  /// actually paused or resumed rather than the instant this queue drained: a pausa and its ripresa
+  /// replayed together would otherwise measure a break of seconds — and that duration now decides
+  /// whether the break was paid. The tap is still only worth sending while it is fresh, because the
+  /// server refuses a replayed instant older than a few minutes; [remoteCommandTtl] drops exactly
+  /// the ones it would refuse. See remote_shift.dart for why (payroll). Rules, in order:
   /// - A Pausa immediately followed by a Ripresa, both still pending, are never sent (a
   ///   zero-length paid break); both are retired and the reconciler converges.
   /// - A tap older than [remoteCommandTtl] is dropped with a visible message.
@@ -432,9 +436,11 @@ class TimbraSyncService {
             // this route, so this is the only chance its technician gets to hear the advice.
             if (clockDisagreement != null) _onClockDisagreement?.call(clockDisagreement);
           case 'pausa':
-            await _apiClient.startBreak();
+            // The tap's own instant, not this replay's: otherwise the break would start when the
+            // queue drained, and a pausa/ripresa pair replayed together would measure seconds.
+            await _apiClient.startBreak(occurredAtUtc: e.eventTime);
           case 'ripresa':
-            await _apiClient.endBreak();
+            await _apiClient.endBreak(occurredAtUtc: e.eventTime);
         }
       } catch (err) {
         if (_isTransient(err)) break;
