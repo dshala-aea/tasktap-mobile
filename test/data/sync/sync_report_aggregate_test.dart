@@ -317,6 +317,15 @@ void main() {
                 startUtc: '2026-10-20T10:00:00Z',
                 endUtc: '2026-10-20T11:30:00Z',
               ),
+              // A nested interval is written under the report being replaced, never under the one
+              // its own body claims: a disagreeing `reportId` must not be able to hang a segment
+              // on a report this pass knows nothing about.
+              _segmentJson(
+                'g-3',
+                reportId: 'r-other',
+                startUtc: '2026-10-20T12:00:00Z',
+                endUtc: '2026-10-20T12:30:00Z',
+              ),
             ],
           ),
         ],
@@ -327,12 +336,19 @@ void main() {
     await svc.sync();
 
     // The intervals are a child of the staff row on the wire, not a payload collection of their
-    // own: they must land keyed to the report the row names.
+    // own: they land under the report the loop is replacing, with the staff row's technician.
     final rows =
         await (db.select(db.reportStaffSegments)
               ..orderBy([(g) => OrderingTerm(expression: g.startUtc)]))
             .get();
-    expect(rows.map((g) => g.id), ['g-1', 'g-2']);
+    expect(rows.map((g) => g.id), ['g-1', 'g-2', 'g-3']);
+    expect(rows.first.reportId, 'r-1');
+    expect(rows.first.userId, 'user-1');
+    expect(
+      rows.last.reportId,
+      'r-1',
+      reason: 'the nested body does not get to choose the report',
+    );
     // `.toUtc()` on the value, not on the expectation: `dateTime()` decodes local-kinded.
     expect(rows.first.startUtc.toUtc(), DateTime.utc(2026, 10, 20, 8));
     expect(rows.first.endUtc.toUtc(), DateTime.utc(2026, 10, 20, 9));
@@ -386,7 +402,22 @@ void main() {
 
     respond(
       _payload(
-        reportStaff: [_staffJson('s-server', 'r-1')],
+        // The server's own row carries an interval of its own, so the assertion below also proves
+        // the INSERT skips this report and not merely that the delete does.
+        reportStaff: [
+          _staffJson(
+            's-server',
+            'r-1',
+            segments: [
+              _segmentJson(
+                'g-server',
+                reportId: 'r-1',
+                startUtc: '2026-10-20T08:00:00Z',
+                endUtc: '2026-10-20T09:00:00Z',
+              ),
+            ],
+          ),
+        ],
         reportVersions: [_versionJson('r-1', '43')],
       ),
     );

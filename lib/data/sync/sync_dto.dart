@@ -1998,8 +1998,14 @@ class SyncReportStaffDto {
   final int pauseMinutes;
 
   /// Where this row's hours come from: `Legacy` (0), `Timer` (1), `Manual` (2). Carried so the UI
-  /// can say why a number is what it is; the editor's own read-only rule keys off the presence of
-  /// [segments], which is the fact the technician can see and the timer wrote.
+  /// can say why a number is what it is.
+  ///
+  /// NOT persisted: `report_staff` has no column for it and the applier drops it, so nothing here
+  /// can read it back after a sync — only a freshly parsed payload has it. The editor's read-only
+  /// rule keys off [segments] instead, which is safe even though a `Manual` row keeps its
+  /// intervals: a corrected figure only exists on a report past Bozza, and `_hydrateBody`
+  /// (`report_editor_providers.dart:623`) refuses to hydrate a server-known non-`Bozza` report at
+  /// all, so one never reaches an editable form.
   final int hoursSource;
 
   /// The intervals recorded for this row, oldest first. Always a list, empty when none.

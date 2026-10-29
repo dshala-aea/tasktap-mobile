@@ -278,6 +278,14 @@ void main() {
     expect(rs.usageDescription, isA<String>());
     expect(rs.outcome, isA<String>());
 
+    // The staff row carries the reason for its hours and the intervals behind it, and both are
+    // read off the snapshot sample rather than only listed in `wireKeys`: `hoursSource` is an enum
+    // on the wire, so a server-side `JsonStringEnumConverter` would send "Timer", `_intOrNull`
+    // would return null and every row would read Legacy with no gate failing.
+    final st = SyncReportStaffDto.fromJson(instance('SyncReportStaffDto'));
+    expect(st.hoursSource, 1);
+    expect(st.segments, hasLength(1));
+
     SyncTicketAssetDto.fromJson(instance('SyncTicketAssetDto'));
 
     final ct = ContractSyncDto.fromJson(instance('SyncContractDto'));

@@ -1135,8 +1135,10 @@ class SyncService {
         await (db.delete(
           db.reportStaffTable,
         )..where((r) => r.reportId.isIn(replace))).go();
-        // The intervals hang off the same report as the staff rows above, so they are cleared with
-        // them; a report whose technician line is back with no intervals genuinely has none.
+        // The intervals hang off the same report as the staff rows above, so `replace` — the
+        // payload's in-scope AND owned set — is the authority that clears them too. Residual: an
+        // interval recorded here but not yet submitted is unsent work the payload cannot know
+        // about, and it goes with the rest.
         await (db.delete(
           db.reportStaffSegments,
         )..where((g) => g.reportId.isIn(replace))).go();
