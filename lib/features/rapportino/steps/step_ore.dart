@@ -618,7 +618,7 @@ class _StaffTileState extends State<_StaffTile> {
                         label: 'Ore',
                         suffix: 'h',
                         onChanged: (v) {
-                          final h = double.tryParse(v);
+                          final h = double.tryParse(v.replaceAll(',', '.'));
                           widget.onUpdate(row.copyWith(hoursWorked: h));
                         },
                       )
@@ -631,7 +631,7 @@ class _StaffTileState extends State<_StaffTile> {
                   label: 'Km percorsi',
                   suffix: 'km',
                   onChanged: (v) {
-                    final km = double.tryParse(v) ?? 0.0;
+                    final km = double.tryParse(v.replaceAll(',', '.')) ?? 0.0;
                     widget.onUpdate(row.copyWith(kmTraveled: km));
                   },
                 ),
@@ -968,7 +968,10 @@ class _NumField extends StatelessWidget {
               ),
             ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+      // Both separators, because the keyboard the option above raises is the LOCALE's: an Italian
+      // device offers a comma, and a filter that only allows the dot would silently drop the
+      // keystroke before `onChanged` ever saw it.
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
       onChanged: onChanged,
     );
   }
@@ -1011,7 +1014,7 @@ class _TotalOreCard extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${totalOre.toStringAsFixed(1)} h',
+                '${_formatHours(totalOre)} h',
                 style: const TextStyle(
                   fontFamily: 'Archivo Narrow',
                   color: Colors.white,
