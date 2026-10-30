@@ -867,6 +867,18 @@ class AiDraftFeed {
     final id = row.rowId!;
     switch (row.kind) {
       case _Kind.worker:
+        // The AI's hours replace whatever the row measured, never sit beside it: the read-only
+        // Ore shows the interval sum while any interval exists and the submit sends the intervals,
+        // so writing `hoursWorked` alone would leave the correction invisible on the phone and
+        // absent from the office's total. Same rule `overrideStaffHours` applies to a typed one.
+        if (u.containsKey('hours')) {
+          final staff = await (_db.select(
+            _db.reportStaffTable,
+          )..where((t) => t.id.equals(id))).getSingleOrNull();
+          if (staff != null) {
+            await DraftReportRepository(_db).deleteSegmentsForStaff(staff.reportId, staff.userId);
+          }
+        }
         await (_db.update(_db.reportStaffTable)..where((t) => t.id.equals(id))).write(
           ReportStaffTableCompanion(
             hoursWorked: u.containsKey('hours')

@@ -128,6 +128,11 @@ class StaffRow {
   /// no-timer fallback: a manual "Ore" edit only ever touches `hoursWorked` (see step_ore.dart) —
   /// if the span won instead, that edit would render in the field but be silently ignored
   /// everywhere it's actually used (the total, the DB save, the submit payload).
+  ///
+  /// The figure can sit a few minutes off the `HoursWorked` the office stores: the server
+  /// re-derives it per band and rounds each interval to whole minutes and each band to two
+  /// decimals (`TimeClassificationService.ClassifySegments`). The intervals still outrank a stored
+  /// total, because a total the intervals do not explain is the number the submit discards.
   double get effectiveHours {
     if (segments.isNotEmpty) {
       // Summed in milliseconds and divided once: `inMinutes` truncates per interval, so k
@@ -586,14 +591,22 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     required ReportEditorState initialState,
     required DraftReportRepository repo,
     ILocationService? locationService,
+    DateTime Function()? clock,
   }) : _repo = repo,
        _locationService = locationService ?? const DisabledLocationService(),
+       _now = clock ?? DateTime.now,
        super(initialState) {
     ready = _hydrate();
   }
 
   final DraftReportRepository _repo;
   final ILocationService _locationService;
+
+  /// Injectable so a test can drive the timer's two instants instead of racing the wall clock.
+  /// `stopTimer`'s minimum-duration rule is invisible on a fast machine — two `DateTime.now()`
+  /// calls a microsecond apart land in the same stored second only by luck — so the rule cannot
+  /// be pinned through real time.
+  final DateTime Function() _now;
 
   /// Resolves once hydration has either applied the draft's saved data or given up.
   ///
@@ -966,7 +979,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// see once the first interval is submitted.
   Future<void> startTimer(String staffId) async {
     final row = state.staffRows.firstWhere((r) => r.id == staffId);
-    final now = DateTime.now().toUtc();
+    final now = _now().toUtc();
     // A row typed by hand, or corrected by the office and re-imported, arrives with a total and
     // nothing measuring it. The start discards that total — and the end of its span too, because
     // `effectiveHours` falls through to `endTime - startTime` once `hoursWorked` is null, so
@@ -988,11 +1001,23 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   /// Stop on-screen timer, record the interval, and recompute hoursWorked from the intervals.
+  ///
+  /// A run the timer cannot measure — one stopped before its start's stored second has passed —
+  /// is dropped instead of recorded, so no interval the server would reject ever reaches Drift.
   Future<void> stopTimer(String staffId) async {
     final row = state.staffRows.firstWhere((r) => r.id == staffId);
-    final now = DateTime.now().toUtc();
+    final now = _now().toUtc();
     final startedAt = row.timerStartedAt;
-    final added = startedAt == null
+    // Drift stores `dateTime()` as whole seconds, so a run shorter than the second it started in
+    // arrives at the server as `start == end` — and `ReportSubmitService` rejects that as
+    // `report_segment_out_of_order`, a permanent 400 that no affordance on this row can clear.
+    // The server's own message is the rule: "Stop the timer once the run has been going for at
+    // least a minute." Compared on the stored unit, not on microseconds, so a tap that rounds
+    // away is dropped here rather than discovered by the office.
+    final startsInSameStoredSecond =
+        startedAt != null &&
+        now.millisecondsSinceEpoch ~/ 1000 <= startedAt.millisecondsSinceEpoch ~/ 1000;
+    final added = startedAt == null || startsInSameStoredSecond
         ? const <StaffSegment>[]
         : [
             StaffSegment(
