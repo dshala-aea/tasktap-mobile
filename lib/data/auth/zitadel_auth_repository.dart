@@ -5,6 +5,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:passkeys/authenticator.dart';
+import 'package:passkeys/types.dart';
 
 import '../../core/config/env.dart';
 import '../../core/startup/startup_report.dart';
@@ -57,6 +59,8 @@ class ZitadelAuthRepository implements IAuthRepository {
       StreamController<AuthUser?>.broadcast();
 
   AuthUser? _current;
+
+  final PasskeyAuthenticator _passkeyAuthenticator = PasskeyAuthenticator();
 
   // ── IAuthRepository ────────────────────────────────────────────────────
 
@@ -180,6 +184,105 @@ class ZitadelAuthRepository implements IAuthRepository {
       _emit(user);
       return (user: user, failure: null);
     } catch (e) {
+      return (user: null, failure: _mapError(e));
+    }
+  }
+
+  @override
+  Future<({AuthUser? user, AuthFailure? failure})> signInWithPasskey(
+    String loginName,
+  ) async {
+    final pkce = Pkce.generate();
+
+    final String authRequestId;
+    try {
+      authRequestId = await _captureAuthRequestId(pkce.challenge);
+    } catch (e) {
+      if (e is AuthFailure) return (user: null, failure: e);
+      return (user: null, failure: _mapError(e));
+    }
+
+    try {
+      // Determine RP ID from issuer (e.g., auth.tasktap.it)
+      final rpId = Uri.parse(Env.oidcIssuer).host;
+
+      final startResp = await _revocationHttpClient.post<dynamic>(
+        '${Env.apiBaseUrl}/api/MobileAuth/passkey/start',
+        data: {
+          'authRequestId': authRequestId,
+          'loginName': loginName,
+          'rpId': rpId,
+        },
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      final startData = startResp.data;
+      if (startData is! Map) {
+        return (user: null, failure: const UnknownAuthError('Malformed passkey start response'));
+      }
+      final sessionId = startData['sessionId'] as String?;
+      final sessionToken = startData['sessionToken'] as String?;
+      final optionsJson = startData['publicKeyCredentialRequestOptions'];
+      if (sessionId == null || sessionToken == null || optionsJson == null) {
+        return (user: null, failure: const UnknownAuthError('Malformed passkey start response'));
+      }
+
+      final request = AuthenticateRequestType.fromJson(optionsJson is Map ? Map<String, dynamic>.from(optionsJson) : {});
+      final assertion = await _passkeyAuthenticator.authenticate(request);
+      final assertionJson = jsonDecode(jsonEncode(assertion));
+
+      final completeResp = await _revocationHttpClient.post<dynamic>(
+        '${Env.apiBaseUrl}/api/MobileAuth/passkey/complete',
+        data: {
+          'authRequestId': authRequestId,
+          'sessionId': sessionId,
+          'sessionToken': sessionToken,
+          'credentialAssertionData': assertionJson,
+        },
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      final completeData = completeResp.data;
+      final rawCode = completeData is Map ? completeData['code'] : null;
+      if (rawCode is! String || rawCode.isEmpty) {
+        return (user: null, failure: const UnknownAuthError('Malformed passkey complete response'));
+      }
+
+      final result = await _appAuth.token(
+        TokenRequest(
+          Env.oidcClientId,
+          Env.oidcRedirectUri,
+          issuer: Env.oidcIssuer,
+          authorizationCode: rawCode,
+          codeVerifier: pkce.verifier,
+        ),
+      );
+      final user = _fromTokens(
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        idToken: result.idToken,
+        expiry: result.accessTokenExpirationDateTime,
+      );
+      if (user == null) {
+        return (user: null, failure: const UnknownAuthError('No tokens returned'));
+      }
+      await _persistRefreshToken(result.refreshToken);
+      await _persistCachedIdentity(user);
+      _emit(user);
+      return (user: user, failure: null);
+    } on DioException catch (e) {
+      final rawResponseData = e.response?.data;
+      final backendCode =
+          rawResponseData is Map && rawResponseData['code'] is String
+          ? rawResponseData['code'] as String
+          : null;
+      return (
+        user: null,
+        failure: switch (backendCode) {
+          'invalid_credentials' => const InvalidCredentials(),
+          _ => _mapError(e),
+        },
+      );
+    } catch (e) {
+      if (e is AuthFailure) return (user: null, failure: e);
       return (user: null, failure: _mapError(e));
     }
   }

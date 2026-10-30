@@ -172,6 +172,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 onPressed: isLoading ? null : _onLogin,
                 isLoading: isLoading,
               ),
+
+              const SizedBox(height: AppSpacing.sm),
+
+              // ── Passkey (opt-in) ──────────────────────────────────────────
+              OutlinedButton(
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        ref.read(loginProvider.notifier).clearError();
+                        await ref
+                            .read(loginProvider.notifier)
+                            .signInWithPasskey(_usernameCtrl.text.trim());
+                        if (ref.read(loginProvider).failure == null) {
+                          TextInput.finishAutofillContext();
+                        }
+                      },
+                child: const Text('Accedi con passkey'),
+              ),
             ],
           ),
         ),

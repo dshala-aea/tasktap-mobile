@@ -137,6 +137,16 @@ class LoginNotifier extends StateNotifier<LoginState> {
     }
   }
 
+  Future<void> signInWithPasskey(String loginName) async {
+    state = const LoginState(isLoading: true);
+    final result = await _repo.signInWithPasskey(loginName);
+    if (result.failure != null) {
+      state = LoginState(failure: result.failure);
+    } else {
+      state = const LoginState();
+    }
+  }
+
   Future<void> signOut() async {
     // The CONSENTED ending: the logout dialog already told the technician how much unsent work
     // this discards (see `UnsentWorkCounter` / `logout_flow.dart`). The forced path goes through
