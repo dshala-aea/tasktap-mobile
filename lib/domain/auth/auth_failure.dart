@@ -19,6 +19,23 @@ class AdditionalFactorRequired extends AuthFailure {
   const AdditionalFactorRequired();
 }
 
+/// The account has no passkey, or this device holds no credential for it.
+///
+/// The same case covers both so the copy cannot tell the user which one it is.
+class PasskeyNotRegistered extends AuthFailure {
+  const PasskeyNotRegistered();
+}
+
+/// This device or OS cannot use passkeys.
+class PasskeyUnavailable extends AuthFailure {
+  const PasskeyUnavailable();
+}
+
+/// The user dismissed the passkey sheet. Never rendered as an error.
+class PasskeyCancelled extends AuthFailure {
+  const PasskeyCancelled();
+}
+
 /// The account has been disabled by an admin.
 class AccountDisabled extends AuthFailure {
   const AccountDisabled();
@@ -56,6 +73,10 @@ String authFailureMessage(AuthFailure failure) => switch (failure) {
     'Email o password errati. Controlla le credenziali e riprova.',
   AdditionalFactorRequired() =>
     'Serve una verifica aggiuntiva. Accedi dal browser per continuare.',
+  PasskeyNotRegistered() =>
+    'Nessuna passkey disponibile. Accedi con la password; potrai attivarla dalle impostazioni dopo l\'accesso.',
+  PasskeyUnavailable() => 'Questo dispositivo non supporta le passkey.',
+  PasskeyCancelled() => '',
   AccountDisabled() =>
     'Il tuo account è stato disabilitato. Contatta l\'assistenza.',
   EmailNotFound() => 'Nessun account trovato con questa email.',
