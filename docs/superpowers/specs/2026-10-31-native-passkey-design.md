@@ -168,6 +168,11 @@ identifies them (`sub`).
 4. `POST /api/MobileAuth/passkey/register/complete
    {passkeyId, publicKeyCredential, passkeyName}` →
    `POST /v2/users/{id}/passkeys/{passkeyId}` → 204.
+
+`MobileAuthController` is `[AllowAnonymous]` at class level and `[Authorize]`
+on an action does not override that, so the class attribute must be removed and
+`[AllowAnonymous]` applied to the sign-in actions instead. Password login must
+stay anonymous; an explicit test guards it.
 5. Settings shows the registered passkey (from `GET /api/MobileAuth/passkey`),
    with a remove action (`DELETE /api/MobileAuth/passkey/{id}`). The action is
    labelled "Rimuovi passkey" and deletes the credential only: it does **not**
@@ -196,7 +201,7 @@ simply being present.
 | POST | `/api/MobileAuth/passkey/login/complete` | anonymous | `{authRequestId, sessionId, sessionToken, credentialAssertionData, loginName}` | `{code}` |
 | POST | `/api/MobileAuth/passkey/register/start` | bearer | `{}` | `{passkeyId, publicKeyCredentialCreationOptions}` |
 | POST | `/api/MobileAuth/passkey/register/complete` | bearer | `{passkeyId, publicKeyCredential, passkeyName}` | 204 |
-| GET | `/api/MobileAuth/passkey` | bearer | — | `[{id, name, createdAt}]` |
+| GET | `/api/MobileAuth/passkey` | bearer | — | `[{id, name}]` |
 | DELETE | `/api/MobileAuth/passkey/{id}` | bearer | — | 204 |
 
 Exactly one of `loginName`/user is derived server-side per endpoint; no
