@@ -343,7 +343,7 @@ void main() {
     });
 
     test(
-      'passkey_verification_failed maps to UnknownAuthError with the code',
+      'passkey_verification_failed maps to PasskeyVerificationFailed',
       () async {
         stubAuthorizeRedirect('authreq-1');
         stubStart(_startPayload());
@@ -355,10 +355,32 @@ void main() {
         final result = await repo().signInWithPasskey('tech@tasktap.io');
 
         expect(result.user, isNull);
-        expect(result.failure, isA<UnknownAuthError>());
+        expect(result.failure, isA<PasskeyVerificationFailed>());
         expect(
-          (result.failure as UnknownAuthError).message,
-          'passkey_verification_failed',
+          authFailureMessage(result.failure!),
+          'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
+        );
+        verifyNever(() => appAuth.token(any()));
+      },
+    );
+
+    test(
+      'identity_provider_unavailable maps to ServiceUnavailable',
+      () async {
+        stubAuthorizeRedirect('authreq-1');
+        stubStart(_startPayload());
+        when(
+          () => passkeyAuthenticator.authenticate(any()),
+        ).thenAnswer((_) async => _assertion());
+        stubCompleteError('identity_provider_unavailable');
+
+        final result = await repo().signInWithPasskey('tech@tasktap.io');
+
+        expect(result.user, isNull);
+        expect(result.failure, isA<ServiceUnavailable>());
+        expect(
+          authFailureMessage(result.failure!),
+          'Servizio temporaneamente non disponibile. Riprova tra poco.',
         );
         verifyNever(() => appAuth.token(any()));
       },

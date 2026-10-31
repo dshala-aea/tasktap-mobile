@@ -171,6 +171,13 @@ void main() {
 
     expect(enroller.removedIds, isEmpty);
     expect(find.text('Rimuovi la passkey?'), findsOneWidget);
+    expect(
+      find.text(
+        'La passkey verrà rimossa dal tuo account. '
+        'Non sarà più possibile usarla per accedere.',
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Rimuovi'));
     await tester.pumpAndSettle();

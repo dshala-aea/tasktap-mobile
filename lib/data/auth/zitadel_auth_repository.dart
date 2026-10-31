@@ -716,7 +716,8 @@ class ZitadelAuthRepository implements IAuthRepository {
     if (code == null) return _mapError(e);
     return switch (code) {
       'no_passkey_registered' => const PasskeyNotRegistered(),
-      'passkey_verification_failed' => UnknownAuthError(code),
+      'passkey_verification_failed' => const PasskeyVerificationFailed(),
+      'identity_provider_unavailable' => const ServiceUnavailable(),
       'additional_factor_required' => const AdditionalFactorRequired(),
       _ => UnknownAuthError(code),
     };

@@ -117,7 +117,7 @@ class PasskeyEnroller {
         failure: null,
       );
     } on DioException catch (e) {
-      return (items: const <PasskeySummary>[], failure: _mapDioError(e));
+      return (items: const <PasskeySummary>[], failure: _mapListDioError(e));
     } catch (e) {
       return (items: const <PasskeySummary>[], failure: UnknownAuthError(e.toString()));
     }
@@ -135,6 +135,23 @@ class PasskeyEnroller {
     }
   }
 
+  /// Maps a [list] failure.
+  ///
+  /// The list path shares no user-facing action with enrolment, so the admin service's generic
+  /// `passkey_registration_failed` code (every non-auth 4xx) must not surface as "could not
+  /// enable the passkey". Any other 4xx is likewise a list failure, with the list's own copy.
+  /// Transport failures keep [NetworkError] so the retry advice stays accurate.
+  AuthFailure _mapListDioError(DioException e) {
+    final data = e.response?.data;
+    final code = data is Map && data['code'] is String ? data['code'] as String : null;
+    final status = e.response?.statusCode;
+    if (code == 'passkey_registration_failed' ||
+        (status != null && status >= 400 && status < 500)) {
+      return const UnknownAuthError('Impossibile caricare le passkey.');
+    }
+    return _mapDioError(e);
+  }
+
   /// Maps the enrolment endpoints' typed error codes onto failures.
   ///
   /// A response with no code at all (network, proxy) falls through to the
@@ -145,6 +162,12 @@ class PasskeyEnroller {
     final code = data is Map && data['code'] is String ? data['code'] as String : null;
     if (code == 'passkey_registration_failed') {
       return const PasskeyRegistrationFailed();
+    }
+    if (code == 'passkey_verification_failed') {
+      return const PasskeyVerificationFailed();
+    }
+    if (code == 'identity_provider_unavailable') {
+      return const ServiceUnavailable();
     }
     if (code != null) return UnknownAuthError(code);
     return switch (e.type) {

@@ -214,6 +214,48 @@ void main() {
       expect(authFailureMessage(result.failure!), 'Impossibile attivare la passkey. Riprova.');
     });
 
+    test('passkey_verification_failed maps to PasskeyVerificationFailed', () async {
+      stubStart(_startPayload());
+      when(() => authenticator.register(any())).thenAnswer((_) async => _credential());
+      stubComplete(
+        error: _dioError(
+          statusCode: 400,
+          body: {'code': 'passkey_verification_failed'},
+          path: '/api/MobileAuth/passkey/register/complete',
+        ),
+      );
+
+      final result = await enroller().enrol(name: 'Pixel 9');
+
+      expect(result.ok, isFalse);
+      expect(result.failure, isA<PasskeyVerificationFailed>());
+      expect(
+        authFailureMessage(result.failure!),
+        'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
+      );
+    });
+
+    test('identity_provider_unavailable maps to ServiceUnavailable', () async {
+      stubStart(_startPayload());
+      when(() => authenticator.register(any())).thenAnswer((_) async => _credential());
+      stubComplete(
+        error: _dioError(
+          statusCode: 503,
+          body: {'code': 'identity_provider_unavailable'},
+          path: '/api/MobileAuth/passkey/register/complete',
+        ),
+      );
+
+      final result = await enroller().enrol(name: 'Pixel 9');
+
+      expect(result.ok, isFalse);
+      expect(result.failure, isA<ServiceUnavailable>());
+      expect(
+        authFailureMessage(result.failure!),
+        'Servizio temporaneamente non disponibile. Riprova tra poco.',
+      );
+    });
+
     test('cancelled registration is ok=false, failure=null', () async {
       stubStart(_startPayload());
       when(() => authenticator.register(any())).thenThrow(PasskeyAuthCancelledException());
@@ -340,6 +382,48 @@ void main() {
       expect(result.items, isEmpty);
       expect(result.failure, isA<UnknownAuthError>());
       expect((result.failure! as UnknownAuthError).message, 'Malformed passkey list response');
+    });
+
+    test('list maps passkey_registration_failed to the list copy, not the enrolment copy', () async {
+      when(() => dio.get<dynamic>(any(that: contains('/api/MobileAuth/passkey')))).thenThrow(
+        _dioError(
+          statusCode: 400,
+          body: {'code': 'passkey_registration_failed'},
+          path: '/api/MobileAuth/passkey',
+        ),
+      );
+
+      final result = await enroller().list();
+
+      expect(result.items, isEmpty);
+      expect(result.failure, isA<UnknownAuthError>());
+      expect((result.failure! as UnknownAuthError).message, 'Impossibile caricare le passkey.');
+    });
+
+    test('list maps an unknown 4xx to the list copy', () async {
+      when(() => dio.get<dynamic>(any(that: contains('/api/MobileAuth/passkey')))).thenThrow(
+        _dioError(
+          statusCode: 403,
+          body: {'code': 'some_other_server_code'},
+          path: '/api/MobileAuth/passkey',
+        ),
+      );
+
+      final result = await enroller().list();
+
+      expect(result.items, isEmpty);
+      expect(result.failure, isA<UnknownAuthError>());
+      expect((result.failure! as UnknownAuthError).message, 'Impossibile caricare le passkey.');
+    });
+
+    test('list keeps transport classification for a network failure', () async {
+      when(() => dio.get<dynamic>(any(that: contains('/api/MobileAuth/passkey')))).thenThrow(
+        _dioError(type: DioExceptionType.receiveTimeout, path: '/api/MobileAuth/passkey'),
+      );
+
+      final result = await enroller().list();
+
+      expect(result.failure, isA<NetworkError>());
     });
   });
 

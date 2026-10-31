@@ -63,6 +63,20 @@ void main() {
       );
     });
 
+    test('PasskeyVerificationFailed uses the exact retry copy', () {
+      expect(
+        authFailureMessage(const PasskeyVerificationFailed()),
+        'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
+      );
+    });
+
+    test('ServiceUnavailable uses the exact temporary-outage copy', () {
+      expect(
+        authFailureMessage(const ServiceUnavailable()),
+        'Servizio temporaneamente non disponibile. Riprova tra poco.',
+      );
+    });
+
     test('PasskeyCancelled is a silent no-op', () {
       expect(authFailureMessage(const PasskeyCancelled()), isEmpty);
     });
@@ -78,6 +92,9 @@ void main() {
         const UnknownAuthError('test'),
         const PasskeyNotRegistered(),
         const PasskeyUnavailable(),
+        const PasskeyRegistrationFailed(),
+        const PasskeyVerificationFailed(),
+        const ServiceUnavailable(),
       ];
       for (final f in failures) {
         final msg = authFailureMessage(f);

@@ -41,6 +41,19 @@ class PasskeyRegistrationFailed extends AuthFailure {
   const PasskeyRegistrationFailed();
 }
 
+/// ZITADEL rejected the passkey assertion.
+///
+/// Deliberately not retried automatically (ruling R18): the copy offers a retry the user
+/// controls, rather than a second biometric prompt they did not ask for.
+class PasskeyVerificationFailed extends AuthFailure {
+  const PasskeyVerificationFailed();
+}
+
+/// The identity provider is temporarily unreachable or misbehaving.
+class ServiceUnavailable extends AuthFailure {
+  const ServiceUnavailable();
+}
+
 /// The account has been disabled by an admin.
 class AccountDisabled extends AuthFailure {
   const AccountDisabled();
@@ -83,6 +96,10 @@ String authFailureMessage(AuthFailure failure) => switch (failure) {
   PasskeyUnavailable() => 'Questo dispositivo non supporta le passkey.',
   PasskeyCancelled() => '',
   PasskeyRegistrationFailed() => 'Impossibile attivare la passkey. Riprova.',
+  PasskeyVerificationFailed() =>
+    'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
+  ServiceUnavailable() =>
+    'Servizio temporaneamente non disponibile. Riprova tra poco.',
   AccountDisabled() =>
     'Il tuo account è stato disabilitato. Contatta l\'assistenza.',
   EmailNotFound() => 'Nessun account trovato con questa email.',

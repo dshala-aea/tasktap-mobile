@@ -160,7 +160,9 @@ class _PasskeyListBodyState extends ConsumerState<_PasskeyListBody> {
     final confirmed = await confirmDeleteDialog(
       context,
       title: 'Rimuovi la passkey?',
-      message: 'La passkey "${passkey.name}" verrà rimossa da questo dispositivo.',
+      message:
+          'La passkey verrà rimossa dal tuo account. '
+          'Non sarà più possibile usarla per accedere.',
       confirmLabel: 'Rimuovi',
     );
     if (!confirmed || !mounted) return;
