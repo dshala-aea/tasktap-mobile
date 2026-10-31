@@ -36,6 +36,11 @@ class PasskeyCancelled extends AuthFailure {
   const PasskeyCancelled();
 }
 
+/// The server refused to enrol this passkey.
+class PasskeyRegistrationFailed extends AuthFailure {
+  const PasskeyRegistrationFailed();
+}
+
 /// The account has been disabled by an admin.
 class AccountDisabled extends AuthFailure {
   const AccountDisabled();
@@ -77,6 +82,7 @@ String authFailureMessage(AuthFailure failure) => switch (failure) {
     'Nessuna passkey disponibile. Accedi con la password; potrai attivarla dalle impostazioni dopo l\'accesso.',
   PasskeyUnavailable() => 'Questo dispositivo non supporta le passkey.',
   PasskeyCancelled() => '',
+  PasskeyRegistrationFailed() => 'Impossibile attivare la passkey. Riprova.',
   AccountDisabled() =>
     'Il tuo account è stato disabilitato. Contatta l\'assistenza.',
   EmailNotFound() => 'Nessun account trovato con questa email.',
