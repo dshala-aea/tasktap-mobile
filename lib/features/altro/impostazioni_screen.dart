@@ -15,6 +15,7 @@ import '../../presentation/providers/auth_providers.dart';
 import 'biometric_setup.dart';
 import 'impostazioni_provider.dart';
 import 'logout_action.dart';
+import 'passkey_settings_section.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -219,6 +220,18 @@ class ImpostazioniScreen extends ConsumerWidget {
                     showDivider: false,
                   ),
                 ],
+              ),
+            ),
+
+            // ── Accesso con passkey ───────────────────────────────────────
+            //
+            // Sits next to the biometric switch: both protect this handset, and both are
+            // opt-in per device. Passkeys also let the technician sign in without a password,
+            // so the card states the device-lock warning before offering the action.
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(top: AppSpacing.md),
+                child: PasskeySettingsSection(),
               ),
             ),
 
