@@ -8554,7 +8554,7 @@
         "tags": [
           "MobileAuth"
         ],
-        "summary": "Starts passkey authentication. Deliberately anonymous: the caller has no token yet.\nThe user is derived from string PasskeyStartRequest.LoginName and the RP ID is\nserver configuration \u2014 neither is accepted from the request.",
+        "summary": "Starts passkey authentication. Deliberately anonymous: the caller has no token yet.\nThe user is identified by the login name in the request body; the relying-party ID comes\nfrom server configuration and is never accepted from the request.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8587,8 +8587,8 @@
         "tags": [
           "MobileAuth"
         ],
-        "summary": "Completes passkey authentication and returns the OIDC authorization code. Anonymous for the\nsame reason as Task\u0026lt;IActionResult\u0026gt; MobileAuthController.StartPasskey(PasskeyStartRequest request, CancellationToken ct); the assertion is validated by ZITADEL.",
-        "description": "The audit row is attributed to the user ZITADEL reports for the session just authenticated,\nnever to string PasskeyCompleteRequest.LoginName (which is caller-supplied and was\nkept only for wire compatibility). A failed session read yields an unattributed best-effort\naudit row; it never fails the login.",
+        "summary": "Completes passkey authentication and returns the OIDC authorization code. Anonymous for the\nsame reason as the start step; the assertion is validated by ZITADEL.",
+        "description": "The audit row is attributed to the user ZITADEL reports for the session just authenticated,\nnever to the caller-supplied login name from the start step. A failed session read yields an\nunattributed best-effort audit row; it never fails the login.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -33097,10 +33097,6 @@
           },
           "sessionToken": {
             "type": "string"
-          },
-          "loginName": {
-            "type": "string",
-            "description": "Kept for wire compatibility with the published mobile contract. It is deliberately NOT\nused for audit attribution \u2014 that comes from the ZITADEL session (ruling R11)."
           },
           "credentialAssertionData": {
             "$ref": "#/components/schemas/JsonElement"
