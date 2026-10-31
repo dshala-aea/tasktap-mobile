@@ -455,6 +455,72 @@ void main() {
     );
 
     test(
+      'a publicKey that is present but not an object maps to UnknownAuthError, '
+      'never throws',
+      () async {
+        stubAuthorizeRedirect('authreq-1');
+        stubStart({
+          'sessionId': 's1',
+          'sessionToken': 'st',
+          'publicKeyCredentialRequestOptions': {'publicKey': 'not-an-object'},
+        });
+
+        final result = await repo().signInWithPasskey('tech@tasktap.io');
+
+        expect(result.user, isNull);
+        expect(result.failure, isA<UnknownAuthError>());
+        verifyNever(() => passkeyAuthenticator.authenticate(any()));
+        verifyNever(() => appAuth.token(any()));
+      },
+    );
+
+    // Distinct from the "not an object" branch above: the unwrapped publicKey IS
+    // a Map, so it reaches AuthenticateRequestType.fromJson, which throws on a
+    // non-String challenge. The catch-all around start parsing must turn that
+    // into a typed failure rather than let the TypeError escape.
+    test(
+      'a publicKey that AuthenticateRequestType.fromJson rejects maps to '
+      'UnknownAuthError, never throws',
+      () async {
+        stubAuthorizeRedirect('authreq-1');
+        stubStart({
+          'sessionId': 's1',
+          'sessionToken': 'st',
+          'publicKeyCredentialRequestOptions': {
+            'publicKey': <String, dynamic>{
+              'challenge': 123,
+              'rpId': 'auth.tasktap.it',
+            },
+          },
+        });
+
+        final result = await repo().signInWithPasskey('tech@tasktap.io');
+
+        expect(result.user, isNull);
+        expect(result.failure, isA<UnknownAuthError>());
+        verifyNever(() => passkeyAuthenticator.authenticate(any()));
+        verifyNever(() => appAuth.token(any()));
+      },
+    );
+
+    test(
+      'a passkey-unsupported platform error maps to PasskeyUnavailable',
+      () async {
+        stubAuthorizeRedirect('authreq-1');
+        stubStart(_startPayload());
+        when(
+          () => passkeyAuthenticator.authenticate(any()),
+        ).thenThrow(PasskeyUnsupportedException('Android API < 28'));
+
+        final result = await repo().signInWithPasskey('tech@tasktap.io');
+
+        expect(result.user, isNull);
+        expect(result.failure, isA<PasskeyUnavailable>());
+        verifyNever(() => appAuth.token(any()));
+      },
+    );
+
+    test(
       'a domain-not-associated platform error maps to PasskeyUnavailable',
       () async {
         stubAuthorizeRedirect('authreq-1');
