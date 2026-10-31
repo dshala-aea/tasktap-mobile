@@ -134,13 +134,26 @@ class _PasskeyListBodyState extends ConsumerState<_PasskeyListBody> {
     }
 
     // Refresh before the toast, so the list the technician sees already contains
-    // the passkey the toast is claiming exists.
+    // the passkey the toast is claiming exists. The enrolment itself succeeded,
+    // so a failed read-back must not reopen the action as a failure of enrolment
+    // — but it must not claim success either. The provider's error state renders
+    // the retry branch; this only makes sure `_busy` cannot stay stuck and that
+    // the error never escapes the button handler.
     ref.invalidate(passkeyListProvider);
-    await ref.read(passkeyListProvider.future);
+    var refreshed = false;
+    try {
+      await ref.read(passkeyListProvider.future);
+      refreshed = true;
+    } catch (error) {
+      debugPrint('Passkey list refresh failed after enrolment: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
     if (!mounted) return;
 
-    setState(() => _busy = false);
-    showAppToast(context, message: 'Passkey attivata.', tone: ToastTone.success);
+    if (refreshed) {
+      showAppToast(context, message: 'Passkey attivata.', tone: ToastTone.success);
+    }
   }
 
   Future<void> _remove(PasskeySummary passkey) async {

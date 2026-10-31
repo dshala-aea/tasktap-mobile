@@ -17,6 +17,13 @@ class _FakePasskeyEnroller extends PasskeyEnroller {
   ({bool ok, AuthFailure? failure}) enrolResult = (ok: true, failure: null);
   ({bool ok, AuthFailure? failure}) removeResult = (ok: true, failure: null);
 
+  /// Thrown by [list] while set, modelling a provider that errors rather than
+  /// returning the `(items: [], failure: …)` record.
+  Object? listError;
+
+  /// Set by [enrol] on success, so the refresh triggered by the enrolment fails.
+  Object? listErrorAfterEnrol;
+
   int listCalls = 0;
   final List<String> enrolNames = <String>[];
   final List<String> removedIds = <String>[];
@@ -24,6 +31,7 @@ class _FakePasskeyEnroller extends PasskeyEnroller {
   @override
   Future<({List<PasskeySummary> items, AuthFailure? failure})> list() async {
     listCalls++;
+    if (listError case final error?) throw error;
     return (items: List<PasskeySummary>.of(passkeys), failure: listFailure);
   }
 
@@ -32,6 +40,7 @@ class _FakePasskeyEnroller extends PasskeyEnroller {
     enrolNames.add(name);
     if (enrolResult.ok) {
       passkeys = [...passkeys, (id: 'pk-new', name: name)];
+      listError = listErrorAfterEnrol;
     }
     return enrolResult;
   }
@@ -89,6 +98,17 @@ void main() {
     await _drain(tester);
   });
 
+  testWidgets('shows the genuine empty state when there are no passkeys', (tester) async {
+    final enroller = _FakePasskeyEnroller();
+    await _pump(tester, enroller);
+
+    expect(find.text('Nessuna passkey attiva su questo dispositivo.'), findsOneWidget);
+    expect(find.text(authFailureMessage(const NetworkError())), findsNothing);
+    expect(find.text('Riprova'), findsNothing);
+
+    await _drain(tester);
+  });
+
   testWidgets('enrolling success refreshes the list and toasts', (tester) async {
     final enroller = _FakePasskeyEnroller();
     await _pump(tester, enroller);
@@ -99,6 +119,29 @@ void main() {
     expect(enroller.enrolNames, ['TaskTap su questo dispositivo']);
     expect(find.text('TaskTap su questo dispositivo'), findsOneWidget);
     expect(find.text('Passkey attivata.'), findsOneWidget);
+
+    await _drain(tester);
+  });
+
+  testWidgets('a failed refresh after enrolment clears busy and shows the failure branch', (
+    tester,
+  ) async {
+    final enroller = _FakePasskeyEnroller()..listErrorAfterEnrol = Exception('list broke');
+    await _pump(tester, enroller);
+
+    await tester.tap(find.text('Attiva accesso con passkey'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Impossibile caricare le passkey. Riprova.'), findsOneWidget);
+    expect(find.text('Riprova'), findsOneWidget);
+    expect(find.text('Passkey attivata.'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    final button = tester.widget<AppButton>(
+      find.widgetWithText(AppButton, 'Attiva accesso con passkey'),
+    );
+    expect(button.isLoading, isFalse);
+    expect(button.onPressed, isNotNull);
 
     await _drain(tester);
   });
