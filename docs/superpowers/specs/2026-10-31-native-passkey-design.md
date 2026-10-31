@@ -209,8 +209,13 @@ endpoint accepts an RP ID or a user id from the caller.
 
 Error codes (400 unless noted): `no_passkey_registered`,
 `passkey_verification_failed`, `additional_factor_required`,
+`passkey_registration_failed` (enrolment 4xx other than 401/403),
 `identity_provider_unavailable` (503). All are logged without credential
 material.
+
+Mobile copy for `passkey_registration_failed`: "Impossibile attivare la
+passkey. Riprova."
+
 
 `no_passkey_registered` is returned **both** for an unknown email and for a
 known user with no enrolled passkey, so `login/start` does not become an
