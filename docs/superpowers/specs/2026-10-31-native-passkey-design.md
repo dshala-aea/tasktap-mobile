@@ -141,7 +141,8 @@ New setting `ZitadelOptions.WebAuthnRpId`, defaulting to the host of
    `PasskeyAuthenticator.authenticate`, and serialises the result with
    `toJson()` (the nested `{id, rawId, type, response{...}}` shape).
 5. `POST /api/MobileAuth/passkey/login/complete
-   {authRequestId, sessionId, sessionToken, credentialAssertionData, loginName}`.
+   {authRequestId, sessionId, sessionToken, credentialAssertionData}` (the login
+   identity is the session's, never a request field).
    Server: `PATCH /v2/sessions/{id}` with `checks.webAuthN`, then
    `CreateCallback` → `{code}`.
 6. Mobile exchanges the code with PKCE (`flutter_appauth`), persists the
@@ -198,7 +199,7 @@ simply being present.
 | Method | Path | Auth | Body | Response |
 |---|---|---|---|---|
 | POST | `/api/MobileAuth/passkey/login/start` | anonymous | `{authRequestId, loginName}` | `{sessionId, sessionToken, publicKeyCredentialRequestOptions}` |
-| POST | `/api/MobileAuth/passkey/login/complete` | anonymous | `{authRequestId, sessionId, sessionToken, credentialAssertionData, loginName}` | `{code}` |
+| POST | `/api/MobileAuth/passkey/login/complete` | anonymous | `{authRequestId, sessionId, sessionToken, credentialAssertionData}` | `{code}` |
 | POST | `/api/MobileAuth/passkey/register/start` | bearer | `{}` | `{passkeyId, publicKeyCredentialCreationOptions}` |
 | POST | `/api/MobileAuth/passkey/register/complete` | bearer | `{passkeyId, publicKeyCredential, passkeyName}` | 204 |
 | GET | `/api/MobileAuth/passkey` | bearer | — | `[{id, name}]` |
