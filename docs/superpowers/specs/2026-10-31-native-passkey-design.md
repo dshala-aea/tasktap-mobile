@@ -253,6 +253,8 @@ New `AuthFailure` cases with Italian copy:
 - `PasskeyUnavailable` — device/OS cannot use passkeys.
 - `PasskeyCancelled` — user dismissed the sheet; shown as a no-op, never as an
   error banner.
+- `PasskeyRegistrationFailed` — "Impossibile attivare la passkey. Riprova."
+  (the `passkey_registration_failed` code from the API).
 
 `PasskeyAuthCancelledException` → `PasskeyCancelled`;
 `NoCredentialsAvailableException` → `PasskeyNotRegistered`;
