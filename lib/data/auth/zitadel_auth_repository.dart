@@ -5,6 +5,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:passkeys/authenticator.dart';
+import 'package:passkeys/types.dart';
 
 import '../../core/config/env.dart';
 import '../../core/startup/startup_report.dart';
@@ -32,10 +34,12 @@ class ZitadelAuthRepository implements IAuthRepository {
     FlutterAppAuth? appAuth,
     FlutterSecureStorage? storage,
     Dio? revocationHttpClient,
+    PasskeyAuthenticator? passkeyAuthenticator,
     bool restore = true,
   }) : _appAuth = appAuth ?? FlutterAppAuth(),
        _storage = storage ?? const FlutterSecureStorage(),
-       _revocationHttpClient = revocationHttpClient ?? Dio() {
+       _revocationHttpClient = revocationHttpClient ?? Dio(),
+       _passkeyAuthenticator = passkeyAuthenticator ?? PasskeyAuthenticator() {
     if (restore) unawaited(_restore());
   }
 
@@ -57,6 +61,8 @@ class ZitadelAuthRepository implements IAuthRepository {
       StreamController<AuthUser?>.broadcast();
 
   AuthUser? _current;
+
+  final PasskeyAuthenticator _passkeyAuthenticator;
 
   // ── IAuthRepository ────────────────────────────────────────────────────
 
@@ -151,6 +157,163 @@ class ZitadelAuthRepository implements IAuthRepository {
           _ => _mapError(e),
         },
       );
+    }
+
+    try {
+      final result = await _appAuth.token(
+        TokenRequest(
+          Env.oidcClientId,
+          Env.oidcRedirectUri,
+          issuer: Env.oidcIssuer,
+          authorizationCode: code,
+          codeVerifier: pkce.verifier,
+        ),
+      );
+      final user = _fromTokens(
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        idToken: result.idToken,
+        expiry: result.accessTokenExpirationDateTime,
+      );
+      if (user == null) {
+        return (
+          user: null,
+          failure: const UnknownAuthError('No tokens returned'),
+        );
+      }
+      await _persistRefreshToken(result.refreshToken);
+      await _persistCachedIdentity(user);
+      _emit(user);
+      return (user: user, failure: null);
+    } catch (e) {
+      return (user: null, failure: _mapError(e));
+    }
+  }
+
+  /// Native passkey sign-in: the same authRequestId capture and code exchange as
+  /// [signInWithPassword], with the platform's WebAuthn assertion in between.
+  ///
+  /// The session id/token and the assertion exist only as locals here — nothing
+  /// but the refresh token and the cached identity snapshot is persisted (see
+  /// the class doc). ZITADEL wraps the request options in a top-level `publicKey`
+  /// key; the package expects the unwrapped object, and the assertion goes back
+  /// to the backend as the package's own `toJson()` (never a JSON round-trip of
+  /// the Dart object, which cannot be encoded).
+  @override
+  Future<({AuthUser? user, AuthFailure? failure})> signInWithPasskey(
+    String loginName,
+  ) async {
+    final pkce = Pkce.generate();
+
+    final String authRequestId;
+    try {
+      authRequestId = await _captureAuthRequestId(pkce.challenge);
+    } catch (e) {
+      if (e is AuthFailure) return (user: null, failure: e);
+      return (user: null, failure: _mapError(e));
+    }
+
+    // ── start: backend challenge + ZITADEL session ───────────────────────
+    final String sessionId;
+    final String sessionToken;
+    final AuthenticateRequestType request;
+    try {
+      final response = await _revocationHttpClient.post<dynamic>(
+        '${Env.apiBaseUrl}/api/MobileAuth/passkey/login/start',
+        // No rpId: the server derives it from OIDC_ISSUER, and the contract has
+        // no such field.
+        data: {'authRequestId': authRequestId, 'loginName': loginName},
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      final data = response.data;
+      final rawSessionId = data is Map ? data['sessionId'] : null;
+      final rawSessionToken = data is Map ? data['sessionToken'] : null;
+      final options = data is Map
+          ? data['publicKeyCredentialRequestOptions']
+          : null;
+      final publicKey = options is Map ? options['publicKey'] : null;
+      if (rawSessionId is! String ||
+          rawSessionId.isEmpty ||
+          rawSessionToken is! String ||
+          rawSessionToken.isEmpty ||
+          publicKey is! Map) {
+        return (
+          user: null,
+          failure: const UnknownAuthError('Malformed passkey start response'),
+        );
+      }
+      sessionId = rawSessionId;
+      sessionToken = rawSessionToken;
+      request = AuthenticateRequestType.fromJson(
+        Map<String, dynamic>.from(publicKey),
+      );
+    } on DioException catch (e) {
+      return (user: null, failure: _mapPasskeyHttpError(e));
+    } catch (_) {
+      // A publicKey shape the package rejects must surface as a typed failure,
+      // never escape as a raw FormatException/TypeError.
+      return (
+        user: null,
+        failure: const UnknownAuthError('Malformed passkey start response'),
+      );
+    }
+
+    // ── platform ceremony ────────────────────────────────────────────────
+    final AuthenticateResponseType assertion;
+    try {
+      assertion = await _passkeyAuthenticator.authenticate(request);
+    } on PasskeyAuthCancelledException {
+      // The user dismissed the sheet: benign, never an error banner.
+      return (user: null, failure: const PasskeyCancelled());
+    } on NoCredentialsAvailableException {
+      // This device holds no credential for the account; the copy must not
+      // distinguish it from "the account has no passkey".
+      return (user: null, failure: const PasskeyNotRegistered());
+    } on DomainNotAssociatedException catch (e) {
+      debugPrint(
+        'Passkey domain not associated (check the RP ID and app-site association files): ${e.message}',
+      );
+      return (user: null, failure: const PasskeyUnavailable());
+    } on PasskeyUnsupportedException catch (e) {
+      debugPrint('Passkey authenticator unsupported on this device: $e');
+      return (user: null, failure: const PasskeyUnavailable());
+    } on DeviceNotSupportedException catch (e) {
+      debugPrint('Device does not support passkeys: $e');
+      return (user: null, failure: const PasskeyUnavailable());
+    } catch (e) {
+      return (user: null, failure: _mapError(e));
+    }
+
+    // ── complete: backend verifies the assertion and mints the code ──────
+    final String code;
+    try {
+      final response = await _revocationHttpClient.post<dynamic>(
+        '${Env.apiBaseUrl}/api/MobileAuth/passkey/login/complete',
+        data: {
+          'authRequestId': authRequestId,
+          'sessionId': sessionId,
+          'sessionToken': sessionToken,
+          // The login identity is the session's on the server; never resend
+          // loginName here.
+          'credentialAssertionData': assertion.toJson(),
+        },
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      final data = response.data;
+      final rawCode = data is Map ? data['code'] : null;
+      if (rawCode is! String || rawCode.isEmpty) {
+        return (
+          user: null,
+          failure: const UnknownAuthError(
+            'Malformed passkey complete response',
+          ),
+        );
+      }
+      code = rawCode;
+    } on DioException catch (e) {
+      return (user: null, failure: _mapPasskeyHttpError(e));
+    } catch (e) {
+      return (user: null, failure: _mapError(e));
     }
 
     try {
@@ -537,6 +700,27 @@ class ZitadelAuthRepository implements IAuthRepository {
     } catch (_) {
       return const {};
     }
+  }
+
+  /// Maps the passkey endpoints' typed error codes (design §9) onto failures.
+  ///
+  /// Any other non-null code is preserved in an [UnknownAuthError] rather than
+  /// lost — e.g. `identity_provider_unavailable` (503) must be diagnosable and
+  /// must never read like a credentials problem. A response with no code at all
+  /// (network, proxy) falls through to the general mapping.
+  AuthFailure _mapPasskeyHttpError(DioException e) {
+    final data = e.response?.data;
+    final code = data is Map && data['code'] is String
+        ? data['code'] as String
+        : null;
+    if (code == null) return _mapError(e);
+    return switch (code) {
+      'no_passkey_registered' => const PasskeyNotRegistered(),
+      'passkey_verification_failed' => const PasskeyVerificationFailed(),
+      'identity_provider_unavailable' => const ServiceUnavailable(),
+      'additional_factor_required' => const AdditionalFactorRequired(),
+      _ => UnknownAuthError(code),
+    };
   }
 
   AuthFailure _mapError(Object e) {

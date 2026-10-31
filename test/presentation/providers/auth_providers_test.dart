@@ -311,6 +311,53 @@ void main() {
       verifyNever(() => repo.signIn());
     });
 
+    test('a cancelled passkey attempt clears the spinner and shows no error', () async {
+      when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
+        (_) async => (user: null, failure: const PasskeyCancelled()),
+      );
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPasskey('tech@tasktap.io');
+
+      final state = container.read(loginProvider);
+      expect(state.isLoading, isFalse);
+      expect(state.failure, isNull);
+    });
+
+    test('PasskeyNotRegistered is surfaced as a failure', () async {
+      when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
+        (_) async => (user: null, failure: const PasskeyNotRegistered()),
+      );
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPasskey('tech@tasktap.io');
+
+      final state = container.read(loginProvider);
+      expect(state.isLoading, isFalse);
+      expect(state.failure, isA<PasskeyNotRegistered>());
+    });
+
+    test('signInWithPasskey AdditionalFactorRequired falls back to signIn() automatically', () async {
+      when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
+        (_) async => (user: null, failure: const AdditionalFactorRequired()),
+      );
+      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPasskey('tech@tasktap.io');
+
+      verify(() => repo.signIn()).called(1);
+      // The browser hand-off is a transition, not an error: no stale failure may remain.
+      expect(container.read(loginProvider).failure, isNull);
+      expect(container.read(loginProvider).isLoading, isFalse);
+    });
+
     test('signInWithPassword AdditionalFactorRequired falls back to signIn() automatically', () async {
       when(() => repo.signInWithPassword('tech@tasktap.io', 'correct')).thenAnswer(
         (_) async => (user: null, failure: const AdditionalFactorRequired()),

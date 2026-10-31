@@ -58,6 +58,11 @@ class _DeadSessionRepo implements IAuthRepository {
   ) async => (user: null, failure: const UnknownAuthError('unused'));
 
   @override
+  Future<({AuthUser? user, AuthFailure? failure})> signInWithPasskey(
+    String loginName,
+  ) async => (user: null, failure: const UnknownAuthError('unused'));
+
+  @override
   Future<({AuthUser? user, AuthFailure? failure})> refreshSession() async =>
       (user: null, failure: const SessionExpired());
 

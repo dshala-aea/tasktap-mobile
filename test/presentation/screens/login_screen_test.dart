@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/security/passkey_support.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
@@ -17,9 +18,12 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-Widget _buildLoginScreen(IAuthRepository repo) {
+Widget _buildLoginScreen(IAuthRepository repo, {bool passkeySupported = false}) {
   return ProviderScope(
-    overrides: [authRepositoryProvider.overrideWithValue(repo)],
+    overrides: [
+      authRepositoryProvider.overrideWithValue(repo),
+      passkeySupportedProvider.overrideWith((ref) async => passkeySupported),
+    ],
     child: const MaterialApp(home: LoginScreen()),
   );
 }
@@ -32,6 +36,7 @@ Finder get _loginCta =>
 Finder get _usernameField => find.byKey(const ValueKey('login-username'));
 Finder get _passwordField => find.byKey(const ValueKey('login-password'));
 Finder get _browserFallbackButton => find.text('Accedi con il browser');
+Finder get _passkeyButton => find.text('Accedi con passkey');
 
 Future<void> _enterCredentials(WidgetTester tester, {String username = 'tech@tasktap.io', String password = 'correct-password'}) async {
   await tester.enterText(_usernameField, username);
@@ -142,6 +147,44 @@ void main() {
 
       verify(() => repo.signInWithPassword('tech@tasktap.io', 'correct-password')).called(1);
       verifyNever(() => repo.signIn());
+    });
+  });
+
+  // ── Passkey (opt-in) ─────────────────────────────────────────────────────
+
+  group('LoginScreen passkey', () {
+    testWidgets('the passkey button is hidden when the platform has no support', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      expect(_passkeyButton, findsNothing);
+    });
+
+    testWidgets('the passkey button is visible when supported', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo, passkeySupported: true));
+      await tester.pumpAndSettle();
+
+      expect(_passkeyButton, findsOneWidget);
+    });
+
+    testWidgets('double tapping the passkey button starts one attempt', (tester) async {
+      final completer = Completer<({AuthUser? user, AuthFailure? failure})>();
+      when(() => repo.signInWithPasskey(any())).thenAnswer((_) => completer.future);
+
+      await tester.pumpWidget(_buildLoginScreen(repo, passkeySupported: true));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(_usernameField, 'tech@tasktap.io');
+
+      // Two taps inside the same frame: the second must hit the loading guard, not a second
+      // native passkey prompt.
+      await tester.tap(_passkeyButton);
+      await tester.tap(_passkeyButton);
+
+      completer.complete((user: null, failure: const PasskeyCancelled()));
+      await tester.pumpAndSettle();
+
+      verify(() => repo.signInWithPasskey('tech@tasktap.io')).called(1);
     });
   });
 

@@ -19,6 +19,41 @@ class AdditionalFactorRequired extends AuthFailure {
   const AdditionalFactorRequired();
 }
 
+/// The account has no passkey, or this device holds no credential for it.
+///
+/// The same case covers both so the copy cannot tell the user which one it is.
+class PasskeyNotRegistered extends AuthFailure {
+  const PasskeyNotRegistered();
+}
+
+/// This device or OS cannot use passkeys.
+class PasskeyUnavailable extends AuthFailure {
+  const PasskeyUnavailable();
+}
+
+/// The user dismissed the passkey sheet. Never rendered as an error.
+class PasskeyCancelled extends AuthFailure {
+  const PasskeyCancelled();
+}
+
+/// The server refused to enrol this passkey.
+class PasskeyRegistrationFailed extends AuthFailure {
+  const PasskeyRegistrationFailed();
+}
+
+/// ZITADEL rejected the passkey assertion.
+///
+/// Deliberately not retried automatically (ruling R18): the copy offers a retry the user
+/// controls, rather than a second biometric prompt they did not ask for.
+class PasskeyVerificationFailed extends AuthFailure {
+  const PasskeyVerificationFailed();
+}
+
+/// The identity provider is temporarily unreachable or misbehaving.
+class ServiceUnavailable extends AuthFailure {
+  const ServiceUnavailable();
+}
+
 /// The account has been disabled by an admin.
 class AccountDisabled extends AuthFailure {
   const AccountDisabled();
@@ -56,6 +91,15 @@ String authFailureMessage(AuthFailure failure) => switch (failure) {
     'Email o password errati. Controlla le credenziali e riprova.',
   AdditionalFactorRequired() =>
     'Serve una verifica aggiuntiva. Accedi dal browser per continuare.',
+  PasskeyNotRegistered() =>
+    'Nessuna passkey disponibile. Accedi con la password; potrai attivarla dalle impostazioni dopo l\'accesso.',
+  PasskeyUnavailable() => 'Questo dispositivo non supporta le passkey.',
+  PasskeyCancelled() => '',
+  PasskeyRegistrationFailed() => 'Impossibile attivare la passkey. Riprova.',
+  PasskeyVerificationFailed() =>
+    'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
+  ServiceUnavailable() =>
+    'Servizio temporaneamente non disponibile. Riprova tra poco.',
   AccountDisabled() =>
     'Il tuo account è stato disabilitato. Contatta l\'assistenza.',
   EmailNotFound() => 'Nessun account trovato con questa email.',

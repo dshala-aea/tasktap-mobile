@@ -52,6 +52,35 @@ void main() {
       );
     });
 
+    test('passkey messages are the exact Italian copy', () {
+      expect(
+        authFailureMessage(const PasskeyNotRegistered()),
+        'Nessuna passkey disponibile. Accedi con la password; potrai attivarla dalle impostazioni dopo l\'accesso.',
+      );
+      expect(
+        authFailureMessage(const PasskeyUnavailable()),
+        'Questo dispositivo non supporta le passkey.',
+      );
+    });
+
+    test('PasskeyVerificationFailed uses the exact retry copy', () {
+      expect(
+        authFailureMessage(const PasskeyVerificationFailed()),
+        'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
+      );
+    });
+
+    test('ServiceUnavailable uses the exact temporary-outage copy', () {
+      expect(
+        authFailureMessage(const ServiceUnavailable()),
+        'Servizio temporaneamente non disponibile. Riprova tra poco.',
+      );
+    });
+
+    test('PasskeyCancelled is a silent no-op', () {
+      expect(authFailureMessage(const PasskeyCancelled()), isEmpty);
+    });
+
     test('all failure types return non-empty Italian strings', () {
       final failures = <AuthFailure>[
         const InvalidCredentials(),
@@ -61,6 +90,11 @@ void main() {
         const NetworkError(),
         const SessionExpired(),
         const UnknownAuthError('test'),
+        const PasskeyNotRegistered(),
+        const PasskeyUnavailable(),
+        const PasskeyRegistrationFailed(),
+        const PasskeyVerificationFailed(),
+        const ServiceUnavailable(),
       ];
       for (final f in failures) {
         final msg = authFailureMessage(f);

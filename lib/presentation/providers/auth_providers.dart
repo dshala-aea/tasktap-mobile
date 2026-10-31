@@ -137,6 +137,31 @@ class LoginNotifier extends StateNotifier<LoginState> {
     }
   }
 
+  Future<void> signInWithPasskey(String loginName) async {
+    state = const LoginState(isLoading: true);
+    final result = await _repo.signInWithPasskey(loginName);
+
+    if (result.failure is AdditionalFactorRequired) {
+      // Same fallback as the password path: the account needs a factor this native flow cannot
+      // submit. The browser can satisfy whatever Zitadel's hosted UI supports, so hand off
+      // silently instead of showing an error.
+      await signIn();
+      return;
+    }
+
+    if (result.failure is PasskeyCancelled) {
+      // Dismissing the OS passkey sheet is a deliberate no-op, not an error: clear the spinner
+      // and show nothing.
+      state = const LoginState();
+      return;
+    }
+    if (result.failure != null) {
+      state = LoginState(failure: result.failure);
+    } else {
+      state = const LoginState();
+    }
+  }
+
   Future<void> signOut() async {
     // The CONSENTED ending: the logout dialog already told the technician how much unsent work
     // this discards (see `UnsentWorkCounter` / `logout_flow.dart`). The forced path goes through

@@ -8549,6 +8549,155 @@
         }
       }
     },
+    "/api/MobileAuth/passkey/login/start": {
+      "post": {
+        "tags": [
+          "MobileAuth"
+        ],
+        "summary": "Starts passkey authentication. Deliberately anonymous: the caller has no token yet.\nThe user is identified by the login name in the request body; the relying-party ID comes\nfrom server configuration and is never accepted from the request.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyStartRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyStartRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/MobileAuth/passkey/login/complete": {
+      "post": {
+        "tags": [
+          "MobileAuth"
+        ],
+        "summary": "Completes passkey authentication and returns the OIDC authorization code. Anonymous for the\nsame reason as the start step; the assertion is validated by ZITADEL.",
+        "description": "The audit row is attributed to the user ZITADEL reports for the session just authenticated,\nnever to the caller-supplied login name from the start step. A failed session read yields an\nunattributed best-effort audit row; it never fails the login.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyCompleteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyCompleteRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/MobileAuth/passkey/register/start": {
+      "post": {
+        "tags": [
+          "MobileAuth"
+        ],
+        "summary": "Starts enrolment of a passkey on the caller\u0027s own ZITADEL user.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/MobileAuth/passkey/register/complete": {
+      "post": {
+        "tags": [
+          "MobileAuth"
+        ],
+        "summary": "Completes enrolment of a passkey on the caller\u0027s own ZITADEL user.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyRegisterCompleteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyRegisterCompleteRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyRegisterCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/MobileAuth/passkey": {
+      "get": {
+        "tags": [
+          "MobileAuth"
+        ],
+        "summary": "Lists the caller\u0027s own passkeys.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/MobileAuth/passkey/{id}": {
+      "delete": {
+        "tags": [
+          "MobileAuth"
+        ],
+        "summary": "Removes one of the caller\u0027s own passkeys. Absent passkeys are already removed.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/MobileAuth/refresh": {
       "post": {
         "tags": [
@@ -32936,6 +33085,48 @@
       },
       "PartTimeTipoEnum": {
         "type": "integer"
+      },
+      "PasskeyCompleteRequest": {
+        "type": "object",
+        "properties": {
+          "authRequestId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "sessionToken": {
+            "type": "string"
+          },
+          "credentialAssertionData": {
+            "$ref": "#/components/schemas/JsonElement"
+          }
+        }
+      },
+      "PasskeyRegisterCompleteRequest": {
+        "type": "object",
+        "properties": {
+          "passkeyId": {
+            "type": "string"
+          },
+          "publicKeyCredential": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "passkeyName": {
+            "type": "string"
+          }
+        }
+      },
+      "PasskeyStartRequest": {
+        "type": "object",
+        "properties": {
+          "authRequestId": {
+            "type": "string"
+          },
+          "loginName": {
+            "type": "string"
+          }
+        }
       },
       "PaymentMethodRequest": {
         "required": [
