@@ -311,6 +311,36 @@ void main() {
       verifyNever(() => repo.signIn());
     });
 
+    test('a cancelled passkey attempt clears the spinner and shows no error', () async {
+      when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
+        (_) async => (user: null, failure: const PasskeyCancelled()),
+      );
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPasskey('tech@tasktap.io');
+
+      final state = container.read(loginProvider);
+      expect(state.isLoading, isFalse);
+      expect(state.failure, isNull);
+    });
+
+    test('PasskeyNotRegistered is surfaced as a failure', () async {
+      when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
+        (_) async => (user: null, failure: const PasskeyNotRegistered()),
+      );
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPasskey('tech@tasktap.io');
+
+      final state = container.read(loginProvider);
+      expect(state.isLoading, isFalse);
+      expect(state.failure, isA<PasskeyNotRegistered>());
+    });
+
     test('signInWithPassword AdditionalFactorRequired falls back to signIn() automatically', () async {
       when(() => repo.signInWithPassword('tech@tasktap.io', 'correct')).thenAnswer(
         (_) async => (user: null, failure: const AdditionalFactorRequired()),

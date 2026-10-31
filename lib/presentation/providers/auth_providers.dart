@@ -140,6 +140,12 @@ class LoginNotifier extends StateNotifier<LoginState> {
   Future<void> signInWithPasskey(String loginName) async {
     state = const LoginState(isLoading: true);
     final result = await _repo.signInWithPasskey(loginName);
+    if (result.failure is PasskeyCancelled) {
+      // Dismissing the OS passkey sheet is a deliberate no-op, not an error: clear the spinner
+      // and show nothing.
+      state = const LoginState();
+      return;
+    }
     if (result.failure != null) {
       state = LoginState(failure: result.failure);
     } else {

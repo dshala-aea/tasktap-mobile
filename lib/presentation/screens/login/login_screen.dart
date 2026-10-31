@@ -5,6 +5,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/router/app_router.dart' show AppRoutes;
+import '../../../core/security/passkey_support.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -53,6 +54,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _onPasskey() async {
+    // Guard inside the callback as well as on the button: two taps can land before the rebuild
+    // that removes the button, and a second attempt would open a second native sheet.
+    if (ref.read(loginProvider).isLoading) return;
+    ref.read(loginProvider.notifier).clearError();
+    await ref
+        .read(loginProvider.notifier)
+        .signInWithPasskey(_usernameCtrl.text.trim());
+    // Deliberately no TextInput.finishAutofillContext() here: the passkey path is not a
+    // username/password fill, so there is nothing for the password manager to save.
+  }
+
   Future<void> _onForgotPassword() async {
     ref.read(loginProvider.notifier).clearError();
     // Zitadel's own hosted page has its own password-reset link — no need to build one here.
@@ -64,6 +77,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final loginState = ref.watch(loginProvider);
     final isLoading = loginState.isLoading;
     final failure = loginState.failure;
+    // Fails closed while the gate is loading or errored, so the password path is the only offer.
+    final passkeySupported = ref.watch(passkeySupportedProvider).valueOrNull ?? false;
 
     return Scaffold(
       backgroundColor: context.colors.bg1,
@@ -176,20 +191,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: AppSpacing.sm),
 
               // ── Passkey (opt-in) ──────────────────────────────────────────
-              OutlinedButton(
-                onPressed: isLoading
-                    ? null
-                    : () async {
-                        ref.read(loginProvider.notifier).clearError();
-                        await ref
-                            .read(loginProvider.notifier)
-                            .signInWithPasskey(_usernameCtrl.text.trim());
-                        if (ref.read(loginProvider).failure == null) {
-                          TextInput.finishAutofillContext();
-                        }
-                      },
-                child: const Text('Accedi con passkey'),
-              ),
+              // Only offered when this device can actually use passkeys, and hidden while any
+              // sign-in is in flight. Password remains the primary action.
+              if (passkeySupported && !isLoading) ...[
+                OutlinedButton(
+                  onPressed: _onPasskey,
+                  child: const Text('Accedi con passkey'),
+                ),
+              ],
             ],
           ),
         ),
