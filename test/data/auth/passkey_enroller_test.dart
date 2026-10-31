@@ -262,6 +262,26 @@ void main() {
       expect(result.failure, isA<PasskeyUnavailable>());
     });
 
+    test('an unsupported authenticator maps to PasskeyUnavailable', () async {
+      stubStart(_startPayload());
+      when(() => authenticator.register(any())).thenThrow(PasskeyUnsupportedException());
+
+      final result = await enroller().enrol(name: 'Pixel 9');
+
+      expect(result.ok, isFalse);
+      expect(result.failure, isA<PasskeyUnavailable>());
+    });
+
+    test('an unsupported device maps to PasskeyUnavailable', () async {
+      stubStart(_startPayload());
+      when(() => authenticator.register(any())).thenThrow(DeviceNotSupportedException());
+
+      final result = await enroller().enrol(name: 'Pixel 9');
+
+      expect(result.ok, isFalse);
+      expect(result.failure, isA<PasskeyUnavailable>());
+    });
+
     test('a start response without the publicKey wrapper is not passed to the platform', () async {
       stubStart({'passkeyId': 'pk-1', 'publicKeyCredentialCreationOptions': _publicKey});
 
@@ -286,9 +306,40 @@ void main() {
         ),
       );
 
-      final passkeys = await enroller().list();
+      final result = await enroller().list();
 
-      expect(passkeys, const [(id: 'pk-1', name: 'Pixel 9'), (id: 'pk-2', name: 'iPad ufficio')]);
+      expect(result.failure, isNull);
+      expect(result.items, const [
+        (id: 'pk-1', name: 'Pixel 9'),
+        (id: 'pk-2', name: 'iPad ufficio'),
+      ]);
+    });
+
+    test('list reports a transport failure instead of an empty list', () async {
+      when(() => dio.get<dynamic>(any(that: contains('/api/MobileAuth/passkey')))).thenThrow(
+        _dioError(type: DioExceptionType.connectionError, path: '/api/MobileAuth/passkey'),
+      );
+
+      final result = await enroller().list();
+
+      expect(result.items, isEmpty);
+      expect(result.failure, isA<NetworkError>());
+    });
+
+    test('list reports a non-list 200 body as a malformed response', () async {
+      when(() => dio.get<dynamic>(any(that: contains('/api/MobileAuth/passkey')))).thenAnswer(
+        (_) async => Response<dynamic>(
+          requestOptions: RequestOptions(path: '/api/MobileAuth/passkey'),
+          statusCode: 200,
+          data: {'unexpected': 'shape'},
+        ),
+      );
+
+      final result = await enroller().list();
+
+      expect(result.items, isEmpty);
+      expect(result.failure, isA<UnknownAuthError>());
+      expect((result.failure! as UnknownAuthError).message, 'Malformed passkey list response');
     });
   });
 
@@ -310,6 +361,19 @@ void main() {
       verify(
         () => dio.delete<dynamic>(any(that: contains('/api/MobileAuth/passkey/pk-1'))),
       ).called(1);
+    });
+
+    test('remove reports a mapped failure on a Dio error', () async {
+      when(
+        () => dio.delete<dynamic>(any(that: contains('/api/MobileAuth/passkey/pk-1'))),
+      ).thenThrow(
+        _dioError(type: DioExceptionType.connectionError, path: '/api/MobileAuth/passkey/pk-1'),
+      );
+
+      final result = await enroller().remove('pk-1');
+
+      expect(result.ok, isFalse);
+      expect(result.failure, isA<NetworkError>());
     });
   });
 }

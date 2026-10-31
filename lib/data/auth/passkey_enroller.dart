@@ -94,15 +94,33 @@ class PasskeyEnroller {
   }
 
   /// The signed-in user's enrolled passkeys.
-  Future<List<PasskeySummary>> list() async {
-    final response = await _dio.get<dynamic>(_listPath);
-    final data = response.data;
-    if (data is! List) return const [];
-    return [
-      for (final row in data.whereType<Map>())
-        if (row['id'] is String && (row['id'] as String).isNotEmpty)
-          (id: row['id'] as String, name: row['name'] is String ? row['name'] as String : ''),
-    ];
+  ///
+  /// A transport or parsing failure is reported as [failure] rather than
+  /// collapsed into an empty list: an empty list is a factual answer ("no
+  /// passkeys enrolled"), not an error state.
+  Future<({List<PasskeySummary> items, AuthFailure? failure})> list() async {
+    try {
+      final response = await _dio.get<dynamic>(_listPath);
+      final data = response.data;
+      if (data is! List) {
+        return (
+          items: const <PasskeySummary>[],
+          failure: const UnknownAuthError('Malformed passkey list response'),
+        );
+      }
+      return (
+        items: [
+          for (final row in data.whereType<Map>())
+            if (row['id'] is String && (row['id'] as String).isNotEmpty)
+              (id: row['id'] as String, name: row['name'] is String ? row['name'] as String : ''),
+        ],
+        failure: null,
+      );
+    } on DioException catch (e) {
+      return (items: const <PasskeySummary>[], failure: _mapDioError(e));
+    } catch (e) {
+      return (items: const <PasskeySummary>[], failure: UnknownAuthError(e.toString()));
+    }
   }
 
   /// Removes the passkey [id].
