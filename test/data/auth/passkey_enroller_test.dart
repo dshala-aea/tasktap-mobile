@@ -242,6 +242,26 @@ void main() {
       expect(result.failure, isA<PasskeyUnavailable>());
     });
 
+    test('a missing Google account maps to PasskeyUnavailable', () async {
+      stubStart(_startPayload());
+      when(() => authenticator.register(any())).thenThrow(MissingGoogleSignInException());
+
+      final result = await enroller().enrol(name: 'Pixel 9');
+
+      expect(result.ok, isFalse);
+      expect(result.failure, isA<PasskeyUnavailable>());
+    });
+
+    test('an unavailable sync account maps to PasskeyUnavailable', () async {
+      stubStart(_startPayload());
+      when(() => authenticator.register(any())).thenThrow(SyncAccountNotAvailableException());
+
+      final result = await enroller().enrol(name: 'Pixel 9');
+
+      expect(result.ok, isFalse);
+      expect(result.failure, isA<PasskeyUnavailable>());
+    });
+
     test('a start response without the publicKey wrapper is not passed to the platform', () async {
       stubStart({'passkeyId': 'pk-1', 'publicKeyCredentialCreationOptions': _publicKey});
 

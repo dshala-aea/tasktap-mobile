@@ -67,6 +67,11 @@ class PasskeyEnroller {
       return (ok: false, failure: const PasskeyUnavailable());
     } on DeviceNotSupportedException {
       return (ok: false, failure: const PasskeyUnavailable());
+    } on MissingGoogleSignInException {
+      // Android needs a Google account before it can create a passkey.
+      return (ok: false, failure: const PasskeyUnavailable());
+    } on SyncAccountNotAvailableException {
+      return (ok: false, failure: const PasskeyUnavailable());
     } catch (e) {
       return (ok: false, failure: UnknownAuthError(e.toString()));
     }
