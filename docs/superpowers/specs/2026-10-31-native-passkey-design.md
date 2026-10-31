@@ -169,12 +169,17 @@ identifies them (`sub`).
    {passkeyId, publicKeyCredential, passkeyName}` →
    `POST /v2/users/{id}/passkeys/{passkeyId}` → 204.
 5. Settings shows the registered passkey (from `GET /api/MobileAuth/passkey`),
-   with a delete action (`DELETE /api/MobileAuth/passkey/{id}`). The action is
-   labelled "Rimuovi passkey", not "revoca dispositivo": deleting the
-   credential stops passkey sign-in from that authenticator but does **not**
-   revoke a refresh token already held on that device. Whether removal must
-   also end the device's session is open (§18); ZITADEL's self-service remains
-   available either way.
+   with a remove action (`DELETE /api/MobileAuth/passkey/{id}`). The action is
+   labelled "Rimuovi passkey" and deletes the credential only: it does **not**
+   revoke a refresh token already held on that device. Ending sessions stays
+   with the existing logout/forced-sign-out paths. ZITADEL's self-service
+   remains available.
+
+The enrolment screen carries an explicit warning that a passkey is unlocked by
+this device's screen lock and should only be enrolled on a personal device.
+Passkey sign-in itself is offered on every supported device: enrolment is the
+user's opt-in choice, and a tenant-level switch is out of scope for this pass
+(shared/rotating tablets are addressed by the warning, not by a gate).
 
 No local enrolment hint is stored. The login button's visibility depends only
 on platform support, and the server's `no_passkey_registered` answer is
@@ -325,6 +330,7 @@ Manual device matrix (required before release):
 - Web or kiosk passkeys.
 - Passkey-based re-authentication for the app lock (`BiometricLock` keeps using
   `local_auth`).
+- A tenant/admin switch that disables passkeys on shared devices.
 
 ## 17. Anti-goals
 
@@ -335,24 +341,19 @@ Manual device matrix (required before release):
 
 ## 18. Inputs still needed
 
-Answers that change what gets built:
+Decisions taken (asked and confirmed during review):
 
-1. **Shared devices.** The fleet includes shared/rotating tablets. A passkey is
-   unlocked by the device's screen lock, not a per-user secret, so anyone who
-   can unlock a shared tablet could sign in as a colleague who enrolled a
-   passkey on it. Should passkey sign-in be offered on shared devices at all,
-   and if so, how is enrolment gated (personal device only, per-device opt-in,
-   admin-controlled)? This decides whether the feature ships to the tablet
-   fleet and whether an explicit warning/control is needed.
-2. **Revocation semantics.** Removing a passkey stops passkey sign-in from
-   that authenticator but leaves any refresh token already on the device
-   alive. Must "rimuovi passkey" also terminate that device's ZITADEL sessions?
-   If yes, the API needs a session-termination endpoint and a way to identify
-   the device, and the copy becomes "revoca dispositivo".
-3. **Environments.** Does staging (or any non-production ZITADEL) need
-   passkeys? If so, its issuer host and the iOS entitlement entry must be
-   added, and the association files configured there too. Otherwise the
-   ceremony can only be tested against production.
+1. **Shared devices.** Passkeys are offered everywhere; enrolment (not
+   sign-in) is the gate, and the enrolment screen warns that a passkey is tied
+   to the device's screen lock and belongs on a personal device. A tenant-level
+   switch is deferred.
+2. **Revocation semantics.** Removing a passkey deletes the credential only.
+   It does not end the device's existing session; logout and forced sign-out
+   keep their current behaviour. Copy says "Rimuovi passkey".
+3. **Environments.** Production only for the first release. A staging issuer
+   can be added later with an additional entitlement entry and its own
+   association configuration; the code already derives the RP ID from
+   `OIDC_ISSUER`.
 
 Operational values (needed before the ZITADEL/Apple configuration, not before
 planning):
