@@ -214,12 +214,24 @@ Password login keeps its own `invalid_credentials` contract, unchanged.
 
 ## 10. Mobile contract
 
-`IAuthRepository` gains:
+Provider graph note: `dioProvider` already reads `authRepositoryProvider`
+through `sessionEnderProvider`, so the auth repository cannot depend on the
+authenticated Dio without a cycle. Enrolment therefore lives in its own client
+that reads `dioProvider`, not on `IAuthRepository`.
 
-- `Future<bool> isPasskeySupported()` — platform availability gate.
-- `signInWithPasskey(String loginName)` — same result shape as
-  `signInWithPassword`.
-- `Future<({bool ok, AuthFailure? failure})> registerPasskey({String name})`.
+- `PasskeySupport` (`lib/core/security/passkey_support.dart`) —
+  `Future<bool> isAvailable()`, wrapping
+  `PasskeyAuthenticator().getAvailability()`: Android requires
+  `hasPasskeySupport && isUserVerifyingPlatformAuthenticatorAvailable`, iOS
+  requires `hasPasskeySupport && hasBiometrics`. Exposed as
+  `passkeySupportedProvider`.
+- `IAuthRepository.signInWithPasskey(String loginName)` — same result shape as
+  `signInWithPassword`. Implemented on the repository because sign-in needs no
+  authenticated Dio.
+- `PasskeyEnroller` (`lib/data/auth/passkey_enroller.dart`) —
+  `Future<({bool ok, AuthFailure? failure})> enrol({required String name})`,
+  using the Dio from `dioProvider`; consumed by the settings screen through
+  `passkeyEnrollerProvider`.
 
 New `AuthFailure` cases with Italian copy:
 
