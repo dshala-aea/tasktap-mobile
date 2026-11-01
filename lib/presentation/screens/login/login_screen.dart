@@ -55,7 +55,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final email = prefs.getString(_lastEmailKey);
-      if (email != null && email.isNotEmpty && mounted) {
+      // Only fill an empty field on the first step: a late-resolving preference must not
+      // overwrite what the technician already typed, nor the email shown on the method step.
+      if (email != null &&
+          email.isNotEmpty &&
+          mounted &&
+          _step == _LoginStep.email &&
+          _usernameCtrl.text.isEmpty) {
         _usernameCtrl.text = email;
       }
     } catch (_) {
@@ -79,8 +85,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  /// A deliberately loose shape check: the invite flow creates the account with the email as
+  /// the ZITADEL login name, so a non-address can never authenticate. It only gates the button;
+  /// the server stays the authority on whether the account exists.
+  static final _emailShape = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  static bool _looksLikeEmail(String value) => _emailShape.hasMatch(value.trim());
+
   Future<void> _onContinue() async {
-    if (_usernameCtrl.text.trim().isEmpty) return;
+    if (!_looksLikeEmail(_usernameCtrl.text)) return;
     ref.read(loginProvider.notifier).clearError();
     setState(() => _step = _LoginStep.method);
   }
@@ -195,7 +208,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       AppTextField(
         key: const ValueKey('login-username'),
         controller: _usernameCtrl,
-        label: 'Email o nome utente',
+        label: 'Email',
         keyboardType: TextInputType.emailAddress,
         textInputAction: TextInputAction.next,
         autofillHints: const [AutofillHints.username],
@@ -206,7 +219,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         valueListenable: _usernameCtrl,
         builder: (context, value, _) => AppButton(
           label: 'Continua',
-          onPressed: value.text.trim().isEmpty ? null : _onContinue,
+          onPressed: _looksLikeEmail(value.text) ? _onContinue : null,
         ),
       ),
     ];

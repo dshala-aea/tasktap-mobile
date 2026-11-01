@@ -94,6 +94,22 @@ void main() {
       expect(find.text('Password dimenticata?'), findsNothing);
     });
 
+    testWidgets('Continua refuses an address that is not an email', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      AppButton button() =>
+          tester.widget<AppButton>(find.widgetWithText(AppButton, 'Continua'));
+
+      await tester.enterText(_usernameField, 'not-an-email');
+      await tester.pump();
+      expect(button().onPressed, isNull);
+
+      await tester.enterText(_usernameField, 'tech@tasktap.io');
+      await tester.pump();
+      expect(button().onPressed, isNotNull);
+    });
+
     testWidgets('Continua is disabled while the email is empty', (tester) async {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
@@ -147,6 +163,26 @@ void main() {
 
       expect(_continueCta, findsOneWidget);
       expect(_usernameText(tester), 'tech@tasktap.io');
+    });
+
+    testWidgets('Cambia clears the error of the failed attempt', (tester) async {
+      when(() => repo.signInWithPassword(any(), any()))
+          .thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+      await tester.enterText(_passwordField, 'wrong');
+      await tester.tap(_loginCta);
+      await tester.pumpAndSettle();
+      expect(find.text(authFailureMessage(const InvalidCredentials())), findsOneWidget);
+
+      await tester.tap(find.text('Cambia'));
+      await tester.pumpAndSettle();
+      await tester.tap(_continueCta);
+      await tester.pumpAndSettle();
+
+      expect(find.text(authFailureMessage(const InvalidCredentials())), findsNothing);
     });
 
     testWidgets('both fields stay inside one AutofillGroup', (tester) async {
@@ -246,6 +282,7 @@ void main() {
       expect(_passwordField, findsOneWidget);
       expect(_continueCta, findsNothing);
       expect(find.text(authFailureMessage(const InvalidCredentials())), findsOneWidget);
+      expect(_browserFallbackButton, findsNothing);
     });
 
     testWidgets('the passkey action uses the step-1 email', (tester) async {
