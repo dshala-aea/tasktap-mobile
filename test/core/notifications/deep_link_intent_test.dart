@@ -29,6 +29,28 @@ void main() {
     });
   });
 
+  group('DeepLinkIntent.fromNotification (notification fallback)', () {
+    test('an entity-less notification with an id resolves to the detail page', () {
+      final intent = DeepLinkIntent.fromNotification(
+        type: 'SystemAnnouncement',
+        notificationId: 'n-1',
+      );
+      expect(intent, isNotNull);
+      expect(intent!.resolveRoute(), '/altro/notifiche/n-1');
+    });
+    test('without an id it still resolves to nothing (existing behaviour)', () {
+      expect(DeepLinkIntent.fromNotification(type: 'SystemAnnouncement'), isNull);
+    });
+    test('an entity pair still wins over the notification id', () {
+      final intent = DeepLinkIntent.fromNotification(
+        entityType: 'Ticket',
+        entityId: 't-1',
+        notificationId: 'n-1',
+      );
+      expect(intent!.resolveRoute(), '/ticket/t-1');
+    });
+  });
+
   group('DeepLinkIntent.fromNotification (type-based fallback)', () {
     test('digest without an entity -> ticket list', () {
       final intent = DeepLinkIntent.fromNotification(type: 'TicketOverdueDigest');

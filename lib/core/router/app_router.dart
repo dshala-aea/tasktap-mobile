@@ -160,6 +160,9 @@ abstract final class AppRoutes {
   static const String altroImpostazioni = '/altro/impostazioni';
   static const String altroNotifiche = '/altro/notifiche';
 
+  /// One notification's own page, for the taps that have no entity to open.
+  static String notificaDettaglioPath(String id) => '$altroNotifiche/$id';
+
   /// Per-type notification switches (`/api/notifications/preferences`), reached from Impostazioni.
   static const String altroPreferenzeNotifiche = '/altro/preferenze-notifiche';
 
