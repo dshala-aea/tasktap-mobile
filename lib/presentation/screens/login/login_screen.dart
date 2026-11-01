@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart' show AutofillHints, TextInput;
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -33,11 +36,71 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
 
+  /// Which half of the flow is on screen. The email is asked first because both backends need
+  /// it before anything can happen — the password BFF takes it with the password, and the
+  /// ZITADEL session behind the passkey path needs a user to challenge.
+  _LoginStep _step = _LoginStep.email;
+
+  /// Last email used on this device, so the first step is not retyped every time. A plain
+  /// preference — never a token; the value only prefills an editable field.
+  static const _lastEmailKey = 'login.last_email';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_prefillLastEmail());
+  }
+
+  Future<void> _prefillLastEmail() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final email = prefs.getString(_lastEmailKey);
+      // Only fill an empty field on the first step: a late-resolving preference must not
+      // overwrite what the technician already typed, nor the email shown on the method step.
+      if (email != null &&
+          email.isNotEmpty &&
+          mounted &&
+          _step == _LoginStep.email &&
+          _usernameCtrl.text.isEmpty) {
+        _usernameCtrl.text = email;
+      }
+    } catch (_) {
+      // A preference that cannot be read is not worth blocking sign-in over.
+    }
+  }
+
+  Future<void> _rememberEmail() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastEmailKey, _usernameCtrl.text.trim());
+    } catch (_) {
+      // Same: the convenience of a prefill must never fail a sign-in.
+    }
+  }
+
   @override
   void dispose() {
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
+  }
+
+  /// A deliberately loose shape check: the invite flow creates the account with the email as
+  /// the ZITADEL login name, so a non-address can never authenticate. It only gates the button;
+  /// the server stays the authority on whether the account exists.
+  static final _emailShape = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  static bool _looksLikeEmail(String value) => _emailShape.hasMatch(value.trim());
+
+  Future<void> _onContinue() async {
+    if (!_looksLikeEmail(_usernameCtrl.text)) return;
+    ref.read(loginProvider.notifier).clearError();
+    setState(() => _step = _LoginStep.method);
+  }
+
+  void _onChangeEmail() {
+    ref.read(loginProvider.notifier).clearError();
+    setState(() => _step = _LoginStep.email);
   }
 
   Future<void> _onLogin() async {
@@ -51,6 +114,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // valid, so it can offer to save them — must only fire on success, never on a failed
       // attempt.
       TextInput.finishAutofillContext();
+      await _rememberEmail();
     }
   }
 
@@ -62,6 +126,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     await ref
         .read(loginProvider.notifier)
         .signInWithPasskey(_usernameCtrl.text.trim());
+    if (ref.read(loginProvider).failure == null) {
+      await _rememberEmail();
+    }
     // Deliberately no TextInput.finishAutofillContext() here: the passkey path is not a
     // username/password fill, so there is nothing for the password manager to save.
   }
@@ -91,144 +158,139 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             // No nav clearance here: login is the one screen outside the shell.
             AppSpacing.pagePadding,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: AppSpacing.xxxl),
+          // One group across both steps: the email and the password stay one credential pair
+          // for the platform password manager even though they are asked on separate screens.
+          child: AutofillGroup(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: AppSpacing.xxxl),
 
-              // ── Logo / wordmark ──────────────────────────────────────────
-              // Long-press is the only way in to kiosk activation (see KioskActivationScreen's
-              // own doc comment for why this is deliberately unadvertised) — an ordinary
-              // technician signing in never has a reason to hold their finger on the logo.
-              // Bare GestureDetector, not AppTappable — an InkWell ripple would visibly hint the
-              // logo is interactive, defeating the point (see tappable_convention_test.dart's
-              // `allowed` entry for this file).
-              GestureDetector(
-                onLongPress: () => context.push(AppRoutes.kioskActivate),
-                child: const _TaskTapLogo(),
-              ),
+                // ── Logo / wordmark ──────────────────────────────────────────
+                // Long-press is the only way in to kiosk activation (see KioskActivationScreen's
+                // own doc comment for why this is deliberately unadvertised) — an ordinary
+                // technician signing in never has a reason to hold their finger on the logo.
+                // Bare GestureDetector, not AppTappable — an InkWell ripple would visibly hint
+                // the logo is interactive, defeating the point (see
+                // tappable_convention_test.dart's `allowed` entry for this file).
+                GestureDetector(
+                  onLongPress: () => context.push(AppRoutes.kioskActivate),
+                  child: const _TaskTapLogo(),
+                ),
 
-              const SizedBox(height: AppSpacing.xxxl),
+                const SizedBox(height: AppSpacing.xxxl),
 
-              // ── Heading ──────────────────────────────────────────────────
-              Text('Accedi', style: AppTextStyles.headlineLarge),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Inserisci le tue credenziali TaskTap.',
-                style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
-              ),
+                Text('Accedi', style: AppTextStyles.headlineLarge),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  _step == _LoginStep.email
+                      ? 'Inserisci la tua email per continuare.'
+                      : 'Scegli come accedere.',
+                  style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
+                ),
 
-              const SizedBox(height: AppSpacing.xxl),
+                const SizedBox(height: AppSpacing.xxl),
 
-              // ── Error banner ─────────────────────────────────────────────
-              if (failure != null) ...[
-                InlineAlert(message: authFailureMessage(failure), icon: LucideIcons.alertCircle),
-                const SizedBox(height: AppSpacing.base),
+                if (_step == _LoginStep.email)
+                  ..._emailStep()
+                else
+                  ..._methodStep(isLoading, failure, passkeySupported),
               ],
-
-              // ── Form fields ──────────────────────────────────────────────
-              // AutofillGroup ties the two fields together so the platform password manager
-              // treats them as one credential pair (username + password), matching the fill/save
-              // behavior the old browser-based OIDC flow got for free.
-              AutofillGroup(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AppTextField(
-                      key: const ValueKey('login-username'),
-                      controller: _usernameCtrl,
-                      label: 'Email o nome utente',
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.username],
-                    ),
-                    const SizedBox(height: AppSpacing.base),
-                    AppTextField(
-                      key: const ValueKey('login-password'),
-                      controller: _passwordCtrl,
-                      label: 'Password',
-                      obscureText: true,
-                      textInputAction: TextInputAction.done,
-                      onEditingComplete: isLoading ? null : _onLogin,
-                      autofillHints: const [AutofillHints.password],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: isLoading ? null : _onForgotPassword,
-                  child: const Text('Password dimenticata?'),
-                ),
-              ),
-
-              // ── Browser fallback (unexpected errors only) ───────────────
-              // A wrong-password error just lets the technician retry the same form — no browser
-              // detour needed. Anything else unexpected (network hiccup, backend error, …) gets a
-              // manual way out via the same browser-based flow "Password dimenticata?" uses.
-              if (failure != null && failure is! InvalidCredentials) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: isLoading ? null : _onForgotPassword,
-                    child: const Text('Accedi con il browser'),
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: AppSpacing.base),
-
-              // ── CTA ──────────────────────────────────────────────────────
-              AppButton(
-                label: 'Accedi',
-                onPressed: isLoading ? null : _onLogin,
-                isLoading: isLoading,
-              ),
-
-              const SizedBox(height: AppSpacing.sm),
-
-              // ── Passkey (opt-in) ──────────────────────────────────────────
-              // Only offered when this device can actually use passkeys, and hidden while any
-              // sign-in is in flight. Password remains the primary action.
-              if (passkeySupported && !isLoading) ...[
-                // The lookup needs an account to point ZITADEL's challenge at, so the action
-                // stays disabled until there is an email to name — a tap with an empty field
-                // would only come back as "nessuna passkey".
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _usernameCtrl,
-                  builder: (context, value, _) {
-                    final hasEmail = value.text.trim().isNotEmpty;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        OutlinedButton(
-                          onPressed: hasEmail ? _onPasskey : null,
-                          child: const Text('Accedi con passkey'),
-                        ),
-                        if (!hasEmail) ...[
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            'Inserisci la tua email per usare la passkey.',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: context.colors.inkFaint,
-                            ),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  List<Widget> _emailStep() {
+    return [
+      AppTextField(
+        key: const ValueKey('login-username'),
+        controller: _usernameCtrl,
+        label: 'Email',
+        keyboardType: TextInputType.emailAddress,
+        textInputAction: TextInputAction.next,
+        autofillHints: const [AutofillHints.username],
+        onEditingComplete: _onContinue,
+      ),
+      const SizedBox(height: AppSpacing.base),
+      ValueListenableBuilder<TextEditingValue>(
+        valueListenable: _usernameCtrl,
+        builder: (context, value, _) => AppButton(
+          label: 'Continua',
+          onPressed: _looksLikeEmail(value.text) ? _onContinue : null,
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _methodStep(bool isLoading, AuthFailure? failure, bool passkeySupported) {
+    return [
+      // The email stays visible (and inside the AutofillGroup) so the pair reads as one
+      // credential; "Cambia" is the way back to editing it.
+      AppTextField(
+        key: const ValueKey('login-username'),
+        controller: _usernameCtrl,
+        label: 'Email',
+        keyboardType: TextInputType.emailAddress,
+        autofillHints: const [AutofillHints.username],
+        readOnly: true,
+        suffixIcon: TextButton(
+          onPressed: isLoading ? null : _onChangeEmail,
+          child: const Text('Cambia'),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.base),
+      AppTextField(
+        key: const ValueKey('login-password'),
+        controller: _passwordCtrl,
+        label: 'Password',
+        obscureText: true,
+        textInputAction: TextInputAction.done,
+        onEditingComplete: isLoading ? null : _onLogin,
+        autofillHints: const [AutofillHints.password],
+      ),
+      if (failure != null) ...[
+        const SizedBox(height: AppSpacing.base),
+        InlineAlert(message: authFailureMessage(failure), icon: LucideIcons.alertCircle),
+      ],
+      if (failure != null && failure is! InvalidCredentials) ...[
+        const SizedBox(height: AppSpacing.sm),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: isLoading ? null : _onForgotPassword,
+            child: const Text('Accedi con il browser'),
+          ),
+        ),
+      ],
+      const SizedBox(height: AppSpacing.sm),
+      Align(
+        alignment: Alignment.centerRight,
+        child: TextButton(
+          onPressed: isLoading ? null : _onForgotPassword,
+          child: const Text('Password dimenticata?'),
+        ),
+      ),
+      const SizedBox(height: AppSpacing.base),
+      AppButton(
+        label: 'Accedi',
+        onPressed: isLoading ? null : _onLogin,
+        isLoading: isLoading,
+      ),
+      if (passkeySupported && !isLoading) ...[
+        const SizedBox(height: AppSpacing.sm),
+        OutlinedButton(
+          onPressed: _onPasskey,
+          child: const Text('Accedi con passkey'),
+        ),
+      ],
+    ];
+  }
 }
+
+enum _LoginStep { email, method }
 
 /// Inline TaskTap logo — accent pill with wordmark.
 class _TaskTapLogo extends StatelessWidget {
