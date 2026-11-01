@@ -260,20 +260,7 @@ class NotificationService {
 
   /// Handle notification tap — deep-link to the relevant screen.
   void _handleNotificationTap(RemoteMessage message) {
-    final data = message.data;
-    if (data.isEmpty) return;
-
-    final entityType = data['relatedEntityType'] as String?;
-    final entityId = data['relatedEntityId'] as String?;
-    // The backend puts the NotificationTypeEnum *name* in `type`.
-    final type = data['type'] as String?;
-
-    // Entity pair when present; otherwise a type-keyed route (the overdue digest has no entity).
-    final intent = DeepLinkIntent.fromNotification(
-      type: type,
-      entityType: entityType,
-      entityId: entityId,
-    );
+    final intent = intentFromPushData(message.data);
     if (intent == null) return;
 
     // Store the deep-link intent; the router will consume it.
@@ -358,40 +345,82 @@ const Map<String, String> kNotificationTypeRoutes = {
   'TicketOverdueDigest': AppRoutes.ticket,
 };
 
-/// Types that only inform: tapping one marks it read and opens nothing, and the list shows no
-/// "no page linked" SnackBar for them.
+/// Types that only inform: with no entity and no type route, their tap opens the notification's
+/// own detail page (see [DeepLinkIntent.notificationId]) so the full text is readable.
 const Set<String> kInformationalNotificationTypes = {'WorkLogCorrected'};
+
+/// The push payload → deep-link decision, kept pure so it is testable without
+/// Firebase.
+///
+/// The backend sends `notificationId`, `type` and, when there is one, the
+/// `relatedEntityType`/`relatedEntityId` pair. An entity-less push therefore has
+/// enough to open the notification's own page.
+DeepLinkIntent? intentFromPushData(Map<String, dynamic> data) {
+  if (data.isEmpty) return null;
+  return DeepLinkIntent.fromNotification(
+    // The backend puts the NotificationTypeEnum *name* in `type`.
+    type: data['type'] as String?,
+    entityType: data['relatedEntityType'] as String?,
+    entityId: data['relatedEntityId'] as String?,
+    notificationId: data['notificationId'] as String?,
+  );
+}
 
 /// Deep-link intent parsed from a notification tap.
 class DeepLinkIntent {
-  const DeepLinkIntent({required this.entityType, required this.entityId});
+  const DeepLinkIntent({
+    required this.entityType,
+    required this.entityId,
+    this.notificationId,
+  });
 
   final String entityType;
   final String entityId;
 
+  /// Present when the intent resolves to the notification's own detail page rather than an
+  /// entity: the page loads by id alone, so a push tap works without the list.
+  final String? notificationId;
+
   /// The one place list taps and push taps decide what a notification opens.
   ///
   /// A complete entity pair wins; otherwise a type-only route from [kNotificationTypeRoutes];
-  /// otherwise null (nothing to open).
+  /// otherwise the notification's detail page when [notificationId] is present; otherwise null.
   static DeepLinkIntent? fromNotification({
     String? type,
     String? entityType,
     String? entityId,
+    String? notificationId,
   }) {
     if (entityType != null &&
         entityType.isNotEmpty &&
         entityId != null &&
         entityId.isNotEmpty) {
-      return DeepLinkIntent(entityType: entityType, entityId: entityId);
+      final entity = DeepLinkIntent(entityType: entityType, entityId: entityId);
+      // An entity type with no mobile destination (Magazzino, User, …) must not
+      // swallow the tap: fall through so the notification's own page can open.
+      if (entity.resolveRoute() != null) return entity;
     }
     if (type != null && kNotificationTypeRoutes.containsKey(type)) {
       return DeepLinkIntent(entityType: type, entityId: '');
+    }
+    if (notificationId != null && notificationId.isNotEmpty) {
+      return DeepLinkIntent(
+        entityType: '',
+        entityId: '',
+        notificationId: notificationId,
+      );
     }
     return null;
   }
 
   /// Resolve the route path for this deep-link.
   String? resolveRoute() {
+    if (entityType.isEmpty) {
+      final id = notificationId;
+      return id == null || id.isEmpty
+          ? null
+          : AppRoutes.notificaDettaglioPath(id);
+    }
     return switch (entityType) {
       'Ticket' => AppRoutes.ticketDetailPath(entityId),
       'Schedule' => AppRoutes.calendario,

@@ -7,6 +7,7 @@ import '../../core/notifications/notification_service.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/widgets/widgets.dart';
+import 'notifica_ui.dart';
 import 'notifiche_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -55,31 +56,19 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
     });
   }
 
-  /// Navigates to whatever the notification is about, if it names something we can open.
+  /// Navigates to whatever the notification is about.
   ///
-  /// When the pair is absent or the type has no mobile screen, stays put and says so with a
-  /// SnackBar — the notification has still been marked read, but a tap that visibly does nothing
-  /// reads as a broken app.
+  /// Entity pair first; otherwise a type-keyed route (the overdue digest opens
+  /// the list); otherwise the notification's own page, which needs only its id.
+  /// The read mark is the row's separate job — see the tap handler below.
   void _openRelatedEntity(BuildContext context, AppNotifica n) {
-    // Entity pair first; a notification without one (the overdue digest) falls back to a route
-    // keyed on its type — the same rule a push tap applies.
     final route = DeepLinkIntent.fromNotification(
       type: n.tipo,
       entityType: n.relatedEntityType,
       entityId: n.relatedEntityId,
+      notificationId: n.id,
     )?.resolveRoute();
-    if (route != null) {
-      context.push(route);
-      return;
-    }
-    // Informational types ("your entry was corrected") have nothing to open and nothing to
-    // explain: the tap just marks them read.
-    if (kInformationalNotificationTypes.contains(n.tipo)) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Nessuna pagina collegata a questa notifica')),
-      );
+    if (route != null) context.push(route);
   }
 
   @override
@@ -240,33 +229,6 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
 // Notification row
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Icon for a notification's `tipo` (the wire `NotificationTypeEnum` name — see
-/// notification_api_client.dart's `_kNotificationTypeNames`). Falls back to the generic bell for
-/// any type not covered here — this deliberately doesn't attempt full 1:1 coverage of every
-/// notification type, only the ones with an unambiguous, already-established icon elsewhere in
-/// this app (ticket icons match ticket_list_screen.dart; report icons match
-/// ticket_detail_screen.dart's 'Report' tab / step_riepilogo.dart's own alertTriangle for a
-/// problem state; hardHat matches cantiere/worksite iconography app-wide).
-IconData _iconForTipo(String? tipo) {
-  return switch (tipo) {
-    'TicketAssigned' || 'TicketCreated' => LucideIcons.ticket,
-    'TicketStatusChanged' || 'TicketCompleted' => LucideIcons.clipboardCheck,
-    'TicketOverdue' || 'TicketOverdueDigest' => LucideIcons.alertTriangle,
-    'ScheduleReminder' || 'ScheduleStarting' => LucideIcons.calendar,
-    'WorkLogSubmitted' => LucideIcons.fileText,
-    'ReportReviewed' => LucideIcons.clipboardCheck,
-    'ReportRejected' => LucideIcons.fileX,
-    'ReportCancelled' => LucideIcons.calendarX,
-    'AbsenceRequestSubmitted' ||
-    'AbsenceRequestDecided' => LucideIcons.calendarCheck,
-    'CantiereAssigned' => LucideIcons.hardHat,
-    'SeatLimitAlert' => LucideIcons.alertTriangle,
-    // lucide_icons ^0.257.0 has no clockAlert; pencil reads as "edited".
-    'WorkLogCorrected' => LucideIcons.pencil,
-    _ => LucideIcons.bell,
-  };
-}
-
 class _NotificaRow extends StatelessWidget {
   const _NotificaRow({
     required this.notifica,
@@ -292,7 +254,7 @@ class _NotificaRow extends StatelessWidget {
               borderRadius: AppRack.insetShape,
             ),
             child: Icon(
-              _iconForTipo(notifica.tipo),
+              notificaIcon(notifica.tipo),
               size: 20,
               color: context.colors.blue,
             ),

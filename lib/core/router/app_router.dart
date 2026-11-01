@@ -6,6 +6,7 @@ import '../widgets/widgets.dart';
 import '../../features/altro/altro_hub_screen.dart';
 import '../../features/altro/i_miei_dati_screen.dart';
 import '../../features/altro/impostazioni_screen.dart';
+import '../../features/altro/notifica_detail_screen.dart';
 import '../../features/altro/notifiche_screen.dart';
 import '../../features/altro/notification_preferences_screen.dart';
 import '../../features/badge/badge_scan_screen.dart';
@@ -159,6 +160,9 @@ abstract final class AppRoutes {
   static const String altroRapportini = '/altro/rapportini';
   static const String altroImpostazioni = '/altro/impostazioni';
   static const String altroNotifiche = '/altro/notifiche';
+
+  /// One notification's own page, for the taps that have no entity to open.
+  static String notificaDettaglioPath(String id) => '$altroNotifiche/$id';
 
   /// Per-type notification switches (`/api/notifications/preferences`), reached from Impostazioni.
   static const String altroPreferenzeNotifiche = '/altro/preferenze-notifiche';
@@ -714,6 +718,16 @@ GoRouter buildRouter(WidgetRef ref) {
                   GoRoute(
                     path: 'notifiche',
                     builder: (context, state) => const NotificheScreen(),
+                    routes: [
+                      // The taps with no entity to open land here; the page loads
+                      // by id, so a push tap works without the list.
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) => NotificaDetailScreen(
+                          id: state.pathParameters['id']!,
+                        ),
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: 'preferenze-notifiche',
