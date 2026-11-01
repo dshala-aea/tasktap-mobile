@@ -231,7 +231,21 @@ class ZitadelAuthRepository implements IAuthRepository {
       final options = data is Map
           ? data['publicKeyCredentialRequestOptions']
           : null;
-      final publicKey = options is Map ? options['publicKey'] : null;
+      // ZITADEL's gateway serialises the WebAuthn options as the inner object
+      // (challenge/rpId/allowCredentials); older docs and some versions wrap it
+      // in a top-level `publicKey`. Accept either, but only a shape that
+      // actually carries a challenge — anything else is malformed, not empty
+      // options that would produce a useless prompt.
+      final Map<dynamic, dynamic>? publicKey;
+      if (options is! Map) {
+        publicKey = null;
+      } else if (options['publicKey'] is Map) {
+        publicKey = options['publicKey'] as Map;
+      } else if (options['challenge'] is String) {
+        publicKey = options;
+      } else {
+        publicKey = null;
+      }
       if (rawSessionId is! String ||
           rawSessionId.isEmpty ||
           rawSessionToken is! String ||

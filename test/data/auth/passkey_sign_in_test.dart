@@ -251,6 +251,31 @@ void main() {
   );
 
   group('signInWithPasskey', () {
+    test('accepts options sent without the publicKey wrapper', () async {
+      stubAuthorizeRedirect('authreq-1');
+      stubStart({
+        'sessionId': 's1',
+        'sessionToken': 'st',
+        'publicKeyCredentialRequestOptions': _publicKey,
+      });
+      when(
+        () => passkeyAuthenticator.authenticate(any()),
+      ).thenAnswer((_) async => _assertion());
+      stubComplete();
+      stubTokenExchange();
+
+      final result = await repo().signInWithPasskey('tech@tasktap.io');
+
+      expect(result.failure, isNull);
+      final authRequest =
+          verify(
+                () => passkeyAuthenticator.authenticate(captureAny()),
+              ).captured.single
+              as AuthenticateRequestType;
+      expect(authRequest.challenge, 'Y2hhbGxlbmdl');
+      expect(authRequest.relyingPartyId, 'auth.tasktap.it');
+    });
+
     test(
       'unwraps publicKey before authenticating and sends toJson() to complete',
       () async {

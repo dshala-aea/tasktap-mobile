@@ -164,6 +164,23 @@ void main() {
       });
     });
 
+    test('enrol accepts creation options sent without the publicKey wrapper', () async {
+      stubStart({
+        'passkeyId': 'pk-1',
+        'publicKeyCredentialCreationOptions': _publicKey,
+      });
+      when(() => authenticator.register(any())).thenAnswer((_) async => _credential());
+      stubComplete();
+
+      final result = await enroller().enrol(name: 'Pixel 9');
+
+      expect(result.ok, isTrue);
+      final request =
+          verify(() => authenticator.register(captureAny())).captured.single as RegisterRequestType;
+      expect(request.challenge, 'Y2hhbGxlbmdl');
+      expect(request.relyingParty.id, 'auth.tasktap.it');
+    });
+
     test('enrol offline returns NetworkError and does not claim success', () async {
       stubStartError(
         _dioError(
@@ -324,8 +341,11 @@ void main() {
       expect(result.failure, isA<PasskeyUnavailable>());
     });
 
-    test('a start response without the publicKey wrapper is not passed to the platform', () async {
-      stubStart({'passkeyId': 'pk-1', 'publicKeyCredentialCreationOptions': _publicKey});
+    test('a creation-options object with no challenge is not passed to the platform', () async {
+      stubStart({
+        'passkeyId': 'pk-1',
+        'publicKeyCredentialCreationOptions': <String, dynamic>{'foo': 'bar'},
+      });
 
       final result = await enroller().enrol(name: 'Pixel 9');
 
