@@ -13,6 +13,8 @@ import '../../core/startup/startup_report.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
+import 'passkey_diagnostics.dart';
+import 'passkey_options.dart';
 import 'pkce.dart';
 
 /// Zitadel OIDC implementation of [IAuthRepository].
@@ -231,44 +233,43 @@ class ZitadelAuthRepository implements IAuthRepository {
       final options = data is Map
           ? data['publicKeyCredentialRequestOptions']
           : null;
-      // ZITADEL's gateway serialises the WebAuthn options as the inner object
-      // (challenge/rpId/allowCredentials); older docs and some versions wrap it
-      // in a top-level `publicKey`. Accept either, but only a shape that
-      // actually carries a challenge — anything else is malformed, not empty
-      // options that would produce a useless prompt.
-      final Map<dynamic, dynamic>? publicKey;
-      if (options is! Map) {
-        publicKey = null;
-      } else if (options['publicKey'] is Map) {
-        publicKey = options['publicKey'] as Map;
-      } else if (options['challenge'] is String) {
-        publicKey = options;
-      } else {
-        publicKey = null;
-      }
+      // Wrapped, unwrapped, or JSON-encoded by the gateway — see passkey_options.dart.
+      final publicKey = passkeyOptionsMap(
+        options,
+        wrapperKey: 'publicKey',
+        requiredKey: 'challenge',
+      );
       if (rawSessionId is! String ||
           rawSessionId.isEmpty ||
           rawSessionToken is! String ||
           rawSessionToken.isEmpty ||
-          publicKey is! Map) {
+          publicKey == null) {
         return (
           user: null,
-          failure: const UnknownAuthError('Malformed passkey start response'),
+          failure: UnknownAuthError(
+            kPasskeyDiagnostics
+                ? 'DIAG malformed login start: body=${describePasskeyPayload(data)} '
+                      'sessionId=$rawSessionId token=$rawSessionToken '
+                      'options=${describePasskeyPayload(options)}'
+                : 'Malformed passkey start response',
+          ),
         );
       }
       sessionId = rawSessionId;
       sessionToken = rawSessionToken;
-      request = AuthenticateRequestType.fromJson(
-        Map<String, dynamic>.from(publicKey),
-      );
+      request = AuthenticateRequestType.fromJson(publicKey);
     } on DioException catch (e) {
       return (user: null, failure: _mapPasskeyHttpError(e));
-    } catch (_) {
+    } catch (e) {
       // A publicKey shape the package rejects must surface as a typed failure,
       // never escape as a raw FormatException/TypeError.
       return (
         user: null,
-        failure: const UnknownAuthError('Malformed passkey start response'),
+        failure: UnknownAuthError(
+          kPasskeyDiagnostics
+              ? 'DIAG login parse failed: $e'
+              : 'Malformed passkey start response',
+        ),
       );
     }
 
@@ -282,12 +283,22 @@ class ZitadelAuthRepository implements IAuthRepository {
     } on NoCredentialsAvailableException {
       // This device holds no credential for the account; the copy must not
       // distinguish it from "the account has no passkey".
-      return (user: null, failure: const PasskeyNotRegistered());
+      return (
+        user: null,
+        failure: kPasskeyDiagnostics
+            ? const UnknownAuthError('DIAG platform: no credentials on this device')
+            : const PasskeyNotRegistered(),
+      );
     } on DomainNotAssociatedException catch (e) {
       debugPrint(
         'Passkey domain not associated (check the RP ID and app-site association files): ${e.message}',
       );
-      return (user: null, failure: const PasskeyUnavailable());
+      return (
+        user: null,
+        failure: kPasskeyDiagnostics
+            ? UnknownAuthError('DIAG platform: domain not associated (${e.message})')
+            : const PasskeyUnavailable(),
+      );
     } on PasskeyUnsupportedException catch (e) {
       debugPrint('Passkey authenticator unsupported on this device: $e');
       return (user: null, failure: const PasskeyUnavailable());
@@ -729,7 +740,9 @@ class ZitadelAuthRepository implements IAuthRepository {
         : null;
     if (code == null) return _mapError(e);
     return switch (code) {
-      'no_passkey_registered' => const PasskeyNotRegistered(),
+      'no_passkey_registered' => kPasskeyDiagnostics
+          ? const UnknownAuthError('DIAG backend: no_passkey_registered')
+          : const PasskeyNotRegistered(),
       'passkey_verification_failed' => const PasskeyVerificationFailed(),
       'identity_provider_unavailable' => const ServiceUnavailable(),
       'additional_factor_required' => const AdditionalFactorRequired(),
