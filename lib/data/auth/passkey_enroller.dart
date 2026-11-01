@@ -39,9 +39,20 @@ class PasskeyEnroller {
       final data = response.data;
       final rawId = data is Map ? data['passkeyId'] : null;
       final rawOptions = data is Map ? data['publicKeyCredentialCreationOptions'] : null;
-      // ZITADEL wraps the creation options in a top-level `publicKey`; the
-      // package's parser expects the inner object.
-      final publicKey = rawOptions is Map ? rawOptions['publicKey'] : null;
+      // ZITADEL's gateway returns the inner creation options; older docs wrap
+      // them in a top-level `publicKey`. Accept either, but require the fields
+      // that make it a creation request (challenge + rp) so an empty or
+      // unrelated object is rejected rather than registered with blanks.
+      final Map<dynamic, dynamic>? publicKey;
+      if (rawOptions is! Map) {
+        publicKey = null;
+      } else if (rawOptions['publicKey'] is Map) {
+        publicKey = rawOptions['publicKey'] as Map;
+      } else if (rawOptions['challenge'] is String && rawOptions['rp'] is Map) {
+        publicKey = rawOptions;
+      } else {
+        publicKey = null;
+      }
       if (rawId is! String || rawId.isEmpty || publicKey is! Map) {
         return (ok: false, failure: const UnknownAuthError('Malformed passkey start response'));
       }
