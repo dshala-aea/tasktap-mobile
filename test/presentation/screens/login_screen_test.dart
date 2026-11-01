@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/core/security/passkey_support.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
@@ -66,6 +67,7 @@ void main() {
   late StreamController<AuthUser?> authStream;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     repo = MockAuthRepository();
     authStream = StreamController<AuthUser?>.broadcast();
     when(() => repo.authStateChanges).thenAnswer((_) => authStream.stream);
@@ -167,6 +169,48 @@ void main() {
       final password = _passwordTextField(tester);
       expect(username.autofillHints, contains(AutofillHints.username));
       expect(password.autofillHints, contains(AutofillHints.password));
+    });
+  });
+
+  group('remembered email', () {
+    testWidgets('a saved email prefills the first step', (tester) async {
+      SharedPreferences.setMockInitialValues({'login.last_email': 'saved@tasktap.io'});
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      expect(_usernameText(tester), 'saved@tasktap.io');
+    });
+
+    testWidgets('a successful password sign-in remembers the email', (tester) async {
+      when(() => repo.signInWithPassword(any(), any()))
+          .thenAnswer((_) async => (user: null, failure: null));
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+      await tester.enterText(_passwordField, 'correct-password');
+      await tester.tap(_loginCta);
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('login.last_email'), 'tech@tasktap.io');
+    });
+
+    testWidgets('a failed attempt does not overwrite the saved email', (tester) async {
+      SharedPreferences.setMockInitialValues({'login.last_email': 'old@tasktap.io'});
+      when(() => repo.signInWithPassword(any(), any()))
+          .thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester, email: 'new@tasktap.io');
+      await tester.enterText(_passwordField, 'wrong');
+      await tester.tap(_loginCta);
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('login.last_email'), 'old@tasktap.io');
     });
   });
 

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart' show AutofillHints, TextInput;
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -38,6 +41,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// ZITADEL session behind the passkey path needs a user to challenge.
   _LoginStep _step = _LoginStep.email;
 
+  /// Last email used on this device, so the first step is not retyped every time. A plain
+  /// preference — never a token; the value only prefills an editable field.
+  static const _lastEmailKey = 'login.last_email';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_prefillLastEmail());
+  }
+
+  Future<void> _prefillLastEmail() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final email = prefs.getString(_lastEmailKey);
+      if (email != null && email.isNotEmpty && mounted) {
+        _usernameCtrl.text = email;
+      }
+    } catch (_) {
+      // A preference that cannot be read is not worth blocking sign-in over.
+    }
+  }
+
+  Future<void> _rememberEmail() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastEmailKey, _usernameCtrl.text.trim());
+    } catch (_) {
+      // Same: the convenience of a prefill must never fail a sign-in.
+    }
+  }
+
   @override
   void dispose() {
     _usernameCtrl.dispose();
@@ -67,6 +101,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // valid, so it can offer to save them — must only fire on success, never on a failed
       // attempt.
       TextInput.finishAutofillContext();
+      await _rememberEmail();
     }
   }
 
@@ -78,6 +113,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     await ref
         .read(loginProvider.notifier)
         .signInWithPasskey(_usernameCtrl.text.trim());
+    if (ref.read(loginProvider).failure == null) {
+      await _rememberEmail();
+    }
     // Deliberately no TextInput.finishAutofillContext() here: the passkey path is not a
     // username/password fill, so there is nothing for the password manager to save.
   }
