@@ -391,7 +391,10 @@ class DeepLinkIntent {
         entityType.isNotEmpty &&
         entityId != null &&
         entityId.isNotEmpty) {
-      return DeepLinkIntent(entityType: entityType, entityId: entityId);
+      final entity = DeepLinkIntent(entityType: entityType, entityId: entityId);
+      // An entity type with no mobile destination (Magazzino, User, …) must not
+      // swallow the tap: fall through so the notification's own page can open.
+      if (entity.resolveRoute() != null) return entity;
     }
     if (type != null && kNotificationTypeRoutes.containsKey(type)) {
       return DeepLinkIntent(entityType: type, entityId: '');

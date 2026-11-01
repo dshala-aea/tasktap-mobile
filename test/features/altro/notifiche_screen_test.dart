@@ -115,6 +115,10 @@ Future<Widget> _buildScreen({
             builder: (_, _) => const Text('STUB ferie'),
           ),
           GoRoute(path: '/calendario', builder: (_, _) => const Text('STUB calendario')),
+          GoRoute(
+            path: '/altro/notifiche/:id',
+            builder: (_, s) => Text('STUB notifica ${s.pathParameters['id']}'),
+          ),
         ],
       ),
     ),
@@ -293,9 +297,9 @@ void main() {
     });
   }
 
-  // ── 9. Unroutable tap: read + explanatory SnackBar, no navigation ─────────
+  // ── 9. No route of any kind: the notification's own page ──────────────────
   for (final type in const ['WorkLog', 'Magazzino', 'User', 'Tenant']) {
-    testWidgets('tap on unroutable $type notification shows SnackBar', (tester) async {
+    testWidgets('tap on unroutable $type notification opens its page', (tester) async {
       await tester.pumpWidget(
         await _buildScreen(
           notifiche: [_fakeNotifica(tipo: 'SeatLimitAlert', relatedEntityType: type, relatedEntityId: 'x1')],
@@ -306,13 +310,26 @@ void main() {
       await tester.tap(find.text('Nuovo intervento'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nessuna pagina collegata a questa notifica'), findsOneWidget);
-      expect(find.text('Segna tutte'), findsNothing);
+      expect(find.text('STUB notifica n1'), findsOneWidget);
+      expect(find.text('Nessuna pagina collegata a questa notifica'), findsNothing);
       await drain(tester);
     });
   }
 
-  testWidgets('WorkLogCorrected row: pencil icon, tap marks read, no SnackBar, no navigation', (
+  testWidgets('tap on an entity-less announcement opens its page', (tester) async {
+    await tester.pumpWidget(
+      await _buildScreen(notifiche: [_fakeNotifica(tipo: 'SystemAnnouncement')]),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Nuovo intervento'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('STUB notifica n1'), findsOneWidget);
+    await drain(tester);
+  });
+
+  testWidgets('WorkLogCorrected row: pencil icon, tap opens its page', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -333,9 +350,8 @@ void main() {
     await tester.tap(find.text('Nuovo intervento'));
     await tester.pumpAndSettle();
 
+    expect(find.text('STUB notifica n1'), findsOneWidget);
     expect(find.text('Nessuna pagina collegata a questa notifica'), findsNothing);
-    expect(find.text('Nuovo intervento'), findsOneWidget); // still on the list
-    expect(find.text('Segna tutte'), findsNothing); // marked read
     await drain(tester);
   });
 
@@ -360,14 +376,14 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('tap on notification without related entity shows SnackBar', (tester) async {
+  testWidgets('tap on notification without related entity opens its page', (tester) async {
     await tester.pumpWidget(await _buildScreen(notifiche: [_fakeNotifica()]));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Nuovo intervento'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Nessuna pagina collegata a questa notifica'), findsOneWidget);
+    expect(find.text('STUB notifica n1'), findsOneWidget);
     await drain(tester);
   });
 }

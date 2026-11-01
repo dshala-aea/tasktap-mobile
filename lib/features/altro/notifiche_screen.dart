@@ -56,31 +56,19 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
     });
   }
 
-  /// Navigates to whatever the notification is about, if it names something we can open.
+  /// Navigates to whatever the notification is about.
   ///
-  /// When the pair is absent or the type has no mobile screen, stays put and says so with a
-  /// SnackBar — the notification has still been marked read, but a tap that visibly does nothing
-  /// reads as a broken app.
+  /// Entity pair first; otherwise a type-keyed route (the overdue digest opens
+  /// the list); otherwise the notification's own page, which needs only its id.
+  /// The read mark is the row's separate job — see the tap handler below.
   void _openRelatedEntity(BuildContext context, AppNotifica n) {
-    // Entity pair first; a notification without one (the overdue digest) falls back to a route
-    // keyed on its type — the same rule a push tap applies.
     final route = DeepLinkIntent.fromNotification(
       type: n.tipo,
       entityType: n.relatedEntityType,
       entityId: n.relatedEntityId,
+      notificationId: n.id,
     )?.resolveRoute();
-    if (route != null) {
-      context.push(route);
-      return;
-    }
-    // Informational types ("your entry was corrected") have nothing to open and nothing to
-    // explain: the tap just marks them read.
-    if (kInformationalNotificationTypes.contains(n.tipo)) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Nessuna pagina collegata a questa notifica')),
-      );
+    if (route != null) context.push(route);
   }
 
   @override
