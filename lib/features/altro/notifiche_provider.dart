@@ -53,6 +53,21 @@ class AppNotifica {
     );
   }
 
+  /// Convert from the API DTO (used by the by-id detail fetch, which has no
+  /// local row to read).
+  factory AppNotifica.fromDto(NotificationDto dto) {
+    return AppNotifica(
+      id: dto.id,
+      titolo: dto.title,
+      corpo: dto.message,
+      timestamp: DateTime.parse(dto.createdAt),
+      letta: dto.isRead,
+      tipo: dto.type,
+      relatedEntityId: dto.relatedEntityId,
+      relatedEntityType: dto.relatedEntityType,
+    );
+  }
+
   /// Convert from the Drift-generated [AppNotification] row.
   factory AppNotifica.fromDrift(AppNotification row) {
     return AppNotifica(
@@ -475,4 +490,34 @@ final notificheHasErrorProvider = StateProvider<bool>((ref) => false);
 final notificationRefreshProvider = FutureProvider<void>((ref) async {
   final notifier = ref.read(notificheProvider.notifier);
   await notifier.refresh();
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Detail page fetch
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// A notification id that cannot be shown: it does not exist (404) or belongs to
+/// somebody else (403). The page renders both identically.
+class NotificaNonDisponibile implements Exception {
+  const NotificaNonDisponibile();
+}
+
+/// One notification by id.
+///
+/// The detail page takes only an id — a push tap or a refresh must work without
+/// the list ever having been loaded — so this fetches from the server instead of
+/// reading [notificheProvider]'s cache.
+final notificaDettaglioProvider =
+    FutureProvider.autoDispose.family<AppNotifica, String>((ref, id) async {
+  final dio = ref.watch(dioProvider);
+  try {
+    final dto = await NotificationApiClient(dio).getNotification(id);
+    return AppNotifica.fromDto(dto);
+  } on DioException catch (e) {
+    final status = e.response?.statusCode;
+    if (status == 404 || status == 403) {
+      throw const NotificaNonDisponibile();
+    }
+    rethrow;
+  }
 });
