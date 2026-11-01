@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/features/onboarding/onboarding_provider.dart';
 import 'package:tasktap_mobile/features/onboarding/onboarding_screen.dart';
+import 'package:tasktap_mobile/features/onboarding/onboarding_notification_ask.dart';
 
 class _SpyLocationService extends ILocationService {
   int calls = 0;
@@ -66,6 +67,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(built.location.calls, 0);
+  });
+
+  testWidgets('a notification request that throws is not an unhandled error', (tester) async {
+    final location = _SpyLocationService();
+    final container = ProviderContainer(
+      overrides: [
+        locationServiceProvider.overrideWithValue(location),
+        onboardingNotificationAskProvider.overrideWithValue(
+          () async => throw Exception('channel error'),
+        ),
+        notificationAvailableProvider.overrideWithValue(true),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: OnboardingScreen(userId: 'user-1')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Attiva le notifiche'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Non è stato possibile attivare le notifiche. Riprova.'), findsOneWidget);
+    // The action stays available to retry.
+    expect(find.text('Attiva le notifiche'), findsOneWidget);
   });
 
   testWidgets('Inizia completes onboarding for the user', (tester) async {

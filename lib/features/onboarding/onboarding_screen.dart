@@ -2,10 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/notifications/notification_service.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/app_button.dart';
+import 'onboarding_notification_ask.dart';
 import 'onboarding_provider.dart';
 
 /// One-time, post-login welcome.
@@ -27,6 +27,7 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool _completing = false;
   bool _notificationsGranted = false;
+  bool _notificationRequestFailed = false;
 
   Future<void> _complete() async {
     if (_completing) return;
@@ -38,14 +39,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _askNotifications() async {
-    if (!NotificationService.isAvailable) return;
-    final granted = await NotificationService.instance.ensurePermission();
-    if (mounted) setState(() => _notificationsGranted = granted);
+    try {
+      final granted = await ref.read(onboardingNotificationAskProvider)();
+      if (mounted) {
+        setState(() {
+          _notificationsGranted = granted;
+          _notificationRequestFailed = false;
+        });
+      }
+    } catch (_) {
+      // A platform/channel failure must not escape as an unhandled async error: the welcome
+      // stays usable and the action can be retried.
+      if (mounted) setState(() => _notificationRequestFailed = true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final notificationsAvailable = NotificationService.isAvailable;
+    final notificationsAvailable = ref.watch(notificationAvailableProvider);
 
     return Scaffold(
       backgroundColor: context.colors.bg1,
@@ -90,12 +101,20 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
                   )
-                else
+                else if (!notificationsAvailable)
                   Text(
                     'Non disponibile su questo dispositivo.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
                   ),
+                if (_notificationRequestFailed) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Non è stato possibile attivare le notifiche. Riprova.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.xl),
                 AppButton(label: 'Inizia', onPressed: _complete, size: AppButtonSize.lg),
               ],
