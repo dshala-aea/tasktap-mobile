@@ -316,6 +316,8 @@ void main() {
                 as AuthenticateRequestType;
         expect(authRequest.challenge, 'Y2hhbGxlbmdl');
         expect(authRequest.relyingPartyId, 'auth.tasktap.it');
+        // Cross-device / third-party credential providers must be selectable.
+        expect(authRequest.preferImmediatelyAvailableCredentials, isFalse);
 
         // Complete: the package's nested toJson() shape, and no loginName.
         final completeBody =

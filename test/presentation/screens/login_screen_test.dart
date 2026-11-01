@@ -167,6 +167,23 @@ void main() {
       expect(_passkeyButton, findsOneWidget);
     });
 
+    testWidgets('the passkey button is disabled until an email is entered', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo, passkeySupported: true));
+      await tester.pumpAndSettle();
+
+      OutlinedButton button() =>
+          tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Accedi con passkey'));
+
+      expect(button().onPressed, isNull);
+      expect(find.text('Inserisci la tua email per usare la passkey.'), findsOneWidget);
+
+      await tester.enterText(_usernameField, 'tech@tasktap.io');
+      await tester.pump();
+
+      expect(button().onPressed, isNotNull);
+      expect(find.text('Inserisci la tua email per usare la passkey.'), findsNothing);
+    });
+
     testWidgets('double tapping the passkey button starts one attempt', (tester) async {
       final completer = Completer<({AuthUser? user, AuthFailure? failure})>();
       when(() => repo.signInWithPasskey(any())).thenAnswer((_) => completer.future);
@@ -175,6 +192,8 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(_usernameField, 'tech@tasktap.io');
+      // The passkey action is gated on a non-empty email; let the rebuild land before tapping.
+      await tester.pump();
 
       // Two taps inside the same frame: the second must hit the loading guard, not a second
       // native passkey prompt.

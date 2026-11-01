@@ -5,6 +5,7 @@ import 'package:passkeys/types.dart';
 
 import '../../domain/auth/auth_failure.dart';
 import '../api/dio_client.dart';
+import 'passkey_options.dart';
 
 /// One passkey the signed-in user has enrolled.
 typedef PasskeySummary = ({String id, String name});
@@ -39,25 +40,17 @@ class PasskeyEnroller {
       final data = response.data;
       final rawId = data is Map ? data['passkeyId'] : null;
       final rawOptions = data is Map ? data['publicKeyCredentialCreationOptions'] : null;
-      // ZITADEL's gateway returns the inner creation options; older docs wrap
-      // them in a top-level `publicKey`. Accept either, but require the fields
-      // that make it a creation request (challenge + rp) so an empty or
-      // unrelated object is rejected rather than registered with blanks.
-      final Map<dynamic, dynamic>? publicKey;
-      if (rawOptions is! Map) {
-        publicKey = null;
-      } else if (rawOptions['publicKey'] is Map) {
-        publicKey = rawOptions['publicKey'] as Map;
-      } else if (rawOptions['challenge'] is String && rawOptions['rp'] is Map) {
-        publicKey = rawOptions;
-      } else {
-        publicKey = null;
-      }
-      if (rawId is! String || rawId.isEmpty || publicKey is! Map) {
+      // Wrapped, unwrapped, or JSON-encoded by the gateway — see passkey_options.dart.
+      final publicKey = passkeyOptionsMap(
+        rawOptions,
+        wrapperKey: 'publicKey',
+        requiredKey: 'challenge',
+      );
+      if (rawId is! String || rawId.isEmpty || publicKey == null) {
         return (ok: false, failure: const UnknownAuthError('Malformed passkey start response'));
       }
       passkeyId = rawId;
-      request = RegisterRequestType.fromJson(Map<String, dynamic>.from(publicKey));
+      request = RegisterRequestType.fromJson(publicKey);
     } on DioException catch (e) {
       return (ok: false, failure: _mapDioError(e));
     } catch (_) {
