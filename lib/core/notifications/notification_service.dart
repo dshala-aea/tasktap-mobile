@@ -260,20 +260,7 @@ class NotificationService {
 
   /// Handle notification tap — deep-link to the relevant screen.
   void _handleNotificationTap(RemoteMessage message) {
-    final data = message.data;
-    if (data.isEmpty) return;
-
-    final entityType = data['relatedEntityType'] as String?;
-    final entityId = data['relatedEntityId'] as String?;
-    // The backend puts the NotificationTypeEnum *name* in `type`.
-    final type = data['type'] as String?;
-
-    // Entity pair when present; otherwise a type-keyed route (the overdue digest has no entity).
-    final intent = DeepLinkIntent.fromNotification(
-      type: type,
-      entityType: entityType,
-      entityId: entityId,
-    );
+    final intent = intentFromPushData(message.data);
     if (intent == null) return;
 
     // Store the deep-link intent; the router will consume it.
@@ -361,6 +348,23 @@ const Map<String, String> kNotificationTypeRoutes = {
 /// Types that only inform: with no entity and no type route, their tap opens the notification's
 /// own detail page (see [DeepLinkIntent.notificationId]) so the full text is readable.
 const Set<String> kInformationalNotificationTypes = {'WorkLogCorrected'};
+
+/// The push payload → deep-link decision, kept pure so it is testable without
+/// Firebase.
+///
+/// The backend sends `notificationId`, `type` and, when there is one, the
+/// `relatedEntityType`/`relatedEntityId` pair. An entity-less push therefore has
+/// enough to open the notification's own page.
+DeepLinkIntent? intentFromPushData(Map<String, dynamic> data) {
+  if (data.isEmpty) return null;
+  return DeepLinkIntent.fromNotification(
+    // The backend puts the NotificationTypeEnum *name* in `type`.
+    type: data['type'] as String?,
+    entityType: data['relatedEntityType'] as String?,
+    entityId: data['relatedEntityId'] as String?,
+    notificationId: data['notificationId'] as String?,
+  );
+}
 
 /// Deep-link intent parsed from a notification tap.
 class DeepLinkIntent {
