@@ -51,6 +51,7 @@ testWidgets('back from the method step keeps the email and clears the error');
 testWidgets('a wrong password stays on the method step');
 testWidgets('the passkey action on the method step calls signInWithPasskey with the email');
 testWidgets('the browser fallback is still offered for an unexpected failure');
+testWidgets('both fields still declare their autofill hints for password managers');
 ```
 
 - [ ] **Step 2: Run them and watch them fail**
