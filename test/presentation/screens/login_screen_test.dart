@@ -1,3 +1,9 @@
+// Two-step login: the email is asked first, then the sign-in method (password or passkey).
+//
+// The methods are a real choice, not two fields competing in one form: both backends need the
+// email before anything can happen (the password BFF and the ZITADEL session behind the passkey
+// flow).
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,11 +18,7 @@ import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/screens/login/login_screen.dart';
 
-// ── Mock ──────────────────────────────────────────────────────────────────
-
 class MockAuthRepository extends Mock implements IAuthRepository {}
-
-// ── Helpers ───────────────────────────────────────────────────────────────
 
 Widget _buildLoginScreen(IAuthRepository repo, {bool passkeySupported = false}) {
   return ProviderScope(
@@ -28,8 +30,9 @@ Widget _buildLoginScreen(IAuthRepository repo, {bool passkeySupported = false}) 
   );
 }
 
-/// The primary login CTA — the AppButton labelled 'Accedi' (distinct from the
-/// screen heading, which is also 'Accedi').
+Finder get _continueCta =>
+    find.descendant(of: find.byType(AppButton), matching: find.text('Continua'));
+
 Finder get _loginCta =>
     find.descendant(of: find.byType(AppButton), matching: find.text('Accedi'));
 
@@ -38,9 +41,24 @@ Finder get _passwordField => find.byKey(const ValueKey('login-password'));
 Finder get _browserFallbackButton => find.text('Accedi con il browser');
 Finder get _passkeyButton => find.text('Accedi con passkey');
 
-Future<void> _enterCredentials(WidgetTester tester, {String username = 'tech@tasktap.io', String password = 'correct-password'}) async {
-  await tester.enterText(_usernameField, username);
-  await tester.enterText(_passwordField, password);
+TextField _usernameTextField(WidgetTester tester) => tester.widget<TextField>(
+  find.descendant(of: _usernameField, matching: find.byType(TextField)),
+);
+
+TextField _passwordTextField(WidgetTester tester) => tester.widget<TextField>(
+  find.descendant(of: _passwordField, matching: find.byType(TextField)),
+);
+
+String? _usernameText(WidgetTester tester) => _usernameTextField(tester).controller?.text;
+
+Future<void> _goToMethodStep(
+  WidgetTester tester, {
+  String email = 'tech@tasktap.io',
+}) async {
+  await tester.enterText(_usernameField, email);
+  await tester.pump();
+  await tester.tap(_continueCta);
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -58,145 +76,156 @@ void main() {
     authStream.close();
   });
 
-  // ── Rendering ──────────────────────────────────────────────────────────
-
-  group('LoginScreen rendering', () {
-    testWidgets('renders TaskTap logo', (tester) async {
+  group('step 1 — email', () {
+    testWidgets('renders the logo and asks only for the email', (tester) async {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
       expect(find.text('TT'), findsOneWidget);
       expect(find.text('TaskTap'), findsOneWidget);
-    });
-
-    testWidgets('renders the Accedi CTA', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      expect(_loginCta, findsOneWidget);
-    });
-
-    testWidgets('renders username and password fields (native login)', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
       expect(_usernameField, findsOneWidget);
-      expect(_passwordField, findsOneWidget);
+      expect(_continueCta, findsOneWidget);
+
+      // The method — and its password — belongs to the next step.
+      expect(_passwordField, findsNothing);
+      expect(_passkeyButton, findsNothing);
+      expect(find.text('Password dimenticata?'), findsNothing);
     });
 
-    testWidgets('renders the Password dimenticata? link', (tester) async {
+    testWidgets('Continua is disabled while the email is empty', (tester) async {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
-      expect(find.text('Password dimenticata?'), findsOneWidget);
-    });
+      AppButton button() =>
+          tester.widget<AppButton>(find.widgetWithText(AppButton, 'Continua'));
+      expect(button().onPressed, isNull);
 
-    // Regression: a real functional regression vs. the old browser-based flow, which got native
-    // password-manager fill/save for free. The two fields must be wrapped in an AutofillGroup and
-    // carry the right autofillHints for the platform password manager to recognize them.
-    testWidgets('wraps the credential fields in an AutofillGroup', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.ancestor(of: _usernameField, matching: find.byType(AutofillGroup)),
-        findsOneWidget,
-      );
-      expect(
-        find.ancestor(of: _passwordField, matching: find.byType(AutofillGroup)),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('username field carries AutofillHints.username', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      // TextFormField itself doesn't expose the properties it was constructed with as public
-      // getters — it forwards them into the TextField it builds internally, so assert on that.
-      final field = tester.widget<TextField>(
-        find.descendant(of: _usernameField, matching: find.byType(TextField)),
-      );
-      expect(field.autofillHints, contains(AutofillHints.username));
-    });
-
-    testWidgets('password field carries AutofillHints.password', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      final field = tester.widget<TextField>(
-        find.descendant(of: _passwordField, matching: find.byType(TextField)),
-      );
-      expect(field.autofillHints, contains(AutofillHints.password));
+      await tester.enterText(_usernameField, 'tech@tasktap.io');
+      await tester.pump();
+      expect(button().onPressed, isNotNull);
     });
   });
 
-  // ── Sign-in ──────────────────────────────────────────────────────────────
+  group('step 2 — method', () {
+    testWidgets('shows the email, the password field and the password CTA', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
 
-  group('LoginScreen sign-in', () {
-    testWidgets('submitting valid credentials calls signInWithPassword', (tester) async {
+      expect(_usernameField, findsOneWidget);
+      expect(_usernameText(tester), 'tech@tasktap.io');
+      expect(_passwordField, findsOneWidget);
+      expect(_loginCta, findsOneWidget);
+      expect(find.text('Password dimenticata?'), findsOneWidget);
+    });
+
+    testWidgets('offers the passkey when the device supports it', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo, passkeySupported: true));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      expect(_passkeyButton, findsOneWidget);
+    });
+
+    testWidgets('hides the passkey when the device has no support', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      expect(_passkeyButton, findsNothing);
+    });
+
+    testWidgets('Cambia returns to step 1 with the email preserved', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      await tester.tap(find.text('Cambia'));
+      await tester.pumpAndSettle();
+
+      expect(_continueCta, findsOneWidget);
+      expect(_usernameText(tester), 'tech@tasktap.io');
+    });
+
+    testWidgets('both fields stay inside one AutofillGroup', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      final group = find.byType(AutofillGroup);
+      expect(group, findsOneWidget);
+      expect(find.ancestor(of: _usernameField, matching: group), findsOneWidget);
+      expect(find.ancestor(of: _passwordField, matching: group), findsOneWidget);
+    });
+
+    testWidgets('the fields declare their autofill hints', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      final username = _usernameTextField(tester);
+      final password = _passwordTextField(tester);
+      expect(username.autofillHints, contains(AutofillHints.username));
+      expect(password.autofillHints, contains(AutofillHints.password));
+    });
+  });
+
+  group('signing in', () {
+    testWidgets('a valid password calls signInWithPassword with the step-1 email', (tester) async {
       when(() => repo.signInWithPassword(any(), any()))
           .thenAnswer((_) async => (user: null, failure: null));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
 
-      await _enterCredentials(tester);
+      await tester.enterText(_passwordField, 'correct-password');
       await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
       verify(() => repo.signInWithPassword('tech@tasktap.io', 'correct-password')).called(1);
       verifyNever(() => repo.signIn());
     });
-  });
 
-  // ── Passkey (opt-in) ─────────────────────────────────────────────────────
+    testWidgets('a wrong password stays on the method step', (tester) async {
+      when(() => repo.signInWithPassword(any(), any()))
+          .thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
 
-  group('LoginScreen passkey', () {
-    testWidgets('the passkey button is hidden when the platform has no support', (tester) async {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
 
-      expect(_passkeyButton, findsNothing);
-    });
-
-    testWidgets('the passkey button is visible when supported', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo, passkeySupported: true));
+      await tester.enterText(_passwordField, 'wrong');
+      await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
-      expect(_passkeyButton, findsOneWidget);
+      expect(_passwordField, findsOneWidget);
+      expect(_continueCta, findsNothing);
+      expect(find.text(authFailureMessage(const InvalidCredentials())), findsOneWidget);
     });
 
-    testWidgets('the passkey button is disabled until an email is entered', (tester) async {
+    testWidgets('the passkey action uses the step-1 email', (tester) async {
+      when(() => repo.signInWithPasskey(any()))
+          .thenAnswer((_) async => (user: null, failure: const PasskeyCancelled()));
+
       await tester.pumpWidget(_buildLoginScreen(repo, passkeySupported: true));
       await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
 
-      OutlinedButton button() =>
-          tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Accedi con passkey'));
+      await tester.tap(_passkeyButton);
+      await tester.pumpAndSettle();
 
-      expect(button().onPressed, isNull);
-      expect(find.text('Inserisci la tua email per usare la passkey.'), findsOneWidget);
-
-      await tester.enterText(_usernameField, 'tech@tasktap.io');
-      await tester.pump();
-
-      expect(button().onPressed, isNotNull);
-      expect(find.text('Inserisci la tua email per usare la passkey.'), findsNothing);
+      verify(() => repo.signInWithPasskey('tech@tasktap.io')).called(1);
     });
 
-    testWidgets('double tapping the passkey button starts one attempt', (tester) async {
+    testWidgets('double tapping the passkey action starts one attempt', (tester) async {
       final completer = Completer<({AuthUser? user, AuthFailure? failure})>();
       when(() => repo.signInWithPasskey(any())).thenAnswer((_) => completer.future);
 
       await tester.pumpWidget(_buildLoginScreen(repo, passkeySupported: true));
       await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
 
-      await tester.enterText(_usernameField, 'tech@tasktap.io');
-      // The passkey action is gated on a non-empty email; let the rebuild land before tapping.
-      await tester.pump();
-
-      // Two taps inside the same frame: the second must hit the loading guard, not a second
-      // native passkey prompt.
       await tester.tap(_passkeyButton);
       await tester.tap(_passkeyButton);
 
@@ -205,117 +234,38 @@ void main() {
 
       verify(() => repo.signInWithPasskey('tech@tasktap.io')).called(1);
     });
-  });
 
-  // ── Error display ──────────────────────────────────────────────────────
-
-  group('LoginScreen error display', () {
-    testWidgets('wrong credentials shows the error banner', (tester) async {
-      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
-        (_) async => (user: null, failure: const InvalidCredentials()),
-      );
-
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      await _enterCredentials(tester, password: 'wrong');
-      await tester.tap(_loginCta);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Email o password errati. Controlla le credenziali e riprova.'), findsOneWidget);
-    });
-
-    testWidgets('shows the network error banner on NetworkError', (tester) async {
-      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
-        (_) async => (user: null, failure: const NetworkError()),
-      );
-
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      await _enterCredentials(tester);
-      await tester.tap(_loginCta);
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('connessione'), findsOneWidget);
-    });
-  });
-
-  // ── Browser fallback on unexpected errors ────────────────────────────────
-
-  group('LoginScreen browser fallback', () {
-    testWidgets('is not shown before any login attempt', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      expect(_browserFallbackButton, findsNothing);
-    });
-
-    testWidgets('is NOT shown on InvalidCredentials — retry the same form instead', (tester) async {
-      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
-        (_) async => (user: null, failure: const InvalidCredentials()),
-      );
-
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      await _enterCredentials(tester, password: 'wrong');
-      await tester.tap(_loginCta);
-      await tester.pumpAndSettle();
-
-      expect(_browserFallbackButton, findsNothing);
-    });
-
-    testWidgets('is shown on an unexpected/generic failure (e.g. NetworkError)', (tester) async {
-      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
-        (_) async => (user: null, failure: const NetworkError()),
-      );
-
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      await _enterCredentials(tester);
-      await tester.tap(_loginCta);
-      await tester.pumpAndSettle();
-
-      expect(_browserFallbackButton, findsOneWidget);
-    });
-
-    testWidgets('tapping it calls signIn (browser flow), not signInWithPassword again', (tester) async {
-      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
-        (_) async => (user: null, failure: const NetworkError()),
-      );
+    testWidgets('Password dimenticata? uses the browser flow', (tester) async {
       when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
-
-      await _enterCredentials(tester);
-      await tester.tap(_loginCta);
-      await tester.pumpAndSettle();
-
-      await tester.tap(_browserFallbackButton);
-      await tester.pumpAndSettle();
-
-      verify(() => repo.signIn()).called(1);
-      verify(() => repo.signInWithPassword(any(), any())).called(1);
-    });
-  });
-
-  // ── Forgot password ──────────────────────────────────────────────────────
-
-  group('LoginScreen forgot password', () {
-    testWidgets('"Password dimenticata?" calls signIn (browser flow), not signInWithPassword', (tester) async {
-      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
-
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
 
       await tester.tap(find.text('Password dimenticata?'));
       await tester.pumpAndSettle();
 
       verify(() => repo.signIn()).called(1);
       verifyNever(() => repo.signInWithPassword(any(), any()));
+    });
+
+    testWidgets('an unexpected failure still offers the browser fallback', (tester) async {
+      when(() => repo.signInWithPassword(any(), any()))
+          .thenAnswer((_) async => (user: null, failure: const NetworkError()));
+      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      await tester.enterText(_passwordField, 'pw');
+      await tester.tap(_loginCta);
+      await tester.pumpAndSettle();
+
+      expect(_browserFallbackButton, findsOneWidget);
+      await tester.tap(_browserFallbackButton);
+      await tester.pumpAndSettle();
+      verify(() => repo.signIn()).called(1);
     });
   });
 }
