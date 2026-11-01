@@ -44,7 +44,8 @@ jobs:
             --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
             --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
             --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
-            --dart-define=API_BASE_URL="$API_BASE_URL"
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --dart-define=PASSKEY_DIAGNOSTICS=true
 
       - uses: actions/upload-artifact@v4
         with:
