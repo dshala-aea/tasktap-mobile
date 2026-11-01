@@ -194,9 +194,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               // Only offered when this device can actually use passkeys, and hidden while any
               // sign-in is in flight. Password remains the primary action.
               if (passkeySupported && !isLoading) ...[
-                OutlinedButton(
-                  onPressed: _onPasskey,
-                  child: const Text('Accedi con passkey'),
+                // The lookup needs an account to point ZITADEL's challenge at, so the action
+                // stays disabled until there is an email to name — a tap with an empty field
+                // would only come back as "nessuna passkey".
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _usernameCtrl,
+                  builder: (context, value, _) {
+                    final hasEmail = value.text.trim().isNotEmpty;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        OutlinedButton(
+                          onPressed: hasEmail ? _onPasskey : null,
+                          child: const Text('Accedi con passkey'),
+                        ),
+                        if (!hasEmail) ...[
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            'Inserisci la tua email per usare la passkey.',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: context.colors.inkFaint,
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
               ],
             ],

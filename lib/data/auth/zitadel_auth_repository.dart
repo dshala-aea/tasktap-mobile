@@ -13,6 +13,7 @@ import '../../core/startup/startup_report.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
+import 'passkey_options.dart';
 import 'pkce.dart';
 
 /// Zitadel OIDC implementation of [IAuthRepository].
@@ -231,26 +232,17 @@ class ZitadelAuthRepository implements IAuthRepository {
       final options = data is Map
           ? data['publicKeyCredentialRequestOptions']
           : null;
-      // ZITADEL's gateway serialises the WebAuthn options as the inner object
-      // (challenge/rpId/allowCredentials); older docs and some versions wrap it
-      // in a top-level `publicKey`. Accept either, but only a shape that
-      // actually carries a challenge — anything else is malformed, not empty
-      // options that would produce a useless prompt.
-      final Map<dynamic, dynamic>? publicKey;
-      if (options is! Map) {
-        publicKey = null;
-      } else if (options['publicKey'] is Map) {
-        publicKey = options['publicKey'] as Map;
-      } else if (options['challenge'] is String) {
-        publicKey = options;
-      } else {
-        publicKey = null;
-      }
+      // Wrapped, unwrapped, or JSON-encoded by the gateway — see passkey_options.dart.
+      final publicKey = passkeyOptionsMap(
+        options,
+        wrapperKey: 'publicKey',
+        requiredKey: 'challenge',
+      );
       if (rawSessionId is! String ||
           rawSessionId.isEmpty ||
           rawSessionToken is! String ||
           rawSessionToken.isEmpty ||
-          publicKey is! Map) {
+          publicKey == null) {
         return (
           user: null,
           failure: const UnknownAuthError('Malformed passkey start response'),
@@ -259,7 +251,11 @@ class ZitadelAuthRepository implements IAuthRepository {
       sessionId = rawSessionId;
       sessionToken = rawSessionToken;
       request = AuthenticateRequestType.fromJson(
-        Map<String, dynamic>.from(publicKey),
+        publicKey,
+        // Do NOT restrict the sheet to credentials already on this device: a passkey held by
+        // Bitwarden/1Password or on another device (hybrid/QR) must be selectable. The default
+        // (`true`) makes the OS throw NoCredentialsAvailable instead of showing those options.
+        preferImmediatelyAvailableCredentials: false,
       );
     } on DioException catch (e) {
       return (user: null, failure: _mapPasskeyHttpError(e));
