@@ -239,9 +239,15 @@ class _FakeVoice extends VoiceCaptureController {
   Completer<void>? startGate;
   int startCalls = 0;
 
+  /// Thrown by [start] instead of returning: what the platform does when it cannot configure or
+  /// activate the audio session (`record_ios` throws there rather than reporting a refusal).
+  Object? startError;
+
   @override
   Future<RecordingStartResult> start({String? ticketId}) async {
     startCalls++;
+    final error = startError;
+    if (error != null) throw error;
     final result = startScript.isEmpty ? startResult : startScript.removeFirst();
     if (result == RecordingStartResult.started) {
       _rec = true;
@@ -853,6 +859,30 @@ void main() {
       final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
       await _reveal(tester, toggle);
       expect(toggle, findsOneWidget);
+      await _unmount(tester);
+    });
+
+    testWidgets('a start the platform refuses says so instead of leaving the orb dead', (
+      tester,
+    ) async {
+      // `record_ios` throws when it cannot set the session category or activate it — a call still
+      // holding the input, for instance. Uncaught, the tap had no effect at all: no toast, no
+      // banner, the orb still idle. That is indistinguishable from a microphone button that does
+      // not work, which is how this was reported.
+      final voice = _FakeVoice()..startError = StateError('setActive failed');
+      await tester.pumpWidget(_wrap(_FakeAi(), voice));
+      await tester.pumpAndSettle();
+
+      await _reveal(tester, _micIdle);
+      await tester.tap(_micIdle);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(voice.startCalls, 1);
+      expect(find.textContaining('Il microfono non è partito'), findsOneWidget);
+      expect(_micIdle, findsOneWidget, reason: 'nothing is recording');
+
+      await tester.pumpAndSettle();
       await _unmount(tester);
     });
   });
