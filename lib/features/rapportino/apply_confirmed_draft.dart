@@ -31,10 +31,16 @@ const _uuid = Uuid();
 /// Returns the new local report id, or null when the device cannot attribute a draft to anybody
 /// (no signed-in internal user id) — the same refusal `createLocalDraft` makes, for the same reason.
 ///
-/// What the response does NOT carry and this function therefore does not write: any signature, and
-/// any location fallback. A null `locationId` is written as an empty string, which reads as
-/// "unknown" and is what the editor's own validation rejects at submit time
-/// (`DraftValidationIssue.missingLocation`).
+/// What the response does NOT carry and this function therefore does not write: any signature. The
+/// header's customer and location are resolved from the LINKED TICKET's mirrored row when the
+/// response does not name them (`TicketDraftSeeder` seeds workers, hours, materials and controls —
+/// never customer or location), which is the same prefill the manual "Crea rapportino" path applies.
+/// Without it the Dettagli step drew a linked ticket above two empty Cliente/Sede pickers and the
+/// report failed `DraftValidationIssue.missingLocation` at submit.
+///
+/// A still-unresolved `locationId` is written as an empty string, which reads as "unknown" — the
+/// behaviour this function had before, now only for a ticketless report whose cantiere names no
+/// location.
 ///
 /// The one thing the response does not carry that this function DOES write is provenance —
 /// `isAiAssisted`, in the final `saveDraft` below, in the same companion as the data. It must not be
@@ -71,12 +77,22 @@ Future<String?> applyConfirmedDraft(
     }
   }
 
+  final resolvedTicketId = response.ticketId ?? ticketId;
+  final ticketRow = await _ticketRow(ref, resolvedTicketId);
+
   final id = await createLocalDraft(
     ref,
     title: response.title,
-    locationId: response.locationId ?? '',
-    ticketId: response.ticketId ?? ticketId,
+    // The server only returns a location it actually resolved. When the report is tied to a
+    // ticket, the ticket's own location and customer are already mirrored on the device and are
+    // exactly what the manual "Crea rapportino" path pre-fills (`_createManualDraft`) — writing
+    // them here is what makes the Dettagli step show Cliente/Sede instead of two empty pickers
+    // under a linked ticket, and what lets the report pass `missingLocation` at submit.
+    locationId: response.locationId ?? ticketRow?.locationId ?? '',
+    ticketId: resolvedTicketId,
     cantiereId: response.cantiereId ?? cantiereId,
+    customerId: ticketRow?.customerId,
+    tenantId: ticketRow?.tenantId,
   );
   if (id == null) return null;
 
@@ -192,4 +208,19 @@ Future<String?> applyConfirmedDraft(
   );
 
   return id;
+}
+
+/// The mirrored ticket row a confirmed draft belongs to, or `null` — a ticketless report, or a
+/// mirror this device cannot read.
+///
+/// Best-effort on purpose, like `_loadTicketNumber` on the copilot screen: a missing row costs the
+/// Cliente/Sede prefill below, never the report itself.
+Future<Ticket?> _ticketRow(WidgetRef ref, String? ticketId) async {
+  if (ticketId == null) return null;
+  try {
+    final db = ref.read(appDatabaseProvider);
+    return await (db.select(db.tickets)..where((t) => t.id.equals(ticketId))).getSingleOrNull();
+  } catch (_) {
+    return null;
+  }
 }

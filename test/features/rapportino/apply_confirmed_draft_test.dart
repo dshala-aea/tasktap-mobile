@@ -240,4 +240,92 @@ void main() {
     expect(id, isNull);
     expect(await db.select(db.draftReports).get(), isEmpty);
   });
+
+  // ── The report knows what it is about ─────────────────────────────────────────
+
+  /// The server's confirm response carries no customer and no location for a ticket-bound draft
+  /// (it seeds workers, hours, materials and controls only), so the header used to be written with
+  /// an empty location and a null customer while the ticket chip still showed. The Dettagli step
+  /// then drew two empty Cliente/Sede pickers under a linked ticket, and the report failed
+  /// `missingLocation` at submit. The ticket's own mirrored row is the prefill the manual
+  /// "Crea rapportino" path already applies, so it is the one used here.
+  testWidgets("takes the linked ticket's customer, location and tenant from the mirror", (
+    tester,
+  ) async {
+    final db = _makeDb();
+    addTearDown(db.close);
+    final container = _container(db);
+    addTearDown(container.dispose);
+
+    await db
+        .into(db.tickets)
+        .insertOnConflictUpdate(
+          TicketsCompanion.insert(
+            id: 'tkt-linked',
+            tenantId: 'tenant-9',
+            title: 'Guasto caldaia',
+            customerId: 'cus-1',
+            locationId: 'loc-1',
+            statusId: 1,
+            typeId: 1,
+            createdAt: DateTime.utc(2026, 11, 2),
+          ),
+        );
+
+    final id = await _callApply(
+      tester,
+      container,
+      const AiConversationConfirmResponse(
+        title: 'Sostituzione valvola',
+        details: 'Valvola bloccata',
+        ticketId: 'tkt-linked',
+        locationId: null,
+      ),
+      ticketId: 'tkt-linked',
+    );
+
+    final row = await (db.select(db.draftReports)..where((r) => r.id.equals(id!))).getSingle();
+    expect(row.customerId, 'cus-1');
+    expect(row.locationId, 'loc-1');
+    expect(row.tenantId, 'tenant-9');
+    expect(row.ticketId, 'tkt-linked');
+  });
+
+  /// The server is the authority when it actually resolved a location: the mirror only fills a gap.
+  testWidgets('a location resolved by the server wins over the ticket one', (tester) async {
+    final db = _makeDb();
+    addTearDown(db.close);
+    final container = _container(db);
+    addTearDown(container.dispose);
+
+    await db
+        .into(db.tickets)
+        .insertOnConflictUpdate(
+          TicketsCompanion.insert(
+            id: 'tkt-linked',
+            tenantId: 'tenant-9',
+            title: 'Guasto caldaia',
+            customerId: 'cus-1',
+            locationId: 'loc-ticket',
+            statusId: 1,
+            typeId: 1,
+            createdAt: DateTime.utc(2026, 11, 2),
+          ),
+        );
+
+    final id = await _callApply(
+      tester,
+      container,
+      const AiConversationConfirmResponse(
+        title: 'Sostituzione valvola',
+        details: 'Valvola bloccata',
+        ticketId: 'tkt-linked',
+        locationId: 'loc-server',
+      ),
+      ticketId: 'tkt-linked',
+    );
+
+    final row = await (db.select(db.draftReports)..where((r) => r.id.equals(id!))).getSingle();
+    expect(row.locationId, 'loc-server');
+  });
 }

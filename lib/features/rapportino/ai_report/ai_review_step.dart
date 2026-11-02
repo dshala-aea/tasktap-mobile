@@ -7,6 +7,7 @@ import '../../../data/ai/ai_api_client.dart';
 import '../ai_draft_feed.dart';
 import '../draft_provenance_badge.dart';
 import 'ai_card.dart';
+import 'ai_report_context.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 2 of the AI report flow: "Controlla" — what the assistant compiled, as cards.
@@ -26,9 +27,15 @@ class AiReviewStep extends StatelessWidget {
     required this.busy,
     required this.onAccept,
     required this.onResolveHeld,
+    this.reportContext,
   });
 
   final AiCopilotDraftDto draft;
+
+  /// The intervento this draft belongs to. Rendered above the cards so the screen always names the
+  /// job being compiled — including when the assistant compiled nothing — instead of opening on an
+  /// anonymous list of lines. Null for a ticketless session (cantiere-only or standalone).
+  final AiReportContext? reportContext;
 
   /// A turn or an edit is in flight: the accept actions are disabled, never removed.
   final bool busy;
@@ -67,6 +74,13 @@ class AiReviewStep extends StatelessWidget {
       children: [
         const AiProvenanceBand(),
         const AiCardGap(dense: true),
+
+        // ── Intervento ────────────────────────────────────────────────────────
+        // Named first: what is being compiled, before what was compiled.
+        if (reportContext != null) ...[
+          AiReportContextCard(context: reportContext!),
+          const AiCardGap(dense: true),
+        ],
 
         // ── Lavoro svolto ─────────────────────────────────────────────────────
         if (activityText.isEmpty)
