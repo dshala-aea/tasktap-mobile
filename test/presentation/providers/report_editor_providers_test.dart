@@ -56,6 +56,24 @@ class _WouldPromptLocationService extends ILocationService {
   }
 }
 
+/// A clock that advances one second per read.
+///
+/// `stopTimer` drops a run whose stop lands in the same *stored* second as its start: Drift keeps
+/// whole seconds, and `start == end` is the `report_segment_out_of_order` the server rejects as a
+/// permanent 400. Back-to-back `startTimer`/`stopTimer` against the real wall clock therefore
+/// recorded nothing at all — the timer stopped, and the interval it was supposed to keep was the
+/// one thing missing. One second per read keeps every run measurable and stays two orders of
+/// magnitude below the shortest duration any assertion here is about.
+class _SteppingClock {
+  DateTime _now = DateTime.utc(2026, 6, 21, 9);
+
+  DateTime call() {
+    final value = _now;
+    _now = _now.add(const Duration(seconds: 1));
+    return value;
+  }
+}
+
 /// Build an editor notifier backed by an in-memory DB.
 ///
 /// Awaits [ReportEditorNotifier.ready] before returning: the notifier's constructor kicks off an
@@ -69,6 +87,7 @@ Future<(ReportEditorNotifier notifier, DraftReportRepository repo)> _makeEditor(
   String tenantId = 'tenant-1',
   String userId = 'user-1',
   ILocationService? locationService,
+  DateTime Function()? clock,
 }) async {
   final repo = DraftReportRepository(db);
   final state = ReportEditorState(
@@ -81,6 +100,7 @@ Future<(ReportEditorNotifier notifier, DraftReportRepository repo)> _makeEditor(
     initialState: state,
     repo: repo,
     locationService: locationService,
+    clock: clock ?? _SteppingClock().call,
   );
   await notifier.ready;
   return (notifier, repo);
@@ -548,6 +568,30 @@ void main() {
       expect(
         stored.single.startUtc.millisecondsSinceEpoch ~/ 1000,
         runStart.millisecondsSinceEpoch ~/ 1000,
+      );
+    });
+
+    test('a run stopped inside the second it started records nothing', () async {
+      // The other side of the same rule: a double tap is not a measured run. Drift keeps whole
+      // seconds, so a segment whose two ends share one arrives at the server as `start == end`,
+      // which it rejects as `report_segment_out_of_order` — a permanent 400 with no affordance on
+      // the row to clear it. Dropping it here costs a zero-length run nobody worked; recording it
+      // costs the whole rapportino.
+      await _seedDraft(db, 'draft-1');
+      final frozen = DateTime.utc(2026, 6, 21, 9);
+      final (notifier, repo) = await _makeEditor(db, clock: () => frozen);
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.startTimer('s-1');
+      await notifier.stopTimer('s-1');
+
+      expect(await repo.getSegments('draft-1'), isEmpty);
+      final row = notifier.state.staffRows.first;
+      expect(row.timerRunning, isFalse);
+      expect(
+        row.hoursWorked,
+        isNull,
+        reason: 'nothing was measured, so no total may be invented for it',
       );
     });
 
