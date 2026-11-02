@@ -234,6 +234,14 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
         stringValue: Value(c.stringValue),
         boolValue: Value(c.boolValue),
         dateValue: Value(c.dateValue),
+        // A copy is a copy: every answer column travels, including the number a numeric control
+        // holds and the label/asset snapshot (schema 52) that lets the new report name its own
+        // rows. Dropping them used to leave the duplicate with blank numeric answers and raw
+        // control ids the moment its checklist left the device.
+        numberValue: Value(c.numberValue),
+        note: Value(c.note),
+        controlLabel: Value(c.controlLabel),
+        assetId: Value(c.assetId),
       ),
     );
   }

@@ -1132,6 +1132,22 @@ class SyncService {
       }
 
       final replace = inScope.intersection(owned);
+      // The label and asset on an answer are this device's own snapshot of the checklist item,
+      // taken when the technician filed the answer (schema 52): the payload carries neither,
+      // because the server's row does not hold them. Read before the delete below and put back on
+      // insert, or every sync strips a sent report of the names it shows and of the asset its rows
+      // are grouped under — and the read-only view, whose whole point is to name its own rows,
+      // falls back to raw control ids.
+      final controlliSnapshots = <String, ({String? controlLabel, String? assetId})>{
+        if (replace.isNotEmpty)
+          for (final r in await (db.select(
+            db.reportControlli,
+          )..where((r) => r.reportId.isIn(replace))).get())
+            '${r.reportId}|${r.controlId}': (
+              controlLabel: r.controlLabel,
+              assetId: r.assetId,
+            ),
+      };
       if (replace.isNotEmpty) {
         // Delete first and insert after, per table: the payload is the complete set for these
         // report ids, so a merge would keep a child the office has already removed.
@@ -1216,6 +1232,7 @@ class SyncService {
           }
           for (final c
               in controlli[reportId] ?? const <SyncReportControlloDto>[]) {
+            final snapshot = controlliSnapshots['$reportId|${c.ticketControlId}'];
             await db
                 .into(db.reportControlli)
                 .insert(
@@ -1231,6 +1248,8 @@ class SyncService {
                     dateValue: Value(c.dateValue?.toUtc()),
                     numberValue: Value(c.numberValue),
                     note: Value(c.note),
+                    controlLabel: Value(snapshot?.controlLabel),
+                    assetId: Value(snapshot?.assetId),
                   ),
                 );
           }

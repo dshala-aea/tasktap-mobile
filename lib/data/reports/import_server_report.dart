@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
 import '../local/app_database.dart';
+import '../local/checklist_read_repository.dart';
 import 'server_report_api_client.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -51,6 +52,33 @@ class ServerReportNotMirroredException implements Exception {
 /// row for the same TicketControl.
 String controlRowId(String reportId, String ticketControlId) =>
     'ctrl-$reportId-$ticketControlId';
+
+/// The label and asset of each of [ticketId]'s checklist items, as this device's sync mirror knows
+/// them, keyed by TicketControl id. Empty when there is nothing to read — no ticket, no mirror yet.
+///
+/// Read straight off `ticket_controls` rather than through the group tree: that tree deliberately
+/// leaves the per-asset rows out (they reach the screen as `assetChecklists`), and those are exactly
+/// the answers whose asset the grouped view needs.
+///
+/// Best-effort by design: an import must not fail because the checklist has not synced, and an
+/// answer without a snapshot simply falls back to resolving its label against the checklist at
+/// read time, the way every answer did before the snapshot columns existed.
+Future<Map<String, ({String? controlLabel, String? assetId})>> controlSnapshotsForTicket(
+  AppDatabase db,
+  String? ticketId,
+) async {
+  if (ticketId == null || ticketId.isEmpty) return const {};
+  try {
+    final rows = await ChecklistReadRepository(db).getTicketControlRows(ticketId);
+    return {
+      for (final row in rows)
+        row.id: (controlLabel: row.label, assetId: row.prodottoAssistenzaId),
+    };
+  } catch (e) {
+    debugPrint('importServerReport: checklist read failed ($e); answers keep no snapshot');
+    return const {};
+  }
+}
 
 /// Promote a server-authored Bozza that ALREADY arrived complete (O-8a: sync delivers every
 /// in-scope report's staff, materiali, controlli and version) to a working copy, with no request.
@@ -104,6 +132,11 @@ Future<void> importServerReportFromMirror({
               dateValue: Value(c.dateValue),
               numberValue: Value(c.numberValue),
               note: Value(c.note),
+              // The row is moved, not re-created: the answer's own snapshot of what it answers
+              // (schema 52) travels with it, or the report loses the names it shows and the asset
+              // its rows are grouped under the moment it is opened for editing.
+              controlLabel: Value(c.controlLabel),
+              assetId: Value(c.assetId),
             ),
           );
     }
@@ -151,6 +184,13 @@ Future<void> importServerReport({
 
   final report = await api.fetchReport(reportId);
   if (!report.isBozza) throw const ServerReportNotEditableException();
+
+  // The server's answer rows name nothing: it holds a TicketControl id and nothing about what was
+  // asked (no label, no asset). The phone's own checklist mirror does, so each imported answer gets
+  // the same label/asset snapshot the editor writes when the technician answers on this device
+  // (schema 52) — otherwise the sent-report view of an imported report lists raw control ids and
+  // drops the asset grouping, exactly the state the snapshot columns were added to end.
+  final snapshots = await controlSnapshotsForTicket(db, report.ticketId);
 
   final now = DateTime.now().toUtc();
   await db.transaction(() async {
@@ -260,6 +300,7 @@ Future<void> importServerReport({
           );
     }
     for (final o in report.observations) {
+      final snapshot = snapshots[o.ticketControlId];
       await db
           .into(db.reportControlli)
           .insertOnConflictUpdate(
@@ -273,6 +314,8 @@ Future<void> importServerReport({
               boolValue: Value(o.boolValue),
               dateValue: Value(o.dateValue),
               numberValue: Value(o.numberValue),
+              controlLabel: Value(snapshot?.controlLabel),
+              assetId: Value(snapshot?.assetId),
             ),
           );
     }

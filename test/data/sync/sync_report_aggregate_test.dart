@@ -294,6 +294,45 @@ void main() {
     expect(report.expectedVersion, '42');
   });
 
+  test('the answer snapshot survives a sync that replaces its row', () async {
+    await seedReport('r-1');
+    // The answer as this device filed it: the label and the asset it belonged to (schema 52). The
+    // payload carries neither — the server's row holds the TicketControl id and nothing about what
+    // was asked — so a replace that simply re-inserted would strip the report of the names it shows
+    // and of the asset its rows are grouped under, on every sync, right after the technician sent it.
+    await db
+        .into(db.reportControlli)
+        .insert(
+          ReportControlliCompanion.insert(
+            id: 'c-old',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 10, 20),
+            reportId: 'r-1',
+            controlId: 'tc-1',
+            boolValue: const Value(true),
+            controlLabel: const Value('Pressione impianto'),
+            assetId: const Value('asset-1'),
+          ),
+        );
+    respond(
+      _payload(
+        // `reportStaff` is what marks the payload as carrying the aggregate at all (the server
+        // always sends the collection, empty or not), so it has to be present for the replace to
+        // run — the point of this test is the replace, not its trigger.
+        reportStaff: const [],
+        reportControlli: [_controlloJson('c-1', 'r-1')],
+        reportVersions: [_versionJson('r-1', '42')],
+      ),
+    );
+
+    await svc.sync();
+
+    final row = (await db.select(db.reportControlli).get()).single;
+    expect(row.id, 'c-1', reason: 'the payload is still the authority on the row itself');
+    expect(row.controlLabel, 'Pressione impianto');
+    expect(row.assetId, 'asset-1');
+  });
+
   test('the intervals nested in a staff row land with that row', () async {
     await seedReport('r-1');
     respond(

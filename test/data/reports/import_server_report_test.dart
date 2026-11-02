@@ -81,6 +81,47 @@ void main() {
     expect(d.submissionState, 'draft');
   });
 
+  test('imported answers keep a label and asset snapshot from the checklist mirror', () async {
+    // The server's answer rows name nothing: they carry the TicketControl id only. The mirror does,
+    // so the import stamps the same snapshot the editor writes when the answer is filed on this
+    // device — without it the sent-report view lists raw control ids and loses the asset grouping.
+    const ticketId = '33333333-3333-3333-3333-333333333333';
+    Future<void> mirror(String id, String label, {String? assetId}) => db
+        .into(db.ticketControls)
+        .insert(
+          TicketControlsCompanion.insert(
+            id: id,
+            ticketId: ticketId,
+            templateControlId: 'tpl-$id',
+            controlLineageId: 'lin-$id',
+            groupId: 'g-1',
+            label: label,
+            type: 'Checkbox',
+            prodottoAssistenzaId: Value(assetId),
+          ),
+        );
+    await mirror(_tc1, 'Pressione impianto', assetId: 'asset-1');
+    await mirror(_tc2, 'Nota generica');
+
+    await run();
+
+    final ctrls = await repo.getControlli(_rid);
+    final first = ctrls.firstWhere((c) => c.controlId == _tc1);
+    expect(first.controlLabel, 'Pressione impianto');
+    expect(first.assetId, 'asset-1');
+    final second = ctrls.firstWhere((c) => c.controlId == _tc2);
+    expect(second.controlLabel, 'Nota generica');
+    expect(second.assetId, isNull, reason: 'a ticket-level answer belongs to no asset');
+  });
+
+  test('an import still succeeds when the checklist was never mirrored', () async {
+    await run();
+
+    final ctrls = await repo.getControlli(_rid);
+    expect(ctrls, hasLength(2));
+    expect(ctrls.every((c) => c.controlLabel == null), isTrue);
+  });
+
   test('replaces children: staff, materiali and controlli with the editor id convention', () async {
     await run();
 
