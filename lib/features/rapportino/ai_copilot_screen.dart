@@ -11,6 +11,7 @@ import '../../core/audio/pending_recording_store.dart';
 import '../../core/audio/voice_capture_controller.dart';
 import '../../core/audio/voice_capture_provider.dart';
 import '../../core/audio/voice_consent.dart';
+import '../../core/crash_reporting/crash_reporter.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
@@ -918,8 +919,13 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       return;
     }
 
-    var result = await voice.start(ticketId: widget.ticketId);
-    if (!mounted) return _releaseOrphanedStart(voice, result);
+    final first = await _startVoice(voice);
+    if (!mounted) {
+      if (first != null) _releaseOrphanedStart(voice, first);
+      return;
+    }
+    if (first == null) return;
+    var result = first;
     if (result == RecordingStartResult.consentRequired) {
       final accepted = await showDialog<bool>(
         context: context,
@@ -934,8 +940,13 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       );
       if (accepted != true || !mounted) return;
       await acceptVoiceConsent();
-      result = await voice.start(ticketId: widget.ticketId);
-      if (!mounted) return _releaseOrphanedStart(voice, result);
+      final second = await _startVoice(voice);
+      if (!mounted) {
+        if (second != null) _releaseOrphanedStart(voice, second);
+        return;
+      }
+      if (second == null) return;
+      result = second;
     }
     switch (result) {
       case RecordingStartResult.started:
@@ -972,6 +983,31 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         // action that fixes it. Writing stays available either way — the description card and
         // on-device dictation never needed this permission.
         setState(() => _micPermissionBlocked = true);
+    }
+  }
+
+  /// Starts a capture, turning a *thrown* start into something on screen. Null means the start
+  /// failed and the technician has already been told.
+  ///
+  /// [VoiceCaptureController.start] returns every refusal, so a throw here means the platform itself
+  /// refused: `record_ios` throws when it cannot set the session category or activate it — a call
+  /// still holding the route, for instance — and the permission plugin can throw on a build that
+  /// never linked it. Unhandled, that left the tap with no effect whatsoever: no toast, no banner,
+  /// nothing to act on, which is exactly what a dead microphone button looks like.
+  Future<RecordingStartResult?> _startVoice(VoiceCaptureController voice) async {
+    try {
+      return await voice.start(ticketId: widget.ticketId);
+    } catch (e) {
+      unawaited(CrashReporter.instance.captureException(e, hint: 'voice start'));
+      if (mounted) {
+        setState(() => _recording = false);
+        showAppToast(
+          context,
+          message: 'Il microfono non è partito: $e',
+          tone: ToastTone.error,
+        );
+      }
+      return null;
     }
   }
 

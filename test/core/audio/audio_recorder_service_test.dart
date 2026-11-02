@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/core/audio/audio_recorder_service.dart';
 import 'package:tasktap_mobile/core/audio/pending_recording_store.dart';
 import 'package:tasktap_mobile/core/audio/voice_capture_controller.dart';
+import 'package:tasktap_mobile/core/crash_reporting/crash_reporter.dart';
 import 'package:tasktap_mobile/core/audio/voice_consent.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/auth/session_ender.dart';
@@ -35,6 +36,10 @@ class _FakeRecorder implements AudioRecorderService {
   /// recorder that never started leaves behind.
   int bytesWritten = minCapturedBytes;
 
+  /// When false, [stop] hands back a path nothing was ever written to: what is left when the
+  /// sandbox refused the file.
+  bool writeFile = true;
+
   @override
   Future<File> stop() async {
     final gate = stopGate;
@@ -42,7 +47,7 @@ class _FakeRecorder implements AudioRecorderService {
     stops++;
     started = false;
     final f = File('${dir.path}/rec_$stops.m4a');
-    await f.writeAsBytes(List<int>.filled(bytesWritten, 0));
+    if (writeFile) await f.writeAsBytes(List<int>.filled(bytesWritten, 0));
     return f;
   }
 
@@ -63,6 +68,20 @@ class _FakePermissions implements MicPermissionService {
     asked++;
     return result;
   }
+}
+
+class _RecordingCrashReporter implements CrashReporter {
+  final exceptions = <Object>[];
+
+  @override
+  Future<void> captureException(Object exception, {StackTrace? stackTrace, String? hint}) async =>
+      exceptions.add(exception);
+
+  @override
+  Future<void> captureMessage(String message) async {}
+
+  @override
+  void addBreadcrumb(String message, {String? category}) {}
 }
 
 class _Adapter implements HttpClientAdapter {
@@ -173,6 +192,37 @@ void main() {
 
     expect(await store.list(userId: 'userA'), isEmpty);
     expect(File('${tmp.path}/rec_1.m4a').existsSync(), isFalse, reason: 'the empty take is deleted');
+  });
+
+  test('A_take_whose_file_was_never_created_is_empty_not_an_io_error', () async {
+    // The recorder hands back a path even when nothing could be written to it. Weighing it used to
+    // throw a FileSystemException, which the screen showed as "Registrazione non riuscita: ..." — a
+    // different bug from the one being reported, on the same phone.
+    recorder.writeFile = false;
+    final c = controller();
+    await c.start(ticketId: 'T1');
+
+    await expectLater(c.stop(), throwsA(isA<EmptyRecordingException>()));
+    expect(await store.list(userId: 'userA'), isEmpty);
+  });
+
+  test('An_empty_capture_becomes_a_crash_report_not_just_a_toast', () async {
+    // `debugPrint` is compiled out of release builds, so the byte count — the only evidence a
+    // microphone that never recorded leaves — used to reach nobody at all.
+    final reporter = _RecordingCrashReporter();
+    final previous = CrashReporter.instance;
+    CrashReporter.setInstance(reporter);
+    addTearDown(() => CrashReporter.setInstance(previous));
+
+    recorder.bytesWritten = 600;
+    final c = controller();
+    await c.start(ticketId: 'T1');
+
+    await expectLater(c.stop(), throwsA(isA<EmptyRecordingException>()));
+
+    final reported = reporter.exceptions.single;
+    expect(reported, isA<EmptyRecordingException>());
+    expect((reported as EmptyRecordingException).bytes, 600);
   });
 
   test('An_empty_capture_that_ends_on_its_own_reports_the_error_not_a_recording', () async {

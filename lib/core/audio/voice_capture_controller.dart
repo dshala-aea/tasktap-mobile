@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../data/ai/ai_api_client.dart';
+import '../crash_reporting/crash_reporter.dart';
 import 'audio_recorder_service.dart';
 import 'pending_recording_store.dart';
 
@@ -173,9 +174,15 @@ class VoiceCaptureController {
         // Weighed before it is stored or offered: a header-only file is a broken capture, and the
         // server's verdict on it (`audio_too_short`) would send the technician back to talk longer
         // into a microphone that never recorded in the first place.
-        final bytes = await file.length();
+        // Zero when the recorder never even created the file (a sandbox that could not be written),
+        // which is still an empty take and must read as one instead of as a FileSystemException.
+        final bytes = await file.exists() ? await file.length() : 0;
         if (bytes < minCapturedBytes) {
           debugPrint('Voice capture empty: $bytes bytes, dropped before upload');
+          // The byte count is the only evidence a microphone that never recorded leaves behind, and
+          // `debugPrint` is compiled out of release builds — so the trail this class advertises has
+          // to come from here. Reported, not thrown-and-forgotten: the technician only sees a toast.
+          unawaited(CrashReporter.instance.captureException(EmptyRecordingException(bytes)));
           if (await file.exists()) await file.delete();
           throw EmptyRecordingException(bytes);
         }
