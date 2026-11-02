@@ -24,6 +24,7 @@ import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider, reportEditorProvider;
 import 'ai_draft_feed.dart';
 import 'ai_report/ai_describe_step.dart';
+import 'ai_report/ai_report_context.dart';
 import 'ai_report/ai_review_step.dart';
 import 'apply_confirmed_draft.dart';
 import 'create_draft.dart';
@@ -143,6 +144,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   /// The ticket's number, shown under the title. Fetched once; null when unknown (cantiere flow).
   String? _ticketNumber;
 
+  /// What the Controlla screen names first: the intervento this session compiles for.
+  AiReportContext? _reportContext;
+
   String? _startError;
   String? _confirmKey;
   int _thinkingStage = 0;
@@ -225,19 +229,49 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     _start();
   }
 
-  /// The header's subtitle. Read from the local mirror, not the server: it is already there for any
-  /// ticket the technician can open this screen from, and a failure here must never block the flow.
+  /// The intervento this session is about, as the local mirror knows it: the header's subtitle
+  /// (numero) and the Controlla screen's context card (numero · titolo, cliente, sede).
+  ///
+  /// Read from the mirror, never the server: it is already there for any ticket the technician can
+  /// open this screen from, it survives being offline mid-session, and a failure here must never
+  /// block the flow — a missing row costs the card, nothing else.
+  ///
+  /// The three lookups are deliberately separate `getSingleOrNull` reads on primary keys rather
+  /// than a join: the mirror is small, the ids are known, and a customer or location row that has
+  /// not synced yet must degrade that one line, not the whole card.
   Future<void> _loadTicketNumber() async {
     final id = widget.ticketId;
     if (id == null) return;
     try {
       final db = ref.read(appDatabaseProvider);
       final row = await (db.select(db.tickets)..where((t) => t.id.equals(id))).getSingleOrNull();
-      final numero = row?.numero?.trim();
-      if (!mounted || numero == null || numero.isEmpty) return;
-      setState(() => _ticketNumber = numero);
+      if (row == null) return;
+
+      final numero = row.numero?.trim() ?? '';
+      final title = row.title.trim();
+      final cliente =
+          await (db.select(db.customers)..where((c) => c.id.equals(row.customerId))).getSingleOrNull();
+      final sede =
+          await (db.select(db.locations)..where((l) => l.id.equals(row.locationId))).getSingleOrNull();
+
+      final label = [
+        if (numero.isNotEmpty) numero,
+        if (title.isNotEmpty) title,
+      ].join(' · ');
+
+      if (!mounted) return;
+      setState(() {
+        _ticketNumber = numero.isEmpty ? null : numero;
+        _reportContext = label.isEmpty
+            ? null
+            : AiReportContext(
+                ticketLabel: label,
+                cliente: cliente?.companyName,
+                sede: sede?.name,
+              );
+      });
     } catch (_) {
-      // A missing row (or an unreadable mirror) costs the subtitle, nothing else.
+      // A missing or unreadable row costs the subtitle and the context card, nothing else.
     }
   }
 
@@ -1361,6 +1395,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                 child: _step == _AiStep.review
                     ? AiReviewStep(
                         draft: _draft,
+                        reportContext: _reportContext,
                         busy: _sending || _editing || _applying || _confirming,
                         onAccept: _accept,
                         onResolveHeld: (item, {required bool reAdd}) =>
