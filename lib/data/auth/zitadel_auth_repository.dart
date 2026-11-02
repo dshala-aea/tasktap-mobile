@@ -6,7 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:passkeys/authenticator.dart';
-import 'package:passkeys/types.dart';
+// `hide TimeoutException`: passkeys' `types.dart` re-exports its own
+// `TimeoutException`, and a package library outranks a `dart:` platform library when resolving a
+// name that both provide — silently. Without the hide, every `on TimeoutException` in this file
+// matches passkeys' class instead of `dart:async`'s, so a real timeout falls through to the generic
+// `catch (e)`. That is what made a hung 12s refresh come back as `UnknownAuthError` (which signs
+// the user out) instead of `NetworkError`.
+import 'package:passkeys/types.dart' hide TimeoutException;
 
 import '../../core/config/env.dart';
 import '../../core/startup/startup_report.dart';
