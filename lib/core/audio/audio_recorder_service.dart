@@ -11,6 +11,18 @@ import 'package:record/record.dart';
 /// refused for length.
 const Duration maxRecordingLength = Duration(minutes: 5);
 
+/// The smallest file that can hold audio at all. A recording that captured nothing is a container
+/// header and little else — under a kilobyte — and uploading it only earns the server's
+/// `audio_too_short`, which reads as "you spoke too briefly" when in fact the microphone never
+/// recorded.
+///
+/// On iOS that is a live possibility, not a theory: `record_ios` ignores the `Bool` returned by
+/// `AVAudioRecorder.record()` and reports `RecordState.record` regardless, so a session that
+/// refused to start (microphone held by a call or another recorder, activation failure) looks
+/// exactly like a healthy one until the file is weighed. 2 KiB is a quarter second at the
+/// 64 kbit/s this path records — far below any deliberate utterance, far above a bare header.
+const int minCapturedBytes = 2048;
+
 /// Records one voice update to a local file. This is the ONLINE path (upload to
 /// `POST /api/ai/voice-captures`, which stores the audio without transcribing it); on-device
 /// dictation lives in `lib/core/dictation/` and is separate.

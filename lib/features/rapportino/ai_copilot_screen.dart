@@ -156,6 +156,13 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
   /// "Abbandona e ricomincia" is running: a second tap would start a second session.
   bool _abandoning = false;
+
+  /// Shown when the recorder handed back a file with no audio in it ([EmptyRecordingException]).
+  /// The server would answer `audio_too_short`, which blames the length of what was said; the file
+  /// was empty, so the microphone is what needs fixing.
+  static const _emptyRecordingMessage =
+      'Il microfono non ha registrato nulla: controlla che non sia occupato da un\'altra app o '
+      'chiamata, poi riprova.';
   StreamSubscription<PendingRecording>? _interruptSub;
   bool _stopping = false;
   VoiceCaptureController? _voiceCtl;
@@ -948,7 +955,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
             setState(() => _recording = false);
             showAppToast(
               context,
-              message: 'La registrazione si è interrotta e non è stata salvata.',
+              message: e is EmptyRecordingException
+                  ? _emptyRecordingMessage
+                  : 'La registrazione si è interrotta e non è stata salvata.',
               tone: ToastTone.error,
             );
           },
@@ -977,6 +986,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       if (!mounted) return;
       setState(() => _recording = false);
       await _run(_Outgoing(key: '${rec.idempotencyKey}:turn', recording: rec, voice: voice));
+    } on EmptyRecordingException {
+      // Nothing was captured, so there is nothing to retry as-is: the microphone itself did not
+      // start. Say that, rather than the recorder's own message or the server's "troppo breve".
+      if (!mounted) return;
+      setState(() => _recording = false);
+      showAppToast(context, message: _emptyRecordingMessage, tone: ToastTone.error);
     } catch (e) {
       if (!mounted) return;
       setState(() => _recording = false);
