@@ -221,4 +221,34 @@ void main() {
       expect(ReportDto.fromJson(json(numero: null)).numero, isNull);
     });
   });
+
+  group('TicketStatusDto.officeOnly', () {
+    Map<String, dynamic> json({Object? officeOnly = #absent}) => {
+      'id': 7,
+      'tenantId': 'tenant1',
+      'name': 'Da ufficio',
+      'isDefault': false,
+      'isClosed': false,
+      'isInProgress': false,
+      if (officeOnly != #absent) 'officeOnly': officeOnly,
+    };
+
+    test('parses a status the office administers', () {
+      expect(TicketStatusDto.fromJson(json(officeOnly: true)).officeOnly, isTrue);
+    });
+
+    test('a normal status reads as unrestricted', () {
+      expect(TicketStatusDto.fromJson(json(officeOnly: false)).officeOnly, isFalse);
+    });
+
+    // An older backend does not send the key. "No restriction" is what every status meant before
+    // the flag existed, so reading it true would lock the sheet for everybody.
+    test('is false when the key is absent (older backend)', () {
+      expect(TicketStatusDto.fromJson(json()).officeOnly, isFalse);
+    });
+
+    test('is false when the server sends an explicit null', () {
+      expect(TicketStatusDto.fromJson(json(officeOnly: null)).officeOnly, isFalse);
+    });
+  });
 }

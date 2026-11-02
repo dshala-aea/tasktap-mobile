@@ -17,6 +17,7 @@ import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/attachments/attachment_content_cache.dart';
+import '../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
@@ -2282,6 +2283,43 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
       _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
       return;
     }
+
+    // "Solo ufficio": without `interventi.ticket.configure` the server refuses both ends of the
+    // move — entering such a status, and leaving one. So the sheet lists only the statuses this
+    // caller could actually enter, and a ticket the office parked on one of its own is not movable
+    // at all: there the pill says why, instead of opening a sheet whose every tap would be refused.
+    //
+    // Fail-closed on an unknown capability, like [CapabilityGate]: nothing cached means no
+    // capability, and the filter still leaves every unrestricted status selectable — so a cold
+    // start degrades to the old behaviour minus the office-only rows, never to an empty sheet.
+    //
+    // Awaited for the same reason as the status list above: nothing in this subtree watches the
+    // provider, and a synchronous read of a cold `FutureProvider` answers `AsyncLoading` — which
+    // would read as "no capability" even for an office user and hide the statuses they may use.
+    bool canConfigureStatuses;
+    try {
+      final entitlement = await ref.read(cachedEntitlementProvider.future);
+      canConfigureStatuses =
+          entitlement?.capabilities.contains('interventi.ticket.configure') ?? false;
+    } catch (_) {
+      canConfigureStatuses = false;
+    }
+    final currentIsOfficeOnly = statuses.any(
+      (s) => s.id == widget.ticket.statusId && s.officeOnly,
+    );
+    if (!canConfigureStatuses && currentIsOfficeOnly) {
+      _report(
+        'Questo stato è gestito solo dall\'ufficio: chiedi all\'ufficio di spostare l\'intervento.',
+      );
+      return;
+    }
+    final offered = canConfigureStatuses
+        ? statuses
+        : statuses.where((s) => !s.officeOnly).toList();
+    if (offered.isEmpty) {
+      _report('Nessuno stato disponibile.');
+      return;
+    }
     if (!mounted) return;
 
     final chosen = await showModalBottomSheet<TicketStatuse>(
@@ -2316,7 +2354,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
                 ],
               ),
             ),
-            for (final status in statuses)
+            for (final status in offered)
               ListRow(
                 title: status.name,
                 strapped: status.id == widget.ticket.statusId,

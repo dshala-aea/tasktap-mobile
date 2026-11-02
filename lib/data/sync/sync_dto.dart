@@ -1325,6 +1325,10 @@ class TicketStatusDto {
   final bool isClosed;
   final bool isInProgress;
 
+  /// "Solo ufficio" — only a caller holding `interventi.ticket.configure` may move a ticket into or
+  /// out of this status. See the `TicketStatuses` table's own comment.
+  final bool officeOnly;
+
   const TicketStatusDto({
     required this.id,
     required this.tenantId,
@@ -1332,6 +1336,7 @@ class TicketStatusDto {
     required this.isDefault,
     required this.isClosed,
     required this.isInProgress,
+    this.officeOnly = false,
   });
 
   factory TicketStatusDto.fromJson(Map<String, dynamic> j) => TicketStatusDto(
@@ -1343,6 +1348,9 @@ class TicketStatusDto {
     // Absent from a payload an older server sends: false is the safe default — the dashboard then
     // keeps falling back to a running timer as its only "work has started" signal, as before.
     isInProgress: j['isInProgress'] as bool? ?? false,
+    // Same rule: an older server does not send it, and "no restriction" is what every status meant
+    // before the flag existed.
+    officeOnly: j['officeOnly'] as bool? ?? false,
   );
 }
 

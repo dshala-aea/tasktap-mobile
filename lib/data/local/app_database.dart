@@ -510,6 +510,12 @@ class TicketStatuses extends Table {
   /// a tenant may rename the status, and `TicketStatus` itself says the flag is the contract.
   BoolColumn get isInProgress => boolean().withDefault(const Constant(false))();
 
+  /// "Solo ufficio": only a caller holding `interventi.ticket.configure` may move a ticket into this
+  /// status or out of it. The server enforces it on `PUT /api/tickets/{id}/status` (and on its
+  /// implicit writers); the device mirrors the flag so the status sheet does not offer a move that
+  /// would come back 403 after the tap.
+  BoolColumn get officeOnly => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1737,7 +1743,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 60;
+  int get schemaVersion => 61;
 
   @override
   MigrationStrategy get migration {
@@ -2495,6 +2501,22 @@ class AppDatabase extends _$AppDatabase {
           // segments at all and the Ore field would stay editable on a timer row.
           await m.createTable(reportStaffSegments);
           await _createReportStaffSegmentIndexes();
+        }
+        if (from < 61) {
+          // "Solo ufficio" on a ticket status: the flag the server uses to reserve a status for a
+          // caller holding `interventi.ticket.configure`. Mirrored so the status sheet stops
+          // offering moves the server refuses.
+          //
+          // No cursor bump: `ticketStatuses` travels in full on every sync (the entity has no
+          // UpdatedAt, so there is nothing to delta on), so a device picks the new flag up on its
+          // next sync without being told to resend anything.
+          //
+          // Guarded like 59: the older-schema fixtures rewind `user_version` on the CURRENT schema,
+          // which already declares the column, and an unconditional add would die on
+          // `duplicate column name` before the app opened.
+          if (!await _columnExists(m.database, 'ticket_statuses', 'office_only')) {
+            await m.addColumn(ticketStatuses, ticketStatuses.officeOnly);
+          }
         }
       },
     );
