@@ -4,7 +4,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'retained_owner.dart';
 import 'unsent_work_counter.dart';
+
+// The marker itself — the two keys and the one writer — lives in `retained_owner.dart`, because a
+// session also ends at COLD START (`ZitadelAuthRepository._restore`) and that path must write the
+// same marker. Re-exported so every reader keeps importing it from here.
+export 'retained_owner.dart'
+    show sessionRetainedOwnerSubKey, sessionRetainedOwnerInternalIdKey;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Session recovery — what happens to a forced sign-out's leftovers
@@ -36,14 +43,12 @@ import 'unsent_work_counter.dart';
 // sign-in time the internal id in prefs is still the *previous* session's value
 // (`/auth/me` has not answered yet), so comparing internal ids here would
 // compare the previous session with itself and always "match".
+//
+// There is exactly ONE writer: `recordRetainedOwner` in `retained_owner.dart`,
+// called by both endings that keep the data (`SessionEnder.endForced` for the
+// in-flight 401, `ZitadelAuthRepository._restore` for the token that was already
+// dead when the app started).
 // ══════════════════════════════════════════════════════════════════════════════
-
-/// OIDC `sub` of the account whose local data a forced sign-out left behind.
-const String sessionRetainedOwnerSubKey = 'session_recovery.owner_sub';
-
-/// The internal `Users.Id` that account had last been seen with — diagnostics only, never the
-/// comparison key (see the file comment).
-const String sessionRetainedOwnerInternalIdKey = 'session_recovery.owner_internal_id';
 
 /// What the router needs to know about a signed-in session's leftovers.
 sealed class SessionRecoveryState {

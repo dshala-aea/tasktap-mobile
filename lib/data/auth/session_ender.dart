@@ -4,9 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/audio/pending_recording_store.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../domain/auth/i_auth_repository.dart';
-import '../entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
 import '../local/app_database.dart';
-import 'session_recovery.dart';
+import 'retained_owner.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SessionEnder
@@ -113,23 +112,10 @@ class SessionEnder {
 
   /// Name the owner of the data this forced sign-out leaves behind.
   ///
-  /// Best-effort: a device whose prefs cannot be written still keeps its data (the important part);
-  /// the consequence is only that the next sign-in cannot tell "same account" from "different
-  /// account", so it treats the data as foreign and asks before discarding — the safe direction.
-  Future<void> _recordRetainedOwner() async {
-    final sub = _repo.currentUser?.id;
-    if (sub == null || sub.isEmpty) return;
-    try {
-      final prefs = await _prefs();
-      final internalId = prefs.getString(internalUserIdPrefsKey);
-      await prefs.setString(sessionRetainedOwnerSubKey, sub);
-      if (internalId != null && internalId.isNotEmpty) {
-        await prefs.setString(sessionRetainedOwnerInternalIdKey, internalId);
-      }
-    } catch (_) {
-      // Best-effort, as above.
-    }
-  }
+  /// See `retained_owner.dart` — the same writer serves the cold-start ending
+  /// (`ZitadelAuthRepository._restore`), which keeps the data for the same reason.
+  Future<void> _recordRetainedOwner() =>
+      recordRetainedOwner(_repo.currentUser?.id, prefsLoader: _prefs);
 
   /// This is a shared/rotating-device field-service app (van tablets, rotating technicians) —
   /// leaving the local Drift DB and SharedPreferences populated after a CONSENTED sign-out would
