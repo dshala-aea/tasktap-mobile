@@ -21,7 +21,9 @@ import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/attachments/attachment_content_cache.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/tickets/pending_ticket_attachment_repository.dart';
@@ -99,6 +101,10 @@ Widget _buildDetail({
   // writes (`true`). Only the unknown-mirror test needs to say otherwise, because a ticket that
   // reaches the screen has by definition already reached the mirror.
   bool? ticketMirrorKnown,
+  // The cached `/auth/me` answer. Null leaves the real provider in place, which reads the empty
+  // `entitlements` table — i.e. "no capabilities", the same fail-closed answer a device with no
+  // cache gets. Only the "office may move into a Solo ufficio status" test grants anything.
+  Entitlement? entitlement,
 }) {
   return ProviderScope(
     overrides: [
@@ -113,6 +119,8 @@ Widget _buildDetail({
         attachmentContentCacheProvider.overrideWithValue(attachmentCache),
       if (ticketMirrorKnown != null)
         ticketMirrorKnownProvider.overrideWith((ref, _) async => ticketMirrorKnown),
+      if (entitlement != null)
+        cachedEntitlementProvider.overrideWith((ref) async => entitlement),
     ],
     child: MaterialApp(home: TicketDetailScreen(ticketId: ticketId)),
   );
@@ -256,6 +264,7 @@ void main() {
     bool settle = true,
     AttachmentContentCache? attachmentCache,
     bool? ticketMirrorKnown,
+    Entitlement? entitlement,
   }) async {
     await tester.pumpWidget(
       _buildDetail(
@@ -267,6 +276,7 @@ void main() {
         captureStore: captureStore,
         attachmentCache: attachmentCache,
         ticketMirrorKnown: ticketMirrorKnown,
+        entitlement: entitlement,
       ),
     );
     await tester.pump();
@@ -506,6 +516,124 @@ void main() {
       expect(find.text('Cambia stato'), findsOneWidget);
       // The ticket's current status is marked rather than merely listed, so a technician can see
       // what they are changing from.
+      expect(find.text('Aperto'), findsWidgets);
+
+      await tester.tapAt(const Offset(10, 10)); // dismiss
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    // ── "Solo ufficio" ────────────────────────────────────────────────────────
+    //
+    // Only a caller holding `interventi.ticket.configure` may move a ticket into such a status or
+    // out of it; the server 403s either way. The device mirrors the flag so the sheet never offers
+    // a move whose only possible answer is a refusal after the tap.
+
+    /// Adds a status the office administers. `statusId` moves the ticket onto it.
+    Future<void> seedOfficeOnlyStatus({int statusId = 1}) async {
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(6),
+              tenantId: 'tenant-1',
+              name: 'Da ufficio',
+              officeOnly: const Value(true),
+            ),
+          );
+      if (statusId != 1) {
+        await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
+          TicketsCompanion(statusId: Value(statusId)),
+        );
+      }
+    }
+
+    Entitlement withCapabilities(Set<String> capabilities) => Entitlement(
+      features: const {},
+      capabilities: capabilities,
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 2),
+    );
+
+    testWidgets('the status sheet does not offer a "Solo ufficio" status to a technician', (
+      tester,
+    ) async {
+      await seedBase(db);
+      await seedOfficeOnlyStatus();
+      await pump(tester);
+
+      await tester.tap(find.byType(StatusPill));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cambia stato'), findsOneWidget);
+      expect(find.text('Aperto'), findsWidgets);
+      // Offering it would mean offering a tap that comes back 403 with nothing the technician can
+      // do about it.
+      expect(find.text('Da ufficio'), findsNothing);
+
+      await tester.tapAt(const Offset(10, 10)); // dismiss
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the office may move a ticket into a "Solo ufficio" status', (tester) async {
+      await seedBase(db);
+      await seedOfficeOnlyStatus();
+      await pump(
+        tester,
+        entitlement: withCapabilities(const {'interventi.ticket.configure'}),
+      );
+
+      await tester.tap(find.byType(StatusPill));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cambia stato'), findsOneWidget);
+      expect(find.text('Da ufficio'), findsOneWidget);
+
+      await tester.tapAt(const Offset(10, 10)); // dismiss
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a ticket the office parked on a "Solo ufficio" status is not movable', (
+      tester,
+    ) async {
+      // Not just "hides that row": the ticket sits ON one, and leaving it is refused too, so there
+      // is no move this caller may make. Saying so beats opening a sheet of refusals.
+      await seedBase(db);
+      await seedOfficeOnlyStatus(statusId: 6);
+      await pump(tester);
+
+      await tester.tap(find.byType(StatusPill));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cambia stato'), findsNothing);
+      expect(
+        find.text(
+          'Questo stato è gestito solo dall\'ufficio: chiedi all\'ufficio di spostare l\'intervento.',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the office may move a ticket off a "Solo ufficio" status', (tester) async {
+      await seedBase(db);
+      await seedOfficeOnlyStatus(statusId: 6);
+      await pump(
+        tester,
+        entitlement: withCapabilities(const {'interventi.ticket.configure'}),
+      );
+
+      await tester.tap(find.byType(StatusPill));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cambia stato'), findsOneWidget);
       expect(find.text('Aperto'), findsWidgets);
 
       await tester.tapAt(const Offset(10, 10)); // dismiss

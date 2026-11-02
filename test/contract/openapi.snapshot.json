@@ -41326,6 +41326,10 @@
           "isInProgress": {
             "type": "boolean",
             "description": "Marks this status as the tenant\u0027s \u0022work has started\u0022 state (seeded as \u0022In corso\u0022) \u2014 the\nticket a technician moved from planned to being worked on, whether they started a work log\nor opened a rapportino on it."
+          },
+          "officeOnly": {
+            "type": "boolean",
+            "description": "Marks this status as manageable from the office only (\u0022Solo ufficio\u0022): a technician can\nneither move a ticket INTO this status nor move a ticket OUT of it."
           }
         },
         "description": "Represents a ticket status (StatoIntervento)."

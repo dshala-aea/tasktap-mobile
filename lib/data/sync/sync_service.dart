@@ -1534,6 +1534,7 @@ class SyncService {
               isDefault: Value(s.isDefault),
               isClosed: Value(s.isClosed),
               isInProgress: Value(s.isInProgress),
+              officeOnly: Value(s.officeOnly),
             ),
           );
     }
