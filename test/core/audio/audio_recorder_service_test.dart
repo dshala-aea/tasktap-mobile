@@ -31,6 +31,10 @@ class _FakeRecorder implements AudioRecorderService {
   /// When set, [stop] waits for it: the recording is "ending" (saved but not yet stored).
   Completer<void>? stopGate;
 
+  /// Size of the file [stop] hands back. Lowered to a header-only size to model what an iOS
+  /// recorder that never started leaves behind.
+  int bytesWritten = minCapturedBytes;
+
   @override
   Future<File> stop() async {
     final gate = stopGate;
@@ -38,7 +42,7 @@ class _FakeRecorder implements AudioRecorderService {
     stops++;
     started = false;
     final f = File('${dir.path}/rec_$stops.m4a');
-    await f.writeAsBytes([1, 2, 3, 4]);
+    await f.writeAsBytes(List<int>.filled(bytesWritten, 0));
     return f;
   }
 
@@ -155,6 +159,37 @@ void main() {
     expect(keys, hasLength(2));
     expect(keys[0], keys[1]);
     expect(keys[0], pending.idempotencyKey);
+  });
+
+  test('A_capture_with_no_audio_is_dropped_instead_of_stored', () async {
+    // What an iOS recorder leaves behind when `AVAudioRecorder.record()` returned false and the
+    // plugin reported "recording" anyway: an m4a header and nothing else. Uploading it earns the
+    // server's `audio_too_short`, which tells the technician to speak longer into a dead mic.
+    recorder.bytesWritten = 600;
+    final c = controller();
+    await c.start(ticketId: 'T1');
+
+    await expectLater(c.stop(), throwsA(isA<EmptyRecordingException>()));
+
+    expect(await store.list(userId: 'userA'), isEmpty);
+    expect(File('${tmp.path}/rec_1.m4a').existsSync(), isFalse, reason: 'the empty take is deleted');
+  });
+
+  test('An_empty_capture_that_ends_on_its_own_reports_the_error_not_a_recording', () async {
+    recorder.bytesWritten = 600;
+    final c = controller();
+    await c.start(ticketId: 'T1');
+
+    final errors = <Object>[];
+    final records = <PendingRecording>[];
+    final sub = c.completed.listen(records.add, onError: errors.add);
+    recorder.endUnexpectedly();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await sub.cancel();
+
+    expect(records, isEmpty);
+    expect(errors.single, isA<EmptyRecordingException>());
+    expect(await store.list(userId: 'userA'), isEmpty);
   });
 
   test('Recording_is_refused_until_consent_is_accepted', () async {

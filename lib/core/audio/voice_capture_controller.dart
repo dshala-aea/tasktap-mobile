@@ -2,9 +2,26 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../../data/ai/ai_api_client.dart';
 import 'audio_recorder_service.dart';
 import 'pending_recording_store.dart';
+
+/// A finished recording that holds no audio: the file is a container header, not a take.
+///
+/// Distinct from a short recording on purpose. A take under a second is the technician's to fix
+/// ("parla un po' più a lungo"); an empty one is the recorder's, and no retry of the same words
+/// would change it. See [minCapturedBytes] for why iOS can produce one silently.
+class EmptyRecordingException implements Exception {
+  const EmptyRecordingException(this.bytes);
+
+  /// Size of the dropped file, in bytes — logged, so a handset with no console still leaves a trail.
+  final int bytes;
+
+  @override
+  String toString() => 'La registrazione è vuota ($bytes byte).';
+}
 
 enum RecordingStartResult {
   started,
@@ -153,6 +170,15 @@ class VoiceCaptureController {
         await _sub?.cancel();
         _sub = null;
         final file = await recorder.stop();
+        // Weighed before it is stored or offered: a header-only file is a broken capture, and the
+        // server's verdict on it (`audio_too_short`) would send the technician back to talk longer
+        // into a microphone that never recorded in the first place.
+        final bytes = await file.length();
+        if (bytes < minCapturedBytes) {
+          debugPrint('Voice capture empty: $bytes bytes, dropped before upload');
+          if (await file.exists()) await file.delete();
+          throw EmptyRecordingException(bytes);
+        }
         return await store.add(file, userId: _userId!, ticketId: _ticketId);
       } finally {
         // Only while it is in flight: a later [cancel] must never delete a recording that was
