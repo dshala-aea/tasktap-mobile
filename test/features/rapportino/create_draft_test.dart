@@ -490,6 +490,10 @@ void main() {
           reportId: 'report-1',
           controlId: 'ctrl-1',
           stringValue: const Value('120 bar'),
+          numberValue: const Value(120),
+          note: const Value('misurato a freddo'),
+          controlLabel: const Value('Pressione impianto'),
+          assetId: const Value('asset-1'),
         ),
       );
 
@@ -514,6 +518,12 @@ void main() {
       expect(newControlli, hasLength(1));
       expect(newControlli.single.controlId, 'ctrl-1');
       expect(newControlli.single.stringValue, '120 bar');
+      // A copy carries every answer column, not just the text one: a numeric answer, the note, and
+      // the label/asset snapshot that lets the duplicate name its own rows without the checklist.
+      expect(newControlli.single.numberValue, 120);
+      expect(newControlli.single.note, 'misurato a freddo');
+      expect(newControlli.single.controlLabel, 'Pressione impianto');
+      expect(newControlli.single.assetId, 'asset-1');
 
       // The rejected report's own child rows are untouched.
       expect((await repo.getStaff('report-1')).single.id, 's-1');

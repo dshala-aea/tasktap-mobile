@@ -5,7 +5,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/ai/ai_api_client.dart';
 import '../../data/local/app_database.dart';
-import '../../data/reports/import_server_report.dart' show controlRowId;
+import '../../data/reports/import_server_report.dart'
+    show controlRowId, controlSnapshotsForTicket;
+import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider;
 import 'ai_draft_feed.dart' show AiFeedReportLockedException, aiDraftFeedProvider;
@@ -120,6 +122,15 @@ Future<String?> applyConfirmedDraft(
   }
 
   if (response.controlli.isNotEmpty) {
+    // The server sends the TicketControl id only. The ticket's checklist is already mirrored on a
+    // device that synced it, so each answer gets the same label/asset snapshot the editor writes
+    // when the technician answers by hand (schema 52) — a report built from a voice draft must name
+    // its own rows just as a typed one does. Best-effort: no mirror, no snapshot, and the read-only
+    // view falls back to the checklist exactly as before.
+    final snapshots = await controlSnapshotsForTicket(
+      ref.read(appDatabaseProvider),
+      draft.ticketId,
+    );
     await repo.upsertControlli([
       for (final c in response.controlli)
         ReportControlliCompanion.insert(
@@ -135,6 +146,8 @@ Future<String?> applyConfirmedDraft(
           dateValue: Value(c.dateValue),
           numberValue: Value(c.numberValue),
           note: Value(c.note),
+          controlLabel: Value(snapshots[c.ticketControlId]?.controlLabel),
+          assetId: Value(snapshots[c.ticketControlId]?.assetId),
         ),
     ]);
   }
