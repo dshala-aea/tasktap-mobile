@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -73,10 +74,18 @@ class NotificationService {
     if (_initialized) return;
     _initialized = true;
 
-    if (await hasPermission()) {
-      _currentToken = await _tryGetToken();
-      debugPrint('FCM token: $_currentToken');
-    }
+    // Warmed in the BACKGROUND, never awaited. On iOS `getToken()` waits for APNs registration to
+    // complete, and when that registration is stuck — App ID without the Push capability, no APNs
+    // key uploaded to the Firebase project, a profile that never matched the capability — the call
+    // does not throw, it HANGS. `initialize()` is awaited by `initializePush` in main.dart under a
+    // 5-second budget, so a hang did not merely lose a token: it timed out the whole bootstrap,
+    // left `isAvailable` false and never wired the listeners below. The app then told the
+    // technician "not available on this device" on a device where the only actual fault was that
+    // APNs had not answered yet, and no push could arrive even if it had.
+    //
+    // Availability therefore means one thing only: Firebase started and the listeners are wired.
+    // A token that arrives late is still registered — `onTokenRefresh` fires for it.
+    unawaited(_warmToken());
 
     // Listen for token refreshes.
     _messaging.onTokenRefresh.listen((newToken) {
@@ -96,11 +105,11 @@ class NotificationService {
 
     // Check if app was opened from a notification (terminated state).
     //
-    // Guarded for the same reason as the token fetch above: a throw here aborts `initialize()`, and
-    // the bootstrap turns that into "push unavailable" — for a cold-start deep link that is merely
-    // absent. Nothing below depends on the result.
+    // Guarded AND bounded, for the same reason as the token fetch above: a throw or a hang here
+    // aborts `initialize()`, and the bootstrap turns that into "push unavailable" — for a
+    // cold-start deep link that is merely absent. Nothing below depends on the result.
     try {
-      final initialMessage = await _messaging.getInitialMessage();
+      final initialMessage = await _messaging.getInitialMessage().timeout(_coldStartBudget);
       if (initialMessage != null) {
         _handleNotificationTap(initialMessage);
       }
@@ -117,17 +126,35 @@ class NotificationService {
     // `ios/firebase_messaging/Sources/firebase_messaging/FLTFirebaseMessagingPlugin.m`, and the
     // doc comment above it reads "Sets the presentation options for Apple notifications". So the
     // call went to the platform that cannot honour it and was skipped on the platform that is the
-    // entire reason it exists. Left unguarded against throwing: if it ever does, the bootstrap now
-    // records the exception and Impostazioni shows it, which is a better outcome than silently
-    // having no foreground alerts.
+    // entire reason it exists.
+    //
+    // Bounded and non-fatal like the two steps above. It used to be left unguarded on the argument
+    // that a throw would at least be recorded — but a throw here takes down `initialize()`, which
+    // the bootstrap reports as "push unavailable", which is a wildly out-of-proportion price for
+    // a foreground-presentation preference on a device that can receive notifications perfectly
+    // well. A failure is still named (lastError, shown by Impostazioni) and it never disables
+    // anything.
     if (Platform.isIOS) {
-      await _messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      try {
+        await _messaging
+            .setForegroundNotificationPresentationOptions(
+              alert: true,
+              badge: true,
+              sound: true,
+            )
+            .timeout(_coldStartBudget);
+      } catch (e) {
+        lastError = 'Notifiche in primo piano: $e';
+        debugPrint('setForegroundNotificationPresentationOptions failed: $e');
+      }
     }
   }
+
+  /// How long any single cold-start step inside [initialize] may take.
+  ///
+  /// Smaller than the bootstrap's own 5-second budget in main.dart on purpose: one slow APNs/plugin
+  /// call must not consume the whole budget and leave the steps after it unrun.
+  static const Duration _coldStartBudget = Duration(seconds: 2);
 
   /// Whether the OS already allows notifications, without asking.
   ///
@@ -289,6 +316,36 @@ class NotificationService {
     return link;
   }
 
+  /// Fetch the token once at startup, if the OS already allows notifications. Never throws and
+  /// never blocks [initialize]; the result is only ever a cached token for the first registration.
+  Future<void> _warmToken() async {
+    try {
+      if (!await hasPermission()) return;
+      _currentToken = await _tryGetToken();
+      debugPrint('FCM token: $_currentToken');
+
+      // A token that arrives after the login-time registration has nobody to hand it to:
+      // `registerDeviceToken` ran while this was still in flight. Register it here so a slow APNs
+      // does not cost the device its registration until the next cold start. `onTokenRefresh`
+      // covers the same case, but only if Firebase decides to emit it — this does not depend on it.
+      final accessToken = _lastAccessToken;
+      if (_currentToken != null && accessToken != null) {
+        await registerDeviceToken(accessToken);
+      }
+    } catch (e) {
+      lastError = 'Token: $e';
+      debugPrint('FCM token warm-up failed: $e');
+    }
+  }
+
+  /// How long a single token fetch may take before it is abandoned.
+  ///
+  /// Bounded rather than relied upon: `getToken()` on iOS resolves only once APNs has registered
+  /// the device, and a misconfigured one never answers at all (see [initialize]). A caller that
+  /// awaits this — [ensurePermission], after the technician granted — must not hold the settings
+  /// sheet open indefinitely for a token that a later `onTokenRefresh` will deliver anyway.
+  static const Duration tokenFetchTimeout = Duration(seconds: 15);
+
   /// Fetch the FCM token, or null when the platform will not issue one yet.
   ///
   /// On iOS `getToken()` throws `[firebase_messaging/apns-token-not-set]` whenever APNs registration
@@ -299,11 +356,33 @@ class NotificationService {
   /// prompt, no listeners, no deep links, and Impostazioni reporting notifications as unsupported
   /// on a handset that supports them perfectly well. A missing token is a missing token; it is not
   /// a reason to refuse to ask for permission.
-  Future<String?> _tryGetToken() async {
+  ///
+  /// The same fault also HANGS instead of throwing on some iOS devices, which is why the fetch is
+  /// bounded by [tokenFetchTimeout] as well as caught.
+  Future<String?> _tryGetToken() => fetchToken(
+    () => _messaging.getToken(),
+    timeout: tokenFetchTimeout,
+    recordError: (message) => lastError = message,
+  );
+
+  /// [fetch], bounded and recorded — the testable half of [_tryGetToken].
+  ///
+  /// Returns null on any failure (throw or timeout) and names it through [recordError], so
+  /// Impostazioni can show a real cause instead of a generic "not available on this device".
+  @visibleForTesting
+  static Future<String?> fetchToken(
+    Future<String?> Function() fetch, {
+    Duration timeout = tokenFetchTimeout,
+    void Function(String message)? recordError,
+  }) async {
     try {
-      return await _messaging.getToken();
+      return await fetch().timeout(timeout);
+    } on TimeoutException {
+      recordError?.call('Token: nessuna risposta da APNs entro $timeout');
+      debugPrint('FCM getToken timed out after $timeout');
+      return null;
     } catch (e) {
-      lastError = 'Token: $e';
+      recordError?.call('Token: $e');
       debugPrint('FCM getToken failed: $e');
       return null;
     }
