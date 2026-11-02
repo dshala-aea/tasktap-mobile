@@ -35876,7 +35876,8 @@
           "oraInizio",
           "oraFine",
           "tecnico",
-          "tecnicoId"
+          "tecnicoId",
+          "squadra"
         ],
         "type": "object",
         "properties": {
@@ -35910,7 +35911,8 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Name of the person this row belongs to. The strip draws one lane per person, so a schedule\nassigned to a squadra appears once per current member \u2014 each entry carries the member\u0027s own\nname, never the squadra\u0027s. Null only for work resolved to nobody (drawn as \u0022non assegnato\u0022)."
           },
           "tecnicoId": {
             "type": [
@@ -35918,9 +35920,16 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "squadra": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Name of the assigned squadra, when the work went to a team. Repeated on every member\u0027s entry;\nit names the work, not the lane."
           }
         },
-        "description": "One of today\u0027s schedules. Time-of-day fields are pre-formatted \u0060\u0022HH:mm\u0022\u0060 strings so the\nfrontend renders without touching a timezone; DateTime ScheduleOggiDto.Data is the UTC activity instant."
+        "description": "One of today\u0027s schedules, as drawn on the dashboard\u0027s Oggi strip. Time-of-day fields are\npre-formatted \u0060\u0022HH:mm\u0022\u0060 strings so the frontend renders without touching a timezone;\nDateTime ScheduleOggiDto.Data is the UTC activity instant."
       },
       "ScheduleTeamConflictDto": {
         "required": [
