@@ -15,6 +15,7 @@ import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
 import 'passkey_options.dart';
 import 'pkce.dart';
+import 'retained_owner.dart';
 
 /// Zitadel OIDC implementation of [IAuthRepository].
 ///
@@ -617,6 +618,22 @@ class ZitadelAuthRepository implements IAuthRepository {
       // after install never completed) — nothing to show as signed-in, so
       // fall through to the normal sign-out path below.
     }
+
+    // The credentials below are about to go while the local database stays — deliberately, because
+    // a dead refresh token routinely turns up with the outboxes full (offline audit F1). Name its
+    // owner FIRST, while the cached identity still exists: `SessionRecoveryController` gates the
+    // next sign-in on that marker, and without it a different account on a shared device inherits
+    // this one's tickets, customers and sync cursor with no prompt. The interceptor's forced path
+    // does this through `SessionEnder.endForced`; a session that died while the app was closed
+    // never reaches the interceptor, so this path has to do it too (`retained_owner.dart`).
+    Map<String, dynamic>? identity;
+    try {
+      identity = await _readCachedIdentity();
+    } catch (_) {
+      // An unreadable keychain names nobody; the teardown still has to finish (the router is
+      // waiting on an emit).
+    }
+    await recordRetainedOwner(identity?['id']?.toString());
 
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _cachedIdentityKey);
