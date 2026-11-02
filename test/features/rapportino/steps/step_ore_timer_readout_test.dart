@@ -105,8 +105,11 @@ void main() {
       // 2,0 h — the measured runs. Not the 4 h span, and not the 4 h the office typed.
       expect(find.text('2,0'), findsOneWidget);
       expect(find.text('Ore effettive: 2,0h · 2 intervalli'), findsOneWidget);
-      // The bottom card folds effectiveHours too, so the total agrees with the row.
-      expect(find.text('2.0 h'), findsOneWidget);
+      // The bottom card folds effectiveHours too, so the total agrees with the row. It formats
+      // through the same Italian-decimal helper as the row above (`_formatHours`), so the
+      // separator is a comma: 1.0.4 moved this line off `toStringAsFixed(1)` and the expectation
+      // was left behind, which is why every zone has been red since that release.
+      expect(find.text('2,0 h'), findsOneWidget);
 
       expect(_oreField, findsNothing, reason: 'the hours are the timer\'s, not the keyboard\'s');
       expect(_kmField, findsOneWidget, reason: 'km is still the technician\'s to enter');
