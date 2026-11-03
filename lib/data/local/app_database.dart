@@ -400,6 +400,20 @@ class Schedules extends Table {
   /// and the behaviour of every build before this one.
   BoolColumn get isAssenza => boolean().withDefault(const Constant(false))();
 
+  /// True when this day belongs to a multi-day plan rather than to a job scheduled on its own.
+  ///
+  /// A block reserves every day it covers, so the day is not free to edit, drag or delete; the
+  /// admin screens read this the same way they already read [isAssenza]. Defaults to false — the
+  /// honest reading of a row written before the column existed, and the behaviour of every build
+  /// before this one.
+  BoolColumn get isBlockOccupied => boolean().withDefault(const Constant(false))();
+
+  /// The absence request this row was materialised from, when it is one.
+  ///
+  /// Null on every ordinary job and on a multi-day block, which is not an absence: only an
+  /// approved absence request produces this value.
+  TextColumn get absenceRequestId => text().nullable()();
+
   // Who is on this schedule lives in [ScheduleAssignees]. teamLeadId, staffIds and squadraId
   // were dropped server-side (backend ADR-0009) and stopped arriving; keeping them here would
   // have left three columns that are null forever and a staffIds blob that never parses to
@@ -1743,7 +1757,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 61;
+  int get schemaVersion => 62;
 
   @override
   MigrationStrategy get migration {
@@ -2516,6 +2530,26 @@ class AppDatabase extends _$AppDatabase {
           // `duplicate column name` before the app opened.
           if (!await _columnExists(m.database, 'ticket_statuses', 'office_only')) {
             await m.addColumn(ticketStatuses, ticketStatuses.officeOnly);
+          }
+        }
+        if (from < 62) {
+          // A multi-day plan marks every day it covers as occupied, and an absence-owned row now
+          // carries the request it came from. Both are read-only signals like `isAssenza`
+          // (schema 58), so the admin screens stop offering writes the server refuses.
+          //
+          // No `syncCursorGeneration` bump: a technician's schedules are re-sent in full on every
+          // sync (the delta filter deliberately does not cover them — see `MobileUserSyncService`'s
+          // type-level delta contract), so the first sync after the upgrade fills both leaves on
+          // rows already on the device.
+          //
+          // Guarded like 58-61: the older-schema fixtures rewind `user_version` on the CURRENT
+          // schema, which already declares both columns, and an unconditional add would die on
+          // `duplicate column name` before the app opened.
+          if (!await _columnExists(m.database, 'schedules', 'is_block_occupied')) {
+            await m.addColumn(schedules, schedules.isBlockOccupied);
+          }
+          if (!await _columnExists(m.database, 'schedules', 'absence_request_id')) {
+            await m.addColumn(schedules, schedules.absenceRequestId);
           }
         }
       },

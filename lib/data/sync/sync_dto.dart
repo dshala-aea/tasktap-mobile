@@ -1408,6 +1408,20 @@ class ScheduleDto {
   /// job — the behaviour it had before the flag existed — rather than guessing.
   final bool isAssenza;
 
+  /// True when this day belongs to a multi-day plan rather than to a job scheduled on its own.
+  ///
+  /// A block reserves every day it covers, so the day is not free to edit, drag or delete; the
+  /// admin screens read this the same way they already read [isAssenza]. Defaults to false so a
+  /// build talking to an older backend reads every row as an ordinary day — the behaviour it had
+  /// before the flag existed — rather than locking a day nobody reserved.
+  final bool isBlockOccupied;
+
+  /// The absence request this row was materialised from, when it is one.
+  ///
+  /// Null on every ordinary job and on a multi-day block, which is not an absence: only an
+  /// approved absence request produces this value.
+  final String? absenceRequestId;
+
   /// Everyone on this schedule, with every reason they are on it.
   ///
   /// Replaces teamLeadId / staffIds / squadraId, which the server dropped (backend ADR-0009).
@@ -1431,6 +1445,8 @@ class ScheduleDto {
     required this.title,
     required this.description,
     this.isAssenza = false,
+    this.isBlockOccupied = false,
+    this.absenceRequestId,
     this.assignees = const [],
   });
 
@@ -1455,6 +1471,8 @@ class ScheduleDto {
       title: j['title'] as String? ?? '',
       description: j['description'] as String? ?? '',
       isAssenza: j['isAssenza'] as bool? ?? false,
+      isBlockOccupied: j['isBlockOccupied'] as bool? ?? false,
+      absenceRequestId: j['absenceRequestId'] as String?,
       assignees: (j['assignees'] as List<dynamic>? ?? const [])
           .map((e) => ScheduleAssigneeDto.fromJson(e as Map<String, dynamic>))
           .toList(growable: false),
