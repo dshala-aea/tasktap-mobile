@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/connectivity_provider.dart';
+import '../../../data/users/user_directory.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -16,16 +17,9 @@ final adminSquadreProvider = FutureProvider.autoDispose<List<Map<String, dynamic
   return api.fetchSquadre();
 });
 
-/// Backs per-squadra member counts here (Gap 7 of the feature audit) and, on the detail screen,
-/// each member's last-access display (Gap 6) — one shared bulk fetch rather than either fetching
-/// per squadra row or per member row. See
-/// [AdminApiClient.fetchAllUsersWithSquadraInfo]'s doc comment for why.
-final allUsersWithSquadraProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
-  ref,
-) async {
-  final api = ref.watch(adminApiClientProvider);
-  return api.fetchAllUsersWithSquadraInfo();
-});
+/// Per-squadra member counts and last-access displays are derived from the shared
+/// [allUsersProvider] (active users) — one bulk fetch rather than one per squadra or per member.
+/// See [AdminApiClient.fetchAllUsersWithSquadraInfo]'s doc comment for why.
 
 /// Admin squadra list — online-only (squadre are not in the sync payload).
 class AdminSquadraListScreen extends ConsumerWidget {
@@ -104,10 +98,10 @@ class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
       return nome.contains(_query.toLowerCase());
     }).toList();
 
-    // One bulk fetch for the whole list, not one per row — see allUsersWithSquadraProvider's doc
-    // comment. `squadraId` is the derived field UsersController.PopulateSquadreAsync projects onto
-    // every user response.
-    final users = ref.watch(allUsersWithSquadraProvider).valueOrNull ?? const [];
+    // One bulk fetch for the whole list, not one per row — see allUsersProvider's doc comment.
+    // `squadraId` is the derived field UsersController.PopulateSquadreAsync projects onto every
+    // user response.
+    final users = ref.watch(allUsersProvider(true)).valueOrNull ?? const [];
     final memberCounts = <String, int>{};
     for (final u in users) {
       final squadraId = u['squadraId'] as String?;
@@ -186,7 +180,7 @@ class _SquadraRow extends StatelessWidget {
   final String specializzazione;
   final String? capoNome;
 
-  /// Derived client-side from `allUsersWithSquadraProvider` — the backend has no `membriCount`
+  /// Derived client-side from `allUsersProvider` — the backend has no `membriCount`
   /// field on the squadra list response (Gap 7 of the feature audit; web's own `nMembri` column
   /// renders 0 for the same reason, per its `api.ts` header comment).
   final int memberCount;
