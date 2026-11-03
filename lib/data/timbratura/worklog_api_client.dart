@@ -338,10 +338,26 @@ class WorklogApiClient {
   /// Idempotent upsert: the server matches on (tenant, user, clientId) and
   /// updates the row (e.g. fills endTime) without creating duplicates.
   /// Throws [DioException] on network / server error.
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
+  ///
+  /// [breaks] is additive and optional. Each entry is a `pausa → ripresa` interval (client id =
+  /// the pausa event id); the server writes it as a break row and classifies it as a short or long
+  /// break when it closes. It is sent in its OWN array, never mixed into [sessions], so a server
+  /// that predates this field simply ignores it: the ordinary intervals are unchanged and the
+  /// break stays the gap it is today. Once the server supports it, the same payload fills that gap
+  /// with a real break row, with no client-side feature flag to flip.
+  ///
+  /// The key is omitted entirely when there is no break, which keeps every existing caller's body
+  /// byte-identical.
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> sessions, {
+    List<MobileSessionDto> breaks = const [],
+  }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/worklog/mobile/sessions',
-      data: {'sessions': sessions.map((s) => s.toJson()).toList()},
+      data: {
+        'sessions': sessions.map((s) => s.toJson()).toList(),
+        if (breaks.isNotEmpty) 'breaks': breaks.map((s) => s.toJson()).toList(),
+      },
     );
 
     final data = response.data;
@@ -380,7 +396,9 @@ class WorklogApiClient {
       data: deviceUtc == null ? null : {'deviceUtc': deviceUtc.toUtc().toIso8601String()},
     );
     final data = response.data;
-    return data is Map<String, dynamic> ? (data['clockDisagreementSeconds'] as num?)?.toInt() : null;
+    return data is Map<String, dynamic>
+        ? (data['clockDisagreementSeconds'] as num?)?.toInt()
+        : null;
   }
 
   /// POST /api/worklog/break/start — 400 unless an ordinary (non-break) row is open.
@@ -394,20 +412,14 @@ class WorklogApiClient {
   /// tap is the replay. This is the tap's own time, so there is no second reading to compare it
   /// with and no clock disagreement to report.
   Future<void> startBreak({DateTime? occurredAtUtc}) async {
-    await _dio.post<dynamic>(
-      '/api/worklog/break/start',
-      data: _breakPunchBody(occurredAtUtc),
-    );
+    await _dio.post<dynamic>('/api/worklog/break/start', data: _breakPunchBody(occurredAtUtc));
   }
 
   /// POST /api/worklog/break/end — 404 unless a break is open. See [startBreak] for
   /// [occurredAtUtc]; on this half it is what makes the break's duration — and so its short/long
   /// classification — the real one rather than the gap between two replays.
   Future<void> endBreak({DateTime? occurredAtUtc}) async {
-    await _dio.post<dynamic>(
-      '/api/worklog/break/end',
-      data: _breakPunchBody(occurredAtUtc),
-    );
+    await _dio.post<dynamic>('/api/worklog/break/end', data: _breakPunchBody(occurredAtUtc));
   }
 
   /// Null, not `{}`, when there is nothing to say: a live tap stays identical on the wire.

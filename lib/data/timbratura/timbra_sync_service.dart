@@ -24,12 +24,15 @@
 //   work_log_reconciler.dart for the write side of this marker.
 // ══════════════════════════════════════════════════════════════════════════════
 
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/timbra/timbra_providers.dart' show workSessionRepositoryProvider;
 import '../../presentation/providers/clock_disagreement_provider.dart';
+import '../../core/crash_reporting/crash_reporter.dart';
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart';
 import '../api/dio_client.dart';
@@ -229,8 +232,10 @@ class TimbraSyncService {
         if (_batchHeld()) return;
         if (!await _pushDay(day)) return;
       }
-    } catch (_) {
-      // Swallow: keeps isPendingSync = true for the next attempt.
+    } catch (e, st) {
+      // Swallow: keeps isPendingSync = true for the next attempt. Reported, because a release
+      // build has no debugPrint and an assembly/repository failure must not be invisible.
+      unawaited(CrashReporter.instance.captureException(e, stackTrace: st, hint: 'timbra sync'));
     }
   }
 
@@ -245,30 +250,36 @@ class TimbraSyncService {
     final intervals = assembleIntervals(day, businessDateOf: _businessTime.businessDateOf);
     if (intervals.isEmpty) return true;
 
-    final dtos = intervals
-        .map(
-          (i) => MobileSessionDto(
-            clientId: i.clientId,
-            startTime: i.startTime,
-            endTime: i.endTime,
-            // Captured at punch time when available (PunchNotifier) — see WorkInterval's own
-            // doc comment for why only the opener's position is carried. Still null whenever no
-            // position was captured (GPS off, permission never granted, or a pre-existing
-            // event from before this capture existed); simple timbra keeps working either way.
-            latitude: i.latitude,
-            longitude: i.longitude,
-            gpsAccuracyMeters: i.gpsAccuracyMeters,
-            // Read once, here, at the moment the batch is handed to Dio — the same reading on
-            // every session, because the comparison the server makes is per batch, not per
-            // punch. Never i.startTime: a punch queued hours ago says nothing about the gap
-            // between the two clocks now.
-            deviceUtc: _clock().toUtc(),
-          ),
-        )
+    MobileSessionDto toDto(WorkInterval i) => MobileSessionDto(
+      clientId: i.clientId,
+      startTime: i.startTime,
+      endTime: i.endTime,
+      // Captured at punch time when available (PunchNotifier) — see WorkInterval's own
+      // doc comment for why only the opener's position is carried. Still null whenever no
+      // position was captured (GPS off, permission never granted, or a pre-existing
+      // event from before this capture existed); simple timbra keeps working either way.
+      latitude: i.latitude,
+      longitude: i.longitude,
+      gpsAccuracyMeters: i.gpsAccuracyMeters,
+      // Read once, here, at the moment the batch is handed to Dio — the same reading on
+      // every session, because the comparison the server makes is per batch, not per
+      // punch. Never i.startTime: a punch queued hours ago says nothing about the gap
+      // between the two clocks now.
+      deviceUtc: _clock().toUtc(),
+    );
+
+    // A break goes in its own array: the ordinary intervals keep their exact old shape, and a
+    // server that predates the `breaks` field ignores it (leaving the break the gap it is today).
+    // Never fold a break into `sessions`: an old server would create an ORDINARY row for it and
+    // count the pausa as worked time.
+    final dtos = intervals.where((i) => i.kind == WorkIntervalKind.ordinary).map(toDto).toList();
+    final breakDtos = intervals
+        .where((i) => i.kind == WorkIntervalKind.breakInterval)
+        .map(toDto)
         .toList();
 
     try {
-      final results = await _apiClient.upsertSessions(dtos);
+      final results = await _apiClient.upsertSessions(dtos, breaks: breakDtos);
       // The server answers per session, already filtered: it only fills this in when the two
       // clocks actually disagreed, so there is nothing to compare here. One report per batch —
       // every session in it carried the same reading, so repeating it would say the same thing
@@ -285,8 +296,18 @@ class TimbraSyncService {
     } catch (e) {
       if (!_isTransient(e) && e is DioException && e.response != null) {
         await _handleRefusedBatch(day, e);
+      } else {
+        // Transient (offline, timeout, 5xx, 401): no backoff on purpose — a reconnect or the next
+        // trigger should try again immediately. A breadcrumb makes the repeated attempt visible
+        // in Sentry without turning an expected offline into an error event.
+        final status = e is DioException ? (e.response?.statusCode ?? e.type.name) : e.runtimeType;
+        CrashReporter.instance.addBreadcrumb(
+          'timbra sync transient: status=$status '
+          'events=${day.where((s) => s.isPendingSync).length}',
+          category: 'sync',
+        );
       }
-      return false; // transient: keeps isPendingSync = true for the next attempt.
+      return false; // keeps isPendingSync = true for the next attempt.
     }
 
     // Mark every local event of this day as synced (by event id, which is the clientId
@@ -304,58 +325,60 @@ class TimbraSyncService {
   /// The batch endpoint is whole-batch atomic (one refused item fails everything), so what to do
   /// depends on WHY, read from the ProblemDetails `code`:
   ///
-  /// - 409 `active_session_exists`: another device already holds the open row. The punch can never
-  ///   be accepted as a new shift, so the pending events are retired — kept for support under
-  ///   [syncFailedMarker], hidden, never uploaded — the user is told (with how many events were
-  ///   kept) and the reconciler adopts the server's shift.
+  /// - 409 `active_session_exists`: the server already holds an open row. The data is still the
+  ///   technician's record, so NOTHING is retired. The events stay pending and visible, are retried
+  ///   with the same backoff as any other refusal, and the technician is told once that they are
+  ///   waiting. Retiring them used to hide the break (or the whole shift) from the day and from the
+  ///   unsent count: the phone showed a pausa the office never received, with no way back except a
+  ///   support visit. The reconciler's own unsynced guard deliberately keeps the local view in
+  ///   charge until the batch is accepted or the office resolves the server's shift.
   /// - EVERYTHING ELSE (403, 400, 404, 413, 422, `payroll_period_locked`, other 409s): the server
   ///   refused, but the data is the technician's record. Nothing is retired or discarded; events
   ///   stay pending. We back off (30s, 60s, 120s, ...), stop after 5 attempts per app session, and
   ///   show ONE accurate message per failure kind. Held events count as unsynced, so the
   ///   reconciler leaves the phone's own view in charge and visible — the safe payroll direction —
   ///   until the office resolves it or a later attempt succeeds.
+  ///
+  /// Every permanent refusal is also reported to the crash reporter (status, stable code and
+  /// event count only — no ids, no times). In a release build `debugPrint` is compiled out, so
+  /// without this a refusal left no trace anywhere.
   Future<void> _handleRefusedBatch(List<WorkSession> sessions, DioException e) async {
     final data = e.response?.data;
     final code = data is Map ? data['code'] as String? : null;
     final detail = data is Map ? data['detail'] as String? : null;
-
-    if (e.response?.statusCode == 409 && code == 'active_session_exists') {
-      final dead = sessions.where((s) => s.isPendingSync).toList();
-      if (dead.isEmpty) return;
-      for (final s in dead) {
-        await _repo.markSyncFailed(s.id);
-      }
-      debugPrint(
-        'TimbraSyncService: batch refused (409 active_session_exists); retained '
-        '${dead.length} event(s) as $syncFailedMarker: '
-        '${dead.map((s) => '${s.eventType}@${s.eventTime.toIso8601String()}#${s.id}').join(', ')}',
-      );
-      final n = dead.length;
-      _onNotice?.call(
-        '$batchConflictMessage ($n ${n == 1 ? 'evento conservato' : 'eventi conservati'})',
-      );
-      _onRemoteCommandsApplied?.call();
-      return;
-    }
+    final pending = sessions.where((s) => s.isPendingSync).toList();
+    if (pending.isEmpty) return;
 
     _batchFailures++;
     final backoff = Duration(seconds: 30 * (1 << (_batchFailures - 1).clamp(0, 6)));
     _batchRetryAt = _clock().add(backoff);
 
-    final payroll = code == 'payroll_period_locked';
-    final kind = payroll ? 'payroll' : 'server';
+    final status = e.response?.statusCode;
+    final conflict = status == 409 && code == 'active_session_exists';
+    final kind = conflict ? 'conflict' : (code == 'payroll_period_locked' ? 'payroll' : 'server');
+
     if (_noticeKinds.add(kind)) {
-      _onNotice?.call(
-        payroll
-            ? (detail != null && detail.trim().isNotEmpty ? detail : payrollLockedMessage)
-            : serverErrorMessage,
-      );
+      if (conflict) {
+        final n = pending.length;
+        _onNotice?.call(
+          '$batchConflictMessage Restano sul telefono ($n '
+          '${n == 1 ? 'timbratura' : 'timbrature'}) e verranno ritentate.',
+        );
+      } else {
+        _onNotice?.call(
+          code == 'payroll_period_locked'
+              ? (detail != null && detail.trim().isNotEmpty ? detail : payrollLockedMessage)
+              : serverErrorMessage,
+        );
+      }
     }
-    debugPrint(
-      'TimbraSyncService: batch refused (${e.response?.statusCode} $code); held '
-      '${sessions.where((s) => s.isPendingSync).length} pending event(s), attempt $_batchFailures/'
-      '$_maxBatchAttempts',
-    );
+
+    final summary =
+        'timbra sync refused: status=${status ?? e.type.name} code=${code ?? '-'} '
+        'events=${pending.length} attempt=$_batchFailures/$_maxBatchAttempts';
+    debugPrint('TimbraSyncService: $summary');
+    CrashReporter.instance.addBreadcrumb(summary, category: 'sync');
+    unawaited(CrashReporter.instance.captureMessage(summary));
   }
 
   // ── Shifts started on another device ────────────────────────────────────────

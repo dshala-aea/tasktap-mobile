@@ -8,6 +8,8 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/pending_sync_count_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart'
     show appDatabaseProvider;
+import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart'
+    show reconciledOrphanMarker;
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
@@ -105,6 +107,30 @@ void main() {
               startUtc: Value(DateTime.now()),
             ),
           );
+      // Personal punches are hours not yet on the server too — the break that never arrives is
+      // exactly this row. The reconciler's own corrections are pending by construction but are
+      // never pushed, so they must not inflate the count.
+      await db
+          .into(db.workSessions)
+          .insert(
+            WorkSessionsCompanion.insert(
+              id: 'ws1',
+              eventTime: DateTime.now().toUtc(),
+              eventType: 'ingresso',
+              isPendingSync: const Value(true),
+            ),
+          );
+      await db
+          .into(db.workSessions)
+          .insert(
+            WorkSessionsCompanion.insert(
+              id: 'ws2',
+              eventTime: DateTime.now().toUtc(),
+              eventType: 'ripresa',
+              notes: const Value(reconciledOrphanMarker),
+              isPendingSync: const Value(true),
+            ),
+          );
 
       final container = ProviderContainer(
         overrides: [appDatabaseProvider.overrideWithValue(db)],
@@ -113,7 +139,8 @@ void main() {
 
       final result = await container.read(pendingSyncCountProvider.future);
 
-      expect(result.pending, 3); // r1 (readyToSubmit) + p1 (pendingSync) + tt1
+      // r1 (readyToSubmit) + p1 (pendingSync) + tt1 + ws1 (personal punch)
+      expect(result.pending, 4);
       expect(result.failed, 2); // r3 + tt2
     },
   );

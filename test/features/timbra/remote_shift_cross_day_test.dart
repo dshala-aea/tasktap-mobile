@@ -33,7 +33,10 @@ class _Api extends WorklogApiClient {
   @override
   Future<void> endBreak({DateTime? occurredAtUtc}) async => calls.add('break/end');
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> s) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> s, {
+    List<MobileSessionDto> breaks = const [],
+  }) async {
     calls.add('batch');
     return [];
   }
