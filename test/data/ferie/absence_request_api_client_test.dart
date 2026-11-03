@@ -31,8 +31,9 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProv
 
 /// Answers with a canned body and keeps the request it was handed.
 class _Adapter implements HttpClientAdapter {
-  _Adapter({this.body = '[]'});
+  _Adapter({this.status = 200, this.body = '[]'});
 
+  final int status;
   final String body;
   RequestOptions? captured;
 
@@ -48,7 +49,7 @@ class _Adapter implements HttpClientAdapter {
     captured = options;
     return ResponseBody.fromString(
       body,
-      200,
+      status,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },
@@ -168,6 +169,62 @@ void main() {
       expect(adapter.captured, isNull, reason: 'no request may go out unscoped');
       expect(result.fromDevice, isTrue);
       expect(result.items, isEmpty);
+    });
+  });
+
+  group('AbsenceRequestApiClient — approvals', () {
+    test('fetchPendingForApproval_sendsStatusZeroAndNoUserId', () async {
+      final adapter = _Adapter(body: jsonEncode([_row()]));
+      final client = _client(adapter);
+
+      final rows = await client.fetchPendingForApproval();
+
+      expect(rows.single.id, 'ar-1');
+      expect(adapter.captured!.path, '/api/absence-requests');
+      expect(adapter.captured!.queryParameters['status'], 0);
+      expect(adapter.captured!.queryParameters.containsKey('userId'), isFalse);
+    });
+
+    test('approve_postsToTheApproveRoute', () async {
+      final adapter = _Adapter(body: '{}');
+      final client = _client(adapter);
+
+      await client.approve('ar-1');
+
+      expect(adapter.captured!.method, 'POST');
+      expect(adapter.captured!.path, '/api/absence-requests/ar-1/approve');
+    });
+
+    test('reject_postsTheTrimmedReason', () async {
+      final adapter = _Adapter(body: '{}');
+      final client = _client(adapter);
+
+      await client.reject('ar-1', reason: '  Copertura insufficiente  ');
+
+      expect(adapter.captured!.method, 'POST');
+      expect(adapter.captured!.path, '/api/absence-requests/ar-1/reject');
+      expect(adapter.captured!.data, {'reason': 'Copertura insufficiente'});
+    });
+
+    test('a_400_detail_becomes_the_validation_error', () async {
+      final adapter = _Adapter(
+        status: 400,
+        body: jsonEncode({
+          'detail': 'Solo una richiesta in attesa può essere approvata o rifiutata.',
+        }),
+      );
+      final client = _client(adapter);
+
+      await expectLater(
+        client.approve('ar-1'),
+        throwsA(
+          isA<AbsenceRequestValidationError>().having(
+            (e) => e.detail,
+            'detail',
+            contains('in attesa'),
+          ),
+        ),
+      );
     });
   });
 }

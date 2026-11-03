@@ -174,6 +174,28 @@ class AbsenceRequestApiClient {
     return list.cast<Map<String, dynamic>>().map(AbsenceRequestDto.fromJson).toList();
   });
 
+  /// GET /api/absence-requests?status=0 with no `userId`: the tenant-wide pending queue for an
+  /// Approve holder (the server resolves the scope itself). Online-only; no local mirror exists
+  /// for other people's requests.
+  Future<List<AbsenceRequestDto>> fetchPendingForApproval() => _guarded(() async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/absence-requests',
+      queryParameters: const {'status': 0},
+    );
+    final list = res.data ?? [];
+    return list.cast<Map<String, dynamic>>().map(AbsenceRequestDto.fromJson).toList();
+  });
+
+  /// POST /api/absence-requests/{id}/approve. The server tolerates an omitted body; send `{}`.
+  Future<void> approve(String id) => _guarded(() async {
+    await _dio.post<dynamic>('/api/absence-requests/$id/approve', data: const <String, dynamic>{});
+  });
+
+  /// POST /api/absence-requests/{id}/reject. The reason is required by the server and max 1000.
+  Future<void> reject(String id, {required String reason}) => _guarded(() async {
+    await _dio.post<dynamic>('/api/absence-requests/$id/reject', data: {'reason': reason.trim()});
+  });
+
   /// POST /api/absence-requests. Returns the new request's id.
   Future<String> create({
     required int type,
