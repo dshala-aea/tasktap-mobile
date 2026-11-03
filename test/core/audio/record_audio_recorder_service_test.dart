@@ -49,10 +49,12 @@ class _FakePlatformRecorder implements AudioRecorder {
   int stops = 0;
   bool disposed = false;
   Object? amplitudeError;
+  RecordConfig? lastConfig;
 
   @override
   Future<void> start(RecordConfig config, {required String path}) async {
     starts++;
+    lastConfig = config;
     _path = path;
     await File(path).writeAsBytes(List<int>.filled(flushedBytes, 0), flush: true);
   }
@@ -232,6 +234,24 @@ void main() {
     expect(ios.sessionCalls, [false], reason: 'record_ios leaves the session active unless asked');
     expect(platform.stops, 1, reason: 'the cancelled probe never stops the recorder again');
     expect(reporter.breadcrumbs, isEmpty);
+  });
+
+  test('The recorder is started with the rates AVAudioRecorder accepts', () async {
+    // `record` and its maintainer advise leaving bit rate and sample rate at their defaults: the
+    // plugin only adjusts custom values as a best effort, and on iOS an unsupported combination
+    // makes AVAudioRecorder.record() return false. record_ios throws that Bool away and reports a
+    // healthy state, so the take is silently empty — the "microfono non ha registrato nulla" the
+    // technician sees. 16 kHz / 64 kbps mono was exactly such a custom combination.
+    final s = service(flushedBytes: 5000, totalBytes: 24000);
+
+    await s.start();
+    await s.stop();
+
+    final config = platform.lastConfig!;
+    expect(config.encoder, AudioEncoder.aacLc, reason: 'the server stores m4a/AAC');
+    expect(config.sampleRate, 44100, reason: 'the platform default, not a custom 16 kHz request');
+    expect(config.bitRate, 128000, reason: 'the platform default, not a custom 64 kbps request');
+    expect(config.numChannels, 1, reason: 'speech is mono; stereo files double nothing useful');
   });
 
   test('The recorder is disposed once', () async {
