@@ -30,15 +30,25 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheduleAsync = ref.watch(adminScheduleDetailProvider(scheduleId));
+    final schedule = scheduleAsync.valueOrNull;
     // An approved absence arrives as an ordinary schedule row (that is how the server blocks the
     // day), and the backend refuses every write to it (`absence_schedule_read_only`). Offering
     // Modifica here invites an edit that can only fail; the absence it stands for is managed where
-    // it lives, from Ferie e Permessi. Null while loading, so the FAB is not flickered in first.
-    final lockedByAbsence = scheduleAsync.valueOrNull?.isAssenza ?? false;
+    // it lives, from Ferie e Permessi. `valueOrNull` is null while loading (and on error, and for a
+    // row the mirror does not hold), so "no row yet" counts as locked: `?? false` used to arm the
+    // FAB for that first frame and flash it in before the row resolved.
+    final lockedByAbsence = schedule == null || schedule.isAssenza;
+    // A day owned by a multi-day plan is the same kind of mirror row: the sync materialises it as
+    // an ordinary schedule carrying `isBlockOccupied`, and the backend refuses every write to it
+    // (`block_occupancy_read_only`). The flag is missing on a device whose mirror synced before
+    // the server started sending it — Drift defaults it to `false`, so that device still offers
+    // Modifica and the server refuses the write; the form recognises that refusal instead (see
+    // `_lockFromServerCode` there). Unresolved rows are locked for the same reason as above.
+    final lockedByBlock = schedule == null || schedule.isBlockOccupied;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: lockedByAbsence
+      floatingActionButton: lockedByAbsence || lockedByBlock
           ? null
           : Padding(
               padding: EdgeInsets.only(bottom: context.fabSafeBottom),
@@ -150,6 +160,27 @@ class _ScheduleDetailBody extends ConsumerWidget {
                     'Assenza approvata: questa voce è creata dalla richiesta di ferie, permesso '
                     'o malattia e non si può modificare da qui. Per cambiarla, annulla la '
                     'richiesta dalle assenze.',
+              ),
+            ),
+          ),
+        // Same reason, same treatment: the day is one materialised row of a multi-day plan, and
+        // the plan — not the single day — is what the office edits.
+        if (schedule.isBlockOccupied)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+                AppSpacing.pagePadding,
+                0,
+              ),
+              child: InlineAlert(
+                icon: LucideIcons.calendarDays,
+                color: context.colors.amber,
+                message:
+                    'Piano multi-giorno: questa giornata è occupata da un intervento pianificato '
+                    'su più giorni e non si può modificare da qui. Per modificare il piano, usa il '
+                    "portale web dell'ufficio.",
               ),
             ),
           ),

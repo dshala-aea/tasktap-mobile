@@ -14083,7 +14083,7 @@
         "tags": [
           "ReportTemplates"
         ],
-        "summary": "The collections a table binding can name, each with the item properties it\n    offers. Fixed by the build like the fields catalogue above, so the table builder in the\n    editor reads its options from the same registry the save-time validator uses.",
+        "summary": "The collections a table binding can name, each with the item properties it\n    offers. The built-in properties are fixed by the build like the fields catalogue above, so\n    the table builder in the editor reads its options from the same registry the save-time\n    validator uses. The asset collections additionally offer the tenant\u0027s own active asset\n    custom fields as \u0060Extension:{key}\u0060 properties, which is why this is async: those keys\n    are per-tenant data, and the editor can only offer a column the save-time validator will\n    accept if both read the same definitions.",
         "parameters": [
           {
             "name": "key",
@@ -14997,6 +14997,356 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/schedules/blocks": {
+      "post": {
+        "tags": [
+          "ScheduleBlocks"
+        ],
+        "summary": "Creates a block and materializes one all-day occupancy row per working day of its range.",
+        "description": "Rejected writes answer \u0060400\u0060 with a problem\u002Bjson body whose \u0060code\u0060 names the rule:\n\u0060tenant_timezone_unsupported\u0060 when block writes are refused for the tenant\u0027s configured\ntime zone, \u0060no_working_days\u0060 when the range holds none and\n\u0060includeNonWorkingDays\u0060 is false, \u0060invalid_range\u0060, \u0060subject_at_most_one\u0060 or\n\u0060title_required\u0060. A crew conflict answers \u0060409\u0060 with\n\u0060{success, message, conflicts}\u0060 unless \u0060force\u0060 is set.",
+        "parameters": [
+          {
+            "name": "force",
+            "in": "query",
+            "description": "When true, a detected crew conflict does not block the write. It bypasses nothing else; the\nconflicting bookings are left untouched and no record of the override is written.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScheduleBlockRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScheduleBlockRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScheduleBlockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasicPkResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasicPkResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasicPkResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ScheduleBlocks"
+        ],
+        "summary": "The calendar listing: every block overlapping the window, with its original range, crew,\nexcluded dates and occupied dates.",
+        "description": "Selection is on the block\u0027s own range, not on its occupied days: a block whose days were\nall excluded has no occupancy at all and is still a commitment the calendar must draw.",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Start of the window, inclusive. \u003Cb\u003ERequired\u003C/b\u003E \u2014 omitting it returns\n\u0060400 invalid_range\u0060. It is nullable only so the omission can be rejected explicitly\ninstead of binding to \u00600001-01-01\u0060.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "End of the window, inclusive. \u003Cb\u003ERequired\u003C/b\u003E on the same terms as from.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size. Defaults to 200; clamped to 500.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip. Defaults to 0.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleBlockPageDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleBlockPageDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleBlockPageDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schedules/blocks/{id}": {
+      "put": {
+        "tags": [
+          "ScheduleBlocks"
+        ],
+        "summary": "Edits a block\u0027s range, crew and subject, re-materializing only the days that change.",
+        "description": "    Absent body members are fields this request does not speak about \u2014 omitting technicianIds\nleaves the crew as it is, and [] is the value that clears it. clearSubject is the\none explicit clear, because a subject is a single nullable pair rather than a collection.\n    Exclusions survive the edit in both directions: extending never restores an excluded date and\nshortening keeps the exclusion rows for a later re-extension.\n    A crew conflict answers 409 with {success, message, conflicts}, exactly as create\ndoes. That body is not declared with ProducesResponseType: declaring the code would make\nthe document advertise the framework\u0027s ProblemDetails, which is not what this action\nreturns.\n    Rejected edits answer 400 with the same code vocabulary as create \u2014\ntenant_timezone_unsupported, no_working_days (only when this request changes the\nrange), invalid_range, subject_at_most_one, title_required,\nlead_required or lead_not_assigned.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The block id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "description": "When true, a detected crew conflict does not block the write. It bypasses nothing else: the\ntenant-zone guard, range validation, the lead rule, referential integrity and the title rule\nall still run, and the conflicting bookings are left untouched.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The fields to change; everything omitted is left alone.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScheduleBlockRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScheduleBlockRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScheduleBlockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The block was edited. The response has no body \u2014 a client re-reads it."
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ScheduleBlocks"
+        ],
+        "summary": "One block: its original range, crew, excluded and occupied dates.",
+        "description": "A block belonging to another tenant is a 404, indistinguishable from a missing one.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The block id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleBlockDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleBlockDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleBlockDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ScheduleBlocks"
+        ],
+        "summary": "Deletes a block and everything it projected: its occupancy rows, their assignments, its crew\nrows and its exclusions.",
+        "description": "    The worklogs of the days it covered are untouched \u2014 they are a person\u0027s record of time, not\nthe block\u0027s \u2014 and a Bozza report pointing at one of its days survives the delete.\nEveryone who was on the block is told once that it was cancelled.\n    A block that does not exist \u2014 including one belonging to another tenant \u2014 answers 404.\nThat answer is not declared with ProducesResponseTypeAttribute: declaring the\ncode would make the document advertise the framework\u0027s ProblemDetails, which is not\nwhat this action returns.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The block id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The block was deleted. The response has no body."
+          }
+        }
+      }
+    },
+    "/api/schedules/blocks/{id}/exclusions": {
+      "post": {
+        "tags": [
+          "ScheduleBlocks"
+        ],
+        "summary": "Excludes one occupied day from the block: the exclusion is stored, that day\u0027s occupancy row\nand its assignment rows are deleted, and the crew receives one block-level update.",
+        "description": "    Excluding a date with no occupancy row answers 400 day_not_occupied and stores\nnothing. The operation has one meaning \u2014 \u0022remove this occupied day\u0022 \u2014 and a stored exclusion\non a weekend or outside the range would be a second, ambiguous one.\n    Excluding every day is allowed: the block stays listed, because the calendar listing selects\non the block\u0027s own range and never on its occupancy rows.\n    Like every other block write, this answers 400 tenant_timezone_unsupported when block\nwrites are refused for the tenant\u0027s configured time zone.\n    The cancellation token is deliberately not documented with a \u0026lt;param\u0026gt;: ASP.NET\u0027s\ngenerator attaches an orphaned parameter description to the request body, so documenting it\nwould put \u0022Request cancellation.\u0022 above the { \u0022date\u0022: ... } schema.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The block id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The date to exclude.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExcludeScheduleBlockDayRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExcludeScheduleBlockDayRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/ExcludeScheduleBlockDayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The day was excluded. The response has no body \u2014 a client re-reads the block."
+          }
+        }
+      }
+    },
+    "/api/schedules/blocks/{id}/exclusions/{date}": {
+      "delete": {
+        "tags": [
+          "ScheduleBlocks"
+        ],
+        "summary": "Restores one excluded date: the exclusion is removed and the day is materialized again \u2014\nafter the same per-day conflict check every other schedule write runs.",
+        "description": "    Restoring a date that is not excluded is an idempotent no-op. Restoring a date the block\u0027s\ncurrent range or calendar no longer occupies removes the exclusion and creates no row.\n    A crew conflict answers 409 with {success, message, conflicts} and leaves the\nexclusion in place \u2014 the check precedes every deletion, so nothing is half-applied. That\nbody is deliberately not declared with ProducesResponseType, for the same reason the\ncreate and update actions do not declare their 409.\n    This is a block write, so it answers 400 tenant_timezone_unsupported when block writes\nare refused for the tenant\u0027s configured time zone \u2014 force does not bypass that guard.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The block id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The date to restore, \u0060yyyy-mm-dd\u0060.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "description": "When true, a detected crew conflict does not block the restore. It bypasses nothing else:\nthe tenant-zone guard still runs and the conflicting bookings are left untouched.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The exclusion was removed. The response has no body \u2014 a client re-reads the block."
           }
         }
       }
@@ -19003,6 +19353,8 @@
         "tags": [
           "Tickets"
         ],
+        "summary": "Change a ticket\u0027s status.",
+        "description": "Gated by \u0060interventi.ticket.write\u0060, plus the \u0022Solo ufficio\u0022 rule: a caller without\n\u0060interventi.ticket.configure\u0060 (the technician role\u0027s default) may neither move a ticket\nINTO an office-only status nor move one OUT of it. Both refusals are 403 with a stable\n\u0060code\u0060 extension so the clients localise them instead of parsing Italian text.",
         "parameters": [
           {
             "name": "id",
@@ -19036,7 +19388,44 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -23698,9 +24087,27 @@
             "items": {
               "type": "string"
             }
+          },
+          "propertyLabels": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "hourProperties": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "description": "One of the collections a table binding can name, with the item properties it\n    offers."
+        "description": "One of the collections a table binding can name, with the item properties it offers.\nPropertyLabels is set for the collections that also offer the tenant\u0027s own\nasset custom fields (\u0060Extension:{key}\u0060 properties): it maps each such property to its\ndefinition\u0027s Label so the editor can print a human name instead of the raw key. Null \u2014 absent\nfrom the payload \u2014 for every collection whose properties are the built-in ones the web editor\nalready translates. HourProperties lists the subset of\nProperties that holds a number of hours, i.e. exactly the columns the server\naccepts the \u0060\u0022HoursMinutes\u0022\u0060 slot style on: the editor offers that choice there and nowhere\nelse, so it cannot propose a setting the save would refuse."
       },
       "AcroFormConfigDto": {
         "required": [
@@ -28066,6 +28473,110 @@
         },
         "description": "Request model for creating a report. Relocated from \u0060ReportsController\u0060\n(W3 Task 2 thinning) per \u0060docs/patterns/service-layer.md\u0060 \u2014 write-request DTOs\nlive in the Application namespace with the owning service."
       },
+      "CreateScheduleBlockRequest": {
+        "required": [
+          "startDate",
+          "endDate",
+          "statusId"
+        ],
+        "type": "object",
+        "properties": {
+          "subjectTicketId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Subject side, ticket. At most one subject \u2014 ticket or cantiere \u2014 may be set.",
+            "format": "uuid"
+          },
+          "subjectCantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Subject side, cantiere. See Guid? CreateScheduleBlockRequest.SubjectTicketId.",
+            "format": "uuid"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Required when both subject ids are null."
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "First day the block occupies. Nullable because an omitted date must fail model validation\nwith a 400: \u0060[Required]\u0060 on a non-nullable DateOnly can never fail \u2014 a\nstruct is never null, so an omitted property would silently bind to 0001-01-01.",
+            "format": "date"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Last day the block occupies. See DateOnly? CreateScheduleBlockRequest.StartDate.",
+            "format": "date"
+          },
+          "includeNonWorkingDays": {
+            "type": "boolean",
+            "description": "When false (the default) the tenant calendar decides which days are occupied; when true only\nweekend/holiday closure is ignored."
+          },
+          "locationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "statusId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Same status vocabulary as a schedule\u0027s \u0060StatusId\u0060.",
+            "format": "int32"
+          },
+          "technicianIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Everyone directly on the block; each becomes one row per occupied day."
+          },
+          "leadUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who compiles the report for this block (ADR-0022 \u00A74).",
+            "format": "uuid"
+          },
+          "squadraId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A squadra on the block. Members are resolved at read time, never expanded into rows.",
+            "format": "uuid"
+          }
+        },
+        "description": "The create body. The range is date-only on purpose: a block owns whole local days, and the\ntenant\u0027s zone decides where each day begins and ends \u2014 a client cannot supply that."
+      },
       "CreateScheduleRequest": {
         "required": [
           "activityDate",
@@ -29149,6 +29660,23 @@
           }
         },
         "description": "Simple request shape for Excel export (placeholder until B5)."
+      },
+      "ExcludeScheduleBlockDayRequest": {
+        "required": [
+          "date"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The local calendar date to remove from the block.",
+            "format": "date"
+          }
+        },
+        "description": "The exclusion body: one local date. Nullable so an omitted \u0060date\u0060 fails model validation\nwith a 400 instead of binding to \u00600001-01-01\u0060 \u2014 a \u0060DateOnly\u0060 struct is never null on\nits own."
       },
       "FieldBindingDto": {
         "required": [
@@ -31285,7 +31813,6 @@
           "workLogId",
           "startTime",
           "endTime",
-          "tipoOra",
           "isActive"
         ],
         "type": "object",
@@ -31311,15 +31838,6 @@
               "string"
             ],
             "description": "The entry\u0027s end time-of-day (null while open)."
-          },
-          "tipoOra": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "description": "Classification code (int cast of \u0060TipoOraEnum\u0060).",
-            "format": "int32"
           },
           "isActive": {
             "type": "boolean",
@@ -35568,6 +36086,163 @@
         },
         "description": "Mode is one of \u0022Nearest\u0022/\u0022Floor\u0022/\u0022Ceil\u0022 \u2014 RoundingMode\u0027s names, as a string so the\n    JSON contract doesn\u0027t depend on the enum\u0027s underlying int values. \u0060TimeFormat\u0060 likewise\n    carries \u0022Decimal\u0022 or \u0022HoursMinutes\u0022."
       },
+      "ScheduleBlockAssigneeDto": {
+        "required": [
+          "userId",
+          "squadraId",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "squadraId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string",
+            "description": "\u0060\u0022Participant\u0022\u0060 or \u0060\u0022Lead\u0022\u0060. A string, not the enum: this API has no global\n        \u0060JsonStringEnumConverter\u0060, so an enum here would reach the wire as \u00600\u0060/\u00601\u0060."
+          }
+        },
+        "description": "One crew entry on a block. Exactly one of UserId / SquadraId\nis set, mirroring ScheduleBlockAssignment."
+      },
+      "ScheduleBlockDto": {
+        "required": [
+          "id",
+          "startDate",
+          "endDate",
+          "subjectTicketId",
+          "subjectCantiereId",
+          "title",
+          "description",
+          "includeNonWorkingDays",
+          "statusId",
+          "locationId",
+          "assignments",
+          "excludedDates",
+          "occupiedDates"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "subjectTicketId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "subjectCantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "includeNonWorkingDays": {
+            "type": "boolean"
+          },
+          "statusId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "locationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "assignments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleBlockAssigneeDto"
+            }
+          },
+          "excludedDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "occupiedDates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        },
+        "description": "One multi-day block as the calendar reads it (design \u00A79): the \u003Cem\u003Eoriginal\u003C/em\u003E range, the\ncrew, and the dates that are excluded or actually occupied.\n\nThe range is carried whole rather than reconstructed from IReadOnlyList\u0026lt;DateOnly\u0026gt; ScheduleBlockDto.OccupiedDates: a block\nwhose days were all excluded has an empty occupancy list and is still a commitment, and a gap\ninside the range is a removed day, not a shorter bar. Both date lists are bounded by this\nblock\u0027s own range, so the payload stays proportional to the block.\n\n\u003Cb\u003ENo hours.\u003C/b\u003E Nothing here is a duration, and nothing may become one: occupancy rows span a\nwhole local day, which is not time worked (design \u00A712)."
+      },
+      "ScheduleBlockPageDto": {
+        "required": [
+          "items",
+          "total",
+          "hasMore",
+          "asOfUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleBlockDto"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "asOfUtc": {
+            "type": "string",
+            "description": "The request\u0027s clock read, so a client can tell how stale its \u0022now\u0022 is.",
+            "format": "date-time"
+          }
+        },
+        "description": "One page of the calendar listing (design \u00A79). int ScheduleBlockPageDto.Total and bool ScheduleBlockPageDto.HasMore are\nthe point: the endpoint never truncates silently, so a calendar that pages says out loud that\nit is showing a partial view rather than drawing a month that is missing a job."
+      },
       "ScheduleCalendarDto": {
         "required": [
           "id",
@@ -35738,6 +36413,24 @@
               "null",
               "string"
             ]
+          },
+          "blockId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "isBlockOccupied": {
+            "type": "boolean",
+            "default": false
+          },
+          "absenceRequestId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
         "description": "One schedule item on the planning calendar."
@@ -36695,14 +37388,8 @@
         "type": "integer"
       },
       "StaffOptionsDto": {
-        "required": [
-          "showHoursBreakdown"
-        ],
         "type": "object",
         "properties": {
-          "showHoursBreakdown": {
-            "type": "boolean"
-          },
           "showSellRate": {
             "type": [
               "null",
@@ -36710,7 +37397,7 @@
             ]
           }
         },
-        "description": "Whether the staff-hours table shows the 4-way ordinarie/straordinarie/festive/notturne\n    breakdown or a single \u0022Ore lavorate\u0022 total, and whether it prints each technician\u0027s hourly sell\n    rate, as exposed over the wire. \u0060ShowSellRate\u0060 is nullable on the wire: a client written before\n    the DTO carried it omits it, and FromDto reads that as the option\u0027s own default (\u0060true\u0060)."
+        "description": "Whether the staff-hours table prints each technician\u0027s hourly sell rate, as exposed over\n    the wire. \u0060ShowSellRate\u0060 is nullable on the wire: a client written before the DTO carried it\n    omits it, and FromDto reads that as the option\u0027s own default (\u0060true\u0060). There is no\n    hours-breakdown member \u2014 see \u0060StaffOptions\u0060 for why the split is gone rather than\n    defaulted off."
       },
       "StartAiConversationRequest": {
         "type": "object",
@@ -39251,7 +39938,9 @@
           "createdAt",
           "updatedAt",
           "assignees",
-          "isAssenza"
+          "isAssenza",
+          "isBlockOccupied",
+          "absenceRequestId"
         ],
         "type": "object",
         "properties": {
@@ -39345,6 +40034,18 @@
           "isAssenza": {
             "type": "boolean",
             "description": "True when this row exists because an absence request (Ferie/Permesso/Malattia) was approved,\nnot because someone scheduled real work. Plain \u0060bool\u0060, not the backend\u0027s raw\n\u0060OwnedByAbsenceRequestId\u0060 \u2014 the client only ever needs \u0022is this an absence\u0022, never the\nspecific request id. An approved absence still creates a completely normal \u0060Schedule\u0060\nrow (same assignment writer as a real appointment), so without this flag the mobile client\ncould not tell an absence-owned schedule apart from a real appointment and rendered it\ndraggable/reassignable/editable \u2014 which it is not (the backend rejects any write to an\nabsence-owned schedule with \u0060DomainRuleException(\u0022absence_schedule_read_only\u0022)\u0060)."
+          },
+          "isBlockOccupied": {
+            "type": "boolean",
+            "description": "True when this row is one day of a multi-day ScheduleBlock \u2014 the block\u0027s columns\nare the authority and the block service re-derives the days on every edit. Without this the\nclient would offer edits to a row the backend rejects with\n\u0060DomainRuleException(\u0022block_occupancy_read_only\u0022)\u0060."
+          },
+          "absenceRequestId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The absence request owning this row, or null when none does. Carried so a client can group the\ndays of one request; bool SyncScheduleDto.IsAssenza remains the \u0022may I edit this\u0022 flag.",
+            "format": "uuid"
           }
         },
         "description": "A schedule as the device sees it.\n\nThe sync payload used to serialise Schedule entities directly, which is how an\ninternal schema change was able to break a client: dropping the assignment columns (ADR-0009)\nremoved \u0060userId\u0060 from the wire, and the Flutter client casts it non-nullably. An entity is\na storage shape and will keep changing; this DTO is the contract, and it changes only when the\ncontract is meant to.\n\nGuid SyncScheduleDto.UserId is preserved as the directly assigned technician \u2014 the same value the\ndropped column held \u2014 so the existing client keeps working unchanged.\nIReadOnlyList\u0026lt;SyncScheduleAssigneeDto\u0026gt; SyncScheduleDto.Assignees is what it should move to: it carries everyone on the schedule,\nincluding squadra-mediated members the old column could never express."
@@ -39905,7 +40606,7 @@
             }
           }
         },
-        "description": "One table binding, as exposed over the wire. \u0060Cells\u0060 is the grid written out\n    row by row: each row lists the PDF field names of its slots, left to right, and\n    \u0060SlotProperties\u0060 says what one item contributes to each slot. Overflow defaults to\n    \u0022FixedRows\u0022 (the only value this build implements). \u0060SlotFormats\u0060 is keyed by slot property\n    and accepts prefix and suffix only."
+        "description": "One table binding, as exposed over the wire. \u0060Cells\u0060 is the grid written out\n    row by row: each row lists the PDF field names of its slots, left to right, and\n    \u0060SlotProperties\u0060 says what one item contributes to each slot. Overflow defaults to\n    \u0022FixedRows\u0022 (the only value this build implements). \u0060SlotFormats\u0060 is keyed by slot property\n    and accepts prefix and suffix \u2014 plus, on a property listed in the collection\u0027s\n    \u0060HourProperties\u0060, the \u0060\u0022HoursMinutes\u0022\u0060 style."
       },
       "TableOptionsDto": {
         "required": [
@@ -41361,6 +42062,13 @@
               "boolean"
             ],
             "description": "Marks this status as the one a ticket moves to automatically when work starts on it\n(first work log or rapportino). At most one per tenant; setting it here clears any other."
+          },
+          "officeOnly": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Marks this status as \u0022Solo ufficio\u0022: a technician can neither move a ticket into it nor\nmove a ticket out of it. Any number of statuses may carry it."
           }
         }
       },
@@ -42828,6 +43536,112 @@
         },
         "description": "\u0060ShortBreakMaxMinutes\u0060/\u0060ShortBreakPaid\u0060/\u0060TimeFormat\u0060 are optional on the wire so a\nclient that has not been taught about break classification or the hours format yet (an older\nweb build, a mobile release) can keep PUTting only Mode\u002BMinutes without silently resetting a\ntenant\u0027s break policy and display format to the defaults. Absent means \u0022leave as configured\u0022."
       },
+      "UpdateScheduleBlockRequest": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "First day the block occupies. Omit to keep the current start.",
+            "format": "date"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Last day the block occupies. Omit to keep the current end.",
+            "format": "date"
+          },
+          "includeNonWorkingDays": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Omit to keep the current setting."
+          },
+          "technicianIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Everyone directly on the block. Omit to leave the crew alone; \u0060[]\u0060 clears it."
+          },
+          "leadUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who compiles the report for this block (ADR-0022 \u00A74). Omit to leave it alone.",
+            "format": "uuid"
+          },
+          "squadraId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A squadra on the block. Omit to leave the current one alone.",
+            "format": "uuid"
+          },
+          "subjectTicketId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Subject side, ticket. Supplying either subject id replaces the block\u0027s current subject and\nclears the other side \u2014 a block has at most one.",
+            "format": "uuid"
+          },
+          "subjectCantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Subject side, cantiere. See Guid? UpdateScheduleBlockRequest.SubjectTicketId.",
+            "format": "uuid"
+          },
+          "clearSubject": {
+            "type": "boolean",
+            "description": "Unlinks the block from whatever subject it has. Rejected if the same request also names a\nsubject id: an instruction that both sets and clears has no correct reading."
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Omit to keep the current label; an empty string re-derives it from the subject."
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "locationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "statusId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Same status vocabulary as a schedule\u0027s \u0060StatusId\u0060. Omit to keep the current one.",
+            "format": "int32"
+          }
+        },
+        "description": "The update body. Every member is optional, and \u0022absent\u0022 is a field this request does not speak\nabout \u2014 the same convention \u0060ScheduleAssignmentInput\u0060 documents. An empty\nList\u0026lt;Guid\u0026gt;? UpdateScheduleBlockRequest.TechnicianIds is therefore meaningful (\u0022clear the crew\u0022) in a way a null is not, and\nbool UpdateScheduleBlockRequest.ClearSubject exists because a subject is a single nullable pair rather than a list."
+      },
       "UpdateScheduleRequest": {
         "type": "object",
         "properties": {
@@ -44274,9 +45088,26 @@
               "null",
               "string"
             ]
+          },
+          "style": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ValueFormatStyle"
+              }
+            ]
           }
         },
-        "description": "The admin\u0027s own finishing over a resolved value. \u0060Override\u0060 replaces the value\n    outright (it is not a fallback); \u0060Prefix\u0060/\u0060Suffix\u0060 wrap it. Every member is optional and\n    a format that sets none of them is stored as no format at all."
+        "description": "The admin\u0027s own finishing over a resolved value. \u0060Override\u0060 replaces the value\n    outright (it is not a fallback); \u0060Prefix\u0060/\u0060Suffix\u0060 wrap it. \u0060Style\u0060 re-reads a\n    number instead of decorating it: \u0060\u0022HoursMinutes\u0022\u0060 prints \u00221h 15m\u0022, and it is accepted only\n    on a table slot whose property is an hour column (\u0060\u0022Decimal\u0022\u0060, the default, is the same as\n    sending nothing). Every member is optional and a format that sets none of them is stored as no\n    format at all."
+      },
+      "ValueFormatStyle": {
+        "enum": [
+          "Decimal",
+          "HoursMinutes",
+          null
+        ]
       },
       "WorkLogAction": {
         "enum": [
@@ -45089,6 +45920,9 @@
     },
     {
       "name": "RolePermissions"
+    },
+    {
+      "name": "ScheduleBlocks"
     },
     {
       "name": "Schedules"

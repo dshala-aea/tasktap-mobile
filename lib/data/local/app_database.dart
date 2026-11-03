@@ -400,6 +400,22 @@ class Schedules extends Table {
   /// and the behaviour of every build before this one.
   BoolColumn get isAssenza => boolean().withDefault(const Constant(false))();
 
+  /// True when this day belongs to a multi-day plan rather than to a job scheduled on its own.
+  ///
+  /// A block reserves every day it covers, so the day is not free to edit, drag or delete; the
+  /// admin screens read this the same way they already read [isAssenza]. Defaults to false — the
+  /// honest reading of a row written before the column existed, and the behaviour of every build
+  /// before this one.
+  BoolColumn get isBlockOccupied => boolean().withDefault(const Constant(false))();
+
+  /// The absence request this row was materialised from, when it is one.
+  ///
+  /// The server sends the row's owning request id unconditionally, so this is whichever request
+  /// materialised the row, or null. It is a GROUPING key, not a lock: the admin screens read
+  /// [isAssenza] and [isBlockOccupied] for "may I edit this", and wiring a write block to this
+  /// column instead would lock the wrong thing.
+  TextColumn get absenceRequestId => text().nullable()();
+
   // Who is on this schedule lives in [ScheduleAssignees]. teamLeadId, staffIds and squadraId
   // were dropped server-side (backend ADR-0009) and stopped arriving; keeping them here would
   // have left three columns that are null forever and a staffIds blob that never parses to
@@ -1743,7 +1759,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 61;
+  int get schemaVersion => 62;
 
   @override
   MigrationStrategy get migration {
@@ -2518,6 +2534,28 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(ticketStatuses, ticketStatuses.officeOnly);
           }
         }
+        if (from < 62) {
+          // A multi-day plan marks every day it covers as occupied, and an absence-owned row now
+          // carries the request it came from. `is_block_occupied` joins `isAssenza` (schema 58) as
+          // a write-blocking signal, so the admin screens stop offering writes the server refuses;
+          // `absence_request_id` is only a grouping key.
+          //
+          // `syncCursorGeneration` bumped to v18 alongside this. A technician's schedules already
+          // avoid the cutoff, but office/admin callers sync `fullScope`, where
+          // `MobileUserSyncService` DOES filter schedules on `(UpdatedAt ?? CreatedAt) > cutoff` —
+          // so an unedited block day would keep the column default forever on exactly the role
+          // that edits plans. Same blind spot as v3/v4/v6/v8/v10/v12/v13/v15/v16/v17.
+          //
+          // Guarded like 58-61: the older-schema fixtures rewind `user_version` on the CURRENT
+          // schema, which already declares both columns, and an unconditional add would die on
+          // `duplicate column name` before the app opened.
+          if (!await _columnExists(m.database, 'schedules', 'is_block_occupied')) {
+            await m.addColumn(schedules, schedules.isBlockOccupied);
+          }
+          if (!await _columnExists(m.database, 'schedules', 'absence_request_id')) {
+            await m.addColumn(schedules, schedules.absenceRequestId);
+          }
+        }
       },
     );
   }
@@ -2655,7 +2693,15 @@ class AppDatabase extends _$AppDatabase {
   ///      on the phone would open with an empty interval list. Same blind spot as
   ///      v3/v4/v6/v8/v10/v12/v13/v15. Bumping the generation only invalidates the cursor; the
   ///      reports themselves are re-requested and arrive whole with their children.
-  static const String syncCursorGeneration = 'v17';
+  /// v18 — 2026-11-03, schema 62 added `schedules.isBlockOccupied` and `schedules.absenceRequestId`.
+  ///      A technician's schedules are re-sent in full on every sync, but office/admin callers take
+  ///      the `fullScope` branch, where `MobileUserSyncService` keeps the `(UpdatedAt ?? CreatedAt)
+  ///      > cutoff` filter on schedules too — so an unedited day of a multi-day block would keep
+  ///      both leaves at their defaults until something else touched the row, and the admin screen
+  ///      would offer edits the server refuses. Same blind spot as v3/v4/v6/v8/v10/v12/v13/v15/
+  ///      v16/v17. (Schema 58's `isAssenza` shipped without a bump on the technician-only reading;
+  ///      that was the same mistake, left alone because it is already on devices.)
+  static const String syncCursorGeneration = 'v18';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

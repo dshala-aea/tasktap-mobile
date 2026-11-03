@@ -65,11 +65,47 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
   /// cannot actually name.
   bool _assignmentLoadedLive = false;
 
+  /// True once the edit-mode row has actually resolved from the mirror; create mode starts true
+  /// because there is nothing to await. An id the mirror does not hold (never synced, or purged by
+  /// a delta) leaves this false on purpose: the form has no row to write, so it stays unarmed
+  /// rather than offer a save that could only fail.
+  bool _scheduleLoaded = false;
+
+  /// A day owned by a multi-day plan is a materialised occupancy row, and the backend refuses
+  /// every write to it (`block_occupancy_read_only`) — the detail screen hides Modifica for these
+  /// rows, but a deep link or a stale back-stack entry can still land here, so the form refuses on
+  /// its own rather than filling a form the server can only reject. False until the row loads, and
+  /// false on a mirror that synced before the server sent the flag: that device still reaches the
+  /// server, whose 400 is recognised by [_lockFromServerCode] instead of ending in the generic
+  /// "Impossibile salvare. Riprova." with the button still armed.
+  bool _lockedByBlock = false;
+
+  /// The same lock for an absence-owned row (`absence_schedule_read_only`). Such a row exists only
+  /// so the approved absence shows on the calendar; it is changed by cancelling and re-filing the
+  /// request in Ferie e Permessi, never from this form.
+  bool _lockedByAbsence = false;
+
   bool get _isEditing => widget.scheduleId != null;
+
+  /// The save control is dead until the row resolves, and stays dead for a read-only row. [_save]
+  /// repeats the same check so no other path can slip past the button.
+  bool get _canSave => _scheduleLoaded && !_lockedByBlock && !_lockedByAbsence;
+
+  /// Why an occupancy row refuses to save — the same opening the detail screen's banner uses.
+  static const String _blockLockedMessage =
+      'Piano multi-giorno: questa giornata è occupata da un intervento pianificato su più giorni '
+      'e non si può modificare da qui.';
+
+  /// Why an absence-owned row refuses to save. Names the screen that owns it instead of leaving
+  /// the office with a dead button.
+  static const String _absenceLockedMessage =
+      'Assenza approvata: questa giornata è gestita dalla richiesta di ferie, permesso o malattia '
+      'e non si può modificare da qui. Per cambiarla, annulla la richiesta da Ferie e Permessi.';
 
   @override
   void initState() {
     super.initState();
+    _scheduleLoaded = !_isEditing;
     if (_isEditing) _loadSchedule();
   }
 
@@ -78,17 +114,24 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
     final schedule = await (db.select(
       db.schedules,
     )..where((s) => s.id.equals(widget.scheduleId!))).getSingleOrNull();
-    if (schedule != null && mounted) {
-      setState(() {
-        _titleCtrl.text = schedule.title;
-        _descriptionCtrl.text = schedule.description;
-        _selectedDate = schedule.activityDate;
-        _startTime = _minutesToTimeOfDay(schedule.timeStartMinutes);
-        _endTime = _minutesToTimeOfDay(schedule.timeEndMinutes);
-        _selectedLocationId = schedule.locationId;
-        _selectedTicketId = schedule.ticketId;
-      });
+    if (!mounted) return;
+    if (schedule == null) {
+      // No row to load means nothing to write. `_scheduleLoaded` is already false, and returning
+      // here keeps the form unarmed for an id that is not in the mirror.
+      return;
     }
+    setState(() {
+      _titleCtrl.text = schedule.title;
+      _descriptionCtrl.text = schedule.description;
+      _selectedDate = schedule.activityDate;
+      _startTime = _minutesToTimeOfDay(schedule.timeStartMinutes);
+      _endTime = _minutesToTimeOfDay(schedule.timeEndMinutes);
+      _selectedLocationId = schedule.locationId;
+      _selectedTicketId = schedule.ticketId;
+      _lockedByBlock = schedule.isBlockOccupied;
+      _lockedByAbsence = schedule.isAssenza;
+      _scheduleLoaded = true;
+    });
 
     await _loadAssignment();
   }
@@ -272,6 +315,17 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
       };
 
   Future<void> _save() async {
+    // Defence in depth: the button is already disabled below, but no path may reach the server
+    // with a write this row can only answer with a 400.
+    if (!_scheduleLoaded) return;
+    if (_lockedByBlock) {
+      showAppToast(context, message: _blockLockedMessage, tone: ToastTone.warning);
+      return;
+    }
+    if (_lockedByAbsence) {
+      showAppToast(context, message: _absenceLockedMessage, tone: ToastTone.warning);
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     if (!_assignmentIsValid) {
       showAppToast(context, message: _assignmentErrorMessage, tone: ToastTone.warning);
@@ -334,10 +388,18 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
         context.pop(true);
       }
     } on DioException catch (e) {
+      // The row can be read-only server-side even when this device's mirror does not know it: the
+      // flag is absent on a mirror that synced before the server sent it, and an absence row can
+      // arrive mid-edit. `ScheduleCommandService` answers both with a 400 problem+json whose `code`
+      // names the owner, so recognise it and switch the form into the same locked state the flags
+      // would have produced — otherwise the office reads "Impossibile salvare. Riprova." and the
+      // button stays armed to retry the same refusal forever.
+      final data = e.response?.data;
+      final code = data is Map ? data['code'] : null;
+      if (_lockFromServerCode(code)) return;
       // A conflict may have appeared between the pre-flight check and the save itself — the same
       // 409 shape the pre-flight would have shown, just discovered late (SchedulesController.Create
       // / .Update both answer 409 with `conflicts` when `force` is not set).
-      final data = e.response?.data;
       if (e.response?.statusCode == 409 && data is Map && data['conflicts'] is List) {
         final conflicts = (data['conflicts'] as List)
             .map((c) => ScheduleConflict.fromJson(c as Map<String, dynamic>))
@@ -371,6 +433,26 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  /// Translates the server's read-only refusal into the lock state the mirror's flags would have
+  /// produced, and says why. Returns false for any other error so the caller can fall through to
+  /// the conflict dialog / generic message.
+  bool _lockFromServerCode(Object? code) {
+    if (code != 'block_occupancy_read_only' && code != 'absence_schedule_read_only') {
+      return false;
+    }
+    if (!mounted) return true;
+    setState(() {
+      _lockedByBlock = code == 'block_occupancy_read_only';
+      _lockedByAbsence = code == 'absence_schedule_read_only';
+    });
+    showAppToast(
+      context,
+      message: _lockedByBlock ? _blockLockedMessage : _absenceLockedMessage,
+      tone: ToastTone.warning,
+    );
+    return true;
   }
 
   void _showSaveError() {
@@ -486,6 +568,25 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
     );
   }
 
+  /// The read-only explanation shown above the form. Constrained to the same width as the fields
+  /// so it does not stretch across a wide screen while the form underneath stays centred.
+  Widget _lockBanner({required String message, required IconData icon}) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            0,
+          ),
+          child: InlineAlert(icon: icon, color: context.colors.amber, message: message),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final locationsAsync = ref.watch(allLocationsProvider);
@@ -499,120 +600,137 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
         title: _isEditing ? 'Modifica pianificazione' : 'Nuova pianificazione',
         showBack: true,
       ),
-      body: Form(
-        key: _formKey,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.pagePadding,
-                AppSpacing.pagePadding,
-                context.navClearance,
+      // Outside the ListView on purpose: `AppTabs` reveals the selected assignment tab with
+      // `Scrollable.ensureVisible`, which scrolls every enclosing scrollable — the form opens with
+      // its list already scrolled to the tab strip, so a banner at the top of the list would be
+      // off-screen exactly when the office needs to read why the save button is dead. The banner
+      // still shares the form's 560px cap (see [_lockBanner]) so it lines up with the fields
+      // instead of spanning a wide screen edge to edge.
+      body: Column(
+        children: [
+          if (_lockedByBlock)
+            _lockBanner(message: _blockLockedMessage, icon: LucideIcons.calendarDays),
+          if (_lockedByAbsence)
+            _lockBanner(message: _absenceLockedMessage, icon: LucideIcons.calendarX),
+          Expanded(
+            child: Form(
+              key: _formKey,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      AppSpacing.pagePadding,
+                      AppSpacing.pagePadding,
+                      context.navClearance,
+                    ),
+                    children: [
+                      AppTextField(label: 'Titolo', controller: _titleCtrl),
+                      const SizedBox(height: 16),
+
+                      // ── Date picker ──────────────────────────────────────────────
+                      AdminDateField(label: 'Data', value: dateLabel, onTap: _pickDate),
+                      const SizedBox(height: 16),
+
+                      // ── Time pickers ─────────────────────────────────────────────
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: AdminDateField(
+                              label: 'Inizio',
+                              value: _startTime.format(context),
+                              icon: LucideIcons.clock,
+                              onTap: _pickStartTime,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: AdminDateField(
+                              label: 'Fine',
+                              value: _endTime.format(context),
+                              icon: LucideIcons.clock,
+                              onTap: _pickEndTime,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Assignment ────────────────────────────────────────────────
+                      Text(
+                        'Assegnazione *',
+                        style: AppTextStyles.labelMedium.copyWith(color: context.colors.inkMuted),
+                      ),
+                      const SizedBox(height: 6),
+                      AppTabs(
+                        tabs: const [
+                          AppTab(label: 'Tecnico'),
+                          AppTab(label: 'Capo squadra'),
+                          AppTab(label: 'Squadra'),
+                        ],
+                        selectedIndex: _assignmentType.index,
+                        onSelected: (i) =>
+                            setState(() => _assignmentType = AssignmentType.values[i]),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_isLoadingAssignment)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+                          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      else
+                        _AssignmentPicker(
+                          type: _assignmentType,
+                          selectedUserId: _selectedUserId,
+                          onUserChanged: (v) => setState(() => _selectedUserId = v),
+                          selectedTeamLeadId: _selectedTeamLeadId,
+                          onTeamLeadChanged: (v) => setState(() => _selectedTeamLeadId = v),
+                          selectedStaffIds: _selectedStaffIds,
+                          onStaffToggled: (id, selected) => setState(() {
+                            if (selected) {
+                              _selectedStaffIds.add(id);
+                            } else {
+                              _selectedStaffIds.remove(id);
+                            }
+                          }),
+                          selectedSquadraId: _selectedSquadraId,
+                          onSquadraChanged: (v) => setState(() => _selectedSquadraId = v),
+                          squadraDisabled: _isEditing && !_assignmentLoadedLive,
+                        ),
+                      const SizedBox(height: 16),
+
+                      // ── Location selector ────────────────────────────────────────
+                      AppFieldShell(
+                        label: 'Sede *',
+                        child: DropdownButtonFormField<String>(
+                          // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                          value: _selectedLocationId,
+                          items: locations
+                              .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
+                              .toList(),
+                          onChanged: (v) => setState(() => _selectedLocationId = v),
+                          validator: (v) => v == null ? 'Campo obbligatorio' : null,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      AppTextField(label: 'Note', controller: _descriptionCtrl, maxLines: 3),
+                      const SizedBox(height: 32),
+
+                      AppButton(
+                        label: _isEditing ? 'Salva modifiche' : 'Crea pianificazione',
+                        onPressed: _isSaving || !_canSave ? null : _save,
+                        isLoading: _isSaving,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              children: [
-                AppTextField(label: 'Titolo', controller: _titleCtrl),
-                const SizedBox(height: 16),
-
-                // ── Date picker ──────────────────────────────────────────────
-                AdminDateField(label: 'Data', value: dateLabel, onTap: _pickDate),
-                const SizedBox(height: 16),
-
-                // ── Time pickers ─────────────────────────────────────────────
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: AdminDateField(
-                        label: 'Inizio',
-                        value: _startTime.format(context),
-                        icon: LucideIcons.clock,
-                        onTap: _pickStartTime,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: AdminDateField(
-                        label: 'Fine',
-                        value: _endTime.format(context),
-                        icon: LucideIcons.clock,
-                        onTap: _pickEndTime,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // ── Assignment ────────────────────────────────────────────────
-                Text(
-                  'Assegnazione *',
-                  style: AppTextStyles.labelMedium.copyWith(color: context.colors.inkMuted),
-                ),
-                const SizedBox(height: 6),
-                AppTabs(
-                  tabs: const [
-                    AppTab(label: 'Tecnico'),
-                    AppTab(label: 'Capo squadra'),
-                    AppTab(label: 'Squadra'),
-                  ],
-                  selectedIndex: _assignmentType.index,
-                  onSelected: (i) => setState(() => _assignmentType = AssignmentType.values[i]),
-                ),
-                const SizedBox(height: 12),
-                if (_isLoadingAssignment)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                  )
-                else
-                  _AssignmentPicker(
-                    type: _assignmentType,
-                    selectedUserId: _selectedUserId,
-                    onUserChanged: (v) => setState(() => _selectedUserId = v),
-                    selectedTeamLeadId: _selectedTeamLeadId,
-                    onTeamLeadChanged: (v) => setState(() => _selectedTeamLeadId = v),
-                    selectedStaffIds: _selectedStaffIds,
-                    onStaffToggled: (id, selected) => setState(() {
-                      if (selected) {
-                        _selectedStaffIds.add(id);
-                      } else {
-                        _selectedStaffIds.remove(id);
-                      }
-                    }),
-                    selectedSquadraId: _selectedSquadraId,
-                    onSquadraChanged: (v) => setState(() => _selectedSquadraId = v),
-                    squadraDisabled: _isEditing && !_assignmentLoadedLive,
-                  ),
-                const SizedBox(height: 16),
-
-                // ── Location selector ────────────────────────────────────────
-                AppFieldShell(
-                  label: 'Sede *',
-                  child: DropdownButtonFormField<String>(
-                    // ignore: deprecated_member_use — controlled field, needs value not initialValue
-                    value: _selectedLocationId,
-                    items: locations
-                        .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
-                        .toList(),
-                    onChanged: (v) => setState(() => _selectedLocationId = v),
-                    validator: (v) => v == null ? 'Campo obbligatorio' : null,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                AppTextField(label: 'Note', controller: _descriptionCtrl, maxLines: 3),
-                const SizedBox(height: 32),
-
-                AppButton(
-                  label: _isEditing ? 'Salva modifiche' : 'Crea pianificazione',
-                  onPressed: _isSaving ? null : _save,
-                  isLoading: _isSaving,
-                ),
-              ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }

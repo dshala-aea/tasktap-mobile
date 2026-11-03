@@ -119,6 +119,8 @@ Map<String, dynamic> _scheduleJson({
   String? updatedAt,
   String activityDate = '2026-06-21T00:00:00Z',
   bool isAssenza = false,
+  bool isBlockOccupied = false,
+  String? absenceRequestId,
   List<Map<String, dynamic>>? assignees,
 }) => {
   'id': id,
@@ -136,6 +138,9 @@ Map<String, dynamic> _scheduleJson({
   'title': title,
   // Present on every row the server sends; only absence-owned ones are true.
   'isAssenza': isAssenza,
+  // Same order the server serializes them in.
+  'isBlockOccupied': isBlockOccupied,
+  'absenceRequestId': absenceRequestId,
   'description': 'Descrizione intervento',
   'assignees':
       assignees ??
@@ -403,6 +408,57 @@ void main() {
       final rows = await db.select(db.schedules).get();
       expect(rows.firstWhere((s) => s.id == 'sched-ferie').isAssenza, isTrue);
       expect(rows.firstWhere((s) => s.id == 'sched-job').isAssenza, isFalse);
+    });
+
+    // The two leaves schema 62 added. Nothing else in the app writes them, so without these the
+    // upsert could drop either one and every device would read the column default forever while
+    // the whole suite stayed green.
+    test('mirrors the block flag and the owning absence request onto the row', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          schedules: [
+            _scheduleJson(id: 'sched-block', isBlockOccupied: true),
+            _scheduleJson(id: 'sched-ferie', isAssenza: true, absenceRequestId: 'req-1'),
+            _scheduleJson(id: 'sched-job'),
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.schedules).get();
+      final block = rows.firstWhere((s) => s.id == 'sched-block');
+      expect(block.isBlockOccupied, isTrue);
+      expect(block.absenceRequestId, isNull, reason: 'a block is not an absence');
+
+      final ferie = rows.firstWhere((s) => s.id == 'sched-ferie');
+      expect(ferie.absenceRequestId, 'req-1');
+      expect(ferie.isBlockOccupied, isFalse);
+
+      final job = rows.firstWhere((s) => s.id == 'sched-job');
+      expect(job.isBlockOccupied, isFalse);
+      expect(job.absenceRequestId, isNull);
+    });
+
+    // The mirror is upsert-only, so a re-sync is the only thing that can clear a flag the server
+    // dropped — deleting the block must unlock the day on a device that already saw it locked.
+    test('a re-sync clears the block flag when the server stops sending it', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(schedules: [_scheduleJson(id: 'sched-1', isBlockOccupied: true)]),
+      );
+      await svc.sync();
+      expect(
+        (await db.select(db.schedules).getSingle()).isBlockOccupied,
+        isTrue,
+        reason: 'precondition: the first sync locks the day',
+      );
+
+      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson(id: 'sched-1')]));
+      await svc.sync();
+
+      expect((await db.select(db.schedules).getSingle()).isBlockOccupied, isFalse);
     });
 
     test('stores who is on a schedule', () async {

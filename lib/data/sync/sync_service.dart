@@ -984,6 +984,10 @@ class SyncService {
               // An approved absence is a normal schedule row on the wire; this is the only thing
               // that separates it from work. See `Schedules.isAssenza`.
               isAssenza: Value(s.isAssenza),
+              // A day reserved by a multi-day plan, and the absence request a materialised
+              // absence came from. Both are read-only signals alongside `isAssenza`.
+              isBlockOccupied: Value(s.isBlockOccupied),
+              absenceRequestId: Value(s.absenceRequestId),
             ),
           );
 

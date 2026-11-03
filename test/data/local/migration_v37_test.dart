@@ -135,8 +135,12 @@ void main() {
   /// keep a null number forever. The eighth is v17 (schema 60): `report_staff_segments`, which
   /// travels inside the report aggregate — a device whose cursor is already past a report would
   /// never receive that report's intervals, and every rapportino on the phone would open with an
-  /// empty list. This test is the record that no release moved the generation silently.
+  /// empty list. The ninth is v18 (schema 62): `schedules.isBlockOccupied` and
+  /// `schedules.absenceRequestId` — the office/admin `fullScope` branch delta-filters schedules,
+  /// so an unedited day of a multi-day block would keep both defaults forever and the admin screen
+  /// would keep offering writes the server refuses. This test is the record that no release moved
+  /// the generation silently.
   test('the sync cursor generation is the one the current release set', () {
-    expect(AppDatabase.syncCursorGeneration, 'v17');
+    expect(AppDatabase.syncCursorGeneration, 'v18');
   });
 }
