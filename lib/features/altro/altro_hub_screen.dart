@@ -182,10 +182,20 @@ class AltroHubScreen extends ConsumerWidget {
       ),
     ];
 
+    final canApprove = entitlement?.capabilities.contains('presenze.absence.approve') ?? false;
+
     return [
       for (final t in tiles)
         if (moduleIsOffered(t.module, entitlement))
           AppCompartmentTile(icon: t.icon, label: t.label, onTap: t.onTap),
+      // Approving is office work, not part of either self-service screen: the tile appears only
+      // for a capability holder (fail-closed when the cache is missing), like the route guard.
+      if (canApprove)
+        AppCompartmentTile(
+          icon: LucideIcons.clipboardCheck,
+          label: 'Approvazioni',
+          onTap: () => context.push(AppRoutes.altroApprovazioni),
+        ),
     ];
   }
 }

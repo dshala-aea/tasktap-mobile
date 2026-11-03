@@ -9,7 +9,7 @@
 //      (PopulateCapiSquadraAsync) but mobile never displayed it — item 8b of the audit.
 //   3. Gap 6 of the feature audit: `User.LastAccessAt` is a real column returned on every
 //      `/api/users` response but was surfaced nowhere on mobile — the member row now shows it,
-//      derived from the same bulk `allUsersWithSquadraProvider` fetch the list screen uses for
+//      derived from the same bulk `allUsersProvider` fetch the list screen uses for
 //      member counts (Gap 7), not a live per-member call.
 //   4. Gap 9: a header action links to this squadra's own schedule, pre-filtered.
 

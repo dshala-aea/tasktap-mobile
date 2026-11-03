@@ -9,7 +9,7 @@ import 'package:tasktap_mobile/core/notifications/notification_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 
 void main() {
-  test('smartWorkingRequestNotification_routesToTheSmartWorkingList', () {
+  test('smartWorkingRequestSubmission_routesToTheApprovalQueue', () {
     final intent = DeepLinkIntent.fromNotification(
       type: 'AbsenceRequestSubmitted',
       entityType: 'SmartWorkingRequest',
@@ -17,8 +17,35 @@ void main() {
     );
 
     expect(intent, isNotNull);
-    expect(intent!.resolveRoute(), AppRoutes.altroSmartWorking);
-    expect(intent.resolveRoute(), '/altro/smart-working');
+    expect(intent!.resolveRoute(), AppRoutes.approvazioni(tab: 'smart-working'));
+    expect(intent.resolveRoute(), '/altro/approvazioni?tab=smart-working');
+  });
+
+  test('a submitted smart-working request without an id still reaches the queue', () {
+    final intent = DeepLinkIntent.fromNotification(
+      type: 'AbsenceRequestSubmitted',
+      entityType: 'SmartWorkingRequest',
+      entityId: '',
+    );
+
+    expect(intent?.resolveRoute(), AppRoutes.approvazioni(tab: 'smart-working'));
+  });
+
+  test('an id-less submitted request beats the notification-detail fallback', () {
+    final intent = DeepLinkIntent.fromNotification(
+      type: 'AbsenceRequestSubmitted',
+      entityType: 'AbsenceRequest',
+      entityId: '',
+      notificationId: 'n-1',
+    );
+
+    expect(intent?.resolveRoute(), AppRoutes.approvazioni(tab: 'assenze'));
+  });
+
+  test('a submitted notification with no entity type defaults to the absence tab', () {
+    final intent = DeepLinkIntent.fromNotification(type: 'AbsenceRequestSubmitted');
+
+    expect(intent?.resolveRoute(), AppRoutes.approvazioni(tab: 'assenze'));
   });
 
   test('a smart-working id no screen can resolve still routes to the list', () {

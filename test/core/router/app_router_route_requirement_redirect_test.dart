@@ -39,6 +39,7 @@ import 'package:tasktap_mobile/features/admin/customers/admin_customer_form_scre
 import 'package:tasktap_mobile/features/admin/magazzini/admin_magazzino_list_screen.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_list_screen.dart';
 import 'package:tasktap_mobile/features/altro/forbidden_screen.dart';
+import 'package:tasktap_mobile/features/approvazioni/approvazioni_screen.dart';
 import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
 import 'package:tasktap_mobile/features/smart_working/smart_working_form_screen.dart';
 import 'package:tasktap_mobile/main.dart';
@@ -199,6 +200,62 @@ void main() {
 
       expect(find.byType(ForbiddenScreen), findsNothing);
       expect(find.byType(AdminScheduleListScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'denied presenze.absence.approve redirects /altro/approvazioni to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'presenze'},
+        capabilities: const {'presenze.absence.read'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 11, 3),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/approvazioni');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+      expect(find.byType(ApprovazioniScreen), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'held presenze.absence.approve reaches the approval queue, not /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'presenze'},
+        capabilities: const {'presenze.absence.approve'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 11, 3),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/approvazioni');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsNothing);
+      expect(find.byType(ApprovazioniScreen), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

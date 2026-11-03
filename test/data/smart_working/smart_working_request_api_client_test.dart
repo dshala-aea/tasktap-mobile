@@ -321,4 +321,63 @@ void main() {
       expect(adapter.captured!.path, '/api/smart-working-requests/sw-1/cancel');
     });
   });
+
+  group('SmartWorkingRequestApiClient — approvals', () {
+    test('fetchPendingForApproval_sendsStatusZeroAndNoUserId', () async {
+      final adapter = _Adapter(body: jsonEncode([_row()]));
+      final client = _client(adapter);
+
+      final rows = await client.fetchPendingForApproval();
+
+      expect(rows.single.id, 'sw-1');
+      expect(adapter.captured!.path, '/api/smart-working-requests');
+      expect(adapter.captured!.queryParameters['status'], 0);
+      expect(adapter.captured!.queryParameters.containsKey('userId'), isFalse);
+    });
+
+    test('approve_postsToTheApproveRoute', () async {
+      final adapter = _Adapter(body: '{}');
+      final client = _client(adapter);
+
+      await client.approve('sw-1');
+
+      expect(adapter.captured!.method, 'POST');
+      expect(adapter.captured!.path, '/api/smart-working-requests/sw-1/approve');
+    });
+
+    test('reject_postsTheTrimmedReason', () async {
+      final adapter = _Adapter(body: '{}');
+      final client = _client(adapter);
+
+      await client.reject('sw-1', reason: '  Servizio scoperto  ');
+
+      expect(adapter.captured!.path, '/api/smart-working-requests/sw-1/reject');
+      expect(adapter.captured!.data, {'reason': 'Servizio scoperto'});
+    });
+
+    test('a_403_becomes_the_permission_error', () async {
+      final adapter = _Adapter(status: 403, body: '');
+      final client = _client(adapter);
+
+      await expectLater(
+        client.approve('sw-1'),
+        throwsA(isA<SmartWorkingPermissionError>()),
+      );
+    });
+
+    test('a_400_detail_becomes_the_validation_error', () async {
+      final adapter = _Adapter(
+        status: 400,
+        body: jsonEncode({
+          'detail': 'Solo una richiesta in attesa può essere approvata o rifiutata.',
+        }),
+      );
+      final client = _client(adapter);
+
+      await expectLater(
+        client.reject('sw-1', reason: 'x'),
+        throwsA(isA<SmartWorkingValidationError>()),
+      );
+    });
+  });
 }

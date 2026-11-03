@@ -8,8 +8,8 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../../data/users/user_directory.dart';
 import '../admin_api_client.dart';
-import 'admin_squadra_list_screen.dart' show allUsersWithSquadraProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -98,12 +98,12 @@ class _SquadraDetailBody extends ConsumerWidget {
     final capoNome = squadra['capSquadraNome'] as String?;
 
     // Gap 6 of the feature audit: `lastAccessAt` is a real column on `User`, returned on every
-    // `/api/users` response, but was surfaced nowhere on mobile. `allUsersWithSquadraProvider` is
-    // the same bulk fetch the list screen uses for member counts (Gap 7) — reused here rather than
-    // a live per-member `/api/users/{id}` call, so this row list still costs one network request
-    // for the whole screen, not one per member.
+    // `/api/users` response, but was surfaced nowhere on mobile. `allUsersProvider` is the same
+    // bulk fetch the list screen uses for member counts (Gap 7) — reused here rather than a live
+    // per-member `/api/users/{id}` call, so this row list still costs one network request for the
+    // whole screen, not one per member.
     final usersById = {
-      for (final u in ref.watch(allUsersWithSquadraProvider).valueOrNull ?? const [])
+      for (final u in ref.watch(allUsersProvider(true)).valueOrNull ?? const [])
         u['id'] as String: u,
     };
 
@@ -269,30 +269,6 @@ String _formatLastAccess(String? iso) {
   return DateFormat('dd/MM/yyyy HH:mm', 'it').format(DateTime.parse(iso).toLocal());
 }
 
-/// The human label for a user row in the add-member picker.
-///
-/// Never an email: an operator must not have to read `mario.rossi@cliente.it` as a person's name.
-/// The `/api/users` payload carries no `displayName` (the `User` schema's name fields are
-/// `fullName`, `firstName`, `lastName`), so the old `t['displayName'] ?? t['email'] ?? ''` fell
-/// through to the email for every real user. Derive from the name fields the payload actually
-/// carries — the server's own `fullName` first, then `firstName`/`lastName` — and, when there is
-/// genuinely no name, fall back to a neutral label rather than inventing one or dropping the row
-/// (a nameless active user is still a valid member to add).
-String _memberOptionLabel(Map<String, dynamic> u) {
-  final display = (u['displayName'] as String?)?.trim();
-  if (display != null && display.isNotEmpty) return display;
-
-  final full = (u['fullName'] as String?)?.trim();
-  if (full != null && full.isNotEmpty) return full;
-
-  final first = (u['firstName'] as String? ?? '').trim();
-  final last = (u['lastName'] as String? ?? '').trim();
-  final composed = '$first $last'.trim();
-  if (composed.isNotEmpty) return composed;
-
-  return 'Utente senza nome';
-}
-
 /// Bottom sheet to add a member to a squadra.
 class _AddMemberSheet extends StatefulWidget {
   const _AddMemberSheet({required this.squadraId, required this.api});
@@ -319,7 +295,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
 
   Future<void> _loadUsers() async {
     try {
-      // Same population the squadra LIST screen uses (`allUsersWithSquadraProvider` above): every
+      // Same population the squadra LIST screen uses (`allUsersProvider` above): every
       // active user in the tenant, no role filter. This picker previously called
       // `fetchTechnicians()` (`GET /api/users?role=Technician`), a client-side invention — the
       // backend does not restrict squadra membership by role (`SquadreController` validates the
@@ -399,7 +375,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                     .map(
                       (t) => DropdownMenuItem(
                         value: t['id'] as String,
-                        child: Text(_memberOptionLabel(t)),
+                        child: Text(userDisplayName(t)),
                       ),
                     )
                     .toList(),

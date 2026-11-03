@@ -418,6 +418,16 @@ void main() {
       final client = AbsenceRequestApiClient(dio);
       return capture(() => client.cancel(_id(19)));
     });
+
+    contractTest('approving an absence request matches the server', () {
+      final client = AbsenceRequestApiClient(dio);
+      return capture(() => client.approve(_id(30)));
+    });
+
+    contractTest('rejecting an absence request matches the server', () {
+      final client = AbsenceRequestApiClient(dio);
+      return capture(() => client.reject(_id(31), reason: 'Copertura insufficiente'));
+    });
   });
 
   group('smart working', () {
@@ -443,6 +453,16 @@ void main() {
     contractTest('cancelling a smart-working request matches the server', () {
       final client = SmartWorkingRequestApiClient(dio);
       return capture(() => client.cancel(_id(20)));
+    });
+
+    contractTest('approving a smart-working request matches the server', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(() => client.approve(_id(32)));
+    });
+
+    contractTest('rejecting a smart-working request matches the server', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(() => client.reject(_id(33), reason: 'Servizio scoperto'));
     });
 
     /// The subset check above can only flag keys the schema does not declare, so a key the client

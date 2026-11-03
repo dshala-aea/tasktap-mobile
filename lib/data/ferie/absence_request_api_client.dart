@@ -140,6 +140,14 @@ class AbsenceRequestValidationError implements Exception {
   String toString() => detail;
 }
 
+/// A 403 on an approval decision: the capability was revoked, or the seat/tenant refuses it.
+/// Terminal — retrying the same call cannot succeed.
+class AbsenceRequestPermissionError implements Exception {
+  const AbsenceRequestPermissionError();
+  @override
+  String toString() => 'Non hai i permessi per approvare le richieste.';
+}
+
 class AbsenceRequestApiClient {
   AbsenceRequestApiClient(this._dio);
 
@@ -153,6 +161,7 @@ class AbsenceRequestApiClient {
       if (e.response?.statusCode == 400 && data is Map && data['detail'] is String) {
         throw AbsenceRequestValidationError(data['detail'] as String);
       }
+      if (e.response?.statusCode == 403) throw const AbsenceRequestPermissionError();
       rethrow;
     }
   }
@@ -172,6 +181,33 @@ class AbsenceRequestApiClient {
     );
     final list = res.data ?? [];
     return list.cast<Map<String, dynamic>>().map(AbsenceRequestDto.fromJson).toList();
+  });
+
+  /// GET /api/absence-requests?status=0 with no `userId`: the tenant-wide pending queue for an
+  /// Approve holder (the server resolves the scope itself). Online-only; no local mirror exists
+  /// for other people's requests.
+  Future<List<AbsenceRequestDto>> fetchPendingForApproval() => _guarded(() async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/absence-requests',
+      queryParameters: const {'status': 0},
+    );
+    final list = res.data;
+    // A 200 with no body is a contract violation, not "nothing to approve": the queue must not
+    // report an empty worklist when the server never answered.
+    if (list == null) {
+      throw const FormatException('GET /api/absence-requests answered 200 with no body');
+    }
+    return list.cast<Map<String, dynamic>>().map(AbsenceRequestDto.fromJson).toList();
+  });
+
+  /// POST /api/absence-requests/{id}/approve. The server tolerates an omitted body; send `{}`.
+  Future<void> approve(String id) => _guarded(() async {
+    await _dio.post<dynamic>('/api/absence-requests/$id/approve', data: const <String, dynamic>{});
+  });
+
+  /// POST /api/absence-requests/{id}/reject. The reason is required by the server and max 1000.
+  Future<void> reject(String id, {required String reason}) => _guarded(() async {
+    await _dio.post<dynamic>('/api/absence-requests/$id/reject', data: {'reason': reason.trim()});
   });
 
   /// POST /api/absence-requests. Returns the new request's id.

@@ -126,6 +126,14 @@ class SmartWorkingValidationError implements Exception {
   String toString() => detail;
 }
 
+/// A 403 on an approval decision: the capability was revoked, or the seat/tenant refuses it.
+/// Terminal — retrying the same call cannot succeed.
+class SmartWorkingPermissionError implements Exception {
+  const SmartWorkingPermissionError();
+  @override
+  String toString() => 'Non hai i permessi per approvare le richieste.';
+}
+
 class SmartWorkingRequestApiClient {
   SmartWorkingRequestApiClient(this._dio);
 
@@ -139,6 +147,7 @@ class SmartWorkingRequestApiClient {
       if (e.response?.statusCode == 400 && data is Map && data['detail'] is String) {
         throw SmartWorkingValidationError(data['detail'] as String);
       }
+      if (e.response?.statusCode == 403) throw const SmartWorkingPermissionError();
       rethrow;
     }
   }
@@ -162,6 +171,36 @@ class SmartWorkingRequestApiClient {
       throw const FormatException('GET /api/smart-working-requests answered 200 with no body');
     }
     return list.cast<Map<String, dynamic>>().map(SmartWorkingRequestDto.fromJson).toList();
+  });
+
+  /// GET /api/smart-working-requests?status=0 with no `userId`: the tenant-wide pending queue for
+  /// an Approve holder (the server resolves the scope itself). Online-only.
+  Future<List<SmartWorkingRequestDto>> fetchPendingForApproval() => _guarded(() async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/smart-working-requests',
+      queryParameters: const {'status': 0},
+    );
+    final list = res.data;
+    if (list == null) {
+      throw const FormatException('GET /api/smart-working-requests answered 200 with no body');
+    }
+    return list.cast<Map<String, dynamic>>().map(SmartWorkingRequestDto.fromJson).toList();
+  });
+
+  /// POST /api/smart-working-requests/{id}/approve. The server tolerates an omitted body; send `{}`.
+  Future<void> approve(String id) => _guarded(() async {
+    await _dio.post<dynamic>(
+      '/api/smart-working-requests/$id/approve',
+      data: const <String, dynamic>{},
+    );
+  });
+
+  /// POST /api/smart-working-requests/{id}/reject. The reason is required by the server and max 1000.
+  Future<void> reject(String id, {required String reason}) => _guarded(() async {
+    await _dio.post<dynamic>(
+      '/api/smart-working-requests/$id/reject',
+      data: {'reason': reason.trim()},
+    );
   });
 
   /// POST /api/smart-working-requests.
