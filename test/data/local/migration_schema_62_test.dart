@@ -12,9 +12,9 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 /// the admin screens stop offering writes the server refuses — the same treatment `isAssenza`
 /// already gets. `absenceRequestId` is the absence request a materialised absence came from.
 ///
-/// No `syncCursorGeneration` bump: a technician's schedules are re-sent in full on every sync (the
-/// delta filter deliberately does not cover them — see `MobileUserSyncService`'s type-level delta
-/// contract), so the first sync after the upgrade fills both leaves on rows already on the device.
+/// `syncCursorGeneration` is bumped to v18 alongside this: office/admin callers sync `fullScope`,
+/// where the backend DOES delta-filter schedules, so an unedited day of a multi-day block would
+/// otherwise keep both column defaults forever on the role that edits plans.
 ///
 /// Both `addColumn`s are guarded by `PRAGMA table_info` rather than by `from`, like schemas 50-61:
 /// the older-schema fixtures in test/ rewind `user_version` on the CURRENT schema, which already
