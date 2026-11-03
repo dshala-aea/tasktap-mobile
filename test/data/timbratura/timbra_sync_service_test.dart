@@ -63,8 +63,10 @@ class _FakeRepo implements IWorkSessionRepository {
   Future<List<WorkSession>> getAllSessions() async => List.of(sessions);
 
   @override
-  Future<List<WorkSession>> getPendingSessions() async =>
-      [...sessions.where((s) => s.isPendingSync), ...pendingBeyondToday];
+  Future<List<WorkSession>> getPendingSessions() async => [
+    ...sessions.where((s) => s.isPendingSync),
+    ...pendingBeyondToday,
+  ];
 
   @override
   Future<int> getPendingCount() async => (await getPendingSessions())
@@ -90,15 +92,20 @@ class _FakeApiClient extends WorklogApiClient {
   _FakeApiClient() : super(Dio());
 
   final List<List<MobileSessionDto>> calls = [];
+  final List<List<MobileSessionDto>> breakCalls = [];
   bool shouldThrow = false;
 
   /// What the server would echo per session: the gap it judged a disagreement, or null.
   int? clockDisagreementSeconds;
 
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> sessions, {
+    List<MobileSessionDto> breaks = const [],
+  }) async {
     if (shouldThrow) throw Exception('Network error');
     calls.add(List.of(sessions));
+    if (breaks.isNotEmpty) breakCalls.add(List.of(breaks));
     return sessions
         .map(
           (s) => UpsertSessionResponse(
@@ -169,23 +176,56 @@ void main() {
       expect(dtos[0].longitude, isNull);
     });
 
-    test('hands the server\'s clock-disagreement answer to the caller, once per batch', () async {
-      final t1 = DateTime.utc(2026, 6, 23, 8);
-      final t2 = DateTime.utc(2026, 6, 23, 17);
-      final repo = _FakeRepo([_ws('id-1', 'ingresso', t1), _ws('id-2', 'fine', t2)]);
-      final api = _FakeApiClient()..clockDisagreementSeconds = 720;
-      final reported = <int>[];
-      final svc = TimbraSyncService(
-        repo: repo,
-        apiClient: api,
-        onClockDisagreement: reported.add,
-      );
+    test(
+      'a break is sent in its own array, keyed by the pausa event',
+      () async {
+        final t1 = DateTime.utc(2026, 6, 23, 8);
+        final t2 = DateTime.utc(2026, 6, 23, 12);
+        final t3 = DateTime.utc(2026, 6, 23, 13);
+        final t4 = DateTime.utc(2026, 6, 23, 17);
+        final repo = _FakeRepo([
+          _ws('in', 'ingresso', t1),
+          _ws('pause', 'pausa', t2),
+          _ws('resume', 'ripresa', t3),
+          _ws('out', 'fine', t4),
+        ]);
+        final api = _FakeApiClient();
+        final svc = TimbraSyncService(repo: repo, apiClient: api);
 
-      await svc.syncNow();
+        await svc.syncNow();
 
-      // One report, not one per session: every session carried the same send-time reading.
-      expect(reported, [720]);
-    });
+        // The ordinary intervals are unchanged...
+        expect(api.calls.single.map((d) => d.clientId), ['in', 'resume']);
+        // ...and the break is additive, with the pausa's own id.
+        expect(api.breakCalls.single.single.clientId, 'pause');
+        expect(api.breakCalls.single.single.startTime, t2);
+        expect(api.breakCalls.single.single.endTime, t3);
+      },
+    );
+
+    test(
+      'hands the server\'s clock-disagreement answer to the caller, once per batch',
+      () async {
+        final t1 = DateTime.utc(2026, 6, 23, 8);
+        final t2 = DateTime.utc(2026, 6, 23, 17);
+        final repo = _FakeRepo([
+          _ws('id-1', 'ingresso', t1),
+          _ws('id-2', 'fine', t2),
+        ]);
+        final api = _FakeApiClient()..clockDisagreementSeconds = 720;
+        final reported = <int>[];
+        final svc = TimbraSyncService(
+          repo: repo,
+          apiClient: api,
+          onClockDisagreement: reported.add,
+        );
+
+        await svc.syncNow();
+
+        // One report, not one per session: every session carried the same send-time reading.
+        expect(reported, [720]);
+      },
+    );
 
     test('says nothing when the server judged the drift ordinary', () async {
       final t1 = DateTime.utc(2026, 6, 23, 8);
@@ -288,7 +328,9 @@ void main() {
     test('an orphan-marked open interval is never pushed', () async {
       final t1 = DateTime.utc(2026, 8, 24, 8);
       // A stale open shift the reconciler has already determined the server closed elsewhere.
-      final sessions = [_ws('id-1', 'ingresso', t1, notes: reconciledOrphanMarker)];
+      final sessions = [
+        _ws('id-1', 'ingresso', t1, notes: reconciledOrphanMarker),
+      ];
       final repo = _FakeRepo(sessions);
       final api = _FakeApiClient();
       final svc = TimbraSyncService(repo: repo, apiClient: api);
@@ -329,19 +371,22 @@ void main() {
       },
     );
 
-    test('a normal (non-orphaned) open interval is unaffected — still syncs', () async {
-      final t1 = DateTime.utc(2026, 8, 24, 8);
-      final sessions = [_ws('id-1', 'ingresso', t1)];
-      final repo = _FakeRepo(sessions);
-      final api = _FakeApiClient();
-      final svc = TimbraSyncService(repo: repo, apiClient: api);
+    test(
+      'a normal (non-orphaned) open interval is unaffected — still syncs',
+      () async {
+        final t1 = DateTime.utc(2026, 8, 24, 8);
+        final sessions = [_ws('id-1', 'ingresso', t1)];
+        final repo = _FakeRepo(sessions);
+        final api = _FakeApiClient();
+        final svc = TimbraSyncService(repo: repo, apiClient: api);
 
-      await svc.syncNow();
+        await svc.syncNow();
 
-      expect(api.calls.length, 1);
-      expect(api.calls[0][0].clientId, 'id-1');
-      expect(repo.markedSynced, contains('id-1'));
-    });
+        expect(api.calls.length, 1);
+        expect(api.calls[0][0].clientId, 'id-1');
+        expect(repo.markedSynced, contains('id-1'));
+      },
+    );
   });
 
   // ── P0-2: the queue is not day-scoped ───────────────────────────────────────
@@ -354,7 +399,10 @@ void main() {
       final end = DateTime.utc(2026, 6, 22, 17);
       final repo = _FakeRepo(
         [],
-        pendingBeyondToday: [_ws('y-1', 'ingresso', start), _ws('y-2', 'fine', end)],
+        pendingBeyondToday: [
+          _ws('y-1', 'ingresso', start),
+          _ws('y-2', 'fine', end),
+        ],
       );
       final api = _FakeApiClient();
       final svc = TimbraSyncService(repo: repo, apiClient: api);
@@ -369,39 +417,51 @@ void main() {
       expect(repo.markedSynced, containsAll(['y-1', 'y-2']));
     });
 
-    test('a multi-day backlog is assembled and sent one day at a time', () async {
-      final day1Start = DateTime.utc(2026, 6, 22, 8);
-      final day1End = DateTime.utc(2026, 6, 22, 17);
-      final day2Start = DateTime.utc(2026, 6, 23, 9);
-      final day2End = DateTime.utc(2026, 6, 23, 18);
-      final repo = _FakeRepo([], pendingBeyondToday: [
-        _ws('d1-in', 'ingresso', day1Start),
-        _ws('d1-out', 'fine', day1End),
-        _ws('d2-in', 'ingresso', day2Start),
-        _ws('d2-out', 'fine', day2End),
-      ]);
-      final api = _FakeApiClient();
-      final svc = TimbraSyncService(repo: repo, apiClient: api);
+    test(
+      'a multi-day backlog is assembled and sent one day at a time',
+      () async {
+        final day1Start = DateTime.utc(2026, 6, 22, 8);
+        final day1End = DateTime.utc(2026, 6, 22, 17);
+        final day2Start = DateTime.utc(2026, 6, 23, 9);
+        final day2End = DateTime.utc(2026, 6, 23, 18);
+        final repo = _FakeRepo(
+          [],
+          pendingBeyondToday: [
+            _ws('d1-in', 'ingresso', day1Start),
+            _ws('d1-out', 'fine', day1End),
+            _ws('d2-in', 'ingresso', day2Start),
+            _ws('d2-out', 'fine', day2End),
+          ],
+        );
+        final api = _FakeApiClient();
+        final svc = TimbraSyncService(repo: repo, apiClient: api);
 
-      await svc.syncNow();
+        await svc.syncNow();
 
-      expect(api.calls.length, 2, reason: 'one POST per business day');
-      expect(api.calls[0].single.clientId, 'd1-in');
-      expect(api.calls[0].single.endTime, day1End);
-      expect(api.calls[1].single.clientId, 'd2-in');
-      expect(api.calls[1].single.endTime, day2End);
-      expect(repo.markedSynced, containsAll(['d1-in', 'd1-out', 'd2-in', 'd2-out']));
-    });
+        expect(api.calls.length, 2, reason: 'one POST per business day');
+        expect(api.calls[0].single.clientId, 'd1-in');
+        expect(api.calls[0].single.endTime, day1End);
+        expect(api.calls[1].single.clientId, 'd2-in');
+        expect(api.calls[1].single.endTime, day2End);
+        expect(
+          repo.markedSynced,
+          containsAll(['d1-in', 'd1-out', 'd2-in', 'd2-out']),
+        );
+      },
+    );
 
     test('an unclosed day is not closed by the next day\'s clock-in', () async {
       final day1Start = DateTime.utc(2026, 6, 22, 8);
       final day2Start = DateTime.utc(2026, 6, 23, 9);
       final day2End = DateTime.utc(2026, 6, 23, 18);
-      final repo = _FakeRepo([], pendingBeyondToday: [
-        _ws('d1-in', 'ingresso', day1Start),
-        _ws('d2-in', 'ingresso', day2Start),
-        _ws('d2-out', 'fine', day2End),
-      ]);
+      final repo = _FakeRepo(
+        [],
+        pendingBeyondToday: [
+          _ws('d1-in', 'ingresso', day1Start),
+          _ws('d2-in', 'ingresso', day2Start),
+          _ws('d2-out', 'fine', day2End),
+        ],
+      );
       final api = _FakeApiClient();
       final svc = TimbraSyncService(repo: repo, apiClient: api);
 
@@ -409,29 +469,39 @@ void main() {
 
       // The day-agnostic assembler used to "defensively close" an unmatched opener with the next
       // event of any day: a forgot-to-clock-out day would become a 25-hour paid shift.
-      expect(api.calls[0].single.endTime, isNull, reason: 'day 1 stays open, not a 25-hour shift');
+      expect(
+        api.calls[0].single.endTime,
+        isNull,
+        reason: 'day 1 stays open, not a 25-hour shift',
+      );
       expect(api.calls[1].single.endTime, day2End);
     });
 
-    test('an overnight shift is sent as one closed interval, in the day it began', () async {
-      // 22:00 → 06:00 next day. The 'fine' belongs to the interval that started on day 1, so it is
-      // sent with it, closed. Grouping by each event's own day would leave the 'fine' alone in day
-      // 2 (ignored by the assembler) and pending forever.
-      final start = DateTime.utc(2026, 6, 22, 22);
-      final end = DateTime.utc(2026, 6, 23, 6);
-      final repo = _FakeRepo([], pendingBeyondToday: [
-        _ws('n-1', 'ingresso', start),
-        _ws('n-2', 'fine', end),
-      ]);
-      final api = _FakeApiClient();
-      final svc = TimbraSyncService(repo: repo, apiClient: api);
+    test(
+      'an overnight shift is sent as one closed interval, in the day it began',
+      () async {
+        // 22:00 → 06:00 next day. The 'fine' belongs to the interval that started on day 1, so it is
+        // sent with it, closed. Grouping by each event's own day would leave the 'fine' alone in day
+        // 2 (ignored by the assembler) and pending forever.
+        final start = DateTime.utc(2026, 6, 22, 22);
+        final end = DateTime.utc(2026, 6, 23, 6);
+        final repo = _FakeRepo(
+          [],
+          pendingBeyondToday: [
+            _ws('n-1', 'ingresso', start),
+            _ws('n-2', 'fine', end),
+          ],
+        );
+        final api = _FakeApiClient();
+        final svc = TimbraSyncService(repo: repo, apiClient: api);
 
-      await svc.syncNow();
+        await svc.syncNow();
 
-      expect(api.calls.length, 1);
-      expect(api.calls.single.single.clientId, 'n-1');
-      expect(api.calls.single.single.endTime, end);
-      expect(repo.markedSynced, containsAll(['n-1', 'n-2']));
-    });
+        expect(api.calls.length, 1);
+        expect(api.calls.single.single.clientId, 'n-1');
+        expect(api.calls.single.single.endTime, end);
+        expect(repo.markedSynced, containsAll(['n-1', 'n-2']));
+      },
+    );
   });
 }

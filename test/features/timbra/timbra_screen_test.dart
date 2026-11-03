@@ -81,7 +81,10 @@ class _NoopApiClient extends WorklogApiClient {
   _NoopApiClient() : super(Dio());
 
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async => [];
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> sessions, {
+    List<MobileSessionDto> breaks = const [],
+  }) async => [];
 
   @override
   Future<List<TodayWorkLogDto>> getToday() async => [];

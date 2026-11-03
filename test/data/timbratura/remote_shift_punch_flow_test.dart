@@ -38,7 +38,10 @@ class _Api extends WorklogApiClient {
   }
 
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> s) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> s, {
+    List<MobileSessionDto> breaks = const [],
+  }) async {
     calls.add('batch');
     return [];
   }
