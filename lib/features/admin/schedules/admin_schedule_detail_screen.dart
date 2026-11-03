@@ -30,18 +30,21 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheduleAsync = ref.watch(adminScheduleDetailProvider(scheduleId));
+    final schedule = scheduleAsync.valueOrNull;
     // An approved absence arrives as an ordinary schedule row (that is how the server blocks the
     // day), and the backend refuses every write to it (`absence_schedule_read_only`). Offering
     // Modifica here invites an edit that can only fail; the absence it stands for is managed where
-    // it lives, from Ferie e Permessi. Null while loading, so the FAB is not flickered in first.
-    final lockedByAbsence = scheduleAsync.valueOrNull?.isAssenza ?? false;
+    // it lives, from Ferie e Permessi. `valueOrNull` is null while loading (and on error, and for a
+    // row the mirror does not hold), so "no row yet" counts as locked: `?? false` used to arm the
+    // FAB for that first frame and flash it in before the row resolved.
+    final lockedByAbsence = schedule == null || schedule.isAssenza;
     // A day owned by a multi-day plan is the same kind of mirror row: the sync materialises it as
     // an ordinary schedule carrying `isBlockOccupied`, and the backend refuses every write to it
     // (`block_occupancy_read_only`). The flag is missing on a device whose mirror synced before
     // the server started sending it — Drift defaults it to `false`, so that device still offers
-    // Modifica and the server refuses the write; it is the one case the client cannot see. Null
-    // while loading too, so the FAB does not flash on before the row resolves.
-    final lockedByBlock = scheduleAsync.valueOrNull?.isBlockOccupied ?? false;
+    // Modifica and the server refuses the write; the form recognises that refusal instead (see
+    // `_lockFromServerCode` there). Unresolved rows are locked for the same reason as above.
+    final lockedByBlock = schedule == null || schedule.isBlockOccupied;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -176,8 +179,8 @@ class _ScheduleDetailBody extends ConsumerWidget {
                 color: context.colors.amber,
                 message:
                     'Piano multi-giorno: questa giornata è occupata da un intervento pianificato '
-                    'su più giorni e non si può modificare da qui. Le modifiche si fanno sulla '
-                    'pianificazione del piano, non sulla singola giornata.',
+                    'su più giorni e non si può modificare da qui. Per modificare il piano, usa il '
+                    "portale web dell'ufficio.",
               ),
             ),
           ),

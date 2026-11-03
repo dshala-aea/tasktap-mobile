@@ -109,7 +109,7 @@ class ScheduleInfoSheet extends ConsumerWidget {
           if (schedule.isBlockOccupied)
             const _InfoLine(
               label: 'Piano multi-giorno',
-              value: 'Giornata di un piano multi-giorno: non si modifica da qui.',
+              value: 'Giornata occupata: non si modifica da qui.',
             ),
           if (schedule.description.isNotEmpty) ...[
             const SizedBox(height: 12),

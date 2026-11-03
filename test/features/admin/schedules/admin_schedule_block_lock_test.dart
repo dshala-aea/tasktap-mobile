@@ -9,7 +9,7 @@
 // is hidden) and the read-only calendar sheet, which only explains the state.
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' hide isNull;
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,11 +34,13 @@ Response<T> _ok<T>(T data, String path) =>
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 /// One ordinary schedule row. [blockOccupied] is the leaf Task 15 put on the Drift row; it is what
-/// the sync now writes from the server's `isBlockOccupied`.
+/// the sync now writes from the server's `isBlockOccupied`. [assenza] is the older, analogous
+/// server-owned row: an approved absence is mirrored as a schedule the backend refuses to edit.
 Future<void> _seedSchedule(
   AppDatabase db, {
   String id = 'sched-1',
   bool blockOccupied = false,
+  bool assenza = false,
 }) async {
   await db.into(db.locations).insert(
     LocationsCompanion.insert(
@@ -63,6 +65,7 @@ Future<void> _seedSchedule(
       locationId: 'loc-1',
       title: 'Manutenzione',
       description: '',
+      isAssenza: Value(assenza),
       isBlockOccupied: Value(blockOccupied),
     ),
   );
@@ -109,6 +112,66 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // ── Admin form harness ──────────────────────────────────────────────────────
+
+  Widget buildForm({required String scheduleId}) {
+    return ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        dioProvider.overrideWithValue(mockDio),
+        isOnlineProvider.overrideWithValue(true),
+      ],
+      child: MaterialApp(home: AdminScheduleFormScreen(scheduleId: scheduleId)),
+    );
+  }
+
+  /// The reads the edit form makes on open: the technician list and the live detail payload that
+  /// rebuilds the assignment. Neither is what these tests lock — only the write is.
+  void stubFormReads(String id) {
+    when(
+      () => mockDio.get<Map<String, dynamic>>(
+        '/api/users',
+        queryParameters: any(named: 'queryParameters'),
+      ),
+    ).thenAnswer(
+      (_) async => _ok({
+        'items': [
+          {'id': 'tech-1', 'displayName': 'Mario Rossi'},
+        ],
+      }, '/api/users'),
+    );
+    when(() => mockDio.get<Map<String, dynamic>>('/api/schedules/$id')).thenAnswer(
+      (_) async => _ok({
+        'userId': 'tech-1',
+        'teamLeadId': 'tech-1',
+        'squadraId': null,
+        'assignees': [
+          {'userId': 'tech-1', 'isDirect': true, 'isLead': true},
+        ],
+      }, '/api/schedules/$id'),
+    );
+  }
+
+  void stubCleanConflictCheck() {
+    when(
+      () => mockDio.post<Map<String, dynamic>>(
+        '/api/schedules/check-conflicts',
+        data: any(named: 'data'),
+      ),
+    ).thenAnswer((_) async => _ok({'hasConflicts': false, 'conflicts': <dynamic>[]}, '/'));
+  }
+
+  /// Brings the submit control into view and returns its finder.
+  Future<Finder> scrollToSubmit(WidgetTester tester) async {
+    final submit = find.widgetWithText(AppButton, 'Salva modifiche');
+    final scrollable = find.ancestor(
+      of: find.text('Assegnazione *'),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(submit, 300, scrollable: scrollable);
+    return submit;
+  }
+
   // ── Admin detail — the edit FAB ─────────────────────────────────────────────
 
   testWidgets('an occupied day offers no edit affordance', (tester) async {
@@ -125,14 +188,16 @@ void main() {
     await teardown(tester);
   });
 
-  testWidgets('an occupied day offers no delete affordance', (tester) async {
+  testWidgets('forward guard: an occupied day offers no delete affordance', (tester) async {
     await _seedSchedule(db, blockOccupied: true);
 
     await tester.pumpWidget(_buildDetail(db: db));
     await tester.pumpAndSettle();
 
-    // The shipping client exposes no schedule-delete path at all; this asserts the lock stays true
-    // if one is ever added, not that today's build would otherwise offer it.
+    // Forward guard, NOT a behavioural test of this lock: the shipping client exposes no
+    // schedule-delete path at all, so this passes with the whole feature removed. It only pins
+    // that a future delete affordance must honour the same rule; it must not be counted as
+    // coverage for the read-only lock.
     expect(find.text('Elimina'), findsNothing);
     expect(find.byTooltip('Elimina'), findsNothing);
     expect(find.byIcon(Icons.delete), findsNothing);
@@ -158,6 +223,10 @@ void main() {
     await _seedSchedule(db);
 
     await tester.pumpWidget(_buildDetail(db: db));
+
+    // First frame: the row has not resolved yet, so the FAB must not be offered. It used to flash
+    // in here on `valueOrNull?.isBlockOccupied ?? false`, which reads "not locked" while loading.
+    expect(find.byType(AppFab), findsNothing);
     await tester.pumpAndSettle();
 
     expect(find.byType(AppFab), findsOneWidget);
@@ -177,7 +246,9 @@ void main() {
     await tester.pumpWidget(_buildSheet(db: db, schedule: schedule));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('multi-giorno'), findsOneWidget);
+    // `_InfoLine` uppercases its label, and the value must not repeat the same phrase.
+    expect(find.text('PIANO MULTI-GIORNO'), findsOneWidget);
+    expect(find.text('Giornata occupata: non si modifica da qui.'), findsOneWidget);
 
     await teardown(tester);
   });
@@ -186,30 +257,7 @@ void main() {
 
   testWidgets('a form opened for an occupied id refuses to submit', (tester) async {
     await _seedSchedule(db, id: 'sched-block', blockOccupied: true);
-
-    // The form resolves live assignment on open; the read path is not what this test locks.
-    when(
-      () => mockDio.get<Map<String, dynamic>>(
-        '/api/users',
-        queryParameters: any(named: 'queryParameters'),
-      ),
-    ).thenAnswer(
-      (_) async => _ok({
-        'items': [
-          {'id': 'tech-1', 'displayName': 'Mario Rossi'},
-        ],
-      }, '/api/users'),
-    );
-    when(() => mockDio.get<Map<String, dynamic>>('/api/schedules/sched-block')).thenAnswer(
-      (_) async => _ok({
-        'userId': 'tech-1',
-        'teamLeadId': 'tech-1',
-        'squadraId': null,
-        'assignees': [
-          {'userId': 'tech-1', 'isDirect': true, 'isLead': true},
-        ],
-      }, '/api/schedules/sched-block'),
-    );
+    stubFormReads('sched-block');
     when(
       () => mockDio.put<dynamic>(
         any(that: contains('/api/schedules/')),
@@ -218,29 +266,20 @@ void main() {
       ),
     ).thenAnswer((_) async => _ok(null, '/api/schedules/sched-block'));
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          dioProvider.overrideWithValue(mockDio),
-          isOnlineProvider.overrideWithValue(true),
-        ],
-        child: const MaterialApp(home: AdminScheduleFormScreen(scheduleId: 'sched-block')),
-      ),
-    );
+    await tester.pumpWidget(buildForm(scheduleId: 'sched-block'));
     await tester.pumpAndSettle();
 
     // The form states the lock and does not arm the save button — the deep-link path must refuse
     // on its own, because the detail FAB is not the only way in.
     expect(find.textContaining('multi-giorno'), findsOneWidget);
 
-    final submit = find.widgetWithText(AppButton, 'Salva modifiche');
-    final scrollable = find.ancestor(
-      of: find.text('Assegnazione *'),
-      matching: find.byType(Scrollable),
-    );
-    await tester.scrollUntilVisible(submit, 300, scrollable: scrollable);
+    final submit = await scrollToSubmit(tester);
+    // `onPressed == null` alone cannot tell a lock from an in-flight save — both disable the
+    // control. Pin the reason: the lock banner is on screen, and `_isSaving` is false (it renders
+    // its own spinner through `AppButton.isLoading`, which must not be present).
     expect(tester.widget<AppButton>(submit).onPressed, isNull);
+    expect(tester.widget<AppButton>(submit).isLoading, isFalse);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
 
     await tester.tap(submit);
     await tester.pumpAndSettle();
@@ -252,6 +291,104 @@ void main() {
         data: any(named: 'data'),
       ),
     );
+
+    await teardown(tester);
+  });
+
+  testWidgets('a form opened for an absence-owned id refuses with the absence reason', (tester) async {
+    await _seedSchedule(db, id: 'sched-absence', assenza: true);
+    stubFormReads('sched-absence');
+
+    await tester.pumpWidget(buildForm(scheduleId: 'sched-absence'));
+    await tester.pumpAndSettle();
+
+    // The detail screen already hides Modifica for an absence row, but a deep link reaches this
+    // form directly: it has to refuse on its own and name the screen that owns the day.
+    expect(find.textContaining('Assenza approvata'), findsOneWidget);
+    expect(find.textContaining('Ferie e Permessi'), findsOneWidget);
+
+    final submit = await scrollToSubmit(tester);
+    expect(tester.widget<AppButton>(submit).onPressed, isNull);
+    expect(tester.widget<AppButton>(submit).isLoading, isFalse);
+
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    verifyNever(
+      () => mockDio.put<dynamic>(
+        any(that: contains('/api/schedules/')),
+        queryParameters: any(named: 'queryParameters'),
+        data: any(named: 'data'),
+      ),
+    );
+
+    await teardown(tester);
+  });
+
+  testWidgets('the save control is disabled before the row resolves', (tester) async {
+    await _seedSchedule(db);
+    stubFormReads('sched-1');
+
+    // Tall enough that the lazy ListView builds the submit button in the very first frame.
+    tester.view.physicalSize = const Size(800, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(buildForm(scheduleId: 'sched-1'));
+
+    final submit = find.widgetWithText(AppButton, 'Salva modifiche');
+    expect(submit, findsOneWidget);
+    // First frame: `_loadSchedule` has not resolved, so nothing may be submitted yet.
+    expect(tester.widget<AppButton>(submit).onPressed, isNull);
+
+    await tester.pumpAndSettle();
+
+    // An ordinary row arms the form once it resolves — the gate is load-driven, not a blanket
+    // disable that would also break creates and edits of editable days.
+    expect(tester.widget<AppButton>(submit).onPressed, isNotNull);
+
+    await teardown(tester);
+  });
+
+  testWidgets('a 400 block_occupancy_read_only locks the form and says why', (tester) async {
+    // The mirror does not know the flag (a device that synced before the server sent it), so the
+    // form opens armed and only discovers the lock from the server's refusal.
+    await _seedSchedule(db, id: 'sched-400');
+    stubFormReads('sched-400');
+    stubCleanConflictCheck();
+    when(
+      () => mockDio.put<dynamic>(
+        any(that: contains('/api/schedules/')),
+        queryParameters: any(named: 'queryParameters'),
+        data: any(named: 'data'),
+      ),
+    ).thenThrow(
+      DioException(
+        requestOptions: RequestOptions(path: '/api/schedules/sched-400'),
+        response: Response<Map<String, dynamic>>(
+          requestOptions: RequestOptions(path: '/api/schedules/sched-400'),
+          statusCode: 400,
+          data: {'status': 400, 'code': 'block_occupancy_read_only'},
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(buildForm(scheduleId: 'sched-400'));
+    await tester.pumpAndSettle();
+
+    final submit = await scrollToSubmit(tester);
+    expect(tester.widget<AppButton>(submit).onPressed, isNotNull);
+
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    // The server names the owner; the form must adopt the locked state and the specific message
+    // instead of "Impossibile salvare. Riprova." with the button armed for the same refusal.
+    expect(find.byType(InlineAlert), findsOneWidget);
+    expect(find.textContaining('Piano multi-giorno'), findsWidgets);
+    expect(find.text('Impossibile salvare. Riprova.'), findsNothing);
+    expect(tester.widget<AppButton>(submit).onPressed, isNull);
+    expect(tester.widget<AppButton>(submit).isLoading, isFalse);
 
     await teardown(tester);
   });
