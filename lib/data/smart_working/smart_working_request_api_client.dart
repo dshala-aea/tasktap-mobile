@@ -164,6 +164,36 @@ class SmartWorkingRequestApiClient {
     return list.cast<Map<String, dynamic>>().map(SmartWorkingRequestDto.fromJson).toList();
   });
 
+  /// GET /api/smart-working-requests?status=0 with no `userId`: the tenant-wide pending queue for
+  /// an Approve holder (the server resolves the scope itself). Online-only.
+  Future<List<SmartWorkingRequestDto>> fetchPendingForApproval() => _guarded(() async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/smart-working-requests',
+      queryParameters: const {'status': 0},
+    );
+    final list = res.data;
+    if (list == null) {
+      throw const FormatException('GET /api/smart-working-requests answered 200 with no body');
+    }
+    return list.cast<Map<String, dynamic>>().map(SmartWorkingRequestDto.fromJson).toList();
+  });
+
+  /// POST /api/smart-working-requests/{id}/approve. The server tolerates an omitted body; send `{}`.
+  Future<void> approve(String id) => _guarded(() async {
+    await _dio.post<dynamic>(
+      '/api/smart-working-requests/$id/approve',
+      data: const <String, dynamic>{},
+    );
+  });
+
+  /// POST /api/smart-working-requests/{id}/reject. The reason is required by the server and max 1000.
+  Future<void> reject(String id, {required String reason}) => _guarded(() async {
+    await _dio.post<dynamic>(
+      '/api/smart-working-requests/$id/reject',
+      data: {'reason': reason.trim()},
+    );
+  });
+
   /// POST /api/smart-working-requests.
   ///
   /// Returns nothing on purpose. The POST declares no response schema and no caller needs the new
