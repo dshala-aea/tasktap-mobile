@@ -35,10 +35,17 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
     // Modifica here invites an edit that can only fail; the absence it stands for is managed where
     // it lives, from Ferie e Permessi. Null while loading, so the FAB is not flickered in first.
     final lockedByAbsence = scheduleAsync.valueOrNull?.isAssenza ?? false;
+    // A day owned by a multi-day plan is the same kind of mirror row: the sync materialises it as
+    // an ordinary schedule carrying `isBlockOccupied`, and the backend refuses every write to it
+    // (`block_occupancy_read_only`). The flag is missing on a device whose mirror synced before
+    // the server started sending it — Drift defaults it to `false`, so that device still offers
+    // Modifica and the server refuses the write; it is the one case the client cannot see. Null
+    // while loading too, so the FAB does not flash on before the row resolves.
+    final lockedByBlock = scheduleAsync.valueOrNull?.isBlockOccupied ?? false;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: lockedByAbsence
+      floatingActionButton: lockedByAbsence || lockedByBlock
           ? null
           : Padding(
               padding: EdgeInsets.only(bottom: context.fabSafeBottom),
@@ -150,6 +157,27 @@ class _ScheduleDetailBody extends ConsumerWidget {
                     'Assenza approvata: questa voce è creata dalla richiesta di ferie, permesso '
                     'o malattia e non si può modificare da qui. Per cambiarla, annulla la '
                     'richiesta dalle assenze.',
+              ),
+            ),
+          ),
+        // Same reason, same treatment: the day is one materialised row of a multi-day plan, and
+        // the plan — not the single day — is what the office edits.
+        if (schedule.isBlockOccupied)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+                AppSpacing.pagePadding,
+                0,
+              ),
+              child: InlineAlert(
+                icon: LucideIcons.calendarDays,
+                color: context.colors.amber,
+                message:
+                    'Piano multi-giorno: questa giornata è occupata da un intervento pianificato '
+                    'su più giorni e non si può modificare da qui. Le modifiche si fanno sulla '
+                    'pianificazione del piano, non sulla singola giornata.',
               ),
             ),
           ),

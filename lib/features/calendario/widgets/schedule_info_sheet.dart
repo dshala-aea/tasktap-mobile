@@ -103,6 +103,14 @@ class ScheduleInfoSheet extends ConsumerWidget {
           if (where?.customerName != null) _InfoLine(label: 'Cliente', value: where!.customerName!),
           if (where?.address != null) _InfoLine(label: 'Sede', value: where!.address!),
           if (tecnici.isNotEmpty) _InfoLine(label: 'Tecnici', value: tecnici.join(', ')),
+          // The sheet exposes no write affordance, so there is nothing to lock here — but a day
+          // owned by a multi-day plan is a materialised occupancy row (the backend refuses every
+          // write to it), and saying so stops a technician reading "nothing to edit" as a bug.
+          if (schedule.isBlockOccupied)
+            const _InfoLine(
+              label: 'Piano multi-giorno',
+              value: 'Giornata di un piano multi-giorno: non si modifica da qui.',
+            ),
           if (schedule.description.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
