@@ -74,8 +74,15 @@ class PermissionHandlerMicPermissionService implements MicPermissionService {
 /// Production recorder on the `record` package.
 ///
 /// Output must be m4a: AAC in a non-fragmented MP4 container (the server reads the duration from
-/// the header, and bills compressed audio from max(header duration, bytes / 24000)), mono, 16 kHz,
-/// ~64 kbps. WAV is never used (billed by byte rate, ~6x larger).
+/// the header, and bills compressed audio from max(header duration, bytes / 24000)), mono.
+///
+/// Bit rate and sample rate are deliberately left at the package defaults, not narrowed to a
+/// speech-sized 16 kHz / 64 kbps. `record` only adjusts custom values to the codec's capabilities
+/// as a best effort, and on iOS `AVAudioRecorder.record()` answers `false` for a combination it
+/// cannot honour — which `record_ios` discards, reporting a healthy take that is in fact empty.
+/// The defaults (44.1 kHz / 128 kbps) are the combination Apple's AAC encoder is built around; the
+/// 5-minute cap keeps the file at ~4.8 MB, well under the server's 25 MB limit, and the container
+/// duration the server reads is exact, so the higher rate costs no extra billed seconds.
 class RecordAudioRecorderService implements AudioRecorderService {
   RecordAudioRecorderService({
     AudioRecorder? recorder,
@@ -93,8 +100,6 @@ class RecordAudioRecorderService implements AudioRecorderService {
 
   static const RecordConfig config = RecordConfig(
     encoder: AudioEncoder.aacLc,
-    bitRate: 64000,
-    sampleRate: 16000,
     numChannels: 1,
   );
 
