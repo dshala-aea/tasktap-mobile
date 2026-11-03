@@ -11,12 +11,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/altro/altro_hub_screen.dart';
 import 'package:tasktap_mobile/features/smart_working/smart_working_list_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
-Widget _app() {
+Widget _app({Entitlement? cached}) {
   final router = GoRouter(
     routes: [
       GoRoute(path: '/', builder: (_, _) => const AltroHubScreen()),
@@ -29,9 +30,9 @@ Widget _app() {
   return ProviderScope(
     overrides: [
       authStateProvider.overrideWith((ref) => Stream<AuthUser?>.value(null)),
-      // Nothing cached = the field-seat baseline, which is exactly what a technician on a fresh
-      // install sees. `presenze` is part of it, so the tile must be drawn.
-      cachedEntitlementProvider.overrideWith((ref) => null),
+      // Null = the field-seat baseline, which is exactly what a technician on a fresh install
+      // sees. `presenze` is part of it, so the self-service tiles must be drawn.
+      cachedEntitlementProvider.overrideWith((ref) => cached),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -63,5 +64,48 @@ void main() {
     // The list screen's own header — the hub tile is offstage by now.
     expect(find.text('Smart working'), findsOneWidget);
     expect(find.text('Nessuna richiesta'), findsOneWidget);
+  });
+
+  testWidgets('the approval tile is hidden without presenze.absence.approve', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approvazioni'), findsNothing);
+  });
+
+  testWidgets('the approval tile is drawn for an approver', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final cached = Entitlement(
+      features: const {'presenze'},
+      capabilities: const {'presenze.absence.approve'},
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 3),
+    );
+
+    await tester.pumpWidget(_app(cached: cached));
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(
+      find.text('Approvazioni'),
+      find.byType(CustomScrollView),
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approvazioni'), findsOneWidget);
   });
 }

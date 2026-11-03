@@ -59,6 +59,7 @@ import '../../features/admin/squadre/admin_squadra_detail_screen.dart';
 import '../../features/admin/squadre/admin_squadra_form_screen.dart';
 import '../../features/admin/reports/admin_report_list_screen.dart';
 import '../../features/admin/reports/admin_report_detail_screen.dart';
+import '../../features/approvazioni/approvazioni_screen.dart';
 import '../../features/ferie/ferie_permessi_form_screen.dart';
 import '../../features/ferie/ferie_permessi_list_screen.dart';
 import '../../features/smart_working/smart_working_form_screen.dart';
@@ -220,15 +221,22 @@ abstract final class AppRoutes {
   }
 
   /// Self-service ferie/permessi against `/api/absence-requests` — already complete and tested
-  /// server-side (docs/superpowers/specs/2026-08-30-ferie-permessi-design.md). No approval
-  /// queue on mobile; that lives only on web, gated behind PresenzeAbsenceApprove.
+  /// server-side (docs/superpowers/specs/2026-08-30-ferie-permessi-design.md).
   static const String altroFerie = '/altro/ferie';
 
   /// Self-service smart working against `/api/smart-working-requests` — a marker, never hours.
   ///
-  /// The same `presenze` module as [altroFerie], and deliberately no approval queue: approving
-  /// belongs to the office and lives on web, gated behind PresenzeAbsenceApprove.
+  /// The same `presenze` module as [altroFerie].
   static const String altroSmartWorking = '/altro/smart-working';
+
+  /// The approver's worklist: every pending absence and smart-working request in the tenant.
+  ///
+  /// Gated on `presenze.absence.approve`; the tile is hidden from everyone else.
+  static const String altroApprovazioni = '/altro/approvazioni';
+
+  /// The approval screen on a specific tab (`assenze` | `smart-working`), for notification taps.
+  static String approvazioni({String? tab}) =>
+      tab == null ? altroApprovazioni : '$altroApprovazioni?tab=$tab';
 
   static const String altroClienti = '/altro/clienti';
   static const String altroClientiDetail = '/altro/clienti/:id';
@@ -343,6 +351,11 @@ final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, Ro
     '/altro/clienti',
     const RouteRequirement.capability('clienti.customer.read'),
     const RouteRequirement.capability('clienti.customer.write'),
+  ),
+  (
+    '/altro/approvazioni',
+    const RouteRequirement.capability('presenze.absence.approve'),
+    null,
   ),
   ('/altro/ferie', const RouteRequirement.module('presenze'), null),
   ('/altro/smart-working', const RouteRequirement.module('presenze'), null),
@@ -771,6 +784,12 @@ GoRouter buildRouter(WidgetRef ref) {
                             const SmartWorkingFormScreen(),
                       ),
                     ],
+                  ),
+                  GoRoute(
+                    path: 'approvazioni',
+                    builder: (context, state) => ApprovazioniScreen(
+                      initialTab: state.uri.queryParameters['tab'],
+                    ),
                   ),
                   GoRoute(
                     path: 'clienti',
