@@ -7,6 +7,8 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/utils/offline_guard.dart';
+import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ferie/absence_request_api_client.dart';
 import '../../data/smart_working/smart_working_request_api_client.dart';
@@ -14,6 +16,7 @@ import '../../data/sync/connectivity_provider.dart';
 import '../../data/users/user_directory.dart';
 import 'approval_request_card.dart';
 import 'approvazioni_providers.dart';
+import 'reject_reason_sheet.dart';
 
 enum _ApprovalTab { assenze, smartWorking }
 
@@ -91,11 +94,91 @@ class _ApprovazioniScreenState extends ConsumerState<ApprovazioniScreen> {
   }
 }
 
-class _AbsenceQueue extends ConsumerWidget {
+class _AbsenceQueue extends ConsumerStatefulWidget {
   const _AbsenceQueue();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AbsenceQueue> createState() => _AbsenceQueueState();
+}
+
+class _AbsenceQueueState extends ConsumerState<_AbsenceQueue> {
+  final _busy = <String>{};
+
+  void _refresh() {
+    ref.invalidate(absenceApprovalQueueProvider);
+    ref.invalidate(myAbsenceRequestsProvider);
+  }
+
+  Future<void> _approve(AbsenceRequestDto item, String name) async {
+    if (_busy.contains(item.id)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Approvare la richiesta di $name?'),
+        content: Text(_absenceSubtitle(item)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Approva richiesta')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    if (_busy.contains(item.id)) return;
+    if (!ensureOnlineOrWarn(context, ref)) return;
+
+    setState(() => _busy.add(item.id));
+    try {
+      await ref.read(absenceRequestApiClientProvider).approve(item.id);
+      _refresh();
+      if (mounted) {
+        showAppToast(context, message: 'Richiesta approvata.', tone: ToastTone.success);
+      }
+    } on AbsenceRequestValidationError catch (e) {
+      _refresh();
+      if (mounted) showAppToast(context, message: e.detail, tone: ToastTone.error);
+    } catch (_) {
+      if (mounted) {
+        showAppToast(
+          context,
+          message: 'Impossibile approvare la richiesta. Riprova.',
+          tone: ToastTone.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy.remove(item.id));
+    }
+  }
+
+  Future<void> _reject(AbsenceRequestDto item, String name) async {
+    if (_busy.contains(item.id)) return;
+    if (!ensureOnlineOrWarn(context, ref)) return;
+
+    await showRejectReasonSheet(
+      context,
+      title: 'Rifiuta la richiesta di $name',
+      onSubmit: (reason) async {
+        try {
+          await ref.read(absenceRequestApiClientProvider).reject(item.id, reason: reason);
+          _refresh();
+          if (mounted) {
+            showAppToast(context, message: 'Richiesta rifiutata.', tone: ToastTone.success);
+          }
+          return null;
+        } on AbsenceRequestValidationError catch (e) {
+          // The server answered and will answer the same way again: terminal. Close the sheet and
+          // say why, rather than letting the approver retry a row that no longer exists.
+          _refresh();
+          if (mounted) showAppToast(context, message: e.detail, tone: ToastTone.error);
+          return null;
+        } catch (_) {
+          return 'Impossibile rifiutare la richiesta. Riprova.';
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     if (!ref.watch(isOnlineProvider)) {
       return _OfflineState(provider: absenceApprovalQueueProvider);
     }
@@ -122,12 +205,14 @@ class _AbsenceQueue extends ConsumerWidget {
               itemCount: items.length,
               itemBuilder: (context, i) {
                 final item = items[i];
+                final name = names[item.requestedByUserId] ?? '—';
                 return ApprovalRequestCard(
-                  title: names[item.requestedByUserId] ?? '—',
+                  title: name,
                   subtitle: _absenceSubtitle(item),
                   reason: item.reason,
-                  onApprove: () {},
-                  onReject: () {},
+                  busy: _busy.contains(item.id),
+                  onApprove: () => _approve(item, name),
+                  onReject: () => _reject(item, name),
                 );
               },
             ),
@@ -135,11 +220,89 @@ class _AbsenceQueue extends ConsumerWidget {
   }
 }
 
-class _SmartWorkingQueue extends ConsumerWidget {
+class _SmartWorkingQueue extends ConsumerStatefulWidget {
   const _SmartWorkingQueue();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SmartWorkingQueue> createState() => _SmartWorkingQueueState();
+}
+
+class _SmartWorkingQueueState extends ConsumerState<_SmartWorkingQueue> {
+  final _busy = <String>{};
+
+  void _refresh() {
+    ref.invalidate(smartWorkingApprovalQueueProvider);
+    ref.invalidate(mySmartWorkingRequestsProvider);
+  }
+
+  Future<void> _approve(SmartWorkingRequestDto item, String name) async {
+    if (_busy.contains(item.id)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Approvare la richiesta di $name?'),
+        content: Text(_smartWorkingSubtitle(item)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Approva richiesta')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    if (_busy.contains(item.id)) return;
+    if (!ensureOnlineOrWarn(context, ref)) return;
+
+    setState(() => _busy.add(item.id));
+    try {
+      await ref.read(smartWorkingRequestApiClientProvider).approve(item.id);
+      _refresh();
+      if (mounted) {
+        showAppToast(context, message: 'Richiesta approvata.', tone: ToastTone.success);
+      }
+    } on SmartWorkingValidationError catch (e) {
+      _refresh();
+      if (mounted) showAppToast(context, message: e.detail, tone: ToastTone.error);
+    } catch (_) {
+      if (mounted) {
+        showAppToast(
+          context,
+          message: 'Impossibile approvare la richiesta. Riprova.',
+          tone: ToastTone.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy.remove(item.id));
+    }
+  }
+
+  Future<void> _reject(SmartWorkingRequestDto item, String name) async {
+    if (_busy.contains(item.id)) return;
+    if (!ensureOnlineOrWarn(context, ref)) return;
+
+    await showRejectReasonSheet(
+      context,
+      title: 'Rifiuta la richiesta di $name',
+      onSubmit: (reason) async {
+        try {
+          await ref.read(smartWorkingRequestApiClientProvider).reject(item.id, reason: reason);
+          _refresh();
+          if (mounted) {
+            showAppToast(context, message: 'Richiesta rifiutata.', tone: ToastTone.success);
+          }
+          return null;
+        } on SmartWorkingValidationError catch (e) {
+          _refresh();
+          if (mounted) showAppToast(context, message: e.detail, tone: ToastTone.error);
+          return null;
+        } catch (_) {
+          return 'Impossibile rifiutare la richiesta. Riprova.';
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     if (!ref.watch(isOnlineProvider)) {
       return _OfflineState(provider: smartWorkingApprovalQueueProvider);
     }
@@ -166,12 +329,14 @@ class _SmartWorkingQueue extends ConsumerWidget {
               itemCount: items.length,
               itemBuilder: (context, i) {
                 final item = items[i];
+                final name = names[item.requestedByUserId] ?? '—';
                 return ApprovalRequestCard(
-                  title: names[item.requestedByUserId] ?? '—',
+                  title: name,
                   subtitle: _smartWorkingSubtitle(item),
                   reason: item.reason,
-                  onApprove: () {},
-                  onReject: () {},
+                  busy: _busy.contains(item.id),
+                  onApprove: () => _approve(item, name),
+                  onReject: () => _reject(item, name),
                 );
               },
             ),
