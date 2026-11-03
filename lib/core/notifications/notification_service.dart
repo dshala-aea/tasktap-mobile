@@ -451,6 +451,7 @@ class DeepLinkIntent {
     required this.entityType,
     required this.entityId,
     this.notificationId,
+    this.notificationType,
   });
 
   final String entityType;
@@ -460,27 +461,51 @@ class DeepLinkIntent {
   /// entity: the page loads by id alone, so a push tap works without the list.
   final String? notificationId;
 
+  /// The `NotificationTypeEnum` name, when the caller has it. `AbsenceRequestSubmitted` and
+  /// `AbsenceRequestDecided` share the same entity type but belong on different screens; without
+  /// this the intent cannot tell an approver's worklist from a requester's own history.
+  final String? notificationType;
+
   /// The one place list taps and push taps decide what a notification opens.
   ///
-  /// A complete entity pair wins; otherwise a type-only route from [kNotificationTypeRoutes];
-  /// otherwise the notification's detail page when [notificationId] is present; otherwise null.
+  /// A submitted request goes to the approver's queue even without an id (the queue needs none).
+  /// Otherwise a complete entity pair wins; otherwise a type-only route from
+  /// [kNotificationTypeRoutes]; otherwise the notification's detail page when [notificationId] is
+  /// present; otherwise null.
   static DeepLinkIntent? fromNotification({
     String? type,
     String? entityType,
     String? entityId,
     String? notificationId,
   }) {
+    if (type == 'AbsenceRequestSubmitted') {
+      // Smart working reuses the absence submission type; the entity pair is the only thing that
+      // says which queue. A payload with neither falls back to the absence tab, which is the
+      // screen's own default and still shows whatever is pending.
+      final kind = entityType == 'SmartWorkingRequest'
+          ? 'SmartWorkingRequest'
+          : 'AbsenceRequest';
+      return DeepLinkIntent(
+        entityType: kind,
+        entityId: entityId ?? '',
+        notificationType: type,
+      );
+    }
     if (entityType != null &&
         entityType.isNotEmpty &&
         entityId != null &&
         entityId.isNotEmpty) {
-      final entity = DeepLinkIntent(entityType: entityType, entityId: entityId);
+      final entity = DeepLinkIntent(
+        entityType: entityType,
+        entityId: entityId,
+        notificationType: type,
+      );
       // An entity type with no mobile destination (Magazzino, User, …) must not
       // swallow the tap: fall through so the notification's own page can open.
       if (entity.resolveRoute() != null) return entity;
     }
     if (type != null && kNotificationTypeRoutes.containsKey(type)) {
-      return DeepLinkIntent(entityType: type, entityId: '');
+      return DeepLinkIntent(entityType: type, entityId: '', notificationType: type);
     }
     if (notificationId != null && notificationId.isNotEmpty) {
       return DeepLinkIntent(
@@ -507,10 +532,14 @@ class DeepLinkIntent {
       // rejected report's reason, so one destination serves Reviewed/Rejected/Cancelled alike.
       'Report' => AppRoutes.rapportiniView(entityId),
       'Cantiere' => AppRoutes.cantieriDetailPath(entityId),
-      // No per-request detail screen exists; the list is where the decision is visible.
-      'AbsenceRequest' => AppRoutes.altroFerie,
-      // Same shape: no detail screen, so the request id is not part of the route.
-      'SmartWorkingRequest' => AppRoutes.altroSmartWorking,
+      // A submitted request belongs to the approver's worklist; a decision belongs to the
+      // requester's own history. Same entity type, different destination.
+      'AbsenceRequest' => notificationType == 'AbsenceRequestSubmitted'
+          ? AppRoutes.approvazioni(tab: 'assenze')
+          : AppRoutes.altroFerie,
+      'SmartWorkingRequest' => notificationType == 'AbsenceRequestSubmitted'
+          ? AppRoutes.approvazioni(tab: 'smart-working')
+          : AppRoutes.altroSmartWorking,
       // WorkLog, ProdottoAssistenza, User, Magazzino, Tenant, License: admin-side, no mobile screen.
       _ => kNotificationTypeRoutes[entityType],
     };

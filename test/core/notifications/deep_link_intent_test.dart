@@ -21,8 +21,24 @@ void main() {
       expect(_route('Report'), AppRoutes.rapportiniView('abc-1'));
       expect(_route('Report'), '/altro/rapportini/view/abc-1');
     });
-    test('AbsenceRequest -> ferie list', () {
+    test('AbsenceRequest without a notification type -> ferie list', () {
       expect(_route('AbsenceRequest'), AppRoutes.altroFerie);
+    });
+    test('AbsenceRequestSubmitted -> the approval queue', () {
+      final intent = DeepLinkIntent.fromNotification(
+        type: 'AbsenceRequestSubmitted',
+        entityType: 'AbsenceRequest',
+        entityId: 'a-1',
+      );
+      expect(intent!.resolveRoute(), AppRoutes.approvazioni(tab: 'assenze'));
+    });
+    test('AbsenceRequestDecided -> the requester\'s own ferie list', () {
+      final intent = DeepLinkIntent.fromNotification(
+        type: 'AbsenceRequestDecided',
+        entityType: 'AbsenceRequest',
+        entityId: 'a-1',
+      );
+      expect(intent!.resolveRoute(), AppRoutes.altroFerie);
     });
     test('Schedule -> calendario', () {
       expect(_route('Schedule'), AppRoutes.calendario);
