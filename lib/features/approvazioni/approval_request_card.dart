@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../core/widgets/app_button.dart';
 import '../../core/widgets/widgets.dart';
 
 /// One pending request in the approver's worklist.

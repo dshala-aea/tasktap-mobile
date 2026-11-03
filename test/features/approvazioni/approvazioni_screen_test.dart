@@ -215,6 +215,25 @@ void main() {
       expect(find.text('Impossibile rifiutare la richiesta. Riprova.'), findsOneWidget);
     });
 
+    testWidgets('a smart-working approval uses the smart-working client', (tester) async {
+      final api = _MockSmartWorkingApi();
+      when(() => api.approve('s1')).thenAnswer((_) async {});
+
+      await tester.pumpWidget(
+        _app(smartWorking: [_smartWorking()], smartWorkingApi: api),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Smart working'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Approva'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Approva richiesta'));
+      await tester.pumpAndSettle();
+
+      verify(() => api.approve('s1')).called(1);
+    });
+
     testWidgets('going offline before confirming sends nothing', (tester) async {
       final api = _MockAbsenceApi();
       final online = ValueNotifier(true);
