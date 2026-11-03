@@ -63,25 +63,42 @@ class ApprovalRequestCard extends StatelessWidget {
               Text(reasonText, style: muted),
             ],
             const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: AppButton.secondary(
-                    label: 'Rifiuta',
-                    size: AppButtonSize.sm,
-                    onPressed: busy ? null : onReject,
-                  ),
+            if (busy)
+              // The spec's row state: a spinner replaces the actions while the decision is in
+              // flight, so the approver can see what is happening and cannot re-submit.
+              const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: AppButton(
-                    label: 'Approva',
-                    size: AppButtonSize.sm,
-                    onPressed: busy ? null : onApprove,
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Tooltip(
+                      message: 'Rifiuta la richiesta di $title',
+                      child: AppButton.secondary(
+                        label: 'Rifiuta',
+                        size: AppButtonSize.sm,
+                        onPressed: onReject,
+                      ),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Tooltip(
+                      message: 'Approva la richiesta di $title',
+                      child: AppButton(
+                        label: 'Approva',
+                        size: AppButtonSize.sm,
+                        onPressed: onApprove,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),

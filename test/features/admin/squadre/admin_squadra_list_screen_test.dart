@@ -3,7 +3,7 @@
 //
 // Gap 7 of the feature audit: the squadra list row showed no member count (the backend has no
 // `membriCount` field on `/api/squadre`, so it has to be derived client-side). This pins that the
-// count is derived from ONE bulk `allUsersWithSquadraProvider` fetch — grouping users by their
+// count is derived from ONE bulk `allUsersProvider` fetch — grouping users by their
 // derived `squadraId` — rather than one `/api/squadre/{id}/membri` call per row, which would be an
 // N+1 over the squadra list just to answer "how many".
 

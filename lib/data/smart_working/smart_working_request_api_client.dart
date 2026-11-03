@@ -126,6 +126,14 @@ class SmartWorkingValidationError implements Exception {
   String toString() => detail;
 }
 
+/// A 403 on an approval decision: the capability was revoked, or the seat/tenant refuses it.
+/// Terminal — retrying the same call cannot succeed.
+class SmartWorkingPermissionError implements Exception {
+  const SmartWorkingPermissionError();
+  @override
+  String toString() => 'Non hai i permessi per approvare le richieste.';
+}
+
 class SmartWorkingRequestApiClient {
   SmartWorkingRequestApiClient(this._dio);
 
@@ -139,6 +147,7 @@ class SmartWorkingRequestApiClient {
       if (e.response?.statusCode == 400 && data is Map && data['detail'] is String) {
         throw SmartWorkingValidationError(data['detail'] as String);
       }
+      if (e.response?.statusCode == 403) throw const SmartWorkingPermissionError();
       rethrow;
     }
   }

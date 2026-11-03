@@ -206,6 +206,26 @@ void main() {
       expect(adapter.captured!.data, {'reason': 'Copertura insufficiente'});
     });
 
+    test('a_200_with_no_body_throws_instead_of_an_empty_queue', () async {
+      final adapter = _Adapter(body: 'null');
+      final client = _client(adapter);
+
+      await expectLater(
+        client.fetchPendingForApproval(),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('a_403_becomes_the_permission_error', () async {
+      final adapter = _Adapter(status: 403, body: '');
+      final client = _client(adapter);
+
+      await expectLater(
+        client.approve('ar-1'),
+        throwsA(isA<AbsenceRequestPermissionError>()),
+      );
+    });
+
     test('a_400_detail_becomes_the_validation_error', () async {
       final adapter = _Adapter(
         status: 400,

@@ -103,8 +103,12 @@ class _AbsenceQueue extends ConsumerStatefulWidget {
 class _AbsenceQueueState extends ConsumerState<_AbsenceQueue> {
   final _busy = <String>{};
 
-  void _refresh() {
-    ref.invalidate(absenceApprovalQueueProvider);
+  /// Refetches the queue before the row is released. Keeping the row busy until the new answer
+  /// arrives is what stops a second tap on a request that was just decided.
+  Future<void> _refresh() async {
+    // ignore: unused_result — awaited on purpose: the row stays busy until the new answer lands.
+    await ref.refresh(absenceApprovalQueueProvider.future);
+    if (!mounted) return;
     ref.invalidate(myAbsenceRequestsProvider);
   }
 
@@ -128,13 +132,23 @@ class _AbsenceQueueState extends ConsumerState<_AbsenceQueue> {
     setState(() => _busy.add(item.id));
     try {
       await ref.read(absenceRequestApiClientProvider).approve(item.id);
-      _refresh();
-      if (mounted) {
-        showAppToast(context, message: 'Richiesta approvata.', tone: ToastTone.success);
-      }
+      if (!mounted) return;
+      await _refresh();
+      if (!mounted) return;
+      showAppToast(context, message: 'Richiesta approvata.', tone: ToastTone.success);
     } on AbsenceRequestValidationError catch (e) {
-      _refresh();
-      if (mounted) showAppToast(context, message: e.detail, tone: ToastTone.error);
+      if (!mounted) return;
+      await _refresh();
+      if (!mounted) return;
+      showAppToast(context, message: e.detail, tone: ToastTone.error);
+    } on AbsenceRequestPermissionError {
+      if (mounted) {
+        showAppToast(
+          context,
+          message: 'Non hai i permessi per approvare le richieste.',
+          tone: ToastTone.error,
+        );
+      }
     } catch (_) {
       if (mounted) {
         showAppToast(
@@ -156,18 +170,34 @@ class _AbsenceQueueState extends ConsumerState<_AbsenceQueue> {
       context,
       title: 'Rifiuta la richiesta di $name',
       onSubmit: (reason) async {
+        // Checked again at the moment of submission: the device can lose signal while the sheet
+        // is open, and the typed reason must survive that refusal.
+        if (!ensureOnlineOrWarn(context, ref)) {
+          return 'Sei offline: la richiesta non è stata inviata.';
+        }
         try {
           await ref.read(absenceRequestApiClientProvider).reject(item.id, reason: reason);
-          _refresh();
-          if (mounted) {
-            showAppToast(context, message: 'Richiesta rifiutata.', tone: ToastTone.success);
-          }
+          if (!mounted) return null;
+          await _refresh();
+          if (!mounted) return null;
+          showAppToast(context, message: 'Richiesta rifiutata.', tone: ToastTone.success);
           return null;
         } on AbsenceRequestValidationError catch (e) {
           // The server answered and will answer the same way again: terminal. Close the sheet and
           // say why, rather than letting the approver retry a row that no longer exists.
-          _refresh();
-          if (mounted) showAppToast(context, message: e.detail, tone: ToastTone.error);
+          if (!mounted) return null;
+          await _refresh();
+          if (!mounted) return null;
+          showAppToast(context, message: e.detail, tone: ToastTone.error);
+          return null;
+        } on AbsenceRequestPermissionError {
+          if (mounted) {
+            showAppToast(
+              context,
+              message: 'Non hai i permessi per approvare le richieste.',
+              tone: ToastTone.error,
+            );
+          }
           return null;
         } catch (_) {
           return 'Impossibile rifiutare la richiesta. Riprova.';
@@ -229,8 +259,10 @@ class _SmartWorkingQueue extends ConsumerStatefulWidget {
 class _SmartWorkingQueueState extends ConsumerState<_SmartWorkingQueue> {
   final _busy = <String>{};
 
-  void _refresh() {
-    ref.invalidate(smartWorkingApprovalQueueProvider);
+  Future<void> _refresh() async {
+    // ignore: unused_result — awaited on purpose: the row stays busy until the new answer lands.
+    await ref.refresh(smartWorkingApprovalQueueProvider.future);
+    if (!mounted) return;
     ref.invalidate(mySmartWorkingRequestsProvider);
   }
 
@@ -254,13 +286,23 @@ class _SmartWorkingQueueState extends ConsumerState<_SmartWorkingQueue> {
     setState(() => _busy.add(item.id));
     try {
       await ref.read(smartWorkingRequestApiClientProvider).approve(item.id);
-      _refresh();
-      if (mounted) {
-        showAppToast(context, message: 'Richiesta approvata.', tone: ToastTone.success);
-      }
+      if (!mounted) return;
+      await _refresh();
+      if (!mounted) return;
+      showAppToast(context, message: 'Richiesta approvata.', tone: ToastTone.success);
     } on SmartWorkingValidationError catch (e) {
-      _refresh();
-      if (mounted) showAppToast(context, message: e.detail, tone: ToastTone.error);
+      if (!mounted) return;
+      await _refresh();
+      if (!mounted) return;
+      showAppToast(context, message: e.detail, tone: ToastTone.error);
+    } on SmartWorkingPermissionError {
+      if (mounted) {
+        showAppToast(
+          context,
+          message: 'Non hai i permessi per approvare le richieste.',
+          tone: ToastTone.error,
+        );
+      }
     } catch (_) {
       if (mounted) {
         showAppToast(
@@ -282,16 +324,30 @@ class _SmartWorkingQueueState extends ConsumerState<_SmartWorkingQueue> {
       context,
       title: 'Rifiuta la richiesta di $name',
       onSubmit: (reason) async {
+        if (!ensureOnlineOrWarn(context, ref)) {
+          return 'Sei offline: la richiesta non è stata inviata.';
+        }
         try {
           await ref.read(smartWorkingRequestApiClientProvider).reject(item.id, reason: reason);
-          _refresh();
-          if (mounted) {
-            showAppToast(context, message: 'Richiesta rifiutata.', tone: ToastTone.success);
-          }
+          if (!mounted) return null;
+          await _refresh();
+          if (!mounted) return null;
+          showAppToast(context, message: 'Richiesta rifiutata.', tone: ToastTone.success);
           return null;
         } on SmartWorkingValidationError catch (e) {
-          _refresh();
-          if (mounted) showAppToast(context, message: e.detail, tone: ToastTone.error);
+          if (!mounted) return null;
+          await _refresh();
+          if (!mounted) return null;
+          showAppToast(context, message: e.detail, tone: ToastTone.error);
+          return null;
+        } on SmartWorkingPermissionError {
+          if (mounted) {
+            showAppToast(
+              context,
+              message: 'Non hai i permessi per approvare le richieste.',
+              tone: ToastTone.error,
+            );
+          }
           return null;
         } catch (_) {
           return 'Impossibile rifiutare la richiesta. Riprova.';
@@ -358,7 +414,13 @@ class _OfflineState extends ConsumerWidget {
         label: 'Riprova',
         size: AppButtonSize.sm,
         fullWidth: false,
-        onPressed: () => ref.invalidate(provider),
+        onPressed: () {
+          // The queue provider is not watched while offline, so invalidating it alone would do
+          // nothing. Re-run the connectivity probe; when it reports online the screen re-watches
+          // and fetches the queue.
+          ref.invalidate(connectivityProvider);
+          ref.invalidate(provider);
+        },
       ),
     );
   }

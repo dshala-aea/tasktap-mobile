@@ -692,7 +692,7 @@ class AdminApiClient {
   ///
   /// Exists so the squadra list/detail screens can derive a per-squadra member count (Gap 7 of the
   /// feature audit) and each member's last-access timestamp (Gap 6) from ONE bulk fetch, shared via
-  /// `allUsersWithSquadraProvider` — chosen over the two N+1 alternatives: a
+  /// `allUsersProvider` — chosen over the two N+1 alternatives: a
   /// `GET /api/squadre/{id}/membri` call per squadra row on the list screen (N calls, N = squadra
   /// count, just to answer "how many"), or a live `GET /api/users/{id}` call per member row on the
   /// detail screen (N calls, N = member count, for a field the bulk list already carries). The call

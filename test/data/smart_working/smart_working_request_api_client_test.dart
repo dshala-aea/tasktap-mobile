@@ -355,6 +355,16 @@ void main() {
       expect(adapter.captured!.data, {'reason': 'Servizio scoperto'});
     });
 
+    test('a_403_becomes_the_permission_error', () async {
+      final adapter = _Adapter(status: 403, body: '');
+      final client = _client(adapter);
+
+      await expectLater(
+        client.approve('sw-1'),
+        throwsA(isA<SmartWorkingPermissionError>()),
+      );
+    });
+
     test('a_400_detail_becomes_the_validation_error', () async {
       final adapter = _Adapter(
         status: 400,

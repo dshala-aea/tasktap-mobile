@@ -152,6 +152,10 @@ void main() {
       await tester.tap(find.text('Approva richiesta'));
       await tester.pump();
       verify(() => api.approve('a1')).called(1);
+      // While the decision is in flight the actions are gone, so the row cannot be submitted a
+      // second time.
+      expect(find.text('Approva'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
       done.complete();
       await tester.pumpAndSettle();
@@ -182,6 +186,15 @@ void main() {
       await tester.tap(find.text('Rifiuta'));
       await tester.pumpAndSettle();
       expect(find.text('Rifiuta la richiesta di Mario Rossi'), findsOneWidget);
+
+      // Empty and whitespace are not reasons: the submit stays disabled until real text arrives.
+      AppButton submitButton() => tester.widget<AppButton>(
+        find.widgetWithText(AppButton, 'Conferma rifiuto'),
+      );
+      expect(submitButton().onPressed, isNull);
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pump();
+      expect(submitButton().onPressed, isNull);
 
       await tester.enterText(find.byType(TextField), '  Copertura  ');
       await tester.pump();
@@ -269,13 +282,27 @@ void main() {
       expect(find.textContaining('Sei offline'), findsWidgets);
     });
 
-    testWidgets('a 400 closes the sheet and shows the server detail', (tester) async {
+    testWidgets('a 400 closes the sheet, refreshes, and removes the terminal row', (tester) async {
       final api = _MockAbsenceApi();
       when(() => api.reject('a1', reason: any(named: 'reason'))).thenThrow(
         const AbsenceRequestValidationError('Solo una richiesta in attesa può essere rifiutata.'),
       );
+      var reads = 0;
 
-      await tester.pumpWidget(_app(absences: [_absence()], absenceApi: api));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            absenceApprovalQueueProvider.overrideWith((ref) async {
+              reads++;
+              return reads == 1 ? [_absence()] : const <AbsenceRequestDto>[];
+            }),
+            userNameByIdProvider.overrideWith((ref) async => const {'u1': 'Mario Rossi'}),
+            isOnlineProvider.overrideWithValue(true),
+            absenceRequestApiClientProvider.overrideWithValue(api),
+          ],
+          child: MaterialApp(theme: buildAppTheme(), home: const ApprovazioniScreen()),
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Rifiuta'));
@@ -287,6 +314,61 @@ void main() {
 
       expect(find.text('Solo una richiesta in attesa può essere rifiutata.'), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
+      expect(find.text('Mario Rossi'), findsNothing, reason: 'the decided row is gone');
+    });
+
+    testWidgets('going offline inside the reject sheet sends nothing and keeps the reason', (tester) async {
+      final api = _MockAbsenceApi();
+      final online = ValueNotifier(true);
+      addTearDown(online.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            absenceApprovalQueueProvider.overrideWith((ref) async => [_absence()]),
+            userNameByIdProvider.overrideWith((ref) async => const {'u1': 'Mario Rossi'}),
+            isOnlineProvider.overrideWith((ref) => online.value),
+            absenceRequestApiClientProvider.overrideWithValue(api),
+          ],
+          child: MaterialApp(theme: buildAppTheme(), home: const ApprovazioniScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Rifiuta'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Copertura');
+      await tester.pump();
+
+      online.value = false;
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ApprovazioniScreen)),
+      );
+      container.invalidate(isOnlineProvider);
+      await tester.pump();
+
+      await tester.tap(find.text('Conferma rifiuto'));
+      await tester.pumpAndSettle();
+
+      verifyNever(() => api.reject(any(), reason: any(named: 'reason')));
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('Copertura'), findsOneWidget);
+      expect(find.text('Sei offline: la richiesta non è stata inviata.'), findsOneWidget);
+    });
+
+    testWidgets('a 403 shows the permission copy', (tester) async {
+      final api = _MockAbsenceApi();
+      when(() => api.approve('a1')).thenThrow(const AbsenceRequestPermissionError());
+
+      await tester.pumpWidget(_app(absences: [_absence()], absenceApi: api));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Approva'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Approva richiesta'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Non hai i permessi per approvare le richieste.'), findsOneWidget);
     });
   });
 }

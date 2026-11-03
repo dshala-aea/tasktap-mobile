@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
-import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/features/approvazioni/approval_request_card.dart';
 
 Widget _wrap(Widget child) =>
@@ -24,6 +23,8 @@ void main() {
     expect(find.text('Mario Rossi'), findsOneWidget);
     expect(find.text('Ferie · 12 mar – 14 mar'), findsOneWidget);
     expect(find.text('Vacanza'), findsOneWidget);
+    expect(find.byTooltip('Approva la richiesta di Mario Rossi'), findsOneWidget);
+    expect(find.byTooltip('Rifiuta la richiesta di Mario Rossi'), findsOneWidget);
   });
 
   testWidgets('a blank reason renders nothing', (tester) async {
@@ -63,7 +64,7 @@ void main() {
     expect(rejected, 1);
   });
 
-  testWidgets('busy disables both actions', (tester) async {
+  testWidgets('busy replaces both actions with a spinner', (tester) async {
     var approved = 0;
     var rejected = 0;
     await tester.pumpWidget(
@@ -78,12 +79,9 @@ void main() {
       ),
     );
 
-    final buttons = tester.widgetList<AppButton>(find.byType(AppButton)).toList();
-    expect(buttons, hasLength(2));
-    expect(buttons.every((b) => b.onPressed == null), isTrue);
-
-    await tester.tap(find.text('Approva'), warnIfMissed: false);
-    await tester.tap(find.text('Rifiuta'), warnIfMissed: false);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Approva'), findsNothing);
+    expect(find.text('Rifiuta'), findsNothing);
     expect(approved, 0);
     expect(rejected, 0);
   });

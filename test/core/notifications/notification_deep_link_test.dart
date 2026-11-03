@@ -31,6 +31,17 @@ void main() {
     expect(intent?.resolveRoute(), AppRoutes.approvazioni(tab: 'smart-working'));
   });
 
+  test('an id-less submitted request beats the notification-detail fallback', () {
+    final intent = DeepLinkIntent.fromNotification(
+      type: 'AbsenceRequestSubmitted',
+      entityType: 'AbsenceRequest',
+      entityId: '',
+      notificationId: 'n-1',
+    );
+
+    expect(intent?.resolveRoute(), AppRoutes.approvazioni(tab: 'assenze'));
+  });
+
   test('a submitted notification with no entity type defaults to the absence tab', () {
     final intent = DeepLinkIntent.fromNotification(type: 'AbsenceRequestSubmitted');
 
