@@ -95,7 +95,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _DetailAppBar(),
+            const _DetailTopBar(),
             Expanded(
               // Same RefreshIndicator+performSync() pattern as cantieri_list_screen.dart one level
               // up. Every branch below gets a real Scrollable (a RefreshIndicator only fires over
@@ -251,8 +251,8 @@ bool _hasDossier(CantieriData c) =>
 // App bar — back, "Cantiere" in display 18/600, the overflow dots. 50px, no rule.
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _DetailAppBar extends StatelessWidget {
-  const _DetailAppBar();
+class _DetailTopBar extends StatelessWidget {
+  const _DetailTopBar();
 
   @override
   Widget build(BuildContext context) {
