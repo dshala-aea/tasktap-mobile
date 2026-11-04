@@ -17,6 +17,8 @@ import 'package:tasktap_mobile/core/files/capture_store.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_activity_timeline.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_facts_grid.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
@@ -1466,6 +1468,8 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Report'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
@@ -1508,6 +1512,8 @@ void main() {
       await tester.pump();
       authStream.add(fakeUser);
       await tester.pumpAndSettle(const Duration(seconds: 2));
+      await tester.ensureVisible(find.text('Report'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
@@ -1539,6 +1545,8 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Report'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
@@ -1555,6 +1563,8 @@ void main() {
 
       await pump(tester, isOnline: false);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Report'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
@@ -1585,6 +1595,8 @@ void main() {
 
       await pump(tester, isOnline: false);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Report'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
@@ -1820,7 +1832,7 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Allegati');
 
-      expect(find.text('foto1.jpg'), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('foto1.jpg')), findsOneWidget);
       await resetAndDispose(tester);
     });
 
@@ -1864,7 +1876,7 @@ void main() {
       // step_riepilogo_signature_test.dart. A bare `Future.delayed` outside runAsync cannot
       // help: at that point the future does not exist yet.
       await tester.runAsync(() async {
-        await tester.tap(find.text('foto1.jpg'));
+        await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('foto1.jpg')));
         await tester.pump();
         await Future<void>.delayed(const Duration(milliseconds: 200));
         await tester.pump();
@@ -1876,7 +1888,8 @@ void main() {
       // (still in the tree, per Navigator semantics, just not what find.text sees by default).
       expect(find.byType(InteractiveViewer), findsOneWidget);
       expect(find.text('foto1.jpg'), findsOneWidget);
-      expect(find.text('foto1.jpg', skipOffstage: false), findsNWidgets(2));
+      // Viewer title + the (offstage) inline row + the (offstage) sheet row.
+      expect(find.text('foto1.jpg', skipOffstage: false), findsNWidgets(3));
       await resetAndDispose(tester);
     });
 
@@ -1922,7 +1935,7 @@ void main() {
       // fake clock and the toast never appears. Tap, pump and wait inside `runAsync`, then let
       // the frame that mounts the toast be pumped there as well.
       await tester.runAsync(() async {
-        await tester.tap(find.text('certificato.pdf'));
+        await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('certificato.pdf')));
         await tester.pump();
         await Future<void>.delayed(const Duration(milliseconds: 200));
         await tester.pump();
@@ -1982,7 +1995,7 @@ void main() {
       await pump(tester, isOnline: false);
       await tapTab(tester, 'Allegati');
 
-      expect(find.text('preventivo.pdf'), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('preventivo.pdf')), findsOneWidget);
       expect(find.text('Allegati non ancora sul telefono'), findsNothing);
       expect(find.text('Nessun allegato'), findsNothing);
       await resetAndDispose(tester);
@@ -2036,7 +2049,7 @@ void main() {
 
       await tapAndSettle(tester, find.text('Fotocamera'));
 
-      expect(find.text('foto.jpg'), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('foto.jpg')), findsOneWidget);
       expect(find.text('Nessun allegato'), findsNothing);
 
       // The pick was copied into the app's own store — the upload never saw the picker's
@@ -2538,6 +2551,55 @@ void main() {
   });
 
   group('TicketDetailScreen — Storico tab (index 6)', () {
+    testWidgets('the Attività timeline shows the latest history from the existing provider', (
+      tester,
+    ) async {
+      await seedBase(db);
+      final dio = MockDio();
+      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history')).thenAnswer(
+        (_) async => _okResponse<List<dynamic>>([
+          {
+            'id': 'h1',
+            'ticketId': 'ticket-1',
+            'fieldName': 'StatusId',
+            'oldValue': null,
+            'newValue': '1',
+            'changedByUserId': 'user-1',
+            'changedAt': DateTime.now().toUtc().toIso8601String(),
+          },
+        ], '/api/Tickets/ticket-1/history'),
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+
+      final timeline = find.byType(DetailActivityTimeline);
+      expect(timeline, findsOneWidget);
+      expect(find.descendant(of: timeline, matching: find.text('Stato')), findsOneWidget);
+      expect(find.descendant(of: timeline, matching: find.text('— → Aperto')), findsOneWidget);
+      // Full detail stays one tap away.
+      expect(find.text('APRI'), findsWidgets);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('Sintesi renders Cliente, Sede and Tecnico as a facts grid, not in the hero', (
+      tester,
+    ) async {
+      await seedBase(db);
+      await pump(tester);
+
+      final grid = find.byType(DetailFactsGrid);
+      expect(grid, findsOneWidget);
+      for (final label in ['CLIENTE', 'SEDE', 'TECNICO']) {
+        expect(find.descendant(of: grid, matching: find.text(label)), findsOneWidget);
+      }
+      expect(find.descendant(of: grid, matching: find.text('ACME Srl')), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(DetailHero), matching: find.byType(DetailFactsGrid)),
+        findsNothing,
+      );
+      await resetAndDispose(tester);
+    });
+
     testWidgets('renders a status change by name, not by raw id', (tester) async {
       await seedBase(db);
       final dio = MockDio();
@@ -2560,8 +2622,8 @@ void main() {
 
       // The audit table stores column names and raw values. Showing "StatusId: → 1" would put
       // database identifiers in front of a technician.
-      expect(find.text('Stato'), findsOneWidget);
-      expect(find.text('— → Aperto'), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('Stato')), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('— → Aperto')), findsOneWidget);
       await resetAndDispose(tester);
     });
 
@@ -2586,8 +2648,8 @@ void main() {
       await tapWideTab(tester, 'Storico');
 
       // A change nobody has a label for still happened; hiding it would make the trail lie.
-      expect(find.text('SomeFutureColumn'), findsOneWidget);
-      expect(find.text('a → b'), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('SomeFutureColumn')), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('a → b')), findsOneWidget);
       await resetAndDispose(tester);
     });
 
@@ -2612,8 +2674,8 @@ void main() {
 
       // The mirror is the point of this slice: on site, with no signal, the trail of who moved
       // this ticket is still readable — through the same translation as the online path.
-      expect(find.text('Stato'), findsOneWidget);
-      expect(find.text('— → Aperto'), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('Stato')), findsOneWidget);
+      expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('— → Aperto')), findsOneWidget);
       await resetAndDispose(tester);
     });
 
