@@ -17,6 +17,7 @@ import 'package:tasktap_mobile/core/files/capture_store.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
@@ -341,9 +342,87 @@ void main() {
   }
 
   group('TicketDetailScreen', () {
-    testWidgets('shows empty-state when ticket not found', (tester) async {
+    testWidgets('shows unavailable state when ticket not found', (tester) async {
       await pump(tester, ticketId: 'nonexistent');
-      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.byType(UnavailableState), findsOneWidget);
+      expect(find.text('Ticket non trovato'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('uses the generic Ticket header and the entity title in the hero', (tester) async {
+      await seedBase(db);
+      await pump(tester);
+      expect(find.text('Ticket'), findsOneWidget);
+      expect(find.text('Perdita idrica bagno'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('offline hero keeps Avvia intervento enabled and says the timer works', (
+      tester,
+    ) async {
+      // Defaults offline with an empty worklog mirror. The action is enabled because a start is
+      // written to the mirror and queued; the live value must not contradict that by saying the
+      // timer is unavailable offline.
+      await seedBase(db);
+      await pump(tester);
+
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Avvia intervento')), findsOneWidget);
+      expect(
+        find.descendant(of: hero, matching: find.text('Timer non disponibile offline')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: hero,
+          matching: find.text(
+            'Ore di questo ticket non ancora sincronizzate. Il timer funziona: '
+            'verrà inviato appena torni online.',
+          ),
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Crea rapportino and AI Copilot move into the hero', (tester) async {
+      await seedBase(db);
+      await pump(tester);
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Crea rapportino')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('AI Copilot')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an unassigned ticket keeps Prendi in carico reachable', (tester) async {
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 'ticket-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1, 9),
+              title: 'Ticket libero',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
+      await pump(tester, ticketId: 'ticket-2');
+      expect(find.text('Prendi in carico'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('delete is hidden without the tenant-admin capability', (tester) async {
+      await seedBase(db);
+      await pump(tester);
+      expect(find.bySemanticsLabel('Elimina'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -352,8 +431,10 @@ void main() {
       await seedBase(db);
       await pump(tester);
 
-      expect(find.text('ACME Srl'), findsOneWidget);
-      expect(find.text('Sede Milano'), findsOneWidget);
+      // Once in the hero facts and once in the ticket's summary card, which stays inside the
+      // temporary Attività section until Task 8 splits it out.
+      expect(find.text('ACME Srl'), findsNWidgets(2));
+      expect(find.text('Sede Milano'), findsNWidgets(2));
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -429,8 +510,9 @@ void main() {
 
       expect(find.byType(StatusPill), findsOneWidget);
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
-      // status_pill_test.dart's own note on this rendering change.
-      expect(find.text('APERTO'), findsOneWidget);
+      // status_pill_test.dart's own note on this rendering change. One stamp is the hero status,
+      // one is the status row's pill, and the collapsed bar always builds its hidden copy.
+      expect(find.text('APERTO'), findsNWidgets(3));
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -465,7 +547,8 @@ void main() {
           .insert(ColleaguesCompanion.insert(id: 'user-1', displayName: 'Mario Rossi'));
       await pump(tester);
 
-      expect(find.text('Mario Rossi'), findsOneWidget);
+      // Hero fact and summary row both resolve the assigned technician.
+      expect(find.text('Mario Rossi'), findsNWidgets(2));
       expect(find.text('user-1'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -477,7 +560,7 @@ void main() {
       await seedBase(db);
       await pump(tester);
 
-      expect(find.text('user-1'), findsOneWidget);
+      expect(find.text('user-1'), findsNWidgets(2));
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -780,16 +863,15 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('the bottom bar holds a single leading doing-action', (tester) async {
-      // Was four equal buttons in two rows: Assegna / Cliente / Crea rapportino / Timbra cantiere,
-      // about 130dp of permanent chrome with no rank between them. What a technician does on a
-      // ticket is start the work and write it up — "Timbra cantiere" moved to CantiereDetailScreen
-      // (reached from this ticket's own cantiere chip; see the chip tests below), so it no longer
-      // shares the bottom bar with "Crea rapportino" at all.
+    testWidgets('the hero holds the report action', (tester) async {
+      // What a technician does on a ticket is start the work and write it up. "Timbra cantiere"
+      // moved to CantiereDetailScreen (reached from this ticket's own cantiere chip; see the chip
+      // tests below), so it is not in the hero at all.
       await seedBase(db);
       await pump(tester);
 
-      expect(find.text('Crea rapporto di intervento'), findsOneWidget);
+      expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('AI Copilot'), findsOneWidget);
       expect(find.text('Timbra cantiere'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -820,9 +902,9 @@ void main() {
 
       await pump(tester);
 
-      expect(find.text('Crea rapporto di intervento'), findsNothing);
-      expect(find.text('Assistente AI'), findsNothing);
-      // Not silence: the bar says the ticket is closed and where the way back is.
+      expect(find.text('Crea rapportino'), findsNothing);
+      expect(find.text('AI Copilot'), findsNothing);
+      // Not silence: the screen says the ticket is closed and where the way back is.
       expect(find.textContaining('Intervento chiuso'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -843,7 +925,7 @@ void main() {
       expect(find.bySemanticsLabel('Scheda cliente'), findsNothing);
       expect(
         find.ancestor(of: find.text('ACME Srl'), matching: find.byType(AppTappable)),
-        findsOneWidget,
+        findsWidgets,
       );
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1007,6 +1089,10 @@ void main() {
       );
 
       await pump(tester, dio: dio, isOnline: true);
+      // The contract row now sits below the hero and the status row, so scroll it into view
+      // before tapping it on the default test surface.
+      await tester.ensureVisible(find.text('Manutenzione annuale'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Manutenzione annuale'));
       await tester.pumpAndSettle();
 

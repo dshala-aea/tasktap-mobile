@@ -119,8 +119,30 @@ void main() {
       ],
     );
 
-    expect(find.text('Timer non disponibile offline'), findsOneWidget);
+    expect(
+      find.text(
+        'Ore di questo ticket non ancora sincronizzate. Il timer funziona: '
+        'verrà inviato appena torni online.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Avvia intervento'), findsOneWidget);
+  });
+
+  testWidgets('offline with a readable mirror says only that it is offline', (tester) async {
+    await pumpHero(
+      tester,
+      overrides: [
+        isOnlineProvider.overrideWithValue(false),
+        ticketWorklogsProvider('t1').overrideWith((ref) async => const <TicketWorkLogDto>[]),
+      ],
+    );
+
+    expect(
+      find.text('Offline: il timer funziona e verrà inviato appena torni online.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('non ancora sincronizzate'), findsNothing);
   });
 
   testWidgets('offline action stays enabled so the offline queue can run', (tester) async {

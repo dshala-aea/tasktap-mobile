@@ -9,14 +9,26 @@ import '../../core/utils/error_message.dart' show humanErrorMessage;
 import '../../core/widgets/app_toast.dart' show ToastTone, showAppToast;
 import '../../core/widgets/detail/detail_hero.dart' show DetailAction;
 import '../../core/widgets/live_dot.dart';
+import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../dashboard/active_trackers_provider.dart' show formatElapsed, nowProvider;
 import 'ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import 'ticket_providers.dart';
 import 'ticket_timer_actions.dart' show startTicketTimer, stopTicketTimer;
 import 'ticket_workflow_api_client.dart' show TicketWorkLogDto, TicketWorkflowFailure;
 
-/// The one sentence used wherever the ticket timer cannot be shown or driven.
-const String _offlineTimerReason = 'Timer non disponibile offline';
+/// The sentence used while offline but the device's worklog mirror is readable.
+///
+/// Matches the old timer bar's copy: the action is enabled offline, so the live value must say the
+/// timer still works rather than claiming it is unavailable.
+const String _offlineTimerReason =
+    'Offline: il timer funziona e verrà inviato appena torni online.';
+
+/// The sentence used offline when the mirror holds no worklogs for this ticket.
+///
+/// An empty mirror is not evidence of zero hours, so it says the hours are not synced yet while
+/// still making clear the timer itself works.
+const String _offlineMirrorEmptyTimerReason =
+    'Ore di questo ticket non ancora sincronizzate. Il timer funziona: verrà inviato appena torni online.';
 
 /// Elapsed time of a running ticket worklog at [now].
 ///
@@ -38,6 +50,9 @@ class TicketTimerLiveValue extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final worklogs = ref.watch(ticketWorklogsProvider(ticketId));
     if (_isOffline(worklogs)) {
+      return const Text(_offlineMirrorEmptyTimerReason);
+    }
+    if (!ref.watch(isOnlineProvider)) {
       return const Text(_offlineTimerReason);
     }
 

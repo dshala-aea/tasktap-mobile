@@ -10,9 +10,11 @@ import '../../core/files/capture_store.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/time/business_time.dart' show formatWorkDate;
-import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/utils/error_message.dart' show humanErrorMessage;
 import '../../core/widgets/app_compartment_tile.dart';
+import '../../core/widgets/detail/detail_hero.dart';
+import '../../core/widgets/detail/detail_scaffold.dart';
+import '../../core/widgets/detail/detail_section.dart';
 import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
@@ -32,16 +34,15 @@ import '../calendario/widgets/schedule_info_sheet.dart';
 import '../cantiere/cantiere_providers.dart';
 import '../checklist/checklist_providers.dart';
 import '../checklist/ticket_asset_checklists_card.dart';
-import '../dashboard/active_trackers_provider.dart' show nowProvider, formatElapsed;
 import '../rapportino/create_draft.dart';
 import '../rapportino/draft_for_ticket.dart';
+import '../timbra/clock_disagreement_note.dart';
 import 'control_group_accordion.dart';
 import 'edit_ticket_screen.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_label.dart';
 import 'ticket_materiali_editor.dart';
 import 'ticket_providers.dart';
-import 'ticket_timer_actions.dart';
 import 'ticket_timer_hero.dart';
 import 'steps/step_assegnazione.dart' show techniciansProvider;
 import 'ticket_workflow_api_client.dart';
@@ -59,15 +60,6 @@ class TicketDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
-  /// Owned here rather than by the body, which is rebuilt on every ticket change.
-  final _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
   /// Ordered by who is holding the phone.
   ///
   /// This was a pinned horizontal strip (four tabs fit a phone, there are eight — four sat past
@@ -97,70 +89,35 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? {};
     final typeMap = ref.watch(ticketTypeMapProvider).valueOrNull ?? {};
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: ticketAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        // This reads the local mirror, so a failure here is the device's database, not the network.
-        // It used to render `Errore: $e` — a Drift exception, full width, as the entire screen.
-        // There is nothing a technician can do about it except back out, so say that.
-        error: (e, _) => Column(
-          children: [
-            _TicketDetailHeader(title: 'Ticket'),
-            const Expanded(
-              child: SafeArea(
-                top: false,
-                child: UnavailableState(
-                  titolo: 'Ticket non leggibile',
-                  motivo:
-                      'I dati salvati sul telefono non si aprono. Torna indietro e riprova; se '
-                      'continua, sincronizza dalla Dashboard.',
-                ),
-              ),
-            ),
-          ],
-        ),
-        data: (ticket) {
-          if (ticket == null) {
-            return Column(
-              children: [
-                _TicketDetailHeader(title: 'Ticket'),
-                SafeArea(
-                  top: false,
-                  child: EmptyState(
-                    icon: LucideIcons.xCircle,
-                    title: 'Ticket non trovato',
-                    body: 'Il ticket richiesto non è disponibile in cache.',
-                  ),
-                ),
-              ],
-            );
-          }
-          return _TicketDetailBody(
-            ticket: ticket,
-            statusMap: statusMap,
-            typeMap: typeMap,
-            sectionLabels: _sectionLabels,
-            scrollController: _scrollController,
-          );
-        },
+    return ticketAsync.when(
+      loading: () => const DetailScaffold.loading(screenTitle: 'Ticket'),
+      // This reads the local mirror, so a failure here is the device's database, not the network.
+      // It used to render `Errore: $e` — a Drift exception, full width, as the entire screen.
+      // There is nothing a technician can do about it except back out, so say that.
+      error: (e, _) => const DetailScaffold.unavailable(
+        screenTitle: 'Ticket',
+        icon: LucideIcons.alertTriangle,
+        title: 'Ticket non leggibile',
+        reason:
+            'I dati salvati sul telefono non si aprono. Torna indietro e riprova; se '
+            'continua, sincronizza dalla Dashboard.',
       ),
-    );
-  }
-}
-
-class _TicketDetailHeader extends StatelessWidget {
-  const _TicketDetailHeader({required this.title, this.subtitle, this.actions = const []});
-
-  final String title;
-  final String? subtitle;
-  final List<Widget> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      bottom: false,
-      child: ScreenHeader(title: title, subtitle: subtitle, showBack: true, actions: actions),
+      data: (ticket) {
+        if (ticket == null) {
+          return const DetailScaffold.unavailable(
+            screenTitle: 'Ticket',
+            icon: LucideIcons.xCircle,
+            title: 'Ticket non trovato',
+            reason: 'Il ticket richiesto non è disponibile in cache.',
+          );
+        }
+        return _TicketDetailBody(
+          ticket: ticket,
+          statusMap: statusMap,
+          typeMap: typeMap,
+          sectionLabels: _sectionLabels,
+        );
+      },
     );
   }
 }
@@ -171,14 +128,12 @@ class _TicketDetailBody extends ConsumerWidget {
     required this.statusMap,
     required this.typeMap,
     required this.sectionLabels,
-    required this.scrollController,
   });
 
   final Ticket ticket;
   final Map<int, String> statusMap;
   final Map<int, String> typeMap;
   final List<String> sectionLabels;
-  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -193,7 +148,7 @@ class _TicketDetailBody extends ConsumerWidget {
     // A closed ticket is finished work: no report and no AI draft may be started on it. Decided
     // from the tenant's own closing status flag (plus `closedAt`, for the sync-lag cases — see
     // [ticketIsClosed]), not from `closedAt` alone: closing from this very screen writes the new
-    // `statusId`, and that is what the bar has to react to immediately.
+    // `statusId`, and that is what the hero actions have to react to immediately.
     final closed = ticketIsClosed(
       ticket,
       ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const {},
@@ -223,7 +178,7 @@ class _TicketDetailBody extends ConsumerWidget {
     // the sheet it opens) — not a route to a full contract editor.
     final contractId = ticket.contractId;
     final contractAsync = contractId == null ? null : ref.watch(contractByIdProvider(contractId));
-    // Same offline-vs-error distinction the timer bar below draws: offline with nothing in the
+    // Same offline-vs-error distinction the contract row draws: offline with nothing in the
     // mirror is its own state ("Non disponibile offline"), not the same as the server saying the
     // contract does not exist.
     final contractLabel = contractAsync?.when(
@@ -243,311 +198,235 @@ class _TicketDetailBody extends ConsumerWidget {
       error: (e, _) => e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
     );
 
-    return SafeArea(
-      top: false,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // The job leads; the reference supports it.
-          //
-          // This was the other way round — `#3f2a1c8e` as the page title, in the largest type on
-          // the screen, with the ticket's actual name demoted to the subtitle. The technician
-          // arrived at a screen whose headline was eight characters of a GUID and had to read the
-          // second line to find out which job they were looking at.
-          //
-          // Where the ticket has no number the subtitle is simply absent. Nothing is invented and
-          // the id never comes back.
-          //
-          // Ticket is an Operational surface (same family as Timbra and the rapportino/ticket
-          // wizards, which already carry the dark CHARCOAL plate) — this used to be the one
-          // Operational screen still wearing the light Browsing-surface header. Only the header
-          // gets the dark plate; the body below stays light. A long, dense detail page with many
-          // KeyVal rows reads better at high contrast outdoors than it would crammed onto a dark
-          // ground, and nothing below this line changes — the bottom action stack has twice been
-          // squeezed until something under it stopped laying out, so it is not touched here.
-          _TicketDetailHeader(
-            title: ticket.title,
-            subtitle: reference,
-            actions: [
-              HeaderIconBtn(
-                icon: LucideIcons.pencil,
-                label: 'Modifica',
-                glass: true,
-                onTap: () => _openEditTicket(context, ticket),
-              ),
-              HeaderIconBtn(
-                icon: LucideIcons.userCheck,
-                label: 'Assegna',
-                glass: true,
-                onTap: () => _showAssignSheet(context, ref, ticket),
-              ),
-              // Delete sits here, beside the ticket's other actions, for the one person who may
-              // perform it: a tenant admin, the same `sistema.tenant.admin` capability the server's
-              // own `[RequirePermission]` on DELETE /api/tickets/{id} enforces. Not a swipe — a
-              // swipe is triggerable by accident one-handed on a site and cannot be performed by a
-              // keyboard/TalkBack user at all; this is a labelled header action behind a
-              // confirmation dialog. See [_confirmDeleteServerTicket].
-              CapabilityGate(
-                capability: 'sistema.tenant.admin',
-                child: HeaderIconBtn(
-                  icon: LucideIcons.trash2,
-                  label: 'Elimina',
-                  glass: true,
-                  onTap: () => _confirmDeleteServerTicket(context, ref, ticket),
+    final disagreement = ref.watch(clockDisagreementProvider)[ticket.id];
+    final hasOwner = ticket.assignedUserId != null;
+
+    return DetailScaffold(
+      screenTitle: 'Ticket',
+      headerActions: [
+        HeaderIconBtn(
+          icon: LucideIcons.pencil,
+          label: 'Modifica',
+          glass: true,
+          onTap: () => _openEditTicket(context, ticket),
+        ),
+        HeaderIconBtn(
+          icon: LucideIcons.userCheck,
+          label: 'Assegna',
+          glass: true,
+          onTap: () => _showAssignSheet(context, ref, ticket),
+        ),
+        // Delete sits here, beside the ticket's other actions, for the one person who may
+        // perform it: a tenant admin, the same `sistema.tenant.admin` capability the server's
+        // own `[RequirePermission]` on DELETE /api/tickets/{id} enforces. Not a swipe — a
+        // swipe is triggerable by accident one-handed on a site and cannot be performed by a
+        // keyboard/TalkBack user at all; this is a labelled header action behind a
+        // confirmation dialog. See [_confirmDeleteServerTicket].
+        CapabilityGate(
+          capability: 'sistema.tenant.admin',
+          child: HeaderIconBtn(
+            icon: LucideIcons.trash2,
+            label: 'Elimina',
+            glass: true,
+            onTap: () => _confirmDeleteServerTicket(context, ref, ticket),
+          ),
+        ),
+      ],
+      // The job leads; the reference supports it. A long, dense detail page reads better at high
+      // contrast outdoors than it would crammed onto a dark ground, so the shell stays light.
+      hero: DetailHeroData(
+        variant: DetailHeroVariant.operational,
+        title: ticket.title,
+        subtitle: reference,
+        status: DetailStatus(label: statusName),
+        facts: [
+          DetailFact(
+            label: 'Cliente',
+            value: customerName,
+            onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
+          ),
+          DetailFact(label: 'Sede', value: locationName),
+          DetailFact(label: 'Tecnico', value: tecnicoLabel),
+        ],
+        liveValue: TicketTimerLiveValue(ticketId: ticket.id),
+        primaryAction: ticketTimerAction(context, ref, ticket.id),
+        // Both secondary actions mint a rapportino for this ticket, and a closed ticket is
+        // finished work: the server would take the submit and leave the ticket closed. The
+        // expanded row says why and where the way back is (the status pill reopens it).
+        secondaryActions: hasOwner && !closed
+            ? [
+                DetailAction(
+                  label: 'AI Copilot',
+                  onPressed: () => context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
+                ),
+                DetailAction(
+                  label: 'Crea rapportino',
+                  onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
+                ),
+              ]
+            : const [],
+      ),
+      expandedExtra: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Status pill + type chip + the two workflow controls. Changing a status is editing
+            // the thing the pill displays, so they belong in the same row.
+            _TicketStatusRow(ticket: ticket, statusName: statusName, typeName: typeName),
+
+            // Cantiere chip — a one-line contextual fact. Only shown when this ticket is actually
+            // linked to a cantiere; tapping it opens CantiereDetailScreen, which now owns "Timbra
+            // cantiere".
+            if (ticket.cantiereId != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.md),
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final cantiereAsync = ref.watch(cantiereByIdProvider(ticket.cantiereId!));
+                    // Neutral fallback, not the raw GUID — this isn't just a brief loading-state
+                    // placeholder, it's the permanent label whenever the linked cantiere falls
+                    // outside this technician's synced scope (a normal, expected case).
+                    final label = cantiereAsync.valueOrNull?.name ?? 'Cantiere collegato';
+                    return AppChip(
+                      label: 'Cantiere: $label',
+                      onTap: () => context.push(
+                        AppRoutes.cantieriDetailPath(ticket.cantiereId!, ticketId: ticket.id),
+                      ),
+                    );
+                  },
                 ),
               ),
-            ],
-          ),
 
-          // Status pill + type chip + the two workflow controls.
-          //
-          // Both controls live in this existing row on purpose. The bottom action stack already
-          // carries four buttons and has twice been squeezed until something below it stopped
-          // laying out; this row is already on screen and costs nothing to reuse. It is also where
-          // they belong — changing a status is editing the thing the pill displays.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              0,
-              AppSpacing.pagePadding,
-              AppSpacing.md,
-            ),
-            child: _TicketStatusRow(ticket: ticket, statusName: statusName, typeName: typeName),
-          ),
-
-          // Cantiere chip — a one-line contextual fact, matching the KeyVal/status-row rhythm
-          // above it. Only shown when this ticket is actually linked to a cantiere; tapping it
-          // opens CantiereDetailScreen, which now owns "Timbra cantiere" (see the bottom-actions
-          // comment below for why that control no longer lives on this screen).
-          if (ticket.cantiereId != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                0,
-                AppSpacing.pagePadding,
-                AppSpacing.md,
+            if (hasOwner && closed)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.md),
+                child: InlineAlert(
+                  icon: LucideIcons.lock,
+                  color: context.colors.amber,
+                  message:
+                      'Intervento chiuso: per registrare ore o un nuovo rapporto riaprilo '
+                      'dallo stato qui sopra.',
+                ),
               ),
-              child: Consumer(
-                builder: (context, ref, _) {
-                  final cantiereAsync = ref.watch(cantiereByIdProvider(ticket.cantiereId!));
-                  // Neutral fallback, not the raw GUID — this isn't just a brief loading-state
-                  // placeholder, it's the permanent label whenever the linked cantiere falls
-                  // outside this technician's synced scope (a normal, expected case).
-                  final label = cantiereAsync.valueOrNull?.name ?? 'Cantiere collegato';
-                  return AppChip(
-                    label: 'Cantiere: $label',
-                    onTap: () => context.push(
-                      AppRoutes.cantieriDetailPath(ticket.cantiereId!, ticketId: ticket.id),
-                    ),
-                  );
-                },
+
+            // The old timer bar surfaced this; the hero's live value cannot, because the warning
+            // is about a completed session rather than the timer's current state.
+            if (disagreement != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.md),
+                child: ClockDisagreementNote(
+                  seconds: disagreement,
+                  onDismiss: () => ref.read(clockDisagreementProvider.notifier).dismiss(ticket.id),
+                ),
               ),
-            ),
-
-          Expanded(
-            child: RefreshIndicator(
-              // Everything this body renders — the ticket, its customer, sede, contract, commessa
-              // and cantiere — is read from the synced mirror, so a delta sync is the whole
-              // refresh; there is no server read behind this screen to re-issue. The compartment
-              // sheets (Report, Controllo, Ore, …) fetch when they are opened, so they are fresh.
-              onRefresh: () => refreshWithFeedback(context, ref),
-              child: CustomScrollView(
-                controller: scrollController,
-                slivers: [
-                  // Timer: status and control together, at the top of the content.
-                  //
-                  // Deliberately not in the bottom action stack, which already carries four
-                  // buttons. Adding a fifth control there cost 74dp of the scroll viewport on every
-                  // ticket — enough that the tab strip below it stopped being laid out at all on a
-                  // short screen, since slivers build lazily. It belongs with the content anyway:
-                  // it reports state as much as it offers an action.
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.pagePadding,
-                        0,
-                        AppSpacing.pagePadding,
-                        AppSpacing.md,
-                      ),
-                      child: _TicketTimerBar(ticketId: ticket.id),
-                    ),
+          ],
+        ),
+      ),
+      sections: [
+        // Temporary: everything below the chrome stays together until Task 8 splits it into four
+        // sections. Keeping it in one section means the screen remains fully working meanwhile.
+        DetailSectionData(
+          title: 'Attività',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Map / Naviga — a real gap the Vetro mockup's own `.mapcard` called for: an
+              // address shown with no way to act on it.
+              if (locationAddress.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: GeoMapCard(
+                    pointAsync: ref.watch(locationGeocodedLocationProvider(ticket.locationId)),
+                    address: locationAddress,
                   ),
+                ),
 
-                  // Map / Naviga — a real gap the Vetro mockup's own `.mapcard` called for: an
-                  // address shown with no way to act on it. Lives in the scrollable body, not the
-                  // fixed header/status-row/bottom-action-stack chrome this file's own comments
-                  // warn is already squeezed — this sliver just adds to the elastic scroll area
-                  // the same way every other card here already does.
-                  if (locationAddress.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: GeoMapCard(
-                          pointAsync: ref.watch(locationGeocodedLocationProvider(ticket.locationId)),
-                          address: locationAddress,
-                        ),
+              // Now: just enough to know where you stand. Data, Chiusura, Descrizione and Note
+              // tecnico moved into the Dettagli compartment below — they're read once, not on
+              // every glance at this ticket, and belonged with the rest of the reference record
+              // rather than pinned above it.
+              AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    KeyVal(
+                      label: 'Cliente',
+                      value: customerName,
+                      onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
+                    ),
+                    KeyVal(label: 'Sede', value: locationName),
+                    KeyVal(
+                      label: 'Tecnico',
+                      value: tecnicoLabel,
+                      showDivider: contractLabel != null || commessaLabel != null,
+                    ),
+                    if (contractLabel != null)
+                      KeyVal(
+                        label: 'Contratto',
+                        value: contractLabel,
+                        showDivider: commessaLabel != null,
+                        onTap: () => _showContractSummarySheet(context, contractId!),
+                      ),
+                    if (commessaLabel != null)
+                      KeyVal(
+                        label: 'Commessa',
+                        value: commessaLabel,
+                        showDivider: false,
+                        onTap: commessaId == null
+                            ? null
+                            : () => context.push('/altro/commesse/$commessaId'),
+                      ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.base),
+
+              // The record — a grid of compartments, not an accordion. Each opens a bottom sheet
+              // over the ticket rather than growing the page in place: the ticket's own shape
+              // stays constant no matter which section (or how much of it) is open. See
+              // _sectionLabels' own doc comment for the fuller reasoning and what this replaced.
+              GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 180,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 1.5,
+                ),
+                children: [
+                  for (final label in sectionLabels)
+                    AppCompartmentTile(
+                      icon: _sectionIcon(label),
+                      label: label,
+                      onTap: () => openCompartmentSheet(
+                        context,
+                        label: label,
+                        content: label == 'Dettagli'
+                            ? _DettagliSheet(
+                                dateLabel: dateLabel,
+                                closedLabel: closedLabel,
+                                description: ticket.description,
+                                technicianNotes: ticket.technicianNotes,
+                              )
+                            : _sectionContent(label, ticket.id),
                       ),
                     ),
-
-                  // Now: just enough to know where you stand. Data, Chiusura, Descrizione and Note
-                  // tecnico moved into the Dettagli compartment below — they're read once, not on
-                  // every glance at this ticket, and belonged with the rest of the reference record
-                  // rather than pinned above it.
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.pagePadding,
-                        0,
-                        AppSpacing.pagePadding,
-                        AppSpacing.base,
-                      ),
-                      child: AppCard(
-                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            KeyVal(
-                              label: 'Cliente',
-                              value: customerName,
-                              onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
-                            ),
-                            KeyVal(label: 'Sede', value: locationName),
-                            KeyVal(
-                              label: 'Tecnico',
-                              value: tecnicoLabel,
-                              showDivider: contractLabel != null || commessaLabel != null,
-                            ),
-                            if (contractLabel != null)
-                              KeyVal(
-                                label: 'Contratto',
-                                value: contractLabel,
-                                showDivider: commessaLabel != null,
-                                onTap: () => _showContractSummarySheet(context, contractId!),
-                              ),
-                            if (commessaLabel != null)
-                              KeyVal(
-                                label: 'Commessa',
-                                value: commessaLabel,
-                                showDivider: false,
-                                onTap: commessaId == null
-                                    ? null
-                                    : () => context.push('/altro/commesse/$commessaId'),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // The record — a grid of compartments, not an accordion. Each opens a bottom
-                  // sheet over the ticket rather than growing the page in place: the ticket's own
-                  // shape stays constant no matter which section (or how much of it) is open. See
-                  // _sectionLabels' own doc comment for the fuller reasoning and what this replaced.
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.pagePadding,
-                        0,
-                        AppSpacing.pagePadding,
-                        AppSpacing.base,
-                      ),
-                      child: GridView(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 180,
-                          mainAxisSpacing: 10,
-                          crossAxisSpacing: 10,
-                          childAspectRatio: 1.5,
-                        ),
-                        children: [
-                          for (final label in sectionLabels)
-                            AppCompartmentTile(
-                              icon: _sectionIcon(label),
-                              label: label,
-                              onTap: () => openCompartmentSheet(
-                                context,
-                                label: label,
-                                content: label == 'Dettagli'
-                                    ? _DettagliSheet(
-                                        dateLabel: dateLabel,
-                                        closedLabel: closedLabel,
-                                        description: ticket.description,
-                                        technicianNotes: ticket.technicianNotes,
-                                      )
-                                    : _sectionContent(label, ticket.id),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
                 ],
               ),
-            ),
-          ),
 
-          // Bottom actions — one primary, state-driven.
-          //
-          // Used to be two equal-weight buttons on every ticket regardless of state. An
-          // unassigned ticket isn't yours to start work on yet — "Prendi in carico" already leads
-          // the status row above, so the bar stays empty rather than repeating that control in a
-          // second place. Once assigned, "Crea rapportino" is what a technician does on a ticket
-          // (see the status-row comment). "Timbra cantiere" no longer lives here at all — it
-          // moved to CantiereDetailScreen, reached from this ticket's own cantiere chip above.
-          //
-          // Neither button survives a closure. Both mint a rapportino for this ticket, and a
-          // closed ticket is finished work: the server would take the submit and leave the ticket
-          // closed (deliberately — it never reopens one on its own), so the report would sit
-          // against a job nobody expects hours on. The bar says why and where the way back is
-          // (the status pill above reopens it) rather than just disappearing.
-          if (ticket.assignedUserId != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.sm,
-                AppSpacing.pagePadding,
-                AppSpacing.base,
-              ),
-              child: closed
-                  ? InlineAlert(
-                      icon: LucideIcons.lock,
-                      color: context.colors.amber,
-                      message:
-                          'Intervento chiuso: per registrare ore o un nuovo rapporto riaprilo '
-                          'dallo stato qui sopra.',
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: AppButton.secondary(
-                            label: 'Assistente AI',
-                            onPressed: () =>
-                                context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: AppButton(
-                            label: 'Crea rapporto di intervento',
-                            onPressed: () =>
-                                _createRapportino(context, ref, ticket, locationAddress),
-                          ),
-                        ),
-                      ],
-                    ),
-            )
-          else
-            const SizedBox.shrink(),
-        ],
-      ),
+              SizedBox(height: context.fabSafeBottom),
+            ],
+          ),
+        ),
+      ],
+      // Everything this body renders — the ticket, its customer, sede, contract, commessa and
+      // cantiere — is read from the synced mirror, so a delta sync is the whole refresh; there is
+      // no server read behind this screen to re-issue. The compartment sheets fetch when opened.
+      onRefresh: () => refreshWithFeedback(context, ref),
     );
   }
 
@@ -1924,242 +1803,6 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
             isLoading: _isSaving,
             onPressed: _isSaving ? null : _save,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Timer bar
-// ══════════════════════════════════════════════════════════════════════════════
-
-/// Start and stop the clock against this ticket.
-///
-/// The routes behind it (`POST .../worklogs/start|stop`) have been live the whole time with no
-/// call site, so a technician could open a ticket and read every detail of it while having no way
-/// to book a minute of the work against it.
-///
-/// The bar shows a pulsing green [LiveDot] when a clock is running — the same equipment-lamp mark
-/// the dashboard's active-tracker strip uses, not the accent strap (that means selected/priority,
-/// not live; see LiveDot's own doc comment). A technician who has left a timer going overnight
-/// should see the same signal wherever they land.
-class _TicketTimerBar extends ConsumerStatefulWidget {
-  const _TicketTimerBar({required this.ticketId});
-
-  final String ticketId;
-
-  @override
-  ConsumerState<_TicketTimerBar> createState() => _TicketTimerBarState();
-}
-
-class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
-  bool _busy = false;
-
-  Future<void> _run(Future<void> Function() action) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await action();
-      // Re-read rather than patching local state: the server owns whether a clock is running, and
-      // this screen has just changed it.
-      ref.invalidate(ticketWorklogsProvider(widget.ticketId));
-      try {
-        await ref.read(ticketWorklogsProvider(widget.ticketId).future);
-      } on TicketDetailOfflineException {
-        // The write landed; only the re-read had nothing to say (offline, empty mirror). The bar's
-        // own note already covers it — a second error on top would be noise.
-      }
-    } on TicketWorkflowFailure catch (e) {
-      if (!mounted) return;
-      showAppToast(context, message: e.message, tone: ToastTone.error);
-    } catch (e) {
-      if (!mounted) return;
-      showAppToast(
-        context,
-        message: humanErrorMessage(e, azione: 'aggiornare il timer del ticket'),
-        tone: ToastTone.error,
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  // Both delegate to `ticket_timer_actions.dart`: the dashboard's running-clock strip drives the
-  // same clock and had its own copy that never learned the offline path. That file states the rule
-  // (a call that reached the server is a decision; everything else is written to the mirror and
-  // queued).
-  Future<void> _startTimer() => startTicketTimer(ref, widget.ticketId);
-
-  /// Says so when the close exists only on this device, rather than leaving the technician to guess
-  /// whether the hours reached the office.
-  Future<void> _stopTimer() async {
-    final queued = await stopTicketTimer(ref, widget.ticketId);
-    if (queued && mounted) {
-      showAppToast(
-        context,
-        message: 'Fermata registrata: verrà inviata al ritorno della connessione.',
-        tone: ToastTone.warning,
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final async = ref.watch(ticketWorklogsProvider(widget.ticketId));
-
-    // The timer bar used to disappear offline ("Timer non disponibile offline"), which was true of
-    // the old design and is not any more: a tap writes to the mirror and queues. What can still be
-    // unknown is whether this ticket has hours at all — an empty mirror is not evidence of zero —
-    // so that is said in a line under the bar rather than replacing it.
-    final mirrorEmpty =
-        async.hasError && async.error is TicketDetailOfflineException;
-    final offline = !ref.watch(isOnlineProvider);
-
-    // Only ever set from the server's answer: this phone cannot see a receipt instant, so it can
-    // never conclude that its own clock was off. Null covers ordinary drift, a backend that predates
-    // the field, and the overwhelming majority of sessions, where nothing is shown at all.
-    final disagreement = ref.watch(clockDisagreementProvider)[widget.ticketId];
-
-    final running = ref.watch(runningTicketWorklogProvider(widget.ticketId));
-    final isRunning = running != null;
-
-    // Only watched while a clock is actually going — an idle ticket detail screen ticks nothing.
-    final elapsed = isRunning
-        ? ticketTimerElapsed(
-            running,
-            ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc(),
-            ref.watch(businessTimeProvider),
-          )
-        : null;
-
-    final bar = Row(
-      children: [
-        if (isRunning) ...[const LiveDot(), const SizedBox(width: 10)],
-        Icon(
-          isRunning ? LucideIcons.timer : LucideIcons.clock,
-          size: 18,
-          color: isRunning ? c.ink : c.inkMuted,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            switch ((async.isLoading, isRunning)) {
-              (true, _) => 'Verifica timer…',
-              (false, true) => 'Timer in corso',
-              (false, false) => 'Nessun timer attivo',
-            },
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: isRunning ? FontWeight.w700 : FontWeight.w500,
-              color: isRunning ? c.ink : c.inkMuted,
-            ),
-          ),
-        ),
-        if (elapsed != null) ...[
-          Text(
-            formatElapsed(elapsed),
-            style: TextStyle(
-              fontFamily: 'Archivo Narrow',
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-              color: c.ink,
-              // Tabular figures: without them the row shifts width every second as digit
-              // widths change, the same reasoning active_tracker_strip.dart's clock uses.
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          const SizedBox(width: 10),
-        ],
-        if (_busy)
-          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-        else if (isRunning)
-          // AppButton has no gradientColors escape hatch (VetroButton's own — the old fixed
-          // stopLight/stopDark pair had no themed equivalent to move to). "Ferma" ends a running
-          // clock, exactly the case AppButton's own `danger` variant exists for — its fill/fg
-          // already read through `context.colors.redSoft`/`context.colors.red` rather than a
-          // fixed hex pair, matching the same "ending" language step_riepilogo.dart's resubmit
-          // button uses.
-          //
-          // fullWidth: false — same reasoning as _PendingTicketRow's own Riprova button below:
-          // AppButton defaults to full-width and this sits directly in a Row with no Expanded/
-          // Flexible around it, so the unbounded-width SizedBox blows up layout otherwise.
-          AppButton.danger(
-            label: 'Ferma',
-            size: AppButtonSize.sm,
-            fullWidth: false,
-            // No loading gate any more: the button must work offline, where the list provider
-            // has nothing to load from.
-            onPressed: () => _run(_stopTimer),
-          )
-        else
-          AppButton(
-            label: 'Avvia',
-            size: AppButtonSize.sm,
-            fullWidth: false,
-            onPressed: () => _run(_startTimer),
-          ),
-      ],
-    );
-
-    if (!mirrorEmpty && !offline && disagreement == null) {
-      return AppCard(child: bar);
-    }
-
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          bar,
-          if (disagreement != null) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(LucideIcons.alertTriangle, size: 14, color: c.amber),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'L\'orologio del telefono non coincideva con il server: segnava '
-                    '${describeClockDisagreement(disagreement)}. Le ore sono registrate '
-                    'con l\'ora del telefono: se non tornano, segnalale all\'ufficio.',
-                    style: TextStyle(fontSize: 11, color: c.ink),
-                  ),
-                ),
-                // Dismissible: it is advice about one session, and a technician who has already
-                // corrected the phone's clock should not carry the warning for the rest of the day.
-                // The server keeps the record either way — this only hides the reminder.
-                IconButton(
-                  icon: Icon(LucideIcons.x, size: 14, color: c.inkMuted),
-                  tooltip: 'Nascondi avviso orologio',
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(),
-                  padding: const EdgeInsets.only(left: 6),
-                  onPressed: () => ref
-                      .read(clockDisagreementProvider.notifier)
-                      .dismiss(widget.ticketId),
-                ),
-              ],
-            ),
-          ],
-          if (mirrorEmpty || offline) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(LucideIcons.cloudOff, size: 14, color: c.inkMuted),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    mirrorEmpty
-                        ? 'Ore di questo ticket non ancora sincronizzate. Il timer funziona: '
-                              'verrà inviato appena torni online.'
-                        : 'Offline: il timer funziona e verrà inviato appena torni online.',
-                    style: TextStyle(fontSize: 11, color: c.inkMuted),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     );
