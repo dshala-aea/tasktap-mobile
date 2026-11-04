@@ -159,92 +159,32 @@ class _RapportinoViewBody extends ConsumerWidget {
       location?.postalCode,
     ].where((s) => s != null && s.isNotEmpty).join(', ');
 
+    final hasCronologia =
+        draft.inviatoAt != null || draft.controllatoAt != null || draft.fatturatoAt != null;
+    final rejected = rapportinoIsRejected(draft);
+    final hasCustomerSignature = draft.customerSignatureAllegatoId != null;
+    final hasCustomerAbsence = !hasCustomerSignature && customerAbsenceReason != null;
+    final hasTechnicianSignature = draft.technicianSignatureAllegatoId != null;
+
     return DetailScaffold(
       screenTitle: 'Rapportino',
       onRefresh: () => refreshWithFeedback(context, ref),
       hero: _buildRapportinoHero(context, ref, draft),
       sections: [
+        // ── Attività: lifecycle and rejection ───────────────────────────
         DetailSectionData(
-          title: 'Documento',
+          title: 'Attività',
+          isEmpty: !hasCronologia && !rejected,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Header card: StatusPill + date + KeyVal metadata ──────────
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                child: AppCard(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
-                        child: Row(
-                          children: [
-                            StatusPill(stato: statusLabel),
-                            const SizedBox(width: 8),
-                            Text(
-                              dateLabel,
-                              style: TextStyle(
-                                fontFamily: 'Archivo',
-                                fontSize: 12,
-                                color: context.colors.inkMuted,
-                              ),
-                            ),
-                            // "Serve un secondo intervento" (step_riepilogo.dart's own toggle)
-                            // — surfaced here so the office/technician sees it without opening
-                            // Rilavora. Local-only for a report synced down from another
-                            // device (see richiedeSecondoIntervento's own doc comment on
-                            // DraftReports) — off is not proof nothing was flagged, only that
-                            // this device doesn't know.
-                            if (draft.richiedeSecondoIntervento) ...[
-                              const SizedBox(width: 8),
-                              AppBadge(
-                                label: 'Da tornare',
-                                bgColor: context.colors.amber.withAlpha(31),
-                                fgColor: context.colors.amber,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      Divider(height: 1, thickness: 1, color: context.colors.borderLight),
-                      // Stated on the technician's own record of what they signed, mirroring
-                      // the exact same row (same label, same text) step_riepilogo.dart's
-                      // summary card shows before the two signatures are collected.
-                      if (draft.isAiAssisted)
-                        const KeyVal(
-                          label: 'Redazione',
-                          value: 'Bozza generata con AI, poi rivista',
-                        ),
-                      KeyVal(label: 'Ore', value: oreLabel, showDivider: false),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ── Sede map ──────────────────────────────────────────────────────
-              //
-              // Same embedded-map treatment ticket detail and cantiere detail already give a
-              // location. The hero states the site; this shows where it is.
-              if (locationAddress.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                  child: GeoMapCard(
-                    pointAsync: ref.watch(locationGeocodedLocationProvider(locationId)),
-                    address: locationAddress,
-                  ),
-                ),
-
               // ── Cronologia: lifecycle dates past creation ────────────────────
               //
               // Bozza → createdAt/updatedAt alone (already in the header) says everything.
               // Past that, the office's own review trail (Inviato/Controllato/Fatturato) is
               // real content this report carries and the view never showed — only the
               // customer-facing Firma dates got surfaced before this.
-              if (draft.inviatoAt != null ||
-                  draft.controllatoAt != null ||
-                  draft.fatturatoAt != null)
+              if (hasCronologia)
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.base),
                   child: AppCard(
@@ -297,11 +237,73 @@ class _RapportinoViewBody extends ConsumerWidget {
               // this report's data into a brand-new local draft — see createReworkDraft's own
               // doc comment for why it can't simply reopen this same report id (the backend's
               // state machine only allows Bozza → Inviato).
-              if (rapportinoIsRejected(draft))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                  child: const _RejectionBanner(),
+              if (rejected) const _RejectionBanner(),
+            ],
+          ),
+        ),
+
+        // ── Sintesi: the report's own metadata and written record ───────
+        DetailSectionData(
+          title: 'Sintesi',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Header card: StatusPill + date + KeyVal metadata ──────────
+              //
+              // Cliente/Sede/Tecnico are hero facts; the rest of the report's own record lives
+              // here so the document's identity is not split across the hero.
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                child: AppCard(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
+                        child: Row(
+                          children: [
+                            StatusPill(stato: statusLabel),
+                            const SizedBox(width: 8),
+                            Text(
+                              dateLabel,
+                              style: TextStyle(
+                                fontFamily: 'Archivo',
+                                fontSize: 12,
+                                color: context.colors.inkMuted,
+                              ),
+                            ),
+                            // "Serve un secondo intervento" (step_riepilogo.dart's own toggle)
+                            // — surfaced here so the office/technician sees it without opening
+                            // Rilavora. Local-only for a report synced down from another
+                            // device (see richiedeSecondoIntervento's own doc comment on
+                            // DraftReports) — off is not proof nothing was flagged, only that
+                            // this device doesn't know.
+                            if (draft.richiedeSecondoIntervento) ...[
+                              const SizedBox(width: 8),
+                              AppBadge(
+                                label: 'Da tornare',
+                                bgColor: context.colors.amber.withAlpha(31),
+                                fgColor: context.colors.amber,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Divider(height: 1, thickness: 1, color: context.colors.borderLight),
+                      // Stated on the technician's own record of what they signed, mirroring
+                      // the exact same row (same label, same text) step_riepilogo.dart's
+                      // summary card shows before the two signatures are collected.
+                      if (draft.isAiAssisted)
+                        const KeyVal(
+                          label: 'Redazione',
+                          value: 'Bozza generata con AI, poi rivista',
+                        ),
+                      KeyVal(label: 'Ore', value: oreLabel, showDivider: false),
+                    ],
+                  ),
                 ),
+              ),
 
               // ── Descrizione ───────────────────────────────────────────────
               if (draft.details != null && draft.details!.isNotEmpty)
@@ -405,141 +407,154 @@ class _RapportinoViewBody extends ConsumerWidget {
                     ),
                   ),
                 ),
+            ],
+          ),
+        ),
 
-              // ── Squadra e ore ────────────────────────────────────────────────
-              //
-              // The header's "Ore" row is the report's aggregate total — this is the
-              // itemized worklog behind it, one row per technician who contributed, with
-              // whatever travel/vehicle/notes data that technician's row carries.
-              if (staff.isNotEmpty)
+        // ── Ore: the itemized worklog behind the total ──────────────────
+        DetailSectionData(
+          title: 'Ore',
+          isEmpty: staff.isEmpty,
+          child: AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                  child: AppCard(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
-                          child: SectionTitle(title: 'Squadra e ore'),
-                        ),
-                        ...staff.map((s) {
-                          final name =
-                              ref.watch(colleagueNameProvider(s.userId)).valueOrNull ?? s.userId;
-                          final hours = formatOreLabel(totalOreMinutes([s]));
-                          final metaParts = [
-                            hours,
-                            if (s.kmTraveled > 0) '${s.kmTraveled.toStringAsFixed(1)} km',
-                            ?s.vehicle,
-                            ?s.notes,
-                          ];
-                          return ListRow(
-                            leading: const RowIconTile(icon: LucideIcons.user),
-                            title: name,
-                            subtitle: metaParts.join(' · '),
-                            showDivider: s != staff.last,
-                          );
-                        }),
-                      ],
+                  padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
+                  child: SectionTitle(title: 'Squadra e ore'),
+                ),
+                ...staff.map((s) {
+                  final name = ref.watch(colleagueNameProvider(s.userId)).valueOrNull ?? s.userId;
+                  final hours = formatOreLabel(totalOreMinutes([s]));
+                  final metaParts = [
+                    hours,
+                    if (s.kmTraveled > 0) '${s.kmTraveled.toStringAsFixed(1)} km',
+                    ?s.vehicle,
+                    ?s.notes,
+                  ];
+                  return ListRow(
+                    leading: const RowIconTile(icon: LucideIcons.user),
+                    title: name,
+                    subtitle: metaParts.join(' · '),
+                    showDivider: s != staff.last,
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+
+        // ── Materiali list ────────────────────────────────────────────
+        DetailSectionData(
+          title: 'Materiali',
+          isEmpty: materiali.isEmpty && !draft.materialiNotRequired,
+          child: AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
+                  child: SectionTitle(title: 'Materiali'),
+                ),
+                if (materiali.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: Text(
+                      'Nessun materiale utilizzato — confermato dal tecnico.',
+                      style: TextStyle(
+                        fontFamily: 'Archivo',
+                        fontSize: 13,
+                        color: context.colors.inkMuted,
+                      ),
                     ),
                   ),
-                ),
+                ...materiali.map((m) {
+                  final name =
+                      m.freeTextName ??
+                      (m.materialeId != null
+                          ? (ref.watch(materialeNameProvider(m.materialeId!)).valueOrNull ??
+                                m.materialeId!)
+                          : '—');
+                  final qty = m.quantity.toStringAsFixed(
+                    m.quantity.truncateToDouble() == m.quantity ? 0 : 2,
+                  );
+                  final priceStr = m.unitPrice != null
+                      ? '€${m.unitPrice!.toStringAsFixed(2)}'
+                      : null;
+                  final uom = m.unitOfMeasure;
+                  final metaSub = ['$qty${uom != null ? ' $uom' : ''}', ?priceStr].join(' · ');
+                  return ListRow(
+                    leading: const RowIconTile(icon: LucideIcons.package, size: 36, iconSize: 18),
+                    title: name,
+                    subtitle: metaSub,
+                    showDivider: m != materiali.last,
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
 
-              // ── Controlli (checklist) ────────────────────────────────────────
+        // ── Controlli (checklist) ────────────────────────────────────────
+        //
+        // What was recorded against the ticket's checklist on this visit (ADR-0012
+        // §B.4) — labels/types resolved against the cached ticket checklist when
+        // available (see controlLabels above); a raw controlId is shown instead of
+        // hiding the row when the checklist hasn't been cached on this device.
+        DetailSectionData(
+          title: 'Controlli',
+          isEmpty: controlli.isEmpty,
+          child: AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
+                  child: SectionTitle(title: 'Controlli'),
+                ),
+                ...groupControlliByAsset(controlli, controlLabels).expand((group) {
+                  return <Widget>[
+                    if (group.assetId != null) ...[
+                      _AssetGroupHeader(assetId: group.assetId!),
+                      const SizedBox(height: 6),
+                    ],
+                    for (final c in group.rows)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _ControlloAnswerRow(controllo: c, flat: controlLabels[c.controlId]),
+                      ),
+                  ];
+                }),
+              ],
+            ),
+          ),
+        ),
+
+        // ── Documenti & mappa: where it happened and what was attached ──
+        DetailSectionData(
+          title: 'Documenti & mappa',
+          isEmpty:
+              locationAddress.isEmpty &&
+              photoAllegati.isEmpty &&
+              !hasCustomerSignature &&
+              !hasCustomerAbsence &&
+              !hasTechnicianSignature,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Sede map ──────────────────────────────────────────────────────
               //
-              // What was recorded against the ticket's checklist on this visit (ADR-0012
-              // §B.4) — labels/types resolved against the cached ticket checklist when
-              // available (see controlLabels above); a raw controlId is shown instead of
-              // hiding the row when the checklist hasn't been cached on this device.
-              if (controlli.isNotEmpty)
+              // Same embedded-map treatment ticket detail and cantiere detail already give a
+              // location. The hero states the site; this shows where it is.
+              if (locationAddress.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                  child: AppCard(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
-                          child: SectionTitle(title: 'Controlli'),
-                        ),
-                        ...groupControlliByAsset(controlli, controlLabels).expand((group) {
-                          return <Widget>[
-                            if (group.assetId != null) ...[
-                              _AssetGroupHeader(assetId: group.assetId!),
-                              const SizedBox(height: 6),
-                            ],
-                            for (final c in group.rows)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: _ControlloAnswerRow(
-                                  controllo: c,
-                                  flat: controlLabels[c.controlId],
-                                ),
-                              ),
-                          ];
-                        }),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // ── Materiali list ────────────────────────────────────────────
-              if (materiali.isNotEmpty || draft.materialiNotRequired)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                  child: AppCard(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
-                          child: SectionTitle(title: 'Materiali'),
-                        ),
-                        if (materiali.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                            child: Text(
-                              'Nessun materiale utilizzato — confermato dal tecnico.',
-                              style: TextStyle(
-                                fontFamily: 'Archivo',
-                                fontSize: 13,
-                                color: context.colors.inkMuted,
-                              ),
-                            ),
-                          ),
-                        ...materiali.map((m) {
-                          final name =
-                              m.freeTextName ??
-                              (m.materialeId != null
-                                  ? (ref.watch(materialeNameProvider(m.materialeId!)).valueOrNull ??
-                                        m.materialeId!)
-                                  : '—');
-                          final qty = m.quantity.toStringAsFixed(
-                            m.quantity.truncateToDouble() == m.quantity ? 0 : 2,
-                          );
-                          final priceStr = m.unitPrice != null
-                              ? '€${m.unitPrice!.toStringAsFixed(2)}'
-                              : null;
-                          final uom = m.unitOfMeasure;
-                          final metaSub = [
-                            '$qty${uom != null ? ' $uom' : ''}',
-                            ?priceStr,
-                          ].join(' · ');
-                          return ListRow(
-                            leading: const RowIconTile(
-                              icon: LucideIcons.package,
-                              size: 36,
-                              iconSize: 18,
-                            ),
-                            title: name,
-                            subtitle: metaSub,
-                            showDivider: m != materiali.last,
-                          );
-                        }),
-                      ],
-                    ),
+                  child: GeoMapCard(
+                    pointAsync: ref.watch(locationGeocodedLocationProvider(locationId)),
+                    address: locationAddress,
                   ),
                 ),
 
@@ -560,7 +575,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                 ),
 
               // ── Firma cliente ─────────────────────────────────────────────
-              if (draft.customerSignatureAllegatoId != null)
+              if (hasCustomerSignature)
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.base),
                   child: AppCard(
@@ -606,7 +621,7 @@ class _RapportinoViewBody extends ConsumerWidget {
               // The counterpart of the block above for a report the customer could not sign:
               // show why, instead of leaving the section blank as if the signature had merely
               // been forgotten.
-              if (draft.customerSignatureAllegatoId == null && customerAbsenceReason != null)
+              if (hasCustomerAbsence)
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.base),
                   child: AppCard(
@@ -643,7 +658,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                 ),
 
               // ── Firma tecnico ─────────────────────────────────────────────
-              if (draft.technicianSignatureAllegatoId != null)
+              if (hasTechnicianSignature)
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.base),
                   child: AppCard(

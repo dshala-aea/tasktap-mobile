@@ -27,6 +27,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_section.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
@@ -84,6 +85,8 @@ Future<void> _seedSubmittedDraft(
   String? diagnosi,
   String? soluzione,
   String? customerSignoffText,
+  String? customerSignatureAllegatoId = 'sig-c-1',
+  String? technicianSignatureAllegatoId = 'sig-t-1',
   bool isAiAssisted = false,
   bool richiedeSecondoIntervento = false,
   bool materialiNotRequired = false,
@@ -106,8 +109,8 @@ Future<void> _seedSubmittedDraft(
           isLocalOnly: const Value(true),
           stato: Value(stato),
           submissionState: const Value('submitted'),
-          customerSignatureAllegatoId: const Value('sig-c-1'),
-          technicianSignatureAllegatoId: const Value('sig-t-1'),
+          customerSignatureAllegatoId: Value(customerSignatureAllegatoId),
+          technicianSignatureAllegatoId: Value(technicianSignatureAllegatoId),
           technicianNotes: Value(technicianNotes),
           diagnosi: Value(diagnosi),
           soluzione: Value(soluzione),
@@ -631,6 +634,9 @@ void main() {
     testWidgets(
       'shows GeoMapCard (never a raw KeyVal-only Sede) when the location has an address',
       (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 2400));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
         await db
             .into(db.customers)
             .insert(
@@ -866,7 +872,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Materiali'), findsOneWidget);
+      expect(find.text('Materiali'), findsWidgets);
       expect(find.text('Nessun materiale utilizzato — confermato dal tecnico.'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1007,7 +1013,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db, dio: dio));
       await tester.pumpAndSettle();
 
-      expect(find.text('Controlli'), findsOneWidget);
+      expect(find.text('Controlli'), findsWidgets);
       expect(find.text('Pressione OK'), findsOneWidget);
       // A Checkbox control reads back as a tick, not as the Sì/No pair a TrueFalse control gets.
       expect(find.text('Spuntato'), findsOneWidget);
@@ -1032,7 +1038,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db, dio: dio));
       await tester.pumpAndSettle();
 
-      expect(find.text('Controlli'), findsOneWidget);
+      expect(find.text('Controlli'), findsWidgets);
       expect(find.text('Controllo tc-9'), findsOneWidget);
       expect(find.text('Tutto ok'), findsOneWidget);
 
@@ -1046,6 +1052,70 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Controlli'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — sections', () {
+    testWidgets('renders Attività, Sintesi, Ore, Materiali, Controlli, Documenti in order', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(800, 4000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await _seedSubmittedDraft(db, inviatoAt: DateTime.utc(2026, 6, 2, 9));
+      await _seedStaff(db, 'report-1');
+      await _seedMateriali(db, 'report-1');
+      await _seedControllo(db, 'report-1', controlId: 'tc-1', boolValue: true);
+      final photo = _makeTempFile('section-photo.jpg', [1, 2, 3]);
+      addTearDown(() => photo.deleteSync());
+      await _insertAllegato(
+        db,
+        id: 'photo-1',
+        reportId: 'report-1',
+        fileName: 'lavoro.jpg',
+        storagePath: photo.path,
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      const titles = ['Attività', 'Sintesi', 'Ore', 'Materiali', 'Controlli', 'Documenti & mappa'];
+      final tops = [
+        for (final title in titles)
+          tester.getTopLeft(find.widgetWithText(DetailSection, title).first).dy,
+      ];
+      for (var i = 0; i < titles.length; i++) {
+        expect(find.widgetWithText(DetailSection, titles[i]), findsWidgets);
+      }
+      for (var i = 0; i < tops.length - 1; i++) {
+        expect(tops[i], lessThan(tops[i + 1]), reason: '${titles[i]} before ${titles[i + 1]}');
+      }
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('omits Materiali, Controlli and Documenti when the report has none', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(
+        db,
+        customerSignatureAllegatoId: null,
+        technicianSignatureAllegatoId: null,
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(DetailSection, 'Sintesi'), findsOneWidget);
+      expect(find.widgetWithText(DetailSection, 'Attività'), findsNothing);
+      expect(find.widgetWithText(DetailSection, 'Ore'), findsNothing);
+      expect(find.widgetWithText(DetailSection, 'Materiali'), findsNothing);
+      expect(find.widgetWithText(DetailSection, 'Controlli'), findsNothing);
+      expect(find.widgetWithText(DetailSection, 'Documenti & mappa'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
