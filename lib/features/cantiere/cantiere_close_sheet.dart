@@ -14,11 +14,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../core/icons/app_lucide_icons.dart';
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_palette.dart';
-import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
@@ -32,6 +29,7 @@ import '../timbra/cantiere_timbra_screen.dart'
         isOfflineFailure;
 import '../timbra/gps_status_indicator.dart';
 import 'cantiere_day.dart';
+import 'cantiere_design.dart';
 
 const _uuid = Uuid();
 
@@ -167,105 +165,114 @@ class _CantiereCloseSheetState extends ConsumerState<CantiereCloseSheet> {
     Navigator.of(context).pop();
   }
 
+  InputDecoration _fieldDecoration(BuildContext context, String hint) {
+    final c = context.colors;
+    OutlineInputBorder border() => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(2),
+      borderSide: BorderSide(color: c.borderLight),
+    );
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: cantiereBody(context, 10.5, color: c.inkMuted),
+      filled: true,
+      fillColor: c.bg2,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      border: border(),
+      enabledBorder: border(),
+      focusedBorder: border(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Container(
+      // `.sheet`: sheet fill, a 1px rule on top only, square corners.
+      child: DecoratedBox(
         decoration: BoxDecoration(
-          color: context.colors.bg2,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          color: c.surface,
+          border: Border(top: BorderSide(color: c.borderLight)),
         ),
         child: SafeArea(
           top: false,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              AppSpacing.sm,
-              AppSpacing.pagePadding,
-              AppSpacing.xxl,
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 9, 16, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.colors.inkMuted.withAlpha(60),
-                      borderRadius: BorderRadius.circular(2),
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 9),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: c.borderLight,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: const SizedBox(width: 34, height: 4),
                     ),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.base),
-                Text(
-                  'Chiudi turno',
-                  style: AppTextStyles.headlineMedium.copyWith(color: context.colors.ink),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    'Chiudi turno',
+                    style: cantiereDisplay(context, 17, weight: FontWeight.w700),
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.cantiereName,
-                  style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Text(
-                      'TEMPO TRASCORSO',
-                      style: TextStyle(
-                        fontFamily: 'Archivo',
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1,
-                        color: context.colors.inkMuted,
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text('TEMPO TRASCORSO', style: cantiereMini(context)),
+                      CantiereLiveElapsed(
+                        start: widget.startTime,
+                        clock: true,
+                        style: cantiereTimer(context, size: 19),
                       ),
-                    ),
-                    const Spacer(),
-                    CantiereLiveElapsed(
-                      start: widget.startTime,
-                      style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 10),
                 const GpsStatusIndicator(),
-                const SizedBox(height: 16),
-                AppTextField.multiline(
-                  label: 'Lavoro svolto',
-                  hint: 'Cosa hai fatto in cantiere…',
+                const SizedBox(height: 8),
+                TextField(
                   controller: _descriptionCtrl,
+                  minLines: 1,
                   maxLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: cantiereBody(context, 10.5),
+                  decoration: _fieldDecoration(context, 'Lavoro svolto…'),
                 ),
-                const SizedBox(height: AppSpacing.base),
-                AppTextField.multiline(
-                  label: 'Note di sicurezza',
-                  hint: 'Eventuali anomalie o incidenti…',
+                const SizedBox(height: 8),
+                TextField(
                   controller: _safetyNotesCtrl,
+                  minLines: 1,
                   maxLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                  style: cantiereBody(context, 10.5),
+                  decoration: _fieldDecoration(context, 'Note di sicurezza…'),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 if (_errorMessage != null) ...[
                   TimbraErrorBanner(message: _errorMessage!),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                 ],
-                AppButton.danger(
+                CantiereButton(
                   label: 'Conferma uscita',
-                  icon: const Icon(LucideIcons.logOut),
-                  isLoading: _isConfirmLoading,
+                  loading: _isConfirmLoading,
                   onPressed: _isBusy ? null : () => _confirm(),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(minHeight: 44),
                     child: AppTappable(
                       onTap: _isBusy ? null : () => _confirm(skipNotes: true),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       child: _isSkipLoading
                           ? const SizedBox(
                               width: 13,
@@ -274,9 +281,7 @@ class _CantiereCloseSheetState extends ConsumerState<CantiereCloseSheet> {
                             )
                           : Text(
                               'Esci senza aggiungere note',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: context.colors.inkMuted,
-                              ),
+                              style: cantiereBody(context, 10, color: c.inkMuted),
                             ),
                     ),
                   ),
