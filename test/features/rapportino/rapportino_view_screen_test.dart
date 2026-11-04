@@ -25,6 +25,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
@@ -264,28 +265,23 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders KeyVal rows Sede, Tecnico, Cliente, Ore', (tester) async {
+    testWidgets('renders the Ore row and moves Sede, Tecnico, Cliente into the hero', (
+      tester,
+    ) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.byType(KeyVal), findsWidgets);
-      // Labels are uppercased in KeyVal widget
-      expect(find.text('SEDE'), findsOneWidget);
-      expect(find.text('TECNICO'), findsOneWidget);
-      expect(find.text('CLIENTE'), findsOneWidget);
+      // The three identity facts now live in the hero, not in a KeyVal card.
       expect(find.text('ORE'), findsOneWidget);
+      expect(find.text('SEDE'), findsNothing);
+      expect(find.text('TECNICO'), findsNothing);
+      expect(find.text('CLIENTE'), findsNothing);
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('renders title in ScreenHeader', (tester) async {
-      await _seedSubmittedDraft(db);
-      await tester.pumpWidget(_buildView(db: db));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Manutenzione straordinaria'), findsWidgets);
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Sede')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Tecnico')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Cliente')), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -415,6 +411,8 @@ void main() {
 
       // The customer block (first in the list) is the one actually wrapped in a tappable —
       // the placeholder branch isn't tappable at all.
+      await tester.ensureVisible(find.textContaining('Firmato il').first);
+      await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Firmato il').first);
       await tester.pumpAndSettle();
 
@@ -496,6 +494,8 @@ void main() {
 
       // The thumbnail itself is the tap target — no seeded signature in this test, so it's the
       // only Image on screen.
+      await tester.ensureVisible(find.byType(Image).first);
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(Image).first);
       await tester.pumpAndSettle();
 
@@ -527,18 +527,13 @@ void main() {
   });
 
   group('RapportinoViewScreen — download', () {
-    testWidgets('Scarica PDF button is present', (tester) async {
-      // The Firma tecnico section (shown by default — _seedSubmittedDraft sets both signature
-      // ids) pushes this section below the default test surface height.
-      await tester.binding.setSurfaceSize(const Size(800, 1400));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
+    testWidgets('Scarica PDF button is present in the hero', (tester) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      final pdfBtn = find.text('Scarica PDF');
-      expect(pdfBtn, findsOneWidget);
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Scarica PDF')), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -685,7 +680,7 @@ void main() {
   });
 
   group('RapportinoViewScreen — rejection banner (mobile audit item #1)', () {
-    testWidgets('shows the rejection banner and Rielabora affordance for a Respinto report', (
+    testWidgets('shows the rejection banner and Rilavora affordance for a Respinto report', (
       tester,
     ) async {
       await _seedSubmittedDraft(db, stato: 'Respinto');
@@ -693,7 +688,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("L'ufficio ha respinto"), findsOneWidget);
-      expect(find.text('Rielabora'), findsOneWidget);
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Rilavora')), findsOneWidget);
+      expect(find.text('Rielabora'), findsNothing);
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
       // status_pill_test.dart's own note on this rendering change.
       expect(find.text('RESPINTA'), findsWidgets);
@@ -710,7 +707,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("L'ufficio ha respinto"), findsNothing);
-      expect(find.text('Rielabora'), findsNothing);
+      expect(find.text('Rilavora'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -724,7 +721,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("L'ufficio ha respinto"), findsNothing);
-      expect(find.text('Rielabora'), findsNothing);
+      expect(find.text('Rilavora'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -883,13 +880,7 @@ void main() {
         kmTraveled: 12.0,
         vehicle: 'Furgone',
       );
-      await _seedStaff(
-        db,
-        'report-1',
-        id: 'staff-2',
-        userId: 'tecnico-2',
-        hoursWorked: 1.0,
-      );
+      await _seedStaff(db, 'report-1', id: 'staff-2', userId: 'tecnico-2', hoursWorked: 1.0);
 
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
@@ -1041,12 +1032,77 @@ void main() {
     });
   });
 
+  group('RapportinoViewScreen — detail shell hero', () {
+    testWidgets('renders the generic Rapportino header and the report title in the hero', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rapportino'), findsOneWidget);
+      final hero = find.byType(DetailHero);
+      expect(
+        find.descendant(of: hero, matching: find.text('Manutenzione straordinaria')),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('hero offers Scarica PDF and Condividi for a submitted report', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Scarica PDF')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Condividi')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a rejected report promotes Rilavora to the hero and shows it once', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db, stato: 'Respinto');
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Rilavora')), findsOneWidget);
+      // The banner no longer owns a button of its own: it keeps its explanation only.
+      expect(find.text('Rielabora'), findsNothing);
+      expect(find.textContaining("L'ufficio ha respinto"), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('hero shows Cliente, Sede, Tecnico facts and the status stamp', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Cliente')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Sede')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Tecnico')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('INVIATA')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
   group('RapportinoViewScreen — not found', () {
     testWidgets('shows empty state for unknown report id', (tester) async {
       await tester.pumpWidget(_buildView(db: db, reportId: 'nonexistent'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.byType(UnavailableState), findsOneWidget);
       expect(find.text('Rapporto di intervento non trovato'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
