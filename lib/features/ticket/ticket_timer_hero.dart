@@ -9,7 +9,6 @@ import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/utils/error_message.dart' show humanErrorMessage;
 import '../../core/widgets/app_toast.dart' show ToastTone, showAppToast;
 import '../../core/widgets/detail/detail_hero.dart' show DetailAction;
-import '../../core/widgets/live_dot.dart';
 import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../dashboard/active_trackers_provider.dart' show formatElapsed, nowProvider;
@@ -63,16 +62,14 @@ class TicketTimerLiveValue extends ConsumerWidget {
         ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc(),
         ref.watch(businessTimeProvider),
       );
-      final value = Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const LiveDot(),
-          const SizedBox(width: 8),
-          Text(
-            formatElapsed(elapsed),
-            style: AppTextStyles.docCode.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
-          ),
-        ],
+      // The mockup's `.timer`: red mono 22, tabular, no extra marker.
+      final value = Text(
+        formatElapsed(elapsed),
+        style: AppTextStyles.timerMono.copyWith(
+          fontSize: 22,
+          letterSpacing: -0.66,
+          color: context.colors.accentInk,
+        ),
       );
 
       if (!offline && !_isOffline(worklogs)) return value;
@@ -125,11 +122,7 @@ DetailAction ticketTimerAction(
   final label = running == null ? 'Avvia intervento' : 'Chiudi intervento';
 
   if (busy) {
-    return DetailAction(
-      label: label,
-      enabled: false,
-      disabledReason: 'Aggiornamento del timer…',
-    );
+    return DetailAction(label: label, enabled: false, disabledReason: 'Aggiornamento del timer…');
   }
 
   // The running entry belongs to someone else. Stopping it from this device would close another

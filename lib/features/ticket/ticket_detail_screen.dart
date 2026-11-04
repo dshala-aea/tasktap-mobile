@@ -9,9 +9,13 @@ import 'package:intl/intl.dart';
 import '../../core/files/capture_store.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
+import '../../core/theme/app_text_styles.dart';
 import '../../core/time/business_time.dart' show formatWorkDate;
 import '../../core/utils/error_message.dart' show humanErrorMessage;
 import '../../core/widgets/app_compartment_tile.dart';
+import '../../core/widgets/detail/detail_activity_timeline.dart';
+import '../../core/widgets/detail/detail_attachment_row.dart';
+import '../../core/widgets/detail/detail_facts_grid.dart';
 import '../../core/widgets/detail/detail_hero.dart';
 import '../../core/widgets/detail/detail_scaffold.dart';
 import '../../core/widgets/detail/detail_section.dart';
@@ -173,6 +177,7 @@ class _TicketDetailBody extends ConsumerWidget {
     );
 
     final disagreement = ref.watch(clockDisagreementProvider)[ticket.id];
+    final runningWorklog = ref.watch(runningTicketWorklogProvider(ticket.id));
     final hasOwner = ticket.assignedUserId != null;
 
     // The label is the key for both the tile's icon and the sheet it opens, so the grid and its
@@ -186,6 +191,30 @@ class _TicketDetailBody extends ConsumerWidget {
             technicianNotes: ticket.technicianNotes,
           )
         : _sectionContent(label, ticket.id);
+
+    // Everything the hero used to carry plus the contract / commessa it never could, in the order
+    // the mockup's Sintesi grid reads: customer, site, technician, then the commercial links.
+    final synthesisFacts = [
+      DetailFact(
+        label: 'Cliente',
+        value: customerName,
+        onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
+      ),
+      DetailFact(label: 'Sede', value: locationName),
+      DetailFact(label: 'Tecnico', value: tecnicoLabel),
+      if (commessaLabel != null)
+        DetailFact(
+          label: 'Commessa',
+          value: commessaLabel,
+          onTap: commessaId == null ? null : () => context.push('/altro/commesse/$commessaId'),
+        ),
+      if (contractLabel != null)
+        DetailFact(
+          label: 'Contratto',
+          value: contractLabel,
+          onTap: () => _showContractSummarySheet(context, contractId!),
+        ),
+    ];
 
     return DetailScaffold(
       screenTitle: 'Ticket',
@@ -223,17 +252,30 @@ class _TicketDetailBody extends ConsumerWidget {
       hero: DetailHeroData(
         variant: DetailHeroVariant.operational,
         title: ticket.title,
-        subtitle: reference,
+        kicker: reference == null ? 'Ticket' : 'Ticket · $reference',
+        kickerContext: _kickerContext(ticket.createdAt),
+        // Who and where, two lines, under the title; the labelled fields live in Sintesi.
+        subtitle:
+            '$customerName · $locationName${locationAddress.isEmpty ? '' : ', $locationAddress'}\n'
+            '${assignedId == null ? 'Non assegnato' : 'Assegnato a $tecnicoLabel'}',
         status: DetailStatus(label: statusName),
-        facts: [
-          DetailFact(
-            label: 'Cliente',
-            value: customerName,
-            onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
-          ),
-          DetailFact(label: 'Sede', value: locationName),
-          DetailFact(label: 'Tecnico', value: tecnicoLabel),
-        ],
+        heroCopy: runningWorklog == null
+            ? null
+            : Text.rich(
+                TextSpan(
+                  children: [
+                    const TextSpan(text: 'Ingresso alle '),
+                    TextSpan(
+                      text: _clock(runningWorklog.startTime),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: context.colors.ink,
+                      ),
+                    ),
+                    const TextSpan(text: ' · sessione aperta'),
+                  ],
+                ),
+              ),
         liveValue: TicketTimerLiveValue(ticketId: ticket.id),
         primaryAction: ticketTimerAction(context, ref, ticket.id, isClosed: closed),
         // Both report secondary actions mint a rapportino for this ticket, and a closed ticket is
@@ -314,45 +356,32 @@ class _TicketDetailBody extends ConsumerWidget {
         // office/lookup concerns and sit lower, not removed.
         DetailSectionData(
           title: 'Attività',
-          child: _TicketCompartmentGrid(
-            labels: const ['Ore', 'Storico'],
-            contentBuilder: compartmentContent,
+          trailing: DetailSectionLink(
+            label: 'Apri',
+            onTap: () =>
+                openCompartmentSheet(context, label: 'Ore', content: compartmentContent('Ore')),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // The latest worklog and history events, from the providers the Ore / Storico
+              // compartments below already read. The compartments keep the full detail.
+              _TicketActivityTimeline(ticketId: ticket.id),
+              _TicketCompartmentGrid(
+                labels: const ['Ore', 'Storico'],
+                contentBuilder: compartmentContent,
+              ),
+            ],
           ),
         ),
         DetailSectionData(
           title: 'Sintesi',
+          trailing: DetailSectionMeta('${synthesisFacts.length} campi'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Cliente/Sede/Tecnico are hero facts; repeat only the contract/commessa the hero
-              // cannot carry.
-              if (contractLabel != null || commessaLabel != null) ...[
-                AppCard(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (contractLabel != null)
-                        KeyVal(
-                          label: 'Contratto',
-                          value: contractLabel,
-                          showDivider: commessaLabel != null,
-                          onTap: () => _showContractSummarySheet(context, contractId!),
-                        ),
-                      if (commessaLabel != null)
-                        KeyVal(
-                          label: 'Commessa',
-                          value: commessaLabel,
-                          showDivider: false,
-                          onTap: commessaId == null
-                              ? null
-                              : () => context.push('/altro/commesse/$commessaId'),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.base),
-              ],
+              DetailFactsGrid(facts: synthesisFacts),
+              const SizedBox(height: AppSpacing.base),
               _TicketCompartmentGrid(
                 labels: const ['Dettagli'],
                 contentBuilder: compartmentContent,
@@ -393,6 +422,23 @@ class _TicketDetailBody extends ConsumerWidget {
           ),
         ),
         DetailSectionData(
+          title: 'Allegati',
+          onTitleTap: () => openCompartmentSheet(
+            context,
+            label: 'Allegati',
+            content: compartmentContent('Allegati'),
+          ),
+          trailing: _InlineAttachmentsMeta(
+            ticketId: ticket.id,
+            onOpen: () => openCompartmentSheet(
+              context,
+              label: 'Allegati',
+              content: compartmentContent('Allegati'),
+            ),
+          ),
+          child: _InlineAttachments(ticketId: ticket.id),
+        ),
+        DetailSectionData(
           title: 'Documenti & mappa',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -408,7 +454,7 @@ class _TicketDetailBody extends ConsumerWidget {
                   ),
                 ),
               _TicketCompartmentGrid(
-                labels: const ['Report', 'Controllo', 'Allegati'],
+                labels: const ['Report', 'Controllo'],
                 contentBuilder: compartmentContent,
               ),
               SizedBox(height: context.fabSafeBottom),
@@ -1117,6 +1163,170 @@ class _TicketControlStatusCard extends StatelessWidget {
       case ControlType.unknown:
         return c.stringValue;
     }
+  }
+}
+
+/// `HH:mm` for a time-of-day [Duration] (a worklog's start/end).
+String _clock(Duration d) =>
+    '${d.inHours.toString().padLeft(2, '0')}:${d.inMinutes.remainder(60).toString().padLeft(2, '0')}';
+
+/// The muted part of the hero's kicker row: `OGGI` for a ticket opened today, else its date.
+String _kickerContext(DateTime createdAt) {
+  final created = createdAt.toLocal();
+  final now = DateTime.now();
+  if (created.year == now.year && created.month == now.month && created.day == now.day) {
+    return 'Oggi';
+  }
+  return DateFormat('dd/MM/yyyy', 'it').format(created);
+}
+
+/// How many timeline events the Attività section shows before deferring to the full compartments.
+const int _timelineLimit = 4;
+
+/// The latest activity on a ticket, newest [_timelineLimit] events in chronological order.
+///
+/// Built only from what the Ore and Storico compartments already read — [ticketWorklogsProvider]
+/// (session start/end) and [ticketHistoryProvider] (field changes) — so it adds no request and no
+/// table. A fetch error or an empty answer simply contributes no events; the compartments below
+/// still carry the explanatory offline/error states.
+class _TicketActivityTimeline extends ConsumerWidget {
+  const _TicketActivityTimeline({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final worklogs = ref.watch(ticketWorklogsProvider(ticketId)).valueOrNull ?? const [];
+    final history = ref.watch(ticketHistoryProvider(ticketId)).valueOrNull ?? const [];
+    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? {};
+    final typeMap = ref.watch(ticketTypeMapProvider).valueOrNull ?? {};
+    final now = DateTime.now();
+
+    String when(DateTime t) {
+      final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
+      return DateFormat(sameDay ? 'HH:mm' : 'dd/MM HH:mm', 'it').format(t);
+    }
+
+    final entries = <(DateTime, DetailActivityEvent)>[];
+    for (final w in worklogs) {
+      final day = DateTime(w.workDate.year, w.workDate.month, w.workDate.day);
+      final start = day.add(w.startTime);
+      entries.add((
+        start,
+        DetailActivityEvent(
+          time: when(start),
+          title: w.isRunning ? 'Intervento in corso' : 'Intervento avviato',
+          meta: [
+            if (w.isManualEntry) 'inserimento manuale',
+            if (w.description != null && w.description!.isNotEmpty) w.description!,
+          ].join(' · ').nullIfEmpty,
+          tone: DetailEventTone.good,
+        ),
+      ));
+      if (!w.isRunning && w.endTime != null) {
+        final end = day.add(w.endTime!);
+        entries.add((
+          end,
+          DetailActivityEvent(
+            time: when(end),
+            title: 'Intervento chiuso',
+            meta: w.duration == null ? null : 'Durata ${_hhmm(w.duration!)}',
+          ),
+        ));
+      }
+    }
+    for (final h in history) {
+      final at = h.changedAt.toLocal();
+      entries.add((
+        at,
+        DetailActivityEvent(
+          time: when(at),
+          title: _StoricoTab._fieldLabel(h.fieldName),
+          meta: _StoricoTab._change(h, statusMap, typeMap),
+          tone: h.fieldName == 'StatusId' ? DetailEventTone.warn : DetailEventTone.neutral,
+        ),
+      ));
+    }
+
+    if (entries.isEmpty) return const SizedBox.shrink();
+    entries.sort((a, b) => b.$1.compareTo(a.$1));
+    final latest = entries.take(_timelineLimit).toList().reversed.map((e) => e.$2).toList();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.base),
+      child: DetailActivityTimeline(events: latest),
+    );
+  }
+}
+
+extension on String {
+  String? get nullIfEmpty => isEmpty ? null : this;
+}
+
+/// The trailing slot of the Allegati header: `N file` and the `APRI` link to the full list.
+class _InlineAttachmentsMeta extends ConsumerWidget {
+  const _InlineAttachmentsMeta({required this.ticketId, required this.onOpen});
+
+  final String ticketId;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(ticketAttachmentsProvider(ticketId)).valueOrNull?.length;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (count != null && count > 0) DetailSectionMeta('$count file'),
+        DetailSectionLink(label: 'Apri', onTap: onOpen),
+      ],
+    );
+  }
+}
+
+/// The ticket's attachments as inline rows. Tapping one opens it exactly as the full list does;
+/// the full list (with the upload buttons and any pending uploads) sits behind the header's link.
+class _InlineAttachments extends ConsumerWidget {
+  const _InlineAttachments({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final attachments = ref.watch(ticketAttachmentsProvider(ticketId)).valueOrNull ?? const [];
+    final dio = ref.watch(dioProvider);
+
+    if (attachments.isEmpty) {
+      return Text(
+        'Nessun allegato da mostrare. Apri per aggiungere una foto.',
+        style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: context.colors.inkMuted),
+      );
+    }
+
+    return Column(
+      children: [
+        for (final a in attachments)
+          DetailAttachmentRow(
+            name: a.fileName,
+            icon: const Icon(LucideIcons.paperclip),
+            size: _formatBytes(a.sizeBytes),
+            isLast: a == attachments.last,
+            onTap: () => openAttachment(
+              context,
+              dio: dio,
+              fileName: a.fileName,
+              contentType: a.contentType,
+              url: a.contentUrl,
+              cache: ref.read(attachmentContentCacheProvider),
+              contentRef: (
+                allegatoId: a.id,
+                contentHash: null,
+                sizeBytes: a.sizeBytes,
+                url: a.contentUrl,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 
