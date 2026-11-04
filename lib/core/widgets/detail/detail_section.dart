@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_palette.dart';
-import '../../theme/app_spacing.dart';
 import '../../theme/app_text_styles.dart';
 
 class DetailSectionData {
@@ -9,13 +8,59 @@ class DetailSectionData {
     required this.title,
     required this.child,
     this.trailing,
+    this.onTitleTap,
     this.isEmpty = false,
   });
 
   final String title;
   final Widget child;
+
+  /// Mono 9px trailing slot — usually a [DetailSectionMeta] count or a [DetailSectionLink].
   final Widget? trailing;
+
+  /// Makes the section title itself tappable (e.g. open the full compartment).
+  final VoidCallback? onTitleTap;
   final bool isEmpty;
+}
+
+/// A muted mono trailing label in a section header, uppercased: `4 campi` -> `4 CAMPI`.
+class DetailSectionMeta extends StatelessWidget {
+  const DetailSectionMeta(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(text.toUpperCase());
+}
+
+/// A red mono `APRI`-style link in a section header.
+class DetailSectionLink extends StatelessWidget {
+  const DetailSectionLink({
+    super.key,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text(
+            label.toUpperCase(),
+            style: TextStyle(color: context.colors.accentInk),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class DetailSection extends StatelessWidget {
@@ -29,33 +74,41 @@ class DetailSection extends StatelessWidget {
 
     final colors = context.colors;
 
+    Widget title = Text(
+      data.title,
+      style: AppTextStyles.headlineMedium.copyWith(
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.17,
+        color: colors.ink,
+      ),
+    );
+    if (data.onTitleTap != null) {
+      title = InkWell(onTap: data.onTitleTap, child: title);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
             Expanded(
-              child: Text(
-                data.title,
-                style: AppTextStyles.headlineMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: colors.ink,
-                ),
-              ),
+              child: Align(alignment: Alignment.centerLeft, child: title),
             ),
-            if (data.trailing != null) ...[
-              const SizedBox(width: AppSpacing.sm),
+            if (data.trailing != null)
               DefaultTextStyle.merge(
                 style: AppTextStyles.docCode.copyWith(
-                  fontSize: 11,
+                  fontSize: 9,
+                  letterSpacing: 0.54,
                   color: colors.inkMuted,
                 ),
                 child: data.trailing!,
               ),
-            ],
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
+        const SizedBox(height: 8),
         data.child,
       ],
     );

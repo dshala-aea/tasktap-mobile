@@ -1,62 +1,114 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tasktap_mobile/core/widgets/app_button.dart';
-import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 
 void _noop() {}
 
 void main() {
-  testWidgets('renders entity title, subtitle, stamp and three facts', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: DetailHero(
-          data: DetailHeroData(
-            variant: DetailHeroVariant.operational,
-            title: 'Perdita acqua sotto il lavello',
-            subtitle: 'INT-2026-0412',
-            status: const DetailStatus(
-              label: 'In corso',
-              tone: DetailStatusTone.warn,
+  testWidgets(
+    'title, kicker and subtitle sit above the card; the card holds state and actions',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: DetailHero(
+                data: DetailHeroData(
+                  variant: DetailHeroVariant.operational,
+                  title: 'Perdita acqua sotto il lavello',
+                  kicker: 'Ticket · INT-2026-0412',
+                  kickerContext: 'Oggi',
+                  subtitle: 'Rossi Srl · Sede Milano\nAssegnato a Daniel Shala',
+                  status: const DetailStatus(
+                    label: 'In corso',
+                    tone: DetailStatusTone.warn,
+                  ),
+                  heroCopy: const Text('Ingresso alle 09:12'),
+                  liveValue: const Text('00:42:18'),
+                  primaryAction: const DetailAction(
+                    label: 'Timbra uscita',
+                    onPressed: _noop,
+                  ),
+                ),
+              ),
             ),
-            facts: const [
-              DetailFact(label: 'Cliente', value: 'Rossi Srl'),
-              DetailFact(label: 'Sede', value: 'Milano'),
-              DetailFact(label: 'Tecnico', value: 'D. Shala'),
-            ],
           ),
         ),
-      ),
-    );
-    expect(find.text('Perdita acqua sotto il lavello'), findsOneWidget);
-    expect(find.text('INT-2026-0412'), findsOneWidget);
-    expect(find.text('IN CORSO'), findsOneWidget);
-    expect(find.text('Rossi Srl'), findsOneWidget);
-  });
+      );
 
-  testWidgets('renders at most three facts and accepts a const data literal', (
+      expect(find.text('PERDITA ACQUA SOTTO IL LAVELLO'), findsNothing);
+      expect(find.text('Perdita acqua sotto il lavello'), findsOneWidget);
+      expect(find.text('TICKET · INT-2026-0412'), findsOneWidget);
+      expect(find.text('OGGI'), findsOneWidget);
+      expect(find.text('IN CORSO'), findsOneWidget);
+
+      final card = find.byKey(const Key('detail-hero-card'));
+      // Title, kicker and subtitle are outside the card; state, timer, copy and action inside it.
+      for (final outside in [
+        find.byKey(const Key('detail-hero-title')),
+        find.byKey(const Key('detail-hero-kicker')),
+        find.byKey(const Key('detail-hero-subtitle')),
+      ]) {
+        expect(find.descendant(of: card, matching: outside), findsNothing);
+        expect(
+          tester.getBottomLeft(outside).dy,
+          lessThanOrEqualTo(tester.getTopLeft(card).dy),
+        );
+      }
+      for (final inside in [
+        'IN CORSO',
+        '00:42:18',
+        'Ingresso alle 09:12',
+        'Timbra uscita',
+      ]) {
+        expect(
+          find.descendant(of: card, matching: find.text(inside)),
+          findsOneWidget,
+        );
+      }
+      // Kicker above title above subtitle.
+      final kickerY = tester
+          .getTopLeft(find.byKey(const Key('detail-hero-kicker')))
+          .dy;
+      final titleY = tester
+          .getTopLeft(find.byKey(const Key('detail-hero-title')))
+          .dy;
+      final subY = tester
+          .getTopLeft(find.byKey(const Key('detail-hero-subtitle')))
+          .dy;
+      expect(kickerY, lessThan(titleY));
+      expect(titleY, lessThan(subY));
+
+      final title = tester.widget<Text>(
+        find.byKey(const Key('detail-hero-title')),
+      );
+      expect(title.maxLines, 2);
+      expect(title.style!.fontSize, 30);
+      expect(title.style!.height, 0.98);
+      expect(
+        tester
+            .widget<Text>(find.byKey(const Key('detail-hero-subtitle')))
+            .maxLines,
+        2,
+      );
+    },
+  );
+
+  testWidgets('hero without kicker or subtitle renders just title and card', (
     tester,
   ) async {
     const data = DetailHeroData(
       variant: DetailHeroVariant.summary,
       title: 'Cliente',
       status: DetailStatus(label: 'Attivo'),
-      facts: [
-        DetailFact(label: 'A', value: '1'),
-        DetailFact(label: 'B', value: '2'),
-        DetailFact(label: 'C', value: '3'),
-        DetailFact(label: 'D', value: '4'),
-      ],
     );
 
-    await tester.pumpWidget(MaterialApp(home: DetailHero(data: data)));
+    await tester.pumpWidget(const MaterialApp(home: DetailHero(data: data)));
 
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
-    expect(find.text('4'), findsNothing);
+    expect(find.byKey(const Key('detail-hero-kicker')), findsNothing);
+    expect(find.byKey(const Key('detail-hero-subtitle')), findsNothing);
+    expect(find.text('Cliente'), findsOneWidget);
+    expect(find.text('ATTIVO'), findsOneWidget);
   });
 
   testWidgets(
@@ -76,11 +128,6 @@ void main() {
                 title:
                     'Perdita acqua sotto il lavello della cucina del piano primo con allagamento',
                 status: const DetailStatus(label: 'In corso'),
-                facts: const [
-                  DetailFact(label: 'Cliente', value: 'Rossi Srl'),
-                  DetailFact(label: 'Sede', value: 'Milano'),
-                  DetailFact(label: 'Tecnico', value: 'D. Shala'),
-                ],
                 primaryAction: const DetailAction(
                   label: 'Avvia intervento',
                   onPressed: _noop,
@@ -104,42 +151,7 @@ void main() {
     },
   );
 
-  testWidgets('long fact values clamp at 320px without a layout exception', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(320, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: DetailHero(
-            data: DetailHeroData(
-              variant: DetailHeroVariant.operational,
-              title: 'Ticket',
-              status: const DetailStatus(label: 'Aperto'),
-              facts: const [
-                DetailFact(
-                  label: 'Tecnico',
-                  value:
-                      'Giovanni Battista Alessandro Michelangelo Della Valle '
-                      'di Torrente Montanari',
-                ),
-                DetailFact(label: 'Sede', value: 'Milano'),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(tester.takeException(), isNull);
-    expect(find.textContaining('Giovanni Battista'), findsOneWidget);
-  });
-
-  testWidgets('actions and tappable facts meet the 48px touch target', (
+  testWidgets('primary action is a 48px target, row actions at least 44px', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -150,9 +162,6 @@ void main() {
               variant: DetailHeroVariant.operational,
               title: 'Ticket',
               status: const DetailStatus(label: 'Aperto'),
-              facts: const [
-                DetailFact(label: 'Cliente', value: 'Rossi Srl', onTap: _noop),
-              ],
               primaryAction: const DetailAction(
                 label: 'Avvia intervento',
                 onPressed: _noop,
@@ -167,15 +176,11 @@ void main() {
       ),
     );
 
-    final buttons = find.byType(AppButton);
+    final buttons = find.byType(DetailHeroButton);
     expect(buttons, findsNWidgets(3));
-    for (var i = 0; i < 3; i++) {
-      expect(tester.getSize(buttons.at(i)).height, greaterThanOrEqualTo(48));
-    }
-    expect(
-      tester.getSize(find.byType(AppTappable)).height,
-      greaterThanOrEqualTo(48),
-    );
+    expect(tester.getSize(buttons.at(0)).height, greaterThanOrEqualTo(48));
+    expect(tester.getSize(buttons.at(1)).height, greaterThanOrEqualTo(44));
+    expect(tester.getSize(buttons.at(2)).height, greaterThanOrEqualTo(44));
   });
 
   testWidgets('disabled primary action shows its reason and never fires', (
