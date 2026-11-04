@@ -5,7 +5,7 @@
 //
 // Covers:
 //   1. Renders KeyVal rows (Sede, Tecnico, Cliente, Ore).
-//   2. Renders StatusPill with correct label.
+//   2. Renders the hero status stamp with the correct label (once — Sintesi does not repeat it).
 //   3. Renders Materiali list rows when materiali seeded.
 //   4. Firma cliente and Firma tecnico blocks shown when their signature allegato ids are set.
 //   5. Shows "not found" empty state for unknown report id.
@@ -20,6 +20,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -35,7 +36,9 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/report_pdf_cache.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportino_view_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 class _MockDio extends Mock implements Dio {}
 
@@ -54,6 +57,34 @@ class _HangingReportPdfCache extends ReportPdfCache {
     return pending.future;
   }
 }
+
+/// A cache whose resolve returns immediately, so a test can hold the *share* step open and inspect
+/// the hero while it runs.
+class _ReadyReportPdfCache extends ReportPdfCache {
+  _ReadyReportPdfCache(this.file)
+    : super(download: (_) async => const <int>[], rootLoader: () async => Directory.systemTemp);
+
+  final File file;
+  int resolves = 0;
+
+  @override
+  Future<File> resolve(String reportId, {required bool online}) async {
+    resolves++;
+    return file;
+  }
+}
+
+final _testUser = AuthUser(
+  id: 'user-2',
+  email: 'tecnico@example.com',
+  accessToken: 'tok',
+  refreshToken: 'ref',
+  expiresAt: DateTime.utc(2030, 1, 1),
+);
+
+/// The signed-in user's internal database id, deliberately distinct from [_testUser].id so a
+/// test reading the wrong provider fails loudly. Mirrors create_draft_test.dart's own fixture.
+const _testInternalUserId = 'internal-guid-2';
 
 /// Never geocodes for real — every test in this file overrides `geocodingServiceProvider` with
 /// this, so a report location with an address exercises `GeoMapCard`'s fallback path
@@ -247,16 +278,46 @@ Widget _buildView({
   Dio? dio,
   bool isOnline = true,
   ReportPdfCache? pdfCache,
+  ReportPdfShare? share,
 }) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       if (dio != null) dioProvider.overrideWithValue(dio),
       if (pdfCache != null) reportPdfCacheProvider.overrideWithValue(pdfCache),
+      if (share != null) reportPdfShareProvider.overrideWithValue(share),
       isOnlineProvider.overrideWithValue(isOnline),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
     ],
     child: MaterialApp(home: RapportinoViewScreen(reportId: reportId)),
+  );
+}
+
+/// Same screen, but behind a [GoRouter] with a real editor destination, so the rework test can
+/// assert the hero's push actually navigated there.
+Widget _buildRoutedView({required AppDatabase db, String reportId = 'report-1'}) {
+  final router = GoRouter(
+    initialLocation: '/altro/rapportini/view/$reportId',
+    routes: [
+      GoRoute(
+        path: '/altro/rapportini/view/:reportId',
+        builder: (_, state) => RapportinoViewScreen(reportId: state.pathParameters['reportId']!),
+      ),
+      GoRoute(
+        path: '/altro/rapportini/editor/:reportId',
+        builder: (_, state) => Scaffold(body: Text('editor:${state.pathParameters['reportId']}')),
+      ),
+    ],
+  );
+  return ProviderScope(
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      isOnlineProvider.overrideWithValue(true),
+      geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+      currentUserProvider.overrideWithValue(_testUser),
+      internalUserIdProvider.overrideWith((ref) async => _testInternalUserId),
+    ],
+    child: MaterialApp.router(routerConfig: router),
   );
 }
 
@@ -274,15 +335,18 @@ void main() {
   tearDown(() async => db.close());
 
   group('RapportinoViewScreen — header card', () {
-    testWidgets('renders StatusPill Inviata for submitted draft', (tester) async {
+    testWidgets('renders the hero status stamp Inviata for submitted draft', (tester) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.byType(StatusPill), findsWidgets);
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.byType(StatusStamp)), findsOneWidget);
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
       // status_pill_test.dart's own note on this rendering change.
-      expect(find.text('INVIATA'), findsWidgets);
+      expect(find.descendant(of: hero, matching: find.text('INVIATA')), findsOneWidget);
+      // Sintesi no longer repeats the status: the hero stamp is the single authoritative one.
+      expect(find.byType(StatusPill), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1185,7 +1249,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('a second tap while the PDF downloads does not start another download', (
+    testWidgets('while the PDF downloads, both PDF actions are disabled and re-entry is ignored', (
       tester,
     ) async {
       await _seedSubmittedDraft(db);
@@ -1196,6 +1260,7 @@ void main() {
 
       final hero = find.byType(DetailHero);
       final pdfLabel = find.descendant(of: hero, matching: find.text('Scarica PDF'));
+      final shareLabel = find.descendant(of: hero, matching: find.text('Condividi'));
       await tester.tap(pdfLabel);
       await tester.pump();
 
@@ -1205,11 +1270,88 @@ void main() {
         find.ancestor(of: pdfLabel, matching: find.byType(AppButton)),
       );
       expect(primary.onPressed, equals(null));
+      // The shared flag covers Condividi too: it resolves the same cache entry, so it must not
+      // start while the download is still writing the same .part file.
+      final secondary = tester.widget<AppButton>(
+        find.ancestor(of: shareLabel, matching: find.byType(AppButton)),
+      );
+      expect(secondary.onPressed, equals(null));
 
-      // The disabled action must ignore the second tap: no concurrent write to the same .part.
+      // Neither disabled action may start a second resolve.
       await tester.tap(pdfLabel);
       await tester.pump();
+      await tester.tap(shareLabel);
+      await tester.pump();
       expect(cache.resolves, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('while the share sheet is open, Scarica PDF is disabled too', (tester) async {
+      await _seedSubmittedDraft(db);
+      final file = _makeTempFile('share-ready.pdf', [1, 2, 3]);
+      addTearDown(() => file.deleteSync());
+      final cache = _ReadyReportPdfCache(file);
+      final sharePending = Completer<void>();
+      var shares = 0;
+
+      await tester.pumpWidget(
+        _buildView(
+          db: db,
+          pdfCache: cache,
+          share: (file) {
+            shares++;
+            return sharePending.future;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      final pdfLabel = find.descendant(of: hero, matching: find.text('Scarica PDF'));
+      final shareLabel = find.descendant(of: hero, matching: find.text('Condividi'));
+      await tester.tap(shareLabel);
+      await tester.pump();
+
+      expect(cache.resolves, 1);
+      expect(shares, 1);
+      final primary = tester.widget<AppButton>(
+        find.ancestor(of: pdfLabel, matching: find.byType(AppButton)),
+      );
+      expect(primary.onPressed, equals(null));
+
+      await tester.tap(pdfLabel);
+      await tester.pump();
+      expect(cache.resolves, 1, reason: 'the download must not race the in-flight share resolve');
+
+      sharePending.complete();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('hero Rilavora creates a reworked draft and opens the editor', (tester) async {
+      await _seedSubmittedDraft(db, stato: 'Respinto');
+
+      await tester.pumpWidget(_buildRoutedView(db: db));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      await tester.tap(find.descendant(of: hero, matching: find.text('Rilavora')));
+      await tester.pumpAndSettle();
+
+      // createReworkDraft really ran: a fresh Bozza row exists, distinct from the rejected one.
+      final rows = await db.select(db.draftReports).get();
+      expect(rows, hasLength(2));
+      final reworked = rows.singleWhere((r) => r.id != 'report-1');
+      expect(reworked.stato, 'Bozza');
+      expect(reworked.title, 'Manutenzione straordinaria');
+      expect(reworked.isLocalOnly, isTrue);
+
+      // ...and the hero pushed its editor route for that new id.
+      expect(find.text('editor:${reworked.id}'), findsOneWidget);
+      expect(find.text('editor:report-1'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

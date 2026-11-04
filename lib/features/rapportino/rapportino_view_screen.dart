@@ -37,18 +37,30 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // RapportinoViewScreen — read-only view for submitted rapportini (D3b).
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Per-report in-flight flags for the hero's PDF actions.
+/// One per-report in-flight flag shared by the hero's two PDF actions.
 ///
-/// The hero calls the PDF helpers directly (it has no local widget state to hold a spinner), so
-/// these keep a second tap from starting a concurrent download (both writes target the same
-/// `.part` file) or a second share sheet. Keyed by report id so two open reports never block each
-/// other.
+/// Scarica PDF and Condividi resolve the same cache entry — same `report-{id}.pdf.part` write — so
+/// they must not run independently: a share starting while a download is still writing can read a
+/// half-renamed file, and two downloads race on the same temporary path. Both actions therefore
+/// take this single flag, and both disable while it is set. Keyed by report id so two open reports
+/// never block each other.
 final _rapportinoPdfBusyProvider = StateProvider.autoDispose.family<bool, String>(
   (ref, reportId) => false,
 );
-final _rapportinoShareBusyProvider = StateProvider.autoDispose.family<bool, String>(
+
+/// Per-report guard for the hero's rework action, so a double tap mints only one draft while two
+/// open reports can still be reworked independently.
+final _rapportinoReworkBusyProvider = StateProvider.autoDispose.family<bool, String>(
   (ref, reportId) => false,
 );
+
+/// How a resolved PDF is handed to another app (share sheet). Injected so the hero's share guard
+/// can be exercised without popping a real platform sheet.
+typedef ReportPdfShare = Future<void> Function(File file);
+
+final reportPdfShareProvider = Provider<ReportPdfShare>((ref) {
+  return (file) => SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+});
 
 class RapportinoViewScreen extends ConsumerWidget {
   const RapportinoViewScreen({super.key, required this.reportId});
@@ -120,7 +132,6 @@ class _RapportinoViewBody extends ConsumerWidget {
         f.control.id: f,
     };
 
-    final statusLabel = rapportinoStatusLabel(draft);
     final dateLabel = DateFormat(
       'dd/MM/yyyy',
       'it',
@@ -248,9 +259,10 @@ class _RapportinoViewBody extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Header card: StatusPill + date + KeyVal metadata ──────────
+              // ── Header card: date + KeyVal metadata ───────────────────────
               //
-              // Cliente/Sede/Tecnico are hero facts; the rest of the report's own record lives
+              // Cliente/Sede/Tecnico are hero facts and the status stamp in the hero is the
+              // single authoritative status display; the rest of the report's own record lives
               // here so the document's identity is not split across the hero.
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.base),
@@ -263,8 +275,6 @@ class _RapportinoViewBody extends ConsumerWidget {
                         padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
                         child: Row(
                           children: [
-                            StatusPill(stato: statusLabel),
-                            const SizedBox(width: 8),
                             Text(
                               dateLabel,
                               style: TextStyle(
@@ -743,11 +753,11 @@ Future<void> _shareReportPdf(BuildContext context, WidgetRef ref, String reportI
   final file = await _resolveReportPdf(ref, reportId, context);
   if (file == null) return;
 
-  await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+  await ref.read(reportPdfShareProvider)(file);
 }
 
-/// Runs the hero's Scarica PDF action with the per-report in-flight guard: the provider disables
-/// the action while the download runs, and the re-entry check covers a tap that lands before the
+/// Runs the hero's Scarica PDF action behind the shared per-report guard: the provider disables
+/// both PDF actions while either runs, and the re-entry check covers a tap that lands before the
 /// rebuild.
 Future<void> _downloadReportPdfFromHero(
   BuildContext context,
@@ -764,10 +774,10 @@ Future<void> _downloadReportPdfFromHero(
   }
 }
 
-/// Runs the hero's Condividi action with the same per-report in-flight guard as
-/// [_downloadReportPdfFromHero].
+/// Runs the hero's Condividi action behind the same shared per-report guard as
+/// [_downloadReportPdfFromHero], because both resolve the same cached file.
 Future<void> _shareReportPdfFromHero(BuildContext context, WidgetRef ref, String reportId) async {
-  final busy = _rapportinoShareBusyProvider(reportId);
+  final busy = _rapportinoPdfBusyProvider(reportId);
   if (ref.read(busy)) return;
   ref.read(busy.notifier).state = true;
   try {
@@ -777,17 +787,15 @@ Future<void> _shareReportPdfFromHero(BuildContext context, WidgetRef ref, String
   }
 }
 
-/// Guards the hero's rework action against a double tap minting two drafts.
-bool _reworkInFlight = false;
-
 /// Creates a fresh local draft from a rejected report and opens it in the editor.
 ///
 /// A rework clones this report's data into a brand-new local draft — see createReworkDraft's own
 /// doc comment for why it can't simply reopen this same report id (the backend's state machine
 /// only allows Bozza → Inviato).
 Future<void> _reworkReport(BuildContext context, WidgetRef ref, DraftReport draft) async {
-  if (_reworkInFlight) return;
-  _reworkInFlight = true;
+  final busy = _rapportinoReworkBusyProvider(draft.id);
+  if (ref.read(busy)) return;
+  ref.read(busy.notifier).state = true;
   try {
     final newId = await createReworkDraft(ref, draft);
     if (!context.mounted) return;
@@ -801,7 +809,7 @@ Future<void> _reworkReport(BuildContext context, WidgetRef ref, DraftReport draf
     }
     context.push(AppRoutes.rapportiniEditor(newId));
   } finally {
-    _reworkInFlight = false;
+    if (context.mounted) ref.read(busy.notifier).state = false;
   }
 }
 
@@ -842,7 +850,7 @@ DetailHeroData _buildRapportinoHero(BuildContext context, WidgetRef ref, DraftRe
             draft.insertedUserId);
   final rejected = rapportinoIsRejected(draft);
   final pdfBusy = ref.watch(_rapportinoPdfBusyProvider(draft.id));
-  final shareBusy = ref.watch(_rapportinoShareBusyProvider(draft.id));
+  final reworkBusy = ref.watch(_rapportinoReworkBusyProvider(draft.id));
 
   return DetailHeroData(
     variant: DetailHeroVariant.operational,
@@ -857,7 +865,9 @@ DetailHeroData _buildRapportinoHero(BuildContext context, WidgetRef ref, DraftRe
         ? DetailAction(
             label: 'Rilavora',
             icon: const Icon(LucideIcons.penTool, size: 16),
-            onPressed: () => _reworkReport(context, ref, draft),
+            enabled: !reworkBusy,
+            disabledReason: reworkBusy ? 'Rielaborazione in corso…' : null,
+            onPressed: reworkBusy ? null : () => _reworkReport(context, ref, draft),
           )
         : DetailAction(
             label: 'Scarica PDF',
@@ -870,8 +880,9 @@ DetailHeroData _buildRapportinoHero(BuildContext context, WidgetRef ref, DraftRe
       DetailAction(
         label: 'Condividi',
         icon: const Icon(LucideIcons.share2, size: 16),
-        enabled: !shareBusy,
-        onPressed: shareBusy ? null : () => _shareReportPdfFromHero(context, ref, draft.id),
+        enabled: !pdfBusy,
+        disabledReason: pdfBusy ? 'Download in corso…' : null,
+        onPressed: pdfBusy ? null : () => _shareReportPdfFromHero(context, ref, draft.id),
       ),
     ],
   );
