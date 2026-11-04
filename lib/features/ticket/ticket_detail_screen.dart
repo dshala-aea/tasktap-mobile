@@ -60,29 +60,6 @@ class TicketDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
-  /// Ordered by who is holding the phone.
-  ///
-  /// This was a pinned horizontal strip (four tabs fit a phone, there are eight — four sat past
-  /// the visible edge), then an accordion (every name on screen, but the page grew as long as
-  /// whichever section was open, and a technician had to scroll past a long one to reach the
-  /// next). Now a grid of compartments: every name is on screen at a constant size regardless of
-  /// what is open, and opening one is a bottom sheet over the ticket rather than the ticket
-  /// itself growing and shrinking underneath you. The order survives from the tab era for the
-  /// same reason it was chosen then — Dettagli/Report/Controllo/Allegati/Ore is the technician's
-  /// own path through a ticket; Pianificazioni, Fabbisogno and Storico are office/lookup concerns
-  /// and sit lower, not removed.
-  static const _sectionLabels = [
-    'Dettagli',
-    'Report',
-    'Controllo',
-    'Asset',
-    'Allegati',
-    'Ore',
-    'Pianificazioni',
-    'Fabbisogno',
-    'Storico',
-  ];
-
   @override
   Widget build(BuildContext context) {
     final ticketAsync = ref.watch(ticketByIdProvider(widget.ticketId));
@@ -115,7 +92,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
           ticket: ticket,
           statusMap: statusMap,
           typeMap: typeMap,
-          sectionLabels: _sectionLabels,
         );
       },
     );
@@ -127,13 +103,11 @@ class _TicketDetailBody extends ConsumerWidget {
     required this.ticket,
     required this.statusMap,
     required this.typeMap,
-    required this.sectionLabels,
   });
 
   final Ticket ticket;
   final Map<int, String> statusMap;
   final Map<int, String> typeMap;
-  final List<String> sectionLabels;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -200,6 +174,18 @@ class _TicketDetailBody extends ConsumerWidget {
 
     final disagreement = ref.watch(clockDisagreementProvider)[ticket.id];
     final hasOwner = ticket.assignedUserId != null;
+
+    // The label is the key for both the tile's icon and the sheet it opens, so the grid and its
+    // content can never drift apart by position. 'Dettagli' needs fields already resolved here
+    // rather than a ticketId-keyed provider, so its call site builds `_DettagliSheet` directly.
+    Widget compartmentContent(String label) => label == 'Dettagli'
+        ? _DettagliSheet(
+            dateLabel: dateLabel,
+            closedLabel: closedLabel,
+            description: ticket.description,
+            technicianNotes: ticket.technicianNotes,
+          )
+        : _sectionContent(label, ticket.id);
 
     return DetailScaffold(
       screenTitle: 'Ticket',
@@ -275,29 +261,6 @@ class _TicketDetailBody extends ConsumerWidget {
             // the thing the pill displays, so they belong in the same row.
             _TicketStatusRow(ticket: ticket, statusName: statusName, typeName: typeName),
 
-            // Cantiere chip — a one-line contextual fact. Only shown when this ticket is actually
-            // linked to a cantiere; tapping it opens CantiereDetailScreen, which now owns "Timbra
-            // cantiere".
-            if (ticket.cantiereId != null)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.md),
-                child: Consumer(
-                  builder: (context, ref, _) {
-                    final cantiereAsync = ref.watch(cantiereByIdProvider(ticket.cantiereId!));
-                    // Neutral fallback, not the raw GUID — this isn't just a brief loading-state
-                    // placeholder, it's the permanent label whenever the linked cantiere falls
-                    // outside this technician's synced scope (a normal, expected case).
-                    final label = cantiereAsync.valueOrNull?.name ?? 'Cantiere collegato';
-                    return AppChip(
-                      label: 'Cantiere: $label',
-                      onTap: () => context.push(
-                        AppRoutes.cantieriDetailPath(ticket.cantiereId!, ticketId: ticket.id),
-                      ),
-                    );
-                  },
-                ),
-              ),
-
             if (hasOwner && closed)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpacing.md),
@@ -324,10 +287,91 @@ class _TicketDetailBody extends ConsumerWidget {
         ),
       ),
       sections: [
-        // Temporary: everything below the chrome stays together until Task 8 splits it into four
-        // sections. Keeping it in one section means the screen remains fully working meanwhile.
+        // Ordered by who is holding the phone: the work being done, then the reference record it
+        // hangs off. Each compartment is a bottom sheet over the ticket rather than page growth,
+        // so the ticket's own shape stays constant no matter what is open.
         DetailSectionData(
           title: 'Attività',
+          child: _TicketCompartmentGrid(
+            labels: const ['Ore', 'Storico'],
+            contentBuilder: compartmentContent,
+          ),
+        ),
+        DetailSectionData(
+          title: 'Sintesi',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Cliente/Sede/Tecnico are hero facts; repeat only the contract/commessa the hero
+              // cannot carry.
+              if (contractLabel != null || commessaLabel != null) ...[
+                AppCard(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (contractLabel != null)
+                        KeyVal(
+                          label: 'Contratto',
+                          value: contractLabel,
+                          showDivider: commessaLabel != null,
+                          onTap: () => _showContractSummarySheet(context, contractId!),
+                        ),
+                      if (commessaLabel != null)
+                        KeyVal(
+                          label: 'Commessa',
+                          value: commessaLabel,
+                          showDivider: false,
+                          onTap: commessaId == null
+                              ? null
+                              : () => context.push('/altro/commesse/$commessaId'),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.base),
+              ],
+              _TicketCompartmentGrid(
+                labels: const ['Dettagli'],
+                contentBuilder: compartmentContent,
+              ),
+            ],
+          ),
+        ),
+        DetailSectionData(
+          title: 'Relazioni',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Cantiere chip — a one-line contextual fact. Only shown when this ticket is
+              // actually linked to a cantiere; tapping it opens CantiereDetailScreen, which owns
+              // "Timbra cantiere".
+              if (ticket.cantiereId != null) ...[
+                Consumer(
+                  builder: (context, ref, _) {
+                    final cantiereAsync = ref.watch(cantiereByIdProvider(ticket.cantiereId!));
+                    // Neutral fallback, not the raw GUID — the permanent label whenever the
+                    // linked cantiere falls outside this technician's synced scope.
+                    final label = cantiereAsync.valueOrNull?.name ?? 'Cantiere collegato';
+                    return AppChip(
+                      label: 'Cantiere: $label',
+                      onTap: () => context.push(
+                        AppRoutes.cantieriDetailPath(ticket.cantiereId!, ticketId: ticket.id),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: AppSpacing.base),
+              ],
+              _TicketCompartmentGrid(
+                labels: const ['Pianificazioni', 'Fabbisogno'],
+                contentBuilder: compartmentContent,
+              ),
+            ],
+          ),
+        ),
+        DetailSectionData(
+          title: 'Documenti & mappa',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -341,83 +385,10 @@ class _TicketDetailBody extends ConsumerWidget {
                     address: locationAddress,
                   ),
                 ),
-
-              // Now: just enough to know where you stand. Data, Chiusura, Descrizione and Note
-              // tecnico moved into the Dettagli compartment below — they're read once, not on
-              // every glance at this ticket, and belonged with the rest of the reference record
-              // rather than pinned above it.
-              AppCard(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    KeyVal(
-                      label: 'Cliente',
-                      value: customerName,
-                      onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
-                    ),
-                    KeyVal(label: 'Sede', value: locationName),
-                    KeyVal(
-                      label: 'Tecnico',
-                      value: tecnicoLabel,
-                      showDivider: contractLabel != null || commessaLabel != null,
-                    ),
-                    if (contractLabel != null)
-                      KeyVal(
-                        label: 'Contratto',
-                        value: contractLabel,
-                        showDivider: commessaLabel != null,
-                        onTap: () => _showContractSummarySheet(context, contractId!),
-                      ),
-                    if (commessaLabel != null)
-                      KeyVal(
-                        label: 'Commessa',
-                        value: commessaLabel,
-                        showDivider: false,
-                        onTap: commessaId == null
-                            ? null
-                            : () => context.push('/altro/commesse/$commessaId'),
-                      ),
-                  ],
-                ),
+              _TicketCompartmentGrid(
+                labels: const ['Report', 'Controllo', 'Allegati'],
+                contentBuilder: compartmentContent,
               ),
-
-              const SizedBox(height: AppSpacing.base),
-
-              // The record — a grid of compartments, not an accordion. Each opens a bottom sheet
-              // over the ticket rather than growing the page in place: the ticket's own shape
-              // stays constant no matter which section (or how much of it) is open. See
-              // _sectionLabels' own doc comment for the fuller reasoning and what this replaced.
-              GridView(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 180,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 1.5,
-                ),
-                children: [
-                  for (final label in sectionLabels)
-                    AppCompartmentTile(
-                      icon: _sectionIcon(label),
-                      label: label,
-                      onTap: () => openCompartmentSheet(
-                        context,
-                        label: label,
-                        content: label == 'Dettagli'
-                            ? _DettagliSheet(
-                                dateLabel: dateLabel,
-                                closedLabel: closedLabel,
-                                description: ticket.description,
-                                technicianNotes: ticket.technicianNotes,
-                              )
-                            : _sectionContent(label, ticket.id),
-                      ),
-                    ),
-                ],
-              ),
-
               SizedBox(height: context.fabSafeBottom),
             ],
           ),
@@ -690,8 +661,8 @@ class _Prose extends StatelessWidget {
 }
 
 /// Maps a compartment's label to its content widget. A switch on the label, not an index, so the
-/// tile grid and its content can never drift apart by position — the label in `_sectionLabels` is
-/// also the key here. 'Dettagli' isn't here: it needs ticket fields already resolved by
+/// tile grid and its content can never drift apart by position — the label is the key both here
+/// and in [_sectionIcon]. 'Dettagli' isn't here: it needs ticket fields already resolved by
 /// `_TicketDetailBody`, not a ticketId-keyed provider, so its call site builds `_DettagliSheet`
 /// directly instead of routing through this switch.
 Widget _sectionContent(String label, String ticketId) => switch (label) {
@@ -721,6 +692,46 @@ IconData _sectionIcon(String label) => switch (label) {
   'Storico' => LucideIcons.history,
   _ => LucideIcons.circle,
 };
+
+/// The record's compartment grid, shared by all four sections. Same fixed geometry the ticket
+/// screen always used; the caller supplies the labels and the builder that turns a tapped label
+/// into its sheet content, so the grid stays a layout helper and never knows what a compartment
+/// means.
+class _TicketCompartmentGrid extends StatelessWidget {
+  const _TicketCompartmentGrid({
+    required this.labels,
+    required this.contentBuilder,
+  });
+
+  final List<String> labels;
+  final Widget Function(String label) contentBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 180,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 1.5,
+      ),
+      children: [
+        for (final label in labels)
+          AppCompartmentTile(
+            icon: _sectionIcon(label),
+            label: label,
+            onTap: () => openCompartmentSheet(
+              context,
+              label: label,
+              content: contentBuilder(label),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 /// The Dettagli compartment: what used to sit above the fold on every ticket, now read on demand.
 class _DettagliSheet extends StatelessWidget {
