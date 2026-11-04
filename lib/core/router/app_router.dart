@@ -73,6 +73,7 @@ import '../../features/rapportino/rapportino_view_screen.dart';
 import '../../features/timbra/cantiere_timbra_screen.dart';
 import '../../features/cantiere/cantieri_list_screen.dart';
 import '../../features/cantiere/cantiere_detail_screen.dart';
+import '../../features/cantiere/cantiere_map_screen.dart';
 import '../../features/altro/forbidden_screen.dart';
 import '../../features/altro/session_recovery_screen.dart';
 import '../../data/auth/session_recovery.dart';
@@ -184,6 +185,10 @@ abstract final class AppRoutes {
   /// (rather than a required path segment) to avoid a route-shape change; the screen itself
   /// treats a missing id the same as a cantiere that failed to resolve.
   static const String cantiereTimbra = '/cantiere-timbra';
+
+  /// Map-led cantiere view, reachable from the detail's map card.
+  static String cantiereMapPath(String cantiereId) =>
+      '/cantieri/${Uri.encodeComponent(cantiereId)}/mappa';
 
   /// Build the cantiere timbra path with optional query params.
   static String cantiereTimbraPath({
@@ -646,6 +651,14 @@ GoRouter buildRouter(WidgetRef ref) {
                       cantiereId: state.pathParameters['id']!,
                       ticketId: state.uri.queryParameters['ticketId'],
                     ),
+                    routes: [
+                      GoRoute(
+                        path: 'mappa',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) =>
+                            CantiereMapScreen(cantiereId: state.pathParameters['id']!),
+                      ),
+                    ],
                   ),
                 ],
               ),
