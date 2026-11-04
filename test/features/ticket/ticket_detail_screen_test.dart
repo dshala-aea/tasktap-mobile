@@ -1888,8 +1888,9 @@ void main() {
       // (still in the tree, per Navigator semantics, just not what find.text sees by default).
       expect(find.byType(InteractiveViewer), findsOneWidget);
       expect(find.text('foto1.jpg'), findsOneWidget);
-      // Viewer title + the (offstage) inline row + the (offstage) sheet row.
-      expect(find.text('foto1.jpg', skipOffstage: false), findsNWidgets(3));
+      // Viewer title + the (offstage) sheet row. The inline Allegati row reads the mirror only
+      // (empty here), so opening the page did not fetch it.
+      expect(find.text('foto1.jpg', skipOffstage: false), findsNWidgets(2));
       await resetAndDispose(tester);
     });
 
@@ -2551,24 +2552,24 @@ void main() {
   });
 
   group('TicketDetailScreen — Storico tab (index 6)', () {
-    testWidgets('the Attività timeline shows the latest history from the existing provider', (
+    testWidgets('the Attività timeline shows history from the mirror and issues no history request', (
       tester,
     ) async {
       await seedBase(db);
+      await db
+          .into(db.ticketHistory)
+          .insert(
+            TicketHistoryCompanion.insert(
+              id: 'h1',
+              ticketId: 'ticket-1',
+              fieldName: 'StatusId',
+              oldValue: const Value(null),
+              newValue: const Value('1'),
+              changedByUserId: 'user-1',
+              changedAt: DateTime.now().toUtc(),
+            ),
+          );
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history')).thenAnswer(
-        (_) async => _okResponse<List<dynamic>>([
-          {
-            'id': 'h1',
-            'ticketId': 'ticket-1',
-            'fieldName': 'StatusId',
-            'oldValue': null,
-            'newValue': '1',
-            'changedByUserId': 'user-1',
-            'changedAt': DateTime.now().toUtc().toIso8601String(),
-          },
-        ], '/api/Tickets/ticket-1/history'),
-      );
 
       await pump(tester, dio: dio, isOnline: true);
 
@@ -2578,6 +2579,29 @@ void main() {
       expect(find.descendant(of: timeline, matching: find.text('— → Aperto')), findsOneWidget);
       // Full detail stays one tap away.
       expect(find.text('APRI'), findsWidgets);
+      verifyNever(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history'));
+      verifyNever(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'));
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('with an empty mirror the page shows no timeline and a collapsed Allegati', (
+      tester,
+    ) async {
+      await seedBase(db);
+      final dio = MockDio();
+
+      await pump(tester, dio: dio, isOnline: true);
+
+      expect(find.byType(DetailActivityTimeline), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('Apri per vedere o aggiungere allegati.'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Apri per vedere o aggiungere allegati.'), findsOneWidget);
+      expect(find.textContaining(' FILE'), findsNothing);
+      verifyNever(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history'));
+      verifyNever(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'));
       await resetAndDispose(tester);
     });
 
