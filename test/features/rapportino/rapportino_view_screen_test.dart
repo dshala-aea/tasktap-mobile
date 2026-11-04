@@ -27,6 +27,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_activity_timeline.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_facts_grid.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_section.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
@@ -341,9 +343,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final hero = find.byType(DetailHero);
-      expect(find.descendant(of: hero, matching: find.byType(StatusStamp)), findsOneWidget);
-      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
-      // status_pill_test.dart's own note on this rendering change.
+      // The hero card's mono state label, uppercased — the single authoritative status display.
       expect(find.descendant(of: hero, matching: find.text('INVIATA')), findsOneWidget);
       // Sintesi no longer repeats the status: the hero stamp is the single authoritative one.
       expect(find.byType(StatusPill), findsNothing);
@@ -352,23 +352,26 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders the Ore row and moves Sede, Tecnico, Cliente into the hero', (
+    testWidgets('renders Cliente, Sede, Tecnico, Stato firma and Ore in the Sintesi facts grid', (
       tester,
     ) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      // The three identity facts now live in the hero, not in a KeyVal card.
-      expect(find.text('ORE'), findsOneWidget);
-      expect(find.text('SEDE'), findsNothing);
-      expect(find.text('TECNICO'), findsNothing);
-      expect(find.text('CLIENTE'), findsNothing);
-
+      // Facts moved out of the hero into the Sintesi grid (mono uppercase labels).
+      final grid = find.byType(DetailFactsGrid);
+      for (final label in ['CLIENTE', 'SEDE', 'TECNICO', 'DATA', 'STATO FIRMA', 'ORE']) {
+        expect(
+          find.descendant(of: grid, matching: find.text(label)),
+          findsOneWidget,
+          reason: label,
+        );
+      }
       final hero = find.byType(DetailHero);
-      expect(find.descendant(of: hero, matching: find.text('Sede')), findsOneWidget);
-      expect(find.descendant(of: hero, matching: find.text('Tecnico')), findsOneWidget);
-      expect(find.descendant(of: hero, matching: find.text('Cliente')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('SEDE')), findsNothing);
+      // Both signatures were recorded on the seeded draft.
+      expect(find.descendant(of: grid, matching: find.text('Firmato')), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -386,9 +389,8 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Diagnosi e soluzione'), findsOneWidget);
-      expect(find.text('Diagnosi'), findsOneWidget);
-      expect(find.text('Soluzione'), findsOneWidget);
+      expect(find.text('DIAGNOSI'), findsOneWidget);
+      expect(find.text('SOLUZIONE'), findsOneWidget);
       expect(find.textContaining('Pressostato guasto'), findsOneWidget);
       expect(find.textContaining('Sostituito pressostato'), findsOneWidget);
 
@@ -402,8 +404,8 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Diagnosi'), findsOneWidget);
-      expect(find.text('Soluzione'), findsNothing);
+      expect(find.text('DIAGNOSI'), findsOneWidget);
+      expect(find.text('SOLUZIONE'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -459,7 +461,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Firma cliente'), findsOneWidget);
+      expect(find.text('FIRMA CLIENTE'), findsOneWidget);
       // _seedSubmittedDraft sets both signature ids — no allegato row seeded for either here, so
       // both sections render the "Firmato il" placeholder.
       expect(find.textContaining('Firmato il'), findsNWidgets(2));
@@ -515,7 +517,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Firma tecnico'), findsOneWidget);
+      expect(find.text('FIRMA TECNICO'), findsOneWidget);
       // Both signature blocks render "Firmato il" — one for each section.
       expect(find.textContaining('Firmato il'), findsNWidgets(2));
 
@@ -551,8 +553,8 @@ void main() {
 
       // Both signatures resolved to real images — the placeholder pen icon is gone entirely.
       expect(find.byIcon(LucideIcons.penTool), findsNothing);
-      expect(find.text('Firma cliente'), findsOneWidget);
-      expect(find.text('Firma tecnico'), findsOneWidget);
+      expect(find.text('FIRMA CLIENTE'), findsOneWidget);
+      expect(find.text('FIRMA TECNICO'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -577,7 +579,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Foto (1)'), findsOneWidget);
+      expect(find.text('FOTO (1)'), findsOneWidget);
 
       // The thumbnail itself is the tap target — no seeded signature in this test, so it's the
       // only Image on screen.
@@ -607,7 +609,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Only the signature block claims it — the photo section never appears for zero photos.
-      expect(find.textContaining('Foto ('), findsNothing);
+      expect(find.textContaining('FOTO ('), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -826,7 +828,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Note tecnico'), findsOneWidget);
+      expect(find.text('NOTE TECNICO'), findsOneWidget);
       expect(find.text('Verificare guarnizione al prossimo giro'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -838,7 +840,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Note tecnico'), findsNothing);
+      expect(find.text('NOTE TECNICO'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -851,7 +853,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Bozza generata con AI, poi rivista'), findsOneWidget);
+      expect(find.text('AI, poi rivista'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -862,7 +864,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Bozza generata con AI, poi rivista'), findsNothing);
+      expect(find.text('AI, poi rivista'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -907,10 +909,10 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Cronologia'), findsOneWidget);
-      expect(find.text('INVIATO IL'), findsOneWidget);
-      expect(find.text('CONTROLLATO IL'), findsOneWidget);
-      expect(find.text('FATTURATO IL'), findsOneWidget);
+      expect(find.byType(DetailActivityTimeline), findsOneWidget);
+      expect(find.text('Inviato'), findsOneWidget);
+      expect(find.text('Controllato'), findsOneWidget);
+      expect(find.text('Fatturato'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -921,7 +923,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Cronologia'), findsNothing);
+      expect(find.byType(DetailActivityTimeline), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -975,7 +977,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Squadra e ore'), findsOneWidget);
+      expect(find.widgetWithText(DetailSection, 'Ore'), findsOneWidget);
       expect(find.textContaining('2h 30min'), findsOneWidget);
       expect(find.textContaining('12.0 km'), findsOneWidget);
       expect(find.textContaining('Furgone'), findsOneWidget);
@@ -1004,7 +1006,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db, reportId: 'report-nostaff'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Squadra e ore'), findsNothing);
+      expect(find.widgetWithText(DetailSection, 'Ore'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1234,16 +1236,24 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('hero shows Cliente, Sede, Tecnico facts and the status stamp', (tester) async {
+    testWidgets('hero shows kicker, title, status label and no facts; Sintesi shows them', (
+      tester,
+    ) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
       final hero = find.byType(DetailHero);
-      expect(find.descendant(of: hero, matching: find.text('Cliente')), findsOneWidget);
-      expect(find.descendant(of: hero, matching: find.text('Sede')), findsOneWidget);
-      expect(find.descendant(of: hero, matching: find.text('Tecnico')), findsOneWidget);
+      expect(
+        find.descendant(of: hero, matching: find.byKey(const Key('detail-hero-kicker'))),
+        findsOneWidget,
+      );
+      expect(find.descendant(of: hero, matching: find.text('CLIENTE')), findsNothing);
       expect(find.descendant(of: hero, matching: find.text('INVIATA')), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(DetailFactsGrid), matching: find.text('CLIENTE')),
+        findsOneWidget,
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1266,14 +1276,14 @@ void main() {
 
       expect(cache.resolves, 1);
       expect(find.descendant(of: hero, matching: find.text('Download in corso…')), findsOneWidget);
-      final primary = tester.widget<AppButton>(
-        find.ancestor(of: pdfLabel, matching: find.byType(AppButton)),
+      final primary = tester.widget<DetailHeroButton>(
+        find.ancestor(of: pdfLabel, matching: find.byType(DetailHeroButton)),
       );
       expect(primary.onPressed, equals(null));
       // The shared flag covers Condividi too: it resolves the same cache entry, so it must not
       // start while the download is still writing the same .part file.
-      final secondary = tester.widget<AppButton>(
-        find.ancestor(of: shareLabel, matching: find.byType(AppButton)),
+      final secondary = tester.widget<DetailHeroButton>(
+        find.ancestor(of: shareLabel, matching: find.byType(DetailHeroButton)),
       );
       expect(secondary.onPressed, equals(null));
 
@@ -1316,8 +1326,8 @@ void main() {
 
       expect(cache.resolves, 1);
       expect(shares, 1);
-      final primary = tester.widget<AppButton>(
-        find.ancestor(of: pdfLabel, matching: find.byType(AppButton)),
+      final primary = tester.widget<DetailHeroButton>(
+        find.ancestor(of: pdfLabel, matching: find.byType(DetailHeroButton)),
       );
       expect(primary.onPressed, equals(null));
 
