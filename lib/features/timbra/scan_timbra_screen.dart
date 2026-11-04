@@ -333,6 +333,23 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
     );
   }
 
+  /// Whether this screen may submit [action].
+  ///
+  /// The day behind it is `GET /api/worklog/today`, whose projection answers for the BUTTON path:
+  /// on a tenant whose clock-in method is QR-only, its punches come back disabled with
+  /// `qr_required` ("la tua azienda richiede la timbratura con QR, non con il pulsante"). That
+  /// reasoning does not apply here — this screen is reached only by scanning the totem's rotating
+  /// QR and submits through the kiosk endpoint, which tells the service the attempt is a QR one.
+  /// So `qr_required` is not a refusal on this screen; it is a description of the path the
+  /// technician is already on, and treating it as a refusal greys out the pause and the clock-out
+  /// at the one place in the product where a QR punch is the normal way to punch.
+  ///
+  /// Every other reason still disables, because the kiosk command refuses them too: a day that
+  /// cannot make the transition (`on_break`, `not_on_break`, `already_clocked_in`) or a closed
+  /// payroll period would only answer with the same words the alert already shows.
+  static bool _submittable(GiornataActionDto? action) =>
+      action != null && (action.enabled || action.reasonCode == 'qr_required');
+
   /// The prompt. Every option is one the server said is available for this day; an option it
   /// refused is disabled and explains itself with the same wording the punch guard uses
   /// ([reasonTextFor]), so one reason never reads two ways on two screens.
@@ -343,9 +360,9 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
     final clockOut = day.action('ClockOut');
 
     String? blockedReason;
-    if (primary != null && !primary.enabled) {
+    if (primary != null && !_submittable(primary)) {
       blockedReason = reasonTextFor(primary);
-    } else if (clockOut != null && !clockOut.enabled) {
+    } else if (clockOut != null && !_submittable(clockOut)) {
       blockedReason = reasonTextFor(clockOut);
     }
 
@@ -366,7 +383,7 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
         AppButton(
           label: onBreak ? 'Riprendi il lavoro' : 'Inizia la pausa',
           icon: Icon(onBreak ? Icons.play_arrow : Icons.free_breakfast, size: 18),
-          onPressed: (primary?.enabled ?? false)
+          onPressed: _submittable(primary)
               ? () => _submit(primaryAction, _userId!)
               : null,
         ),
@@ -374,7 +391,7 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
         AppButton.secondary(
           label: 'Fine turno',
           icon: const Icon(Icons.logout, size: 18),
-          onPressed: (clockOut?.enabled ?? false) ? () => _submit('ClockOut', _userId!) : null,
+          onPressed: _submittable(clockOut) ? () => _submit('ClockOut', _userId!) : null,
         ),
         if (blockedReason != null) ...[
           const SizedBox(height: AppSpacing.base),

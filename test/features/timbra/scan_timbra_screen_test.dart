@@ -364,6 +364,84 @@ void main() {
       await _teardown(tester);
     });
 
+    // The regression that greys out the totem. `/worklog/today` projects the BUTTON path, so on a
+    // QR-only tenant every button punch reads `qr_required` — and this screen used to take that as
+    // a refusal, disabling the pause and the clock-out at the one place where a QR punch IS the
+    // normal way to punch. The server's own prose would then have explained the QR requirement to
+    // a technician holding the totem's QR in their hand.
+    testWidgets('a QR-only day is not a refusal here: the totem can start a pause', (tester) async {
+      final client = _FakeWorklogApiClient(
+        result: const KioskScanResult(action: 'breakStart', workLogId: 'wl-qr'),
+        day: _day(
+          'Working',
+          actions: [
+            const GiornataActionDto(
+              action: 'StartBreak',
+              enabled: false,
+              reasonCode: 'qr_required',
+              reason: 'La tua azienda richiede la timbratura con QR, non con il pulsante.',
+            ),
+            const GiornataActionDto(
+              action: 'ClockOut',
+              enabled: false,
+              reasonCode: 'qr_required',
+              reason: 'La tua azienda richiede la timbratura con QR, non con il pulsante.',
+            ),
+          ],
+        ),
+      );
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      expect(
+        tester.widget<AppButton>(find.widgetWithText(AppButton, 'Inizia la pausa')).onPressed,
+        isNotNull,
+      );
+      expect(
+        tester.widget<AppButton>(find.widgetWithText(AppButton, 'Fine turno')).onPressed,
+        isNotNull,
+      );
+      // And the reason is not thrown at them as a warning: it describes the punch they are making.
+      expect(find.textContaining('richiede la timbratura con QR'), findsNothing);
+
+      await tester.tap(find.widgetWithText(AppButton, 'Inizia la pausa'));
+      await tester.pumpAndSettle();
+
+      expect(client.calls.single['action'], 'StartBreak');
+
+      await _teardown(tester);
+    });
+
+    testWidgets('a QR-only day is not a refusal here: the totem can end the turn', (
+      tester,
+    ) async {
+      final client = _FakeWorklogApiClient(
+        result: const KioskScanResult(action: 'out', workLogId: 'wl-qr-out'),
+        day: _day(
+          'OnBreak',
+          actions: [
+            const GiornataActionDto(
+              action: 'EndBreak',
+              enabled: false,
+              reasonCode: 'qr_required',
+            ),
+            const GiornataActionDto(
+              action: 'ClockOut',
+              enabled: false,
+              reasonCode: 'qr_required',
+            ),
+          ],
+        ),
+      );
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      await tester.tap(find.widgetWithText(AppButton, 'Fine turno'));
+      await tester.pumpAndSettle();
+
+      expect(client.calls.single['action'], 'ClockOut');
+
+      await _teardown(tester);
+    });
+
     testWidgets('an action the server disabled is not tappable and explains itself', (
       tester,
     ) async {
