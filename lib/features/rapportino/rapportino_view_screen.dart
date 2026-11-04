@@ -13,7 +13,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/widgets/detail/detail_hero.dart';
+import '../../core/widgets/detail/detail_scaffold.dart';
+import '../../core/widgets/detail/detail_section.dart';
 import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
@@ -35,6 +37,31 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // RapportinoViewScreen — read-only view for submitted rapportini (D3b).
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// One per-report in-flight flag shared by the hero's two PDF actions.
+///
+/// Scarica PDF and Condividi resolve the same cache entry — same `report-{id}.pdf.part` write — so
+/// they must not run independently: a share starting while a download is still writing can read a
+/// half-renamed file, and two downloads race on the same temporary path. Both actions therefore
+/// take this single flag, and both disable while it is set. Keyed by report id so two open reports
+/// never block each other.
+final _rapportinoPdfBusyProvider = StateProvider.autoDispose.family<bool, String>(
+  (ref, reportId) => false,
+);
+
+/// Per-report guard for the hero's rework action, so a double tap mints only one draft while two
+/// open reports can still be reworked independently.
+final _rapportinoReworkBusyProvider = StateProvider.autoDispose.family<bool, String>(
+  (ref, reportId) => false,
+);
+
+/// How a resolved PDF is handed to another app (share sheet). Injected so the hero's share guard
+/// can be exercised without popping a real platform sheet.
+typedef ReportPdfShare = Future<void> Function(File file);
+
+final reportPdfShareProvider = Provider<ReportPdfShare>((ref) {
+  return (file) => SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+});
+
 class RapportinoViewScreen extends ConsumerWidget {
   const RapportinoViewScreen({super.key, required this.reportId});
 
@@ -44,51 +71,29 @@ class RapportinoViewScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final draftAsync = ref.watch(rapportinoByIdProvider(reportId));
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: draftAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        // No online/offline distinction to draw here (unlike the ticket detail tabs): this reads
-        // the local Drift mirror only (rapportinoByIdProvider), never the network, so an error
-        // here is a local read failure, not connectivity — and a retry re-opens that same stream.
-        error: (e, _) => SafeArea(
-          child: Column(
-            children: [
-              ScreenHeader(title: 'Rapporto', showBack: true),
-              Expanded(
-                child: UnavailableState(
-                  icon: LucideIcons.xCircle,
-                  titolo: 'Impossibile caricare il rapporto di intervento',
-                  motivo: 'Si è verificato un errore imprevisto. Riprova.',
-                  action: AppButton(
-                    label: 'Riprova',
-                    size: AppButtonSize.sm,
-                    fullWidth: false,
-                    onPressed: () => ref.invalidate(rapportinoByIdProvider(reportId)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        data: (draft) {
-          if (draft == null) {
-            return SafeArea(
-              child: Column(
-                children: [
-                  ScreenHeader(title: 'Rapporto', showBack: true),
-                  EmptyState(
-                    icon: LucideIcons.fileX,
-                    title: 'Rapporto di intervento non trovato',
-                    body: 'Il rapporto di intervento richiesto non è disponibile in cache.',
-                  ),
-                ],
-              ),
-            );
-          }
-          return _RapportinoViewBody(draft: draft);
-        },
+    return draftAsync.when(
+      loading: () => const DetailScaffold.loading(screenTitle: 'Rapportino'),
+      // No online/offline distinction to draw here (unlike the ticket detail tabs): this reads
+      // the local Drift mirror only (rapportinoByIdProvider), never the network, so an error
+      // here is a local read failure, not connectivity — and a retry re-opens that same stream.
+      error: (e, _) => DetailScaffold.unavailable(
+        screenTitle: 'Rapportino',
+        icon: LucideIcons.xCircle,
+        title: 'Impossibile caricare il rapporto di intervento',
+        reason: 'Si è verificato un errore imprevisto. Riprova.',
+        onRetry: () => ref.invalidate(rapportinoByIdProvider(reportId)),
       ),
+      data: (draft) {
+        if (draft == null) {
+          return const DetailScaffold.unavailable(
+            screenTitle: 'Rapportino',
+            icon: LucideIcons.fileX,
+            title: 'Rapporto di intervento non trovato',
+            reason: 'Il rapporto di intervento richiesto non è disponibile in cache.',
+          );
+        }
+        return _RapportinoViewBody(draft: draft);
+      },
     );
   }
 }
@@ -127,7 +132,6 @@ class _RapportinoViewBody extends ConsumerWidget {
         f.control.id: f,
     };
 
-    final statusLabel = rapportinoStatusLabel(draft);
     final dateLabel = DateFormat(
       'dd/MM/yyyy',
       'it',
@@ -154,17 +158,6 @@ class _RapportinoViewBody extends ConsumerWidget {
       draft.customerSignatureAbsenceReason,
     );
 
-    // Names, not user ids. This joined raw GUIDs — on the read-only view of the document that
-    // becomes an invoice, where "who did the work" is the line a customer actually reads back.
-    // The colleagues mirror is synced, so this still resolves with the radio off; an id the mirror
-    // does not know falls through as itself rather than vanishing from the list.
-    final tecnicoLabel = staff.isNotEmpty
-        ? staff
-              .map((s) => ref.watch(colleagueNameProvider(s.userId)).valueOrNull ?? s.userId)
-              .join(', ')
-        : (ref.watch(colleagueNameProvider(draft.insertedUserId)).valueOrNull ??
-              draft.insertedUserId);
-
     // Sede map — only when this draft carries a real Location id: a report saved against a
     // free-text-only site (`locationFreeText` in metadataJson, no `Locations` row) has nothing to
     // geocode or cache a point against, same as `_locationLabel`'s own fallback chain above.
@@ -177,659 +170,529 @@ class _RapportinoViewBody extends ConsumerWidget {
       location?.postalCode,
     ].where((s) => s != null && s.isNotEmpty).join(', ');
 
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ScreenHeader(title: draft.title, showBack: true),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () => refreshWithFeedback(context, ref),
-              child: CustomScrollView(
-                slivers: [
-                  // ── Header card: StatusPill + date + KeyVal metadata ──────────
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.pagePadding,
-                        AppSpacing.sm,
-                        AppSpacing.pagePadding,
-                        AppSpacing.base,
-                      ),
-                      child: AppCard(
-                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+    final hasCronologia =
+        draft.inviatoAt != null || draft.controllatoAt != null || draft.fatturatoAt != null;
+    final rejected = rapportinoIsRejected(draft);
+    final hasCustomerSignature = draft.customerSignatureAllegatoId != null;
+    final hasCustomerAbsence = !hasCustomerSignature && customerAbsenceReason != null;
+    final hasTechnicianSignature = draft.technicianSignatureAllegatoId != null;
+
+    return DetailScaffold(
+      screenTitle: 'Rapportino',
+      onRefresh: () => refreshWithFeedback(context, ref),
+      hero: _buildRapportinoHero(context, ref, draft),
+      sections: [
+        // ── Attività: lifecycle and rejection ───────────────────────────
+        DetailSectionData(
+          title: 'Attività',
+          isEmpty: !hasCronologia && !rejected,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Cronologia: lifecycle dates past creation ────────────────────
+              //
+              // Bozza → createdAt/updatedAt alone (already in the header) says everything.
+              // Past that, the office's own review trail (Inviato/Controllato/Fatturato) is
+              // real content this report carries and the view never showed — only the
+              // customer-facing Firma dates got surfaced before this.
+              if (hasCronologia)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: AppCard(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
+                          child: SectionTitle(title: 'Cronologia'),
+                        ),
+                        if (draft.inviatoAt != null)
+                          KeyVal(
+                            label: 'Inviato il',
+                            value: DateFormat(
+                              'dd/MM/yyyy HH:mm',
+                              'it',
+                            ).format(draft.inviatoAt!.toLocal()),
+                            showDivider: draft.controllatoAt != null || draft.fatturatoAt != null,
+                          ),
+                        if (draft.controllatoAt != null)
+                          KeyVal(
+                            label: 'Controllato il',
+                            value: DateFormat(
+                              'dd/MM/yyyy HH:mm',
+                              'it',
+                            ).format(draft.controllatoAt!.toLocal()),
+                            showDivider: draft.fatturatoAt != null,
+                          ),
+                        if (draft.fatturatoAt != null)
+                          KeyVal(
+                            label: 'Fatturato il',
+                            value: DateFormat(
+                              'dd/MM/yyyy HH:mm',
+                              'it',
+                            ).format(draft.fatturatoAt!.toLocal()),
+                            showDivider: false,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ── Rejection banner + rework affordance ────────────────────────
+              //
+              // The office rejected this report (POST /api/reports/{id}/respingi). The
+              // backend has no rejection-reason field to show (checked: ReportsController,
+              // ReportService.RespingiAsync, the Report entity itself all take/carry none), so
+              // this states the fact plainly instead of inventing a reason. "Rilavora" clones
+              // this report's data into a brand-new local draft — see createReworkDraft's own
+              // doc comment for why it can't simply reopen this same report id (the backend's
+              // state machine only allows Bozza → Inviato).
+              if (rejected) const _RejectionBanner(),
+            ],
+          ),
+        ),
+
+        // ── Sintesi: the report's own metadata and written record ───────
+        DetailSectionData(
+          title: 'Sintesi',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Header card: date + KeyVal metadata ───────────────────────
+              //
+              // Cliente/Sede/Tecnico are hero facts and the status stamp in the hero is the
+              // single authoritative status display; the rest of the report's own record lives
+              // here so the document's identity is not split across the hero.
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                child: AppCard(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
+                        child: Row(
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                top: AppSpacing.md,
-                                bottom: AppSpacing.sm,
-                              ),
-                              child: Row(
-                                children: [
-                                  StatusPill(stato: statusLabel),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    dateLabel,
-                                    style: TextStyle(
-                                      fontFamily: 'Archivo',
-                                      fontSize: 12,
-                                      color: context.colors.inkMuted,
-                                    ),
-                                  ),
-                                  // "Serve un secondo intervento" (step_riepilogo.dart's own toggle)
-                                  // — surfaced here so the office/technician sees it without opening
-                                  // Rilavora. Local-only for a report synced down from another
-                                  // device (see richiedeSecondoIntervento's own doc comment on
-                                  // DraftReports) — off is not proof nothing was flagged, only that
-                                  // this device doesn't know.
-                                  if (draft.richiedeSecondoIntervento) ...[
-                                    const SizedBox(width: 8),
-                                    AppBadge(
-                                      label: 'Da tornare',
-                                      bgColor: context.colors.amber.withAlpha(31),
-                                      fgColor: context.colors.amber,
-                                    ),
-                                  ],
-                                ],
+                            Text(
+                              dateLabel,
+                              style: TextStyle(
+                                fontFamily: 'Archivo',
+                                fontSize: 12,
+                                color: context.colors.inkMuted,
                               ),
                             ),
-                            Divider(height: 1, thickness: 1, color: context.colors.borderLight),
-                            KeyVal(label: 'Sede', value: _locationLabel(context, ref, draft)),
-                            KeyVal(label: 'Tecnico', value: tecnicoLabel),
-                            KeyVal(label: 'Cliente', value: _customerLabel(context, ref, draft)),
-                            // Stated on the technician's own record of what they signed, mirroring
-                            // the exact same row (same label, same text) step_riepilogo.dart's
-                            // summary card shows before the two signatures are collected.
-                            if (draft.isAiAssisted)
-                              const KeyVal(
-                                label: 'Redazione',
-                                value: 'Bozza generata con AI, poi rivista',
+                            // "Serve un secondo intervento" (step_riepilogo.dart's own toggle)
+                            // — surfaced here so the office/technician sees it without opening
+                            // Rilavora. Local-only for a report synced down from another
+                            // device (see richiedeSecondoIntervento's own doc comment on
+                            // DraftReports) — off is not proof nothing was flagged, only that
+                            // this device doesn't know.
+                            if (draft.richiedeSecondoIntervento) ...[
+                              const SizedBox(width: 8),
+                              AppBadge(
+                                label: 'Da tornare',
+                                bgColor: context.colors.amber.withAlpha(31),
+                                fgColor: context.colors.amber,
                               ),
-                            KeyVal(label: 'Ore', value: oreLabel, showDivider: false),
+                            ],
                           ],
                         ),
                       ),
-                    ),
+                      Divider(height: 1, thickness: 1, color: context.colors.borderLight),
+                      // Stated on the technician's own record of what they signed, mirroring
+                      // the exact same row (same label, same text) step_riepilogo.dart's
+                      // summary card shows before the two signatures are collected.
+                      if (draft.isAiAssisted)
+                        const KeyVal(
+                          label: 'Redazione',
+                          value: 'Bozza generata con AI, poi rivista',
+                        ),
+                      KeyVal(label: 'Ore', value: oreLabel, showDivider: false),
+                    ],
                   ),
-
-                  // ── Sede map ──────────────────────────────────────────────────────
-                  //
-                  // Same embedded-map treatment ticket detail and cantiere detail already give a
-                  // location — this report's "Sede" KeyVal row above used to be the only trace of
-                  // where the job happened; there was no map at all.
-                  if (locationAddress.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: GeoMapCard(
-                          pointAsync: ref.watch(locationGeocodedLocationProvider(locationId)),
-                          address: locationAddress,
-                        ),
-                      ),
-                    ),
-
-                  // ── Cronologia: lifecycle dates past creation ────────────────────
-                  //
-                  // Bozza → createdAt/updatedAt alone (already in the header) says everything.
-                  // Past that, the office's own review trail (Inviato/Controllato/Fatturato) is
-                  // real content this report carries and the view never showed — only the
-                  // customer-facing Firma dates got surfaced before this.
-                  if (draft.inviatoAt != null ||
-                      draft.controllatoAt != null ||
-                      draft.fatturatoAt != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: AppSpacing.md,
-                                  bottom: AppSpacing.xs,
-                                ),
-                                child: SectionTitle(title: 'Cronologia'),
-                              ),
-                              if (draft.inviatoAt != null)
-                                KeyVal(
-                                  label: 'Inviato il',
-                                  value: DateFormat(
-                                    'dd/MM/yyyy HH:mm',
-                                    'it',
-                                  ).format(draft.inviatoAt!.toLocal()),
-                                  showDivider:
-                                      draft.controllatoAt != null || draft.fatturatoAt != null,
-                                ),
-                              if (draft.controllatoAt != null)
-                                KeyVal(
-                                  label: 'Controllato il',
-                                  value: DateFormat(
-                                    'dd/MM/yyyy HH:mm',
-                                    'it',
-                                  ).format(draft.controllatoAt!.toLocal()),
-                                  showDivider: draft.fatturatoAt != null,
-                                ),
-                              if (draft.fatturatoAt != null)
-                                KeyVal(
-                                  label: 'Fatturato il',
-                                  value: DateFormat(
-                                    'dd/MM/yyyy HH:mm',
-                                    'it',
-                                  ).format(draft.fatturatoAt!.toLocal()),
-                                  showDivider: false,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Rejection banner + rework affordance ────────────────────────
-                  //
-                  // The office rejected this report (POST /api/reports/{id}/respingi). The
-                  // backend has no rejection-reason field to show (checked: ReportsController,
-                  // ReportService.RespingiAsync, the Report entity itself all take/carry none), so
-                  // this states the fact plainly instead of inventing a reason. "Rilavora" clones
-                  // this report's data into a brand-new local draft — see createReworkDraft's own
-                  // doc comment for why it can't simply reopen this same report id (the backend's
-                  // state machine only allows Bozza → Inviato).
-                  if (rapportinoIsRejected(draft))
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: _RejectionBanner(draft: draft),
-                      ),
-                    ),
-
-                  // ── Descrizione ───────────────────────────────────────────────
-                  if (draft.details != null && draft.details!.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SectionTitle(title: 'Descrizione'),
-                              const SizedBox(height: 4),
-                              Text(
-                                draft.details!,
-                                style: TextStyle(
-                                  fontFamily: 'Archivo',
-                                  fontSize: 13,
-                                  color: context.colors.ink,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Diagnosi e soluzione ──────────────────────────────────────
-                  //
-                  // Two fields the technician fills in on site (step Dettagli) and that the
-                  // customer's PDF prints — but the read-only view, the only place a sent report
-                  // can be re-read, dropped them. They are not part of Descrizione: that is the
-                  // free-text account of the visit, while diagnosi names the cause and soluzione
-                  // the remedy, and the office searches on those two. One card, because they are
-                  // read together; each shown only when it has text, so a report with just a cause
-                  // does not print an empty "Soluzione".
-                  if ((draft.diagnosi ?? '').isNotEmpty || (draft.soluzione ?? '').isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SectionTitle(title: 'Diagnosi e soluzione'),
-                              if ((draft.diagnosi ?? '').isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                _ReportFieldLabel(label: 'Diagnosi'),
-                                const SizedBox(height: 2),
-                                Text(
-                                  draft.diagnosi!,
-                                  style: TextStyle(
-                                    fontFamily: 'Archivo',
-                                    fontSize: 13,
-                                    color: context.colors.ink,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ],
-                              if ((draft.soluzione ?? '').isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                _ReportFieldLabel(label: 'Soluzione'),
-                                const SizedBox(height: 2),
-                                Text(
-                                  draft.soluzione!,
-                                  style: TextStyle(
-                                    fontFamily: 'Archivo',
-                                    fontSize: 13,
-                                    color: context.colors.ink,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Note tecnico ──────────────────────────────────────────────
-                  //
-                  // A separate field from Descrizione (DraftReports.details) — internal, not
-                  // printed on the customer PDF (see Report.technicianNotes' own backend doc
-                  // comment) — so it needs its own section rather than being folded into or
-                  // mistaken for the description above it.
-                  if (draft.technicianNotes != null && draft.technicianNotes!.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SectionTitle(title: 'Note tecnico'),
-                              const SizedBox(height: 4),
-                              Text(
-                                draft.technicianNotes!,
-                                style: TextStyle(
-                                  fontFamily: 'Archivo',
-                                  fontSize: 13,
-                                  color: context.colors.ink,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Squadra e ore ────────────────────────────────────────────────
-                  //
-                  // The header's "Ore" row is the report's aggregate total — this is the
-                  // itemized worklog behind it, one row per technician who contributed, with
-                  // whatever travel/vehicle/notes data that technician's row carries.
-                  if (staff.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: AppSpacing.md,
-                                  bottom: AppSpacing.xs,
-                                ),
-                                child: SectionTitle(title: 'Squadra e ore'),
-                              ),
-                              ...staff.map((s) {
-                                final name =
-                                    ref.watch(colleagueNameProvider(s.userId)).valueOrNull ??
-                                    s.userId;
-                                final hours = formatOreLabel(totalOreMinutes([s]));
-                                final metaParts = [
-                                  hours,
-                                  if (s.kmTraveled > 0) '${s.kmTraveled.toStringAsFixed(1)} km',
-                                  ?s.vehicle,
-                                  ?s.notes,
-                                ];
-                                return ListRow(
-                                  leading: const RowIconTile(icon: LucideIcons.user),
-                                  title: name,
-                                  subtitle: metaParts.join(' · '),
-                                  showDivider: s != staff.last,
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Controlli (checklist) ────────────────────────────────────────
-                  //
-                  // What was recorded against the ticket's checklist on this visit (ADR-0012
-                  // §B.4) — labels/types resolved against the cached ticket checklist when
-                  // available (see controlLabels above); a raw controlId is shown instead of
-                  // hiding the row when the checklist hasn't been cached on this device.
-                  if (controlli.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: AppSpacing.md,
-                                  bottom: AppSpacing.xs,
-                                ),
-                                child: SectionTitle(title: 'Controlli'),
-                              ),
-                              ...groupControlliByAsset(controlli, controlLabels).expand((group) {
-                                return <Widget>[
-                                  if (group.assetId != null) ...[
-                                    _AssetGroupHeader(assetId: group.assetId!),
-                                    const SizedBox(height: 6),
-                                  ],
-                                  for (final c in group.rows)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 10),
-                                      child: _ControlloAnswerRow(
-                                        controllo: c,
-                                        flat: controlLabels[c.controlId],
-                                      ),
-                                    ),
-                                ];
-                              }),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Materiali list ────────────────────────────────────────────
-                  if (materiali.isNotEmpty || draft.materialiNotRequired)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  top: AppSpacing.md,
-                                  bottom: AppSpacing.xs,
-                                ),
-                                child: SectionTitle(title: 'Materiali'),
-                              ),
-                              if (materiali.isEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                                  child: Text(
-                                    'Nessun materiale utilizzato — confermato dal tecnico.',
-                                    style: TextStyle(
-                                      fontFamily: 'Archivo',
-                                      fontSize: 13,
-                                      color: context.colors.inkMuted,
-                                    ),
-                                  ),
-                                ),
-                              ...materiali.map((m) {
-                                final name =
-                                    m.freeTextName ??
-                                    (m.materialeId != null
-                                        ? (ref
-                                                  .watch(materialeNameProvider(m.materialeId!))
-                                                  .valueOrNull ??
-                                              m.materialeId!)
-                                        : '—');
-                                final qty = m.quantity.toStringAsFixed(
-                                  m.quantity.truncateToDouble() == m.quantity ? 0 : 2,
-                                );
-                                final priceStr = m.unitPrice != null
-                                    ? '€${m.unitPrice!.toStringAsFixed(2)}'
-                                    : null;
-                                final uom = m.unitOfMeasure;
-                                final metaSub = [
-                                  '$qty${uom != null ? ' $uom' : ''}',
-                                  ?priceStr,
-                                ].join(' · ');
-                                return ListRow(
-                                  leading: const RowIconTile(
-                                    icon: LucideIcons.package,
-                                    size: 36,
-                                    iconSize: 18,
-                                  ),
-                                  title: name,
-                                  subtitle: metaSub,
-                                  showDivider: m != materiali.last,
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Foto ──────────────────────────────────────────────────────
-                  if (photoAllegati.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SectionTitle(title: 'Foto (${photoAllegati.length})'),
-                              const SizedBox(height: 8),
-                              _AllegatiPhotoGrid(dio: dio, allegati: photoAllegati),                          ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Firma cliente ─────────────────────────────────────────────
-                  if (draft.customerSignatureAllegatoId != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SectionTitle(title: 'Firma cliente'),
-                              // The acceptance text the customer signed against
-                              // (Report.customerSignoffText) — captured alongside the signature
-                              // itself, and otherwise nowhere on this screen.
-                              if (draft.customerSignoffText != null &&
-                                  draft.customerSignoffText!.isNotEmpty) ...[
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Text(
-                                    draft.customerSignoffText!,
-                                    style: TextStyle(
-                                      fontFamily: 'Archivo',
-                                      fontSize: 13,
-                                      fontStyle: FontStyle.italic,
-                                      color: context.colors.inkMuted,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                ),
-                              ] else
-                                const SizedBox(height: 8),
-                              _SignatureBlock(
-                                dio: dio,
-                                allegato: customerSignatureAllegato,
-                                signedAt:
-                                    draft.customerSignoffAt ??
-                                    draft.inviatoAt ??
-                                    draft.updatedAt ??
-                                    draft.createdAt,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Senza firma cliente (motivo) ──────────────────────────────
-                  // The counterpart of the block above for a report the customer could not sign:
-                  // show why, instead of leaving the section blank as if the signature had merely
-                  // been forgotten.
-                  if (draft.customerSignatureAllegatoId == null && customerAbsenceReason != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SectionTitle(title: 'Firma cliente'),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Senza firma cliente — ${customerAbsenceReason.summaryLabel}',
-                                style: TextStyle(
-                                  fontFamily: 'Archivo',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: context.colors.ink,
-                                ),
-                              ),
-                              if (draft.customerSignatureAbsenceNote?.isNotEmpty ?? false) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  draft.customerSignatureAbsenceNote!,
-                                  style: TextStyle(
-                                    fontFamily: 'Archivo',
-                                    fontSize: 13,
-                                    fontStyle: FontStyle.italic,
-                                    color: context.colors.inkMuted,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Firma tecnico ─────────────────────────────────────────────
-                  if (draft.technicianSignatureAllegatoId != null)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          AppSpacing.pagePadding,
-                          0,
-                          AppSpacing.pagePadding,
-                          AppSpacing.base,
-                        ),
-                        child: AppCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SectionTitle(title: 'Firma tecnico'),
-                              const SizedBox(height: 8),
-                              _SignatureBlock(
-                                dio: dio,
-                                allegato: technicianSignatureAllegato,
-                                signedAt:
-                                    draft.customerSignoffAt ??
-                                    draft.inviatoAt ??
-                                    draft.updatedAt ??
-                                    draft.createdAt,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  // ── Download PDF ──────────────────────────────────────────────
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.pagePadding,
-                        0,
-                        AppSpacing.pagePadding,
-                        AppSpacing.xl,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(child: _DownloadPdfButton(reportId: draft.id)),
-                          const SizedBox(width: 8),
-                          _SharePdfButton(reportId: draft.id),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
-                ],
+                ),
               ),
+
+              // ── Descrizione ───────────────────────────────────────────────
+              if (draft.details != null && draft.details!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionTitle(title: 'Descrizione'),
+                        const SizedBox(height: 4),
+                        Text(
+                          draft.details!,
+                          style: TextStyle(
+                            fontFamily: 'Archivo',
+                            fontSize: 13,
+                            color: context.colors.ink,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ── Diagnosi e soluzione ──────────────────────────────────────
+              //
+              // Two fields the technician fills in on site (step Dettagli) and that the
+              // customer's PDF prints — but the read-only view, the only place a sent report
+              // can be re-read, dropped them. They are not part of Descrizione: that is the
+              // free-text account of the visit, while diagnosi names the cause and soluzione
+              // the remedy, and the office searches on those two. One card, because they are
+              // read together; each shown only when it has text, so a report with just a cause
+              // does not print an empty "Soluzione".
+              if ((draft.diagnosi ?? '').isNotEmpty || (draft.soluzione ?? '').isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionTitle(title: 'Diagnosi e soluzione'),
+                        if ((draft.diagnosi ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          _ReportFieldLabel(label: 'Diagnosi'),
+                          const SizedBox(height: 2),
+                          Text(
+                            draft.diagnosi!,
+                            style: TextStyle(
+                              fontFamily: 'Archivo',
+                              fontSize: 13,
+                              color: context.colors.ink,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                        if ((draft.soluzione ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          _ReportFieldLabel(label: 'Soluzione'),
+                          const SizedBox(height: 2),
+                          Text(
+                            draft.soluzione!,
+                            style: TextStyle(
+                              fontFamily: 'Archivo',
+                              fontSize: 13,
+                              color: context.colors.ink,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ── Note tecnico ──────────────────────────────────────────────
+              //
+              // A separate field from Descrizione (DraftReports.details) — internal, not
+              // printed on the customer PDF (see Report.technicianNotes' own backend doc
+              // comment) — so it needs its own section rather than being folded into or
+              // mistaken for the description above it.
+              if (draft.technicianNotes != null && draft.technicianNotes!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionTitle(title: 'Note tecnico'),
+                        const SizedBox(height: 4),
+                        Text(
+                          draft.technicianNotes!,
+                          style: TextStyle(
+                            fontFamily: 'Archivo',
+                            fontSize: 13,
+                            color: context.colors.ink,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+
+        // ── Ore: the itemized worklog behind the total ──────────────────
+        DetailSectionData(
+          title: 'Ore',
+          isEmpty: staff.isEmpty,
+          child: AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
+                  child: SectionTitle(title: 'Squadra e ore'),
+                ),
+                ...staff.map((s) {
+                  final name = ref.watch(colleagueNameProvider(s.userId)).valueOrNull ?? s.userId;
+                  final hours = formatOreLabel(totalOreMinutes([s]));
+                  final metaParts = [
+                    hours,
+                    if (s.kmTraveled > 0) '${s.kmTraveled.toStringAsFixed(1)} km',
+                    ?s.vehicle,
+                    ?s.notes,
+                  ];
+                  return ListRow(
+                    leading: const RowIconTile(icon: LucideIcons.user),
+                    title: name,
+                    subtitle: metaParts.join(' · '),
+                    showDivider: s != staff.last,
+                  );
+                }),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+
+        // ── Materiali list ────────────────────────────────────────────
+        DetailSectionData(
+          title: 'Materiali',
+          isEmpty: materiali.isEmpty && !draft.materialiNotRequired,
+          child: AppCard(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.base,
+              AppSpacing.md,
+              AppSpacing.base,
+              AppSpacing.base,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (materiali.isEmpty)
+                  Text(
+                    'Nessun materiale utilizzato — confermato dal tecnico.',
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 13,
+                      color: context.colors.inkMuted,
+                    ),
+                  ),
+                ...materiali.map((m) {
+                  final name =
+                      m.freeTextName ??
+                      (m.materialeId != null
+                          ? (ref.watch(materialeNameProvider(m.materialeId!)).valueOrNull ??
+                                m.materialeId!)
+                          : '—');
+                  final qty = m.quantity.toStringAsFixed(
+                    m.quantity.truncateToDouble() == m.quantity ? 0 : 2,
+                  );
+                  final priceStr = m.unitPrice != null
+                      ? '€${m.unitPrice!.toStringAsFixed(2)}'
+                      : null;
+                  final uom = m.unitOfMeasure;
+                  final metaSub = ['$qty${uom != null ? ' $uom' : ''}', ?priceStr].join(' · ');
+                  return ListRow(
+                    leading: const RowIconTile(icon: LucideIcons.package, size: 36, iconSize: 18),
+                    title: name,
+                    subtitle: metaSub,
+                    showDivider: m != materiali.last,
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+
+        // ── Controlli (checklist) ────────────────────────────────────────
+        //
+        // What was recorded against the ticket's checklist on this visit (ADR-0012
+        // §B.4) — labels/types resolved against the cached ticket checklist when
+        // available (see controlLabels above); a raw controlId is shown instead of
+        // hiding the row when the checklist hasn't been cached on this device.
+        DetailSectionData(
+          title: 'Controlli',
+          isEmpty: controlli.isEmpty,
+          child: AppCard(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.base,
+              AppSpacing.md,
+              AppSpacing.base,
+              AppSpacing.base,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ...groupControlliByAsset(controlli, controlLabels).expand((group) {
+                  return <Widget>[
+                    if (group.assetId != null) ...[
+                      _AssetGroupHeader(assetId: group.assetId!),
+                      const SizedBox(height: 6),
+                    ],
+                    for (final c in group.rows)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _ControlloAnswerRow(controllo: c, flat: controlLabels[c.controlId]),
+                      ),
+                  ];
+                }),
+              ],
+            ),
+          ),
+        ),
+
+        // ── Documenti & mappa: where it happened and what was attached ──
+        DetailSectionData(
+          title: 'Documenti & mappa',
+          isEmpty:
+              locationAddress.isEmpty &&
+              photoAllegati.isEmpty &&
+              !hasCustomerSignature &&
+              !hasCustomerAbsence &&
+              !hasTechnicianSignature,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Sede map ──────────────────────────────────────────────────────
+              //
+              // Same embedded-map treatment ticket detail and cantiere detail already give a
+              // location. The hero states the site; this shows where it is.
+              if (locationAddress.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: GeoMapCard(
+                    pointAsync: ref.watch(locationGeocodedLocationProvider(locationId)),
+                    address: locationAddress,
+                  ),
+                ),
+
+              // ── Foto ──────────────────────────────────────────────────────
+              if (photoAllegati.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionTitle(title: 'Foto (${photoAllegati.length})'),
+                        const SizedBox(height: 8),
+                        _AllegatiPhotoGrid(dio: dio, allegati: photoAllegati),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ── Firma cliente ─────────────────────────────────────────────
+              if (hasCustomerSignature)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionTitle(title: 'Firma cliente'),
+                        // The acceptance text the customer signed against
+                        // (Report.customerSignoffText) — captured alongside the signature
+                        // itself, and otherwise nowhere on this screen.
+                        if (draft.customerSignoffText != null &&
+                            draft.customerSignoffText!.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              draft.customerSignoffText!,
+                              style: TextStyle(
+                                fontFamily: 'Archivo',
+                                fontSize: 13,
+                                fontStyle: FontStyle.italic,
+                                color: context.colors.inkMuted,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ] else
+                          const SizedBox(height: 8),
+                        _SignatureBlock(
+                          dio: dio,
+                          allegato: customerSignatureAllegato,
+                          signedAt:
+                              draft.customerSignoffAt ??
+                              draft.inviatoAt ??
+                              draft.updatedAt ??
+                              draft.createdAt,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ── Senza firma cliente (motivo) ──────────────────────────────
+              // The counterpart of the block above for a report the customer could not sign:
+              // show why, instead of leaving the section blank as if the signature had merely
+              // been forgotten.
+              if (hasCustomerAbsence)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionTitle(title: 'Firma cliente'),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Senza firma cliente — ${customerAbsenceReason.summaryLabel}',
+                          style: TextStyle(
+                            fontFamily: 'Archivo',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: context.colors.ink,
+                          ),
+                        ),
+                        if (draft.customerSignatureAbsenceNote?.isNotEmpty ?? false) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            draft.customerSignatureAbsenceNote!,
+                            style: TextStyle(
+                              fontFamily: 'Archivo',
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                              color: context.colors.inkMuted,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ── Firma tecnico ─────────────────────────────────────────────
+              if (hasTechnicianSignature)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                  child: AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SectionTitle(title: 'Firma tecnico'),
+                        const SizedBox(height: 8),
+                        _SignatureBlock(
+                          dio: dio,
+                          allegato: technicianSignatureAllegato,
+                          signedAt:
+                              draft.customerSignoffAt ??
+                              draft.inviatoAt ??
+                              draft.updatedAt ??
+                              draft.createdAt,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -853,7 +716,7 @@ Future<void> _openReportPdf(BuildContext context, WidgetRef ref, String reportId
   }
 }
 
-/// Shared resolve step behind [_openReportPdf] and [_SharePdfButton] — each caller decides what to
+/// Shared resolve step behind [_openReportPdf] and [_shareReportPdf] — each caller decides what to
 /// do with the file. Returns null (and has already said why) when there is no PDF to be had, so
 /// callers check for null rather than duplicating error UI.
 ///
@@ -884,89 +747,69 @@ Future<File?> _resolveReportPdf(WidgetRef ref, String reportId, BuildContext con
   }
 }
 
-/// "Scarica PDF" — downloads (via [_openReportPdf]) and opens the report's PDF in the device's
-/// default viewer. Same local-`_busy` shape as its sibling [_SharePdfButton] below, so the two
-/// download actions next to each other agree on what "in progress" looks like: this one drives
-/// [AppButton]'s own `isLoading` state instead of a bespoke spinner, since [AppButton] (unlike the
-/// icon-only [AppTappable] share button) already renders one.
-class _DownloadPdfButton extends ConsumerStatefulWidget {
-  const _DownloadPdfButton({required this.reportId});
+/// Sends the report's PDF through the OS share sheet — same cached file [_openReportPdf] uses,
+/// so a technician can hand it to the office/customer over email/WhatsApp without leaving the app.
+Future<void> _shareReportPdf(BuildContext context, WidgetRef ref, String reportId) async {
+  final file = await _resolveReportPdf(ref, reportId, context);
+  if (file == null) return;
 
-  final String reportId;
-
-  @override
-  ConsumerState<_DownloadPdfButton> createState() => _DownloadPdfButtonState();
+  await ref.read(reportPdfShareProvider)(file);
 }
 
-class _DownloadPdfButtonState extends ConsumerState<_DownloadPdfButton> {
-  bool _busy = false;
+/// Runs the hero's Scarica PDF action behind the shared per-report guard: the provider disables
+/// both PDF actions while either runs, and the re-entry check covers a tap that lands before the
+/// rebuild.
+Future<void> _downloadReportPdfFromHero(
+  BuildContext context,
+  WidgetRef ref,
+  String reportId,
+) async {
+  final busy = _rapportinoPdfBusyProvider(reportId);
+  if (ref.read(busy)) return;
+  ref.read(busy.notifier).state = true;
+  try {
+    await _openReportPdf(context, ref, reportId);
+  } finally {
+    if (context.mounted) ref.read(busy.notifier).state = false;
+  }
+}
 
-  Future<void> _open() async {
-    setState(() => _busy = true);
-    try {
-      await _openReportPdf(context, ref, widget.reportId);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+/// Runs the hero's Condividi action behind the same shared per-report guard as
+/// [_downloadReportPdfFromHero], because both resolve the same cached file.
+Future<void> _shareReportPdfFromHero(BuildContext context, WidgetRef ref, String reportId) async {
+  final busy = _rapportinoPdfBusyProvider(reportId);
+  if (ref.read(busy)) return;
+  ref.read(busy.notifier).state = true;
+  try {
+    await _shareReportPdf(context, ref, reportId);
+  } finally {
+    if (context.mounted) ref.read(busy.notifier).state = false;
+  }
+}
+
+/// Creates a fresh local draft from a rejected report and opens it in the editor.
+///
+/// A rework clones this report's data into a brand-new local draft — see createReworkDraft's own
+/// doc comment for why it can't simply reopen this same report id (the backend's state machine
+/// only allows Bozza → Inviato).
+Future<void> _reworkReport(BuildContext context, WidgetRef ref, DraftReport draft) async {
+  final busy = _rapportinoReworkBusyProvider(draft.id);
+  if (ref.read(busy)) return;
+  ref.read(busy.notifier).state = true;
+  try {
+    final newId = await createReworkDraft(ref, draft);
+    if (!context.mounted) return;
+    if (newId == null) {
+      showAppToast(
+        context,
+        message: 'Accedi per rielaborare il rapporto di intervento.',
+        tone: ToastTone.warning,
+      );
+      return;
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AppButton(
-      label: _busy ? 'Download in corso...' : 'Scarica PDF',
-      icon: _busy ? null : const Icon(LucideIcons.download, size: 16),
-      isLoading: _busy,
-      onPressed: _busy ? null : _open,
-    );
-  }
-}
-
-/// Square icon-only twin to the "Scarica PDF" [VetroButton] — sends the same downloaded file
-/// through the OS share sheet instead of opening it, so a technician can hand the report to the
-/// office/customer over email/WhatsApp without leaving the app. Not [VetroButton] itself: that
-/// widget always pairs an icon with a label, and a share affordance next to a full-width primary
-/// button reads better as an icon-only square than a second full-width row.
-class _SharePdfButton extends ConsumerStatefulWidget {
-  const _SharePdfButton({required this.reportId});
-
-  final String reportId;
-
-  @override
-  ConsumerState<_SharePdfButton> createState() => _SharePdfButtonState();
-}
-
-class _SharePdfButtonState extends ConsumerState<_SharePdfButton> {
-  bool _busy = false;
-
-  Future<void> _share() async {
-    setState(() => _busy = true);
-    final file = await _resolveReportPdf(ref, widget.reportId, context);
-    if (mounted) setState(() => _busy = false);
-    if (file == null) return;
-
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-      child: AppTappable(
-        onTap: _busy ? null : _share,
-        color: AppColors.Y.withAlpha(31),
-        borderRadius: BorderRadius.circular(16),
-        semanticLabel: 'Condividi PDF',
-        child: Center(
-          child: _busy
-              ? SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
-                )
-              : Icon(LucideIcons.share2, size: 18, color: AppColors.Y),
-        ),
-      ),
-    );
+    context.push(AppRoutes.rapportiniEditor(newId));
+  } finally {
+    if (context.mounted) ref.read(busy.notifier).state = false;
   }
 }
 
@@ -994,6 +837,57 @@ String _customerLabel(BuildContext context, WidgetRef ref, DraftReport draft) {
       customerId;
 }
 
+/// Builds the report's hero: identity, status, the three facts and the actions this read-only
+/// document actually offers. PDF/share are the normal pair; a rejected report swaps the primary
+/// for Rilavora, the one action that gives the technician a way forward.
+DetailHeroData _buildRapportinoHero(BuildContext context, WidgetRef ref, DraftReport draft) {
+  final staff = ref.watch(rapportinoStaffProvider(draft.id)).valueOrNull ?? const [];
+  final tecnicoLabel = staff.isNotEmpty
+      ? staff
+            .map((s) => ref.watch(colleagueNameProvider(s.userId)).valueOrNull ?? s.userId)
+            .join(', ')
+      : (ref.watch(colleagueNameProvider(draft.insertedUserId)).valueOrNull ??
+            draft.insertedUserId);
+  final rejected = rapportinoIsRejected(draft);
+  final pdfBusy = ref.watch(_rapportinoPdfBusyProvider(draft.id));
+  final reworkBusy = ref.watch(_rapportinoReworkBusyProvider(draft.id));
+
+  return DetailHeroData(
+    variant: DetailHeroVariant.operational,
+    title: draft.title,
+    status: DetailStatus(label: rapportinoStatusLabel(draft)),
+    facts: [
+      DetailFact(label: 'Cliente', value: _customerLabel(context, ref, draft)),
+      DetailFact(label: 'Sede', value: _locationLabel(context, ref, draft)),
+      DetailFact(label: 'Tecnico', value: tecnicoLabel),
+    ],
+    primaryAction: rejected
+        ? DetailAction(
+            label: 'Rilavora',
+            icon: const Icon(LucideIcons.penTool, size: 16),
+            enabled: !reworkBusy,
+            disabledReason: reworkBusy ? 'Rielaborazione in corso…' : null,
+            onPressed: reworkBusy ? null : () => _reworkReport(context, ref, draft),
+          )
+        : DetailAction(
+            label: 'Scarica PDF',
+            icon: const Icon(LucideIcons.download, size: 16),
+            enabled: !pdfBusy,
+            disabledReason: pdfBusy ? 'Download in corso…' : null,
+            onPressed: pdfBusy ? null : () => _downloadReportPdfFromHero(context, ref, draft.id),
+          ),
+    secondaryActions: [
+      DetailAction(
+        label: 'Condividi',
+        icon: const Icon(LucideIcons.share2, size: 16),
+        enabled: !pdfBusy,
+        disabledReason: pdfBusy ? 'Download in corso…' : null,
+        onPressed: pdfBusy ? null : () => _shareReportPdfFromHero(context, ref, draft.id),
+      ),
+    ],
+  );
+}
+
 /// Reads one string field out of the draft's packed `metadataJson` blob. Malformed/absent
 /// metadata is not worth losing the rest of the display over — returns null rather than
 /// throwing, same tolerance `report_editor_providers.dart`'s own parser applies.
@@ -1009,40 +903,13 @@ String? _metadataField(String? json, String key) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Rejection banner + rework button
+// Rejection banner
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _RejectionBanner extends ConsumerStatefulWidget {
-  const _RejectionBanner({required this.draft});
-
-  final DraftReport draft;
-
-  @override
-  ConsumerState<_RejectionBanner> createState() => _RejectionBannerState();
-}
-
-class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
-  bool _busy = false;
-
-  Future<void> _rielabora() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      final newId = await createReworkDraft(ref, widget.draft);
-      if (!mounted) return;
-      if (newId == null) {
-        showAppToast(
-          context,
-          message: 'Accedi per rielaborare il rapporto di intervento.',
-          tone: ToastTone.warning,
-        );
-        return;
-      }
-      context.push(AppRoutes.rapportiniEditor(newId));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+/// Explains a rejected report. Text-only on purpose: the hero owns the single Rilavora action, so
+/// this banner never duplicates it.
+class _RejectionBanner extends StatelessWidget {
+  const _RejectionBanner();
 
   @override
   Widget build(BuildContext context) {
@@ -1078,13 +945,6 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
             "lavoro con gli stessi dati, quello respinto resta com'è. "
             "L'ufficio non ha registrato un motivo per questo rifiuto.",
             style: TextStyle(color: context.colors.ink, fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          AppButton(
-            label: 'Rielabora',
-            icon: const Icon(LucideIcons.penTool),
-            onPressed: _busy ? null : _rielabora,
-            isLoading: _busy,
           ),
         ],
       ),
@@ -1391,11 +1251,7 @@ class _ReportFieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: context.colors.inkMuted,
-      ),
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.inkMuted),
     );
   }
 }
@@ -1418,10 +1274,7 @@ class _ControlloAnswerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final control = flat?.control;
-    final label =
-        controllo.controlLabel ??
-        control?.label ??
-        'Controllo ${controllo.controlId}';
+    final label = controllo.controlLabel ?? control?.label ?? 'Controllo ${controllo.controlId}';
     final groupPath = flat?.groupPath;
     final valueLabel = _valueLabel(control?.type);
 

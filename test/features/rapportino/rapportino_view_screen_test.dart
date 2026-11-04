@@ -5,12 +5,13 @@
 //
 // Covers:
 //   1. Renders KeyVal rows (Sede, Tecnico, Cliente, Ore).
-//   2. Renders StatusPill with correct label.
+//   2. Renders the hero status stamp with the correct label (once — Sintesi does not repeat it).
 //   3. Renders Materiali list rows when materiali seeded.
 //   4. Firma cliente and Firma tecnico blocks shown when their signature allegato ids are set.
 //   5. Shows "not found" empty state for unknown report id.
 //   6. Scarica PDF button present.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -19,21 +20,71 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_section.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/reports/report_pdf_cache.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportino_view_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 class _MockDio extends Mock implements Dio {}
+
+/// A cache whose one resolve never finishes, so a test can inspect the hero while the download is
+/// in flight without touching the filesystem or the platform viewer.
+class _HangingReportPdfCache extends ReportPdfCache {
+  _HangingReportPdfCache()
+    : super(download: (_) async => const <int>[], rootLoader: () async => Directory.systemTemp);
+
+  final Completer<File> pending = Completer<File>();
+  int resolves = 0;
+
+  @override
+  Future<File> resolve(String reportId, {required bool online}) {
+    resolves++;
+    return pending.future;
+  }
+}
+
+/// A cache whose resolve returns immediately, so a test can hold the *share* step open and inspect
+/// the hero while it runs.
+class _ReadyReportPdfCache extends ReportPdfCache {
+  _ReadyReportPdfCache(this.file)
+    : super(download: (_) async => const <int>[], rootLoader: () async => Directory.systemTemp);
+
+  final File file;
+  int resolves = 0;
+
+  @override
+  Future<File> resolve(String reportId, {required bool online}) async {
+    resolves++;
+    return file;
+  }
+}
+
+final _testUser = AuthUser(
+  id: 'user-2',
+  email: 'tecnico@example.com',
+  accessToken: 'tok',
+  refreshToken: 'ref',
+  expiresAt: DateTime.utc(2030, 1, 1),
+);
+
+/// The signed-in user's internal database id, deliberately distinct from [_testUser].id so a
+/// test reading the wrong provider fails loudly. Mirrors create_draft_test.dart's own fixture.
+const _testInternalUserId = 'internal-guid-2';
 
 /// Never geocodes for real — every test in this file overrides `geocodingServiceProvider` with
 /// this, so a report location with an address exercises `GeoMapCard`'s fallback path
@@ -65,6 +116,8 @@ Future<void> _seedSubmittedDraft(
   String? diagnosi,
   String? soluzione,
   String? customerSignoffText,
+  String? customerSignatureAllegatoId = 'sig-c-1',
+  String? technicianSignatureAllegatoId = 'sig-t-1',
   bool isAiAssisted = false,
   bool richiedeSecondoIntervento = false,
   bool materialiNotRequired = false,
@@ -87,8 +140,8 @@ Future<void> _seedSubmittedDraft(
           isLocalOnly: const Value(true),
           stato: Value(stato),
           submissionState: const Value('submitted'),
-          customerSignatureAllegatoId: const Value('sig-c-1'),
-          technicianSignatureAllegatoId: const Value('sig-t-1'),
+          customerSignatureAllegatoId: Value(customerSignatureAllegatoId),
+          technicianSignatureAllegatoId: Value(technicianSignatureAllegatoId),
           technicianNotes: Value(technicianNotes),
           diagnosi: Value(diagnosi),
           soluzione: Value(soluzione),
@@ -224,15 +277,47 @@ Widget _buildView({
   String reportId = 'report-1',
   Dio? dio,
   bool isOnline = true,
+  ReportPdfCache? pdfCache,
+  ReportPdfShare? share,
 }) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       if (dio != null) dioProvider.overrideWithValue(dio),
+      if (pdfCache != null) reportPdfCacheProvider.overrideWithValue(pdfCache),
+      if (share != null) reportPdfShareProvider.overrideWithValue(share),
       isOnlineProvider.overrideWithValue(isOnline),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
     ],
     child: MaterialApp(home: RapportinoViewScreen(reportId: reportId)),
+  );
+}
+
+/// Same screen, but behind a [GoRouter] with a real editor destination, so the rework test can
+/// assert the hero's push actually navigated there.
+Widget _buildRoutedView({required AppDatabase db, String reportId = 'report-1'}) {
+  final router = GoRouter(
+    initialLocation: '/altro/rapportini/view/$reportId',
+    routes: [
+      GoRoute(
+        path: '/altro/rapportini/view/:reportId',
+        builder: (_, state) => RapportinoViewScreen(reportId: state.pathParameters['reportId']!),
+      ),
+      GoRoute(
+        path: '/altro/rapportini/editor/:reportId',
+        builder: (_, state) => Scaffold(body: Text('editor:${state.pathParameters['reportId']}')),
+      ),
+    ],
+  );
+  return ProviderScope(
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      isOnlineProvider.overrideWithValue(true),
+      geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+      currentUserProvider.overrideWithValue(_testUser),
+      internalUserIdProvider.overrideWith((ref) async => _testInternalUserId),
+    ],
+    child: MaterialApp.router(routerConfig: router),
   );
 }
 
@@ -250,42 +335,40 @@ void main() {
   tearDown(() async => db.close());
 
   group('RapportinoViewScreen — header card', () {
-    testWidgets('renders StatusPill Inviata for submitted draft', (tester) async {
+    testWidgets('renders the hero status stamp Inviata for submitted draft', (tester) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.byType(StatusPill), findsWidgets);
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.byType(StatusStamp)), findsOneWidget);
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
       // status_pill_test.dart's own note on this rendering change.
-      expect(find.text('INVIATA'), findsWidgets);
+      expect(find.descendant(of: hero, matching: find.text('INVIATA')), findsOneWidget);
+      // Sintesi no longer repeats the status: the hero stamp is the single authoritative one.
+      expect(find.byType(StatusPill), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders KeyVal rows Sede, Tecnico, Cliente, Ore', (tester) async {
+    testWidgets('renders the Ore row and moves Sede, Tecnico, Cliente into the hero', (
+      tester,
+    ) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.byType(KeyVal), findsWidgets);
-      // Labels are uppercased in KeyVal widget
-      expect(find.text('SEDE'), findsOneWidget);
-      expect(find.text('TECNICO'), findsOneWidget);
-      expect(find.text('CLIENTE'), findsOneWidget);
+      // The three identity facts now live in the hero, not in a KeyVal card.
       expect(find.text('ORE'), findsOneWidget);
+      expect(find.text('SEDE'), findsNothing);
+      expect(find.text('TECNICO'), findsNothing);
+      expect(find.text('CLIENTE'), findsNothing);
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('renders title in ScreenHeader', (tester) async {
-      await _seedSubmittedDraft(db);
-      await tester.pumpWidget(_buildView(db: db));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Manutenzione straordinaria'), findsWidgets);
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Sede')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Tecnico')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Cliente')), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -415,6 +498,8 @@ void main() {
 
       // The customer block (first in the list) is the one actually wrapped in a tappable —
       // the placeholder branch isn't tappable at all.
+      await tester.ensureVisible(find.textContaining('Firmato il').first);
+      await tester.pumpAndSettle();
       await tester.tap(find.textContaining('Firmato il').first);
       await tester.pumpAndSettle();
 
@@ -496,6 +581,8 @@ void main() {
 
       // The thumbnail itself is the tap target — no seeded signature in this test, so it's the
       // only Image on screen.
+      await tester.ensureVisible(find.byType(Image).first);
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(Image).first);
       await tester.pumpAndSettle();
 
@@ -527,18 +614,13 @@ void main() {
   });
 
   group('RapportinoViewScreen — download', () {
-    testWidgets('Scarica PDF button is present', (tester) async {
-      // The Firma tecnico section (shown by default — _seedSubmittedDraft sets both signature
-      // ids) pushes this section below the default test surface height.
-      await tester.binding.setSurfaceSize(const Size(800, 1400));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
+    testWidgets('Scarica PDF button is present in the hero', (tester) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      final pdfBtn = find.text('Scarica PDF');
-      expect(pdfBtn, findsOneWidget);
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Scarica PDF')), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -616,6 +698,9 @@ void main() {
     testWidgets(
       'shows GeoMapCard (never a raw KeyVal-only Sede) when the location has an address',
       (tester) async {
+        await tester.binding.setSurfaceSize(const Size(800, 2400));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
         await db
             .into(db.customers)
             .insert(
@@ -685,7 +770,7 @@ void main() {
   });
 
   group('RapportinoViewScreen — rejection banner (mobile audit item #1)', () {
-    testWidgets('shows the rejection banner and Rielabora affordance for a Respinto report', (
+    testWidgets('shows the rejection banner and Rilavora affordance for a Respinto report', (
       tester,
     ) async {
       await _seedSubmittedDraft(db, stato: 'Respinto');
@@ -693,7 +778,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("L'ufficio ha respinto"), findsOneWidget);
-      expect(find.text('Rielabora'), findsOneWidget);
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Rilavora')), findsOneWidget);
+      expect(find.text('Rielabora'), findsNothing);
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
       // status_pill_test.dart's own note on this rendering change.
       expect(find.text('RESPINTA'), findsWidgets);
@@ -710,7 +797,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("L'ufficio ha respinto"), findsNothing);
-      expect(find.text('Rielabora'), findsNothing);
+      expect(find.text('Rilavora'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -724,7 +811,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining("L'ufficio ha respinto"), findsNothing);
-      expect(find.text('Rielabora'), findsNothing);
+      expect(find.text('Rilavora'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -883,13 +970,7 @@ void main() {
         kmTraveled: 12.0,
         vehicle: 'Furgone',
       );
-      await _seedStaff(
-        db,
-        'report-1',
-        id: 'staff-2',
-        userId: 'tecnico-2',
-        hoursWorked: 1.0,
-      );
+      await _seedStaff(db, 'report-1', id: 'staff-2', userId: 'tecnico-2', hoursWorked: 1.0);
 
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
@@ -1041,12 +1122,248 @@ void main() {
     });
   });
 
+  group('RapportinoViewScreen — sections', () {
+    testWidgets('renders Attività, Sintesi, Ore, Materiali, Controlli, Documenti in order', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(800, 4000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await _seedSubmittedDraft(db, inviatoAt: DateTime.utc(2026, 6, 2, 9));
+      await _seedStaff(db, 'report-1');
+      await _seedMateriali(db, 'report-1');
+      await _seedControllo(db, 'report-1', controlId: 'tc-1', boolValue: true);
+      final photo = _makeTempFile('section-photo.jpg', [1, 2, 3]);
+      addTearDown(() => photo.deleteSync());
+      await _insertAllegato(
+        db,
+        id: 'photo-1',
+        reportId: 'report-1',
+        fileName: 'lavoro.jpg',
+        storagePath: photo.path,
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      const titles = ['Attività', 'Sintesi', 'Ore', 'Materiali', 'Controlli', 'Documenti & mappa'];
+      final tops = [
+        for (final title in titles) tester.getTopLeft(find.widgetWithText(DetailSection, title)).dy,
+      ];
+      for (var i = 0; i < titles.length; i++) {
+        expect(find.widgetWithText(DetailSection, titles[i]), findsOneWidget);
+      }
+      for (var i = 0; i < tops.length - 1; i++) {
+        expect(tops[i], lessThan(tops[i + 1]), reason: '${titles[i]} before ${titles[i + 1]}');
+      }
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('omits Materiali, Controlli and Documenti when the report has none', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(
+        db,
+        customerSignatureAllegatoId: null,
+        technicianSignatureAllegatoId: null,
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(DetailSection, 'Sintesi'), findsOneWidget);
+      expect(find.widgetWithText(DetailSection, 'Attività'), findsNothing);
+      expect(find.widgetWithText(DetailSection, 'Ore'), findsNothing);
+      expect(find.widgetWithText(DetailSection, 'Materiali'), findsNothing);
+      expect(find.widgetWithText(DetailSection, 'Controlli'), findsNothing);
+      expect(find.widgetWithText(DetailSection, 'Documenti & mappa'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — detail shell hero', () {
+    testWidgets('renders the generic Rapportino header and the report title in the hero', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rapportino'), findsOneWidget);
+      final hero = find.byType(DetailHero);
+      expect(
+        find.descendant(of: hero, matching: find.text('Manutenzione straordinaria')),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('hero offers Scarica PDF and Condividi for a submitted report', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Scarica PDF')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Condividi')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a rejected report promotes Rilavora to the hero and shows it once', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db, stato: 'Respinto');
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Rilavora')), findsOneWidget);
+      // The banner no longer owns a button of its own: it keeps its explanation only.
+      expect(find.text('Rielabora'), findsNothing);
+      expect(find.textContaining("L'ufficio ha respinto"), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('hero shows Cliente, Sede, Tecnico facts and the status stamp', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Cliente')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Sede')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Tecnico')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('INVIATA')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('while the PDF downloads, both PDF actions are disabled and re-entry is ignored', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db);
+      final cache = _HangingReportPdfCache();
+
+      await tester.pumpWidget(_buildView(db: db, pdfCache: cache));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      final pdfLabel = find.descendant(of: hero, matching: find.text('Scarica PDF'));
+      final shareLabel = find.descendant(of: hero, matching: find.text('Condividi'));
+      await tester.tap(pdfLabel);
+      await tester.pump();
+
+      expect(cache.resolves, 1);
+      expect(find.descendant(of: hero, matching: find.text('Download in corso…')), findsOneWidget);
+      final primary = tester.widget<AppButton>(
+        find.ancestor(of: pdfLabel, matching: find.byType(AppButton)),
+      );
+      expect(primary.onPressed, equals(null));
+      // The shared flag covers Condividi too: it resolves the same cache entry, so it must not
+      // start while the download is still writing the same .part file.
+      final secondary = tester.widget<AppButton>(
+        find.ancestor(of: shareLabel, matching: find.byType(AppButton)),
+      );
+      expect(secondary.onPressed, equals(null));
+
+      // Neither disabled action may start a second resolve.
+      await tester.tap(pdfLabel);
+      await tester.pump();
+      await tester.tap(shareLabel);
+      await tester.pump();
+      expect(cache.resolves, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('while the share sheet is open, Scarica PDF is disabled too', (tester) async {
+      await _seedSubmittedDraft(db);
+      final file = _makeTempFile('share-ready.pdf', [1, 2, 3]);
+      addTearDown(() => file.deleteSync());
+      final cache = _ReadyReportPdfCache(file);
+      final sharePending = Completer<void>();
+      var shares = 0;
+
+      await tester.pumpWidget(
+        _buildView(
+          db: db,
+          pdfCache: cache,
+          share: (file) {
+            shares++;
+            return sharePending.future;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      final pdfLabel = find.descendant(of: hero, matching: find.text('Scarica PDF'));
+      final shareLabel = find.descendant(of: hero, matching: find.text('Condividi'));
+      await tester.tap(shareLabel);
+      await tester.pump();
+
+      expect(cache.resolves, 1);
+      expect(shares, 1);
+      final primary = tester.widget<AppButton>(
+        find.ancestor(of: pdfLabel, matching: find.byType(AppButton)),
+      );
+      expect(primary.onPressed, equals(null));
+
+      await tester.tap(pdfLabel);
+      await tester.pump();
+      expect(cache.resolves, 1, reason: 'the download must not race the in-flight share resolve');
+
+      sharePending.complete();
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('hero Rilavora creates a reworked draft and opens the editor', (tester) async {
+      await _seedSubmittedDraft(db, stato: 'Respinto');
+
+      await tester.pumpWidget(_buildRoutedView(db: db));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      await tester.tap(find.descendant(of: hero, matching: find.text('Rilavora')));
+      await tester.pumpAndSettle();
+
+      // createReworkDraft really ran: a fresh Bozza row exists, distinct from the rejected one.
+      final rows = await db.select(db.draftReports).get();
+      expect(rows, hasLength(2));
+      final reworked = rows.singleWhere((r) => r.id != 'report-1');
+      expect(reworked.stato, 'Bozza');
+      expect(reworked.title, 'Manutenzione straordinaria');
+      expect(reworked.isLocalOnly, isTrue);
+
+      // ...and the hero pushed its editor route for that new id.
+      expect(find.text('editor:${reworked.id}'), findsOneWidget);
+      expect(find.text('editor:report-1'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
   group('RapportinoViewScreen — not found', () {
     testWidgets('shows empty state for unknown report id', (tester) async {
       await tester.pumpWidget(_buildView(db: db, reportId: 'nonexistent'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.byType(UnavailableState), findsOneWidget);
       expect(find.text('Rapporto di intervento non trovato'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
