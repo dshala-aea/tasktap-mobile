@@ -10,18 +10,18 @@ import '../../core/time/business_time.dart' show BusinessTime;
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_vetro_palette.dart';
-import '../../core/widgets/app_button.dart';
-import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/compartment_sheet.dart';
-import '../../core/widgets/row_icon_tile.dart';
 import '../../core/widgets/screen_header.dart';
+import '../../core/widgets/status_stamp.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider;
 import '../../data/timbratura/remote_shift.dart' show OfflineRemoteShiftException;
 import '../../presentation/providers/clock_disagreement_provider.dart';
 import 'clock_disagreement_note.dart';
+import 'day_rail.dart';
+import 'day_rail_view.dart';
 import 'timbra_providers.dart';
 import 'work_log_live_refresh.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -36,106 +36,70 @@ import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 ///
 ///   - (2026-08-26 redesign, module #1; hero restructured 2026-08-30, "Status-First Hero"; chrome
 ///     removed 2026-08-30, "Hybrid Card Hero"; hero card dropped entirely 2026-08-30, full flip;
-///     flat Documento material, no more gradients, 2026-09-04 — see below.)
+///     flat Documento material, no more gradients, 2026-09-04.)
 ///   - The screen used to be permanently dark, top to bottom, with its own fixed `ScreenHeader`
 ///     plate. A first pass narrowed that to one dark "hero card" wrapping just the punch control
 ///     (the sun-glare argument for a dark, high-contrast surface was real — see the git history on
-///     this file). That card didn't land: on a real device it read as a second, disconnected
-///     surface rather than part of the page, and its fixed 156dp circular button and generous
-///     internal padding left the top of a tall phone looking sparse against a big session-list gap
-///     below it. This pass drops the card: every surface on this page, including the punch/pause
-///     controls, now reads `context.colors`/`context.vetro` and flips with the app theme like
-///     every other screen. The sun-glare property is kept differently — the punch/pause buttons
-///     are still a saturated flat fill with white text/icon, which stays legible regardless of
-///     the surrounding theme, without needing a dedicated dark ground under them.
-///   - `ScreenHeader` was dropped for a plain inline title + date (2026-09-04, see above) — every
-///     other timbra screen (`chiudi_turno_screen.dart`, `seleziona_cantiere_screen.dart`,
-///     `cantiere_timbra_screen.dart`) already used the shared header, and the divergence bought
-///     this root-tab screen nothing the header itself doesn't already support (no back chevron,
-///     no actions — both optional on `ScreenHeader`). Reinstated 2026-09-15 for that consistency;
-///     the date now rides as the header's own `subtitle`.
-///   - Punch/pause are now full-width rounded-rect buttons, not a floating disc/small pill — more
-///     touch target, no wasted side margins, and closer in shape to `AppButton`'s own full-width
-///     convention used everywhere else in the app.
+///     this file). That card didn't land: it read as a second, disconnected surface rather than
+///     part of the page. The sun-glare property is kept differently — the punch/pause controls are
+///     a saturated flat fill with white text/icon, legible regardless of the surrounding theme.
+///   - Punch/pause are full-width rounded-rect buttons, not a floating disc/small pill.
 ///   - "Invia ore" (day-level submit-for-approval) removed entirely — the approval workflow it
-///     fed had no real consumer (payroll already reads a raw Excel export, ignoring approval
-///     status; the office edits/deletes hours directly). Removed from mobile only for now; the
-///     backend/web-frontend side of the same workflow is a tracked follow-up, not done here.
-///   - Punch failures used to render as inline red text under the button — now routed through
-///     [showAppToast], the same shared feedback surface every other screen in the app uses, so
-///     the layout doesn't shift to make room for an error line.
-///   - The punch button gets a brief `AnimatedScale` press-down instead of an ink splash (a splash
-///     over a saturated fill read as a smudge, not a press — still true, still avoided), and its
-///     fill/state crossfades on tap instead of snapping; the status badge crossfades on state
-///     change; the guard banner animates its own height in/out instead of popping.
-class TimbraScreen extends ConsumerStatefulWidget {
+///     fed had no real consumer.
+///   - Punch failures route through [showAppToast], the shared feedback surface, so the layout
+///     never shifts to make room for an error line.
+///   - **2026-11-04 — the day became a line.** Two defects drove this rebuild. (1) The list and
+///     the total came from this phone's own table only: a punch made on the totem, on another
+///     device, or corrected by the office was invisible, so the total undercounted and the
+///     technician could not tell it was wrong. (2) The screen is pushed on the root navigator and
+///     its header declared no leading control — Android's system back was the only way out.
+///
+///     The fix for (1) is not a longer list. `SESSIONI DI OGGI` showed moments and left the
+///     subtraction to the reader; the rail (`day_rail_view.dart`) shows stretches and voids with
+///     their own durations, so the total is legible as the sum of what is drawn. The merge behind
+///     it lives in `day_rail.dart` (phone events + server rows, joined on the client id). Every
+///     stretch says where it came from, because "the office corrected this" and "this phone
+///     recorded it" are different facts and the whole bug was their conflation.
+///
+///     The fix for (2) is `showBack: true` — the shared header already carries the chevron.
+///
+///     The punch control moved out of the scrolling content into a docked deck above the safe
+///     area: the one action the technician came here to take should not be able to scroll away,
+///     and the rail needs the vertical room more than the controls do.
+class TimbraScreen extends ConsumerWidget {
   const TimbraScreen({super.key});
 
   @override
-  ConsumerState<TimbraScreen> createState() => _TimbraScreenState();
-}
-
-class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProviderStateMixin {
-  // Pulse animation for the clock dot while on shift.
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    );
-    _pulseAnim = Tween<double>(
-      begin: 0.85,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
-  void _updatePulse(bool isOnShift) {
-    final reducedMotion = MediaQuery.of(context).disableAnimations;
-    if (isOnShift && !reducedMotion) {
-      if (!_pulseController.isAnimating) {
-        _pulseController.repeat(reverse: true);
-      }
-    } else {
-      _pulseController.stop();
-      _pulseController.reset();
-    }
-  }
-
-  /// Re-reads the server's clock state every time the screen opens (and on resume / every 15s while
-  /// visible), so buttons reflect a clock started, paused or stopped on another device. The buttons
-  /// themselves derive from the local state, which the reconciler mirrors the server into — a punch
-  /// made offline is pending and therefore never overwritten. See WorkLogLiveRefresh.
-  @override
-  Widget build(BuildContext context) => WorkLogLiveRefresh(child: _buildScreen(context));
-
-  Widget _buildScreen(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // The punch controls act on the whole-log state, not today's: a shift opened at 22:00 is still
     // open at 00:01 and must keep both its finish and its "FINE TURNO" label. See
-    // actionableShiftStateProvider — the sessions card and "Ore lavorate oggi" below stay
-    // day-scoped through their own providers.
+    // actionableShiftStateProvider — the rail below stays day-scoped through dayRailProvider.
     final shiftState = ref.watch(actionableShiftStateProvider);
-    final sessionsAsync = ref.watch(todaySessionsProvider);
-    final rejected = ref.watch(syncFailedSessionsProvider).valueOrNull ?? const <WorkSession>[];
     final punchState = ref.watch(punchNotifierProvider);
-    final total = ref.watch(totalWorkedTodayProvider);
     final clockInMethod = ref.watch(effectiveClockInMethodProvider);
     final smartWorking = ref.watch(smartWorkingTodayProvider);
+    final day = ref.watch(dayRailProvider);
+    // Whether the server's own day answered at all. A failed read is not an error screen — the
+    // phone's own punches still draw — but it must not be silently indistinguishable from "the
+    // server says there is nothing", which is the exact claim this screen was rebuilt to stop
+    // making. See serverDayProvider.
+    final serverDay = ref.watch(serverDayProvider);
+    final serverFailed = serverDay.hasError;
+    final serverResolved = serverDay.hasValue;
+    final localFailure = ref.watch(todaySessionsProvider).error;
+    // What an empty rail may claim depends on BOTH sources: a failed server read allows only this
+    // phone's truth, and a failed local read leaves the day unknown — the screen cannot then say
+    // "nothing happened today" beside its own "impossibile leggere le timbrature", nor offer a
+    // punch that would open a second shift on a day nobody has seen.
+    final coverage = localFailure != null
+        ? DayCoverage.unknown
+        : (serverResolved ? DayCoverage.complete : DayCoverage.phoneOnly);
+    final rejected = ref.watch(syncFailedSessionsProvider).valueOrNull ?? const <WorkSession>[];
+    final punchGuard = ref.watch(punchGuardProvider);
+    final pauseGuard = ref.watch(pauseGuardProvider);
+    final clockDisagreement = ref.watch(timbraClockDisagreementProvider);
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
-    _updatePulse(shiftState.isOnShift);
-
-    // A failed punch used to render as red text wedged under the button, shifting everything
-    // below it. Routed through the shared toast instead, same as every other transient-feedback
-    // site in the app now.
     ref.listen<AsyncValue<void>>(punchNotifierProvider, (previous, next) {
       if (next is AsyncError) {
         showAppToast(
@@ -148,225 +112,183 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
       }
     });
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: Column(
-          children: [
-            ScreenHeader(
-              title: 'Timbra',
-              subtitle: _formatDateLabel(ref.watch(businessTimeProvider)),
-              // ButtonOnly: no server endpoint would accept a kiosk-QR punch anyway (backend
-              // Task 4's EnsureClockInMethodAllowedAsync), so the entry point is hidden rather
-              // than shown-but-doomed.
-              actions: clockInMethod == 'ButtonOnly'
-                  ? const []
-                  : [
-                      HeaderIconBtn(
-                        icon: Icons.qr_code_scanner,
-                        label: 'Timbra con QR',
-                        onTap: () => context.push(AppRoutes.timbraQr),
-                      ),
-                    ],
-            ),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  AppSpacing.pagePadding,
-                  AppSpacing.lg,
-                  AppSpacing.pagePadding,
-                  // fabSafeBottom, not navClearance: this route is pushed full-screen
-                  // (rootNavigatorKey), so the pill nav is never drawn here — and the difference
-                  // isn't just wasted space, since this padding shrinks the height LayoutBuilder
-                  // compares against _kFixedLayoutMinHeight just below.
-                  context.fabSafeBottom,
-                ),
-                // Fixed when there is room, scrolling when there is not — see
-                // _kFixedLayoutMinHeight.
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    // A refusal notice adds height that `_kFixedLayoutMinHeight` does not know
-                    // about, so a screen that just fits would overflow the session card below it.
-                    // With rejections present the page scrolls instead — the notice is the one
-                    // thing here that must never be clipped.
-                    //
-                    // The controls themselves are not a fixed height either. Counting against the
-                    // bare punch button (76dp):
-                    //   • approved smart-working day → chip ~26 + a 12 gap;
-                    //   • QrOnly notice → ~84, where the punch button it replaces is 76;
-                    //   • a shift open on a QrOnly day that is not confirmed approved → the
-                    //     scanner fallback under the controls: 12 gap + a one-or-two-line 12px
-                    //     caption (~17/line) + 8 + a 44-tall AppButton, so ≈ 98 with two lines —
-                    //     *on top of* the pause button (12 gap + its own 64) the open shift adds.
-                    // The largest arrangement is therefore punch 76 + pause 76 + fallback ≈ 98 ≈
-                    // 250dp of controls, well inside the 640 budget below — and the largest that can be
-                    // drawn at all, since the chip and the notice each need an answer the fallback
-                    // rules out. The fixed-layout tests pin that at 390×844, the height a tall phone
-                    // actually gives this box: once with the chip, once with an open shift and the
-                    // fallback present.
-                    final fits = constraints.maxHeight >= _kFixedLayoutMinHeight && rejected.isEmpty;
-                    final punchGuard = ref.watch(punchGuardProvider);
-                    final clockDisagreement = ref.watch(timbraClockDisagreementProvider);
-                    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    // The one shared rule (entitlement_providers.dart's isButtonPunchWithheld): a QrOnly tenant may
+    // only withhold the button on an explicit `false`, and never while the shift is open — the flag
+    // may remove a way to START work, never a way to finish it. An unknown answer (cold start,
+    // signed out, another user, /auth/me not back yet) keeps the button too.
+    final hidePunch = isButtonPunchWithheld(
+      surface: ButtonPunchSurface.startOrFinish,
+      clockInMethod: clockInMethod,
+      smartWorkingToday: smartWorking,
+      hasOpenShift: shiftState.isOnShift,
+    );
 
-                    // The one shared rule (entitlement_providers.dart's isButtonPunchWithheld): a
-                    // QrOnly tenant may only withhold the button on an explicit `false`, and never
-                    // while the shift is open — the flag may remove a way to START work, never a
-                    // way to finish it. An unknown answer (cold start, signed out, another user,
-                    // /auth/me not back yet) keeps the button too: a stale `true` would be a lie,
-                    // but a stale `false` would strand exactly the technician this feature exists
-                    // for. See the chip below, which needs a positive answer where the button does
-                    // not.
-                    final hidePunch = isButtonPunchWithheld(
-                      surface: ButtonPunchSurface.startOrFinish,
-                      clockInMethod: clockInMethod,
-                      smartWorkingToday: smartWorking,
-                      hasOpenShift: shiftState.isOnShift,
-                    );
+    // The one state the punch control cannot resolve on its own: an open shift on a QrOnly tenant
+    // whose day is not a confirmed approved one. The button stays (it may still be legal — the
+    // server's two-day rule covers a night shift opened on an approved day), so the scanner has to
+    // stay reachable beside it.
+    final showQrFallback =
+        clockInMethod == 'QrOnly' && shiftState.isOnShift && smartWorking != true;
 
-                    // The one state the punch control cannot resolve on its own: an open shift on
-                    // a QrOnly tenant whose day is not a confirmed approved one. The button stays
-                    // (it may still be legal — the server's two-day rule covers a night shift
-                    // opened on an approved day), so the scanner has to stay reachable beside it.
-                    final showQrFallback =
-                        clockInMethod == 'QrOnly' &&
-                        shiftState.isOnShift &&
-                        smartWorking != true;
+    final banners = <Widget>[
+      // The server compared this phone's clock with its own receipt instant and found them far
+      // apart. Only the server can make that comparison, so this banner says what the technician
+      // could not otherwise discover. Advisory: the hours are already recorded.
+      if (clockDisagreement != null) ...[
+        ClockDisagreementNote(
+          seconds: clockDisagreement,
+          onDismiss: () => ref.read(timbraClockDisagreementProvider.notifier).dismiss(),
+        ),
+        const SizedBox(height: AppSpacing.md),
+      ],
+      // A punch the server refused is a fact about the shift the technician is about to add to.
+      if (rejected.isNotEmpty) ...[
+        _RejectedPunchesBanner(sessions: rejected),
+        const SizedBox(height: AppSpacing.md),
+      ],
+      // Both guard reasons, promoted out of the buttons themselves: the deck is a fixed strip at
+      // the bottom of the screen and has no room to grow a paragraph under it. Above the rail, the
+      // reason is read before the tap rather than after it.
+      for (final guard in [punchGuard, pauseGuard])
+        if (guard.blocked && guard.reason != null) ...[
+          AnimatedSize(
+            duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 200),
+            alignment: Alignment.topCenter,
+            curve: Curves.easeInOut,
+            child: _GuardBanner(reason: guard.reason!),
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+      // An approved remote day, said before the control it explains.
+      if (smartWorking == true) ...[
+        const _SmartWorkingChip(),
+        const SizedBox(height: AppSpacing.md),
+      ],
+      // A failure to read *this phone's own* table, unlike an unreachable server (which leaves the
+      // phone's own line intact and is not an error state — see day_rail.dart). Silently showing
+      // an empty rail here would look exactly like a day with no punches.
+      if (localFailure != null) ...[
+        _InlineFailure(message: '$localFailure'),
+        const SizedBox(height: AppSpacing.md),
+      ],
+      // The opposite failure: this phone is fine, the server's day is not. The rail still shows
+      // every punch made here; what it cannot show is anything recorded elsewhere, and only this
+      // line can say so. When there is nothing to draw at all, the rail's own empty state says it
+      // instead — one sentence, not two.
+      if (serverFailed && !day.isEmpty) ...[
+        const _ServerDayUnknown(),
+        const SizedBox(height: AppSpacing.md),
+      ],
+    ];
 
-                    final content = <Widget>[
-                      _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
-                      const SizedBox(height: 24),
-                      // The server compared this phone's clock with its own receipt instant and
-                      // found them far apart. Only the server can make that comparison — the device
-                      // never sees a receipt instant — so this banner exists precisely to say what
-                      // the technician could not otherwise discover. Advisory: the hours are
-                      // already recorded, and the office reads the same flag in Correzioni.
-                      if (clockDisagreement != null) ...[
-                        ClockDisagreementNote(
-                          seconds: clockDisagreement,
-                          onDismiss: () =>
-                              ref.read(timbraClockDisagreementProvider.notifier).dismiss(),
+    return WorkLogLiveRefresh(
+      child: Scaffold(
+        // bg1, not bg2: the header, the rail's sheet and the deck are all `surface` (Sheet). In
+        // light mode bg1 and bg2 are the same Paper value, so nothing moves; in dark they differ
+        // (#17181C vs #1E1F24), and bg2 left the three Sheet surfaces floating on a ground of their
+        // own tone — the paper-to-sheet step simply absent from a whole theme.
+        backgroundColor: context.colors.bg1,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              ScreenHeader(
+                title: 'Timbra',
+                subtitle: _formatDateLabel(ref.watch(businessTimeProvider)),
+                // This route is pushed on the root navigator, so the app's own tab bar — the only
+                // other way back — is not on screen. Without this the Android system gesture was
+                // the sole exit, which is a missing affordance, not a shortcut.
+                showBack: true,
+                // ButtonOnly: no server endpoint would accept a kiosk-QR punch anyway (backend
+                // EnsureClockInMethodAllowedAsync), so the entry point is hidden rather than
+                // shown-but-doomed.
+                actions: clockInMethod == 'ButtonOnly'
+                    ? const []
+                    : [
+                        HeaderIconBtn(
+                          icon: Icons.qr_code_scanner,
+                          label: 'Timbra con QR',
+                          onTap: () => context.push(AppRoutes.timbraQr),
                         ),
-                        const SizedBox(height: 16),
                       ],
-                      // Above the punch control, not below it: a punch the server refused is a
-                      // fact about the shift the technician is about to add to.
-                      if (rejected.isNotEmpty) ...[
-                        _RejectedPunchesBanner(sessions: rejected),
-                        const SizedBox(height: 16),
-                      ],
-                      // The blocked reason used to be conditionally inserted into the Column
-                      // outright — an abrupt pop. AnimatedSize gives it a height transition
-                      // in/out instead, without needing to know its own content's height up
-                      // front.
-                      AnimatedSize(
-                        duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 200),
-                        alignment: Alignment.topCenter,
-                        curve: Curves.easeInOut,
-                        child: punchGuard.blocked && punchGuard.reason != null
-                            ? Column(
-                                children: [
-                                  _GuardBanner(reason: punchGuard.reason!),
-                                  const SizedBox(height: 16),
-                                ],
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                      // An approved remote day, said before the control it explains: the same
-                      // slot as the guard banner, above the punch button, in both layouts.
-                      if (smartWorking == true) ...[
-                        const _SmartWorkingChip(),
-                        const SizedBox(height: AppSpacing.md),
-                      ],
-                      if (hidePunch) ...[
-                        const _QrRequiredNotice(),
-                      ] else ...[
-                        _PunchButton(
-                          shiftState: shiftState,
-                          isLoading: punchState is AsyncLoading,
-                          guard: punchGuard,
-                          onTap: () {
-                            ref.read(punchNotifierProvider.notifier).punch(shiftState);
-                          },
-                        ),
-                        if (shiftState.isOnShift) ...[
-                          const SizedBox(height: AppSpacing.md),
-                          _PauseButton(
-                            shiftState: shiftState,
-                            isLoading: punchState is AsyncLoading,
-                            guard: ref.watch(pauseGuardProvider),
-                            onTap: () {
-                              ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
-                            },
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    AppSpacing.md,
+                    AppSpacing.pagePadding,
+                    0,
+                  ),
+                  // Fixed when there is room, scrolling when there is not. The rail is the only
+                  // elastic element, so a short viewport shrinks it to _kRailMinHeight and then the
+                  // page scrolls — the head and the banners keep their natural heights either way.
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final tight = constraints.maxHeight < _kComfortableMinHeight;
+
+                      if (tight) {
+                        return SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _DayHead(shiftState: shiftState, day: day),
+                              const SizedBox(height: AppSpacing.md),
+                              ...banners,
+                              SizedBox(
+                                height: _kRailMinHeight,
+                                child: DayRailView(day: day, coverage: coverage),
+                              ),
+                            ],
                           ),
+                        );
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _DayHead(shiftState: shiftState, day: day),
+                          const SizedBox(height: AppSpacing.md),
+                          ...banners,
+                          Expanded(child: DayRailView(day: day, coverage: coverage)),
                         ],
-                      ],
-                      // The button above has to stay while a shift is open (see `hidePunch`), and
-                      // on a QrOnly tenant one refusal it cannot resolve is left: the shift's own
-                      // row day was not an approved remote day. The server judges EndWork against
-                      // both that day and today (`EnsureClockInMethodAllowedAsync` takes the
-                      // candidate days), so a night shift opened on an approved day still closes
-                      // by button — but a cancelled approval on the row's day is refused, and the
-                      // scanner is how that shift gets closed. Hidden on a confirmed approved day,
-                      // where there is nothing to fall back to.
-                      if (showQrFallback) ...[
-                        const SizedBox(height: AppSpacing.md),
-                        const _QrFallbackForOpenShift(),
-                      ],
-                      const SizedBox(height: AppSpacing.xl),
-                    ];
-
-                    final sessions = sessionsAsync.when(
-                      loading: () => const SizedBox.shrink(),
-                      error: (e, _) => Text(
-                        'Errore sessioni: $e',
-                        style: TextStyle(color: context.colors.red, fontSize: 12),
-                      ),
-                      data: (list) => _SessionsCard(
-                        sessions: list,
-                        total: total,
-                        hasPendingSync: ref.watch(hasPendingSyncProvider),
-                        fillHeight: fits,
-                      ),
-                    );
-
-                    if (!fits) {
-                      return SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [...content, sessions],
-                        ),
                       );
-                    }
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        ...content,
-                        Expanded(child: sessions),
-                      ],
-                    );
-                  },
+                    },
+                  ),
                 ),
               ),
-            ),
-          ],
+              _PunchDeck(
+                shiftState: shiftState,
+                isLoading: punchState is AsyncLoading,
+                punchGuard: punchGuard,
+                pauseGuard: pauseGuard,
+                hidePunch: hidePunch,
+                showQrFallback: showQrFallback,
+                onPunch: () => ref.read(punchNotifierProvider.notifier).punch(shiftState),
+                onPause: () => ref.read(punchNotifierProvider.notifier).togglePause(shiftState),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Below this the controls alone would leave the session list unreadable, so the page scrolls.
-const double _kFixedLayoutMinHeight = 640;
+/// Below this the rail would be too short to read as a time axis, so the whole body scrolls and the
+/// rail takes [_kRailMinHeight] instead. Counted against a head of ≈110dp and up to three banners
+/// of ≈60dp each; the deck is outside this box, so it never eats into the figure.
+const double _kComfortableMinHeight = 460;
+
+const double _kRailMinHeight = 300;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Date label
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// The business-zone calendar date, not the clock — this never needs the per-second tick
-/// `_SmallClock` does, so it reads the clock once per build rather than watching `nowProvider`.
-/// Feeds `ScreenHeader`'s `subtitle`.
+/// The business-zone calendar date, not the clock — this never needs the per-second tick the live
+/// clock does, so it reads the clock once per build rather than watching `nowProvider`. Feeds
+/// `ScreenHeader`'s `subtitle`.
 ///
 /// Locale-neutral format to avoid requiring `initializeDateFormatting`. Renders as e.g.
 /// "LUN 22 GIU 2026".
@@ -392,142 +314,163 @@ String _formatDateLabel(BusinessTime businessTime) {
   return '$day ${now.day} $month ${now.year}';
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Shared duration formatting
-// ══════════════════════════════════════════════════════════════════════════════
-
 String _formatHoursMinutes(Duration d) {
   final h = d.inHours;
   final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
   return '${h}h ${m}m';
 }
 
-String _formatHoursMinutesSeconds(Duration d) {
-  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-  return '${_formatHoursMinutes(d)} ${s}s';
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
-// _HeroStatus  — state badge + elapsed time + small live clock
+// _DayHead  — the live state, the running total, the clock
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// What the technician actually glances at this screen to answer: not "what time is it" (the
-/// status bar already says that), but "am I clocked in, and for how long." That question is the
-/// hero — a state badge and the elapsed-today reading, both far larger than the clock, which sits
-/// underneath as a small secondary readout.
+/// The two things a technician glances at this screen for: "am I clocked in" and "how much is in
+/// the day". The state is the app's own stamp device, not a fresh pill; the total is the merged
+/// day's count, so a totem punch and an office correction are inside it.
 ///
-/// [total] is [totalWorkedTodayProvider] — the same "worked so far today" value [_TotalRow] has
-/// always shown, not a new computation. It only recomputes on a data change (a punch, pause, or
-/// resume) — it does not tick live, and does not need to: a number that changes at most a few
-/// times an hour does not need to visibly age in real time.
-class _HeroStatus extends StatelessWidget {
-  const _HeroStatus({required this.shiftState, required this.total, required this.pulseAnim});
+/// The total re-derives from [nowProvider] only while a stretch is running — a closed day returns
+/// the same number on every tick, and this widget still rebuilds for the clock beside it.
+class _DayHead extends ConsumerWidget {
+  const _DayHead({required this.shiftState, required this.day});
 
   final TimbraState shiftState;
-  final Duration total;
-  final Animation<double> pulseAnim;
+  final DayRail day;
 
   @override
-  Widget build(BuildContext context) {
-    final v = context.vetro;
-    final (String label, Color color, Color? bg) = switch (shiftState) {
-      TimbraState(isOnShift: true, isOnPause: true) => ('IN PAUSA', v.statusWarn, v.statusWarnBg),
-      TimbraState(isOnShift: true) => ('IN TURNO', v.statusGood, v.statusGoodBg),
-      // Not on shift: no saturated colour — Vetro reserves that for something active, and
-      // nothing is active right now. Same inkMuted the rest of this screen's quiet text uses.
-      _ => ('FUORI TURNO', context.colors.inkMuted, null),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ticking = ref.watch(nowProvider).valueOrNull ?? DateTime.now();
+    final worked = day.workedAt(day.isOpen ? ticking : day.now);
+    final paused = day.pausedAt(day.isOpen ? ticking : day.now);
+    // Above the system font's own default the caption goes UNDER the figure instead of beside it.
+    // Side by side, the pair is wider than the phone at 1.3 and the FittedBox below has nowhere to
+    // go but down — shrinking the one number this screen exists to show. Stacked, the figure keeps
+    // its full size and only a caption that no longer fits is scaled.
+    final stackedHead = MediaQuery.textScalerOf(context).scale(1) > 1.15;
+
+    final label = switch (shiftState) {
+      TimbraState(isOnShift: true, isOnPause: true) => 'In pausa',
+      TimbraState(isOnShift: true) => 'In turno',
+      _ => 'Fuori turno',
     };
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AnimatedSwitcher(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 220),
-          child: Semantics(
-            key: ValueKey(label),
-            label: 'Stato: $label',
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.xs),
-              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // The pulse moves here — a small dot is a truer "this is live" cue than
-                  // pulsing an eight-digit number, and it sits directly next to the state it is
-                  // confirming rather than next to the time of day.
-                  ScaleTransition(
-                    scale: pulseAnim,
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: 'Archivo',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                      color: color,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        Row(
+          children: [
+            StatusStamp(stato: label, size: StampSize.large),
+            const Spacer(),
+            const _LiveClock(),
+          ],
         ),
         const SizedBox(height: 14),
-        // The app's one running clock nobody could not see, and until now the one liveRegion
-        // nobody added — a screen reader had no signal this number changes every minute.
-        // accentInk, not raw AppColors.Y: this Scaffold's `bg2` flips with the theme (unlike the
-        // permanently-dark punch surfaces elsewhere), and Y-as-text only clears 2.91:1 in dark
-        // mode — under even the relaxed 3:1 large-text floor at this size.
+        // The app's one running number, and the one place a screen reader needs to be told it
+        // changed — a liveRegion on a figure that ticks while a shift is open.
         Semantics(
           liveRegion: true,
-          label: 'Ore lavorate oggi ${_formatHoursMinutes(total)}',
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              _formatHoursMinutes(total),
-              style: TextStyle(
-                fontFamily: 'IBM Plex Mono',
-                fontSize: 52,
-                fontWeight: FontWeight.w600,
-                color: context.colors.accentInk,
-                letterSpacing: -1,
-                height: 1.0,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-              textAlign: TextAlign.center,
+          label: 'Ore lavorate oggi ${_formatHoursMinutes(worked)}',
+          excludeSemantics: true,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: stackedHead
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _WorkedFigure(worked: worked),
+                        const SizedBox(height: 2),
+                        _WorkedCaption(paused: paused),
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _WorkedFigure(worked: worked),
+                        const SizedBox(width: 10),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: _WorkedCaption(paused: paused),
+                        ),
+                      ],
+                    ),
             ),
           ),
         ),
-        const SizedBox(height: 10),
-        const _SmallClock(),
       ],
     );
   }
 }
 
-/// Small secondary clock under [_HeroStatus]'s elapsed reading — the confirm-the-phone's-right
-/// glance at the weight that question actually needs now that "am I clocked in" is the hero. The
-/// one per-second-ticking widget on this screen — only this rebuilds on the tick, not the whole
-/// card or page.
-class _SmallClock extends ConsumerWidget {
-  const _SmallClock();
+/// The day's worked total — the app's one running number.
+class _WorkedFigure extends StatelessWidget {
+  const _WorkedFigure({required this.worked});
+
+  final Duration worked;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _formatHoursMinutes(worked),
+      style: TextStyle(
+        fontFamily: 'IBM Plex Mono',
+        fontSize: 46,
+        fontWeight: FontWeight.w600,
+        // accentInk, not AppColors.Y: this Scaffold's `bg1` flips with the theme, and Y-as-text
+        // only clears 2.91:1 in dark mode — under even the relaxed 3:1 large-text floor at this
+        // size. See AppPalette.accentInk's own note.
+        color: context.colors.accentInk,
+        letterSpacing: -1,
+        height: 1.0,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
+  }
+}
+
+/// What the figure counts, and how much of it is pause.
+class _WorkedCaption extends StatelessWidget {
+  const _WorkedCaption({required this.paused});
+
+  final Duration paused;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      paused > Duration.zero
+          ? 'lavorate · ${_formatHoursMinutes(paused)} in pausa'
+          : 'lavorate oggi',
+      style: TextStyle(
+        fontFamily: 'IBM Plex Mono',
+        fontSize: 9.5,
+        height: 1.1,
+        letterSpacing: 0.6,
+        color: context.colors.inkMuted,
+      ),
+    );
+  }
+}
+
+/// The business-zone clock, at the weight of a secondary readout: the technician's other question
+/// is whether this phone agrees with the wall clock. The one per-second-ticking widget up here —
+/// only this rebuilds on the tick.
+class _LiveClock extends ConsumerWidget {
+  const _LiveClock();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final businessTime = ref.watch(businessTimeProvider);
     final now = ref.watch(nowProvider).valueOrNull ?? businessTime.nowInstant();
     final timeStr = businessTime.formatInZone(now, 'HH:mm:ss');
+    // A semantics label, NOT a live region. The label changes every second, so a live region here
+    // makes TalkBack read the wall clock aloud on every tick and renders the screen unusable with a
+    // screen reader. The one live region on this screen is the worked total, which changes at most
+    // once a minute and is the number the technician came to hear.
     return Semantics(
       label: 'Ora corrente $timeStr',
-      liveRegion: true,
+      excludeSemantics: true,
       child: Text(
         timeStr,
         style: TextStyle(
@@ -543,13 +486,61 @@ class _SmallClock extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// _InlineFailure
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// A failure to read this phone's own database — never the server's, which is an expected
+/// condition on a site with no signal and is handled inside the rail.
+///
+/// Wears the screen's one "needs attention" treatment (`statusWarnBg` + `amberInk`, the same pair
+/// as [_GuardBanner] and [_ServerDayUnknown]) rather than red 12px prose on Paper: `colors.red` at
+/// this size measures 4.30:1 on the Paper ground, and a bare sentence here was the only failure on
+/// the screen that did not look like one.
+class _InlineFailure extends StatelessWidget {
+  const _InlineFailure({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = context.vetro;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: v.statusWarnBg,
+        borderRadius: AppRack.freeShape,
+        border: Border.all(color: v.statusWarn.withAlpha(80)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.alertTriangle, size: 15, color: v.statusWarn),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Impossibile leggere le timbrature di questo telefono: $message',
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 12,
+                height: 1.35,
+                color: context.colors.amberInk,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // _GuardBanner
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Full-width, seen-before-the-tap treatment for a punch refusal the device already knows about
 /// (closed payroll period, a shift another device opened). Reuses `context.vetro.statusWarn`/
-/// `statusWarnBg` — the same "needs attention" pair [_HeroStatus] uses for "IN PAUSA", not a
-/// fresh colour invented for this one banner.
+/// `statusWarnBg` — the same "needs attention" pair, not a fresh colour invented for this banner.
 class _GuardBanner extends StatelessWidget {
   const _GuardBanner({required this.reason});
   final String reason;
@@ -562,7 +553,7 @@ class _GuardBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
         color: v.statusWarnBg,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: AppRack.freeShape,
         border: Border.all(color: v.statusWarn.withAlpha(80)),
       ),
       child: Row(
@@ -577,7 +568,55 @@ class _GuardBanner extends StatelessWidget {
                 fontFamily: 'Archivo',
                 fontSize: 12,
                 height: 1.35,
-                color: v.statusWarn,
+                color: context.colors.amberInk,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _ServerDayUnknown
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// The day on the rail may be incomplete, and this says so above it.
+///
+/// The rail still draws — this phone's own punches are not lost when the server is unreachable —
+/// but the merged day is exactly what this screen exists to be, so a partial one must not look
+/// like a complete one. Same "needs attention" pair as [_GuardBanner], and the same amberInk body
+/// colour for the same reason: `statusWarn` as a fill is tuned against white ink, and falls under
+/// 4.5:1 as text on these surfaces.
+class _ServerDayUnknown extends StatelessWidget {
+  const _ServerDayUnknown();
+
+  @override
+  Widget build(BuildContext context) {
+    final v = context.vetro;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: v.statusWarnBg,
+        borderRadius: AppRack.freeShape,
+        border: Border.all(color: v.statusWarn.withAlpha(80)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.alertTriangle, size: 15, color: v.statusWarn),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'La giornata del server non è raggiungibile: le timbrature fatte al totem o da un '
+              'altro dispositivo potrebbero mancare.',
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 12,
+                height: 1.35,
+                color: context.colors.amberInk,
               ),
             ),
           ),
@@ -593,7 +632,7 @@ class _GuardBanner extends StatelessWidget {
 
 /// Says out loud what the app used to say once and then forget: the server refused N punches.
 ///
-/// Those rows stay on the phone under `syncFailedMarker` and are hidden from the shift on purpose —
+/// Those rows stay on the phone under `syncFailedMarker` and are hidden from the rail on purpose —
 /// a rejected opener would double the day. The consequence is that every number on this screen is
 /// correct while the technician still cannot see that part of their day never reached the office.
 /// The notice names the count and opens the list; it disappears when the rows fall out of the
@@ -649,7 +688,7 @@ class _RejectedPunchesBanner extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
           color: v.statusWarnBg,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: AppRack.freeShape,
           border: Border.all(color: v.statusWarn.withAlpha(80)),
         ),
         child: Row(
@@ -668,7 +707,7 @@ class _RejectedPunchesBanner extends StatelessWidget {
                       fontSize: 12,
                       height: 1.35,
                       fontWeight: FontWeight.w600,
-                      color: v.statusWarn,
+                      color: context.colors.amberInk,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -678,7 +717,7 @@ class _RejectedPunchesBanner extends StatelessWidget {
                       fontFamily: 'Archivo',
                       fontSize: 12,
                       height: 1.35,
-                      color: v.statusWarn,
+                      color: context.colors.amberInk,
                     ),
                   ),
                 ],
@@ -741,49 +780,47 @@ class _RejectedPunchRow extends ConsumerWidget {
 /// `true`, never for `null`. See [isButtonPunchWithheld] for why an unknown answer may not be
 /// treated as "not approved".
 ///
-/// Same pill language [_HeroStatus]'s state badge already uses (rounded-full, tint-on-tint, Archivo
-/// 11 w700 with a touch of tracking, sentence case), in the positive half of [_GuardBanner]'s pair:
-/// `statusGood`/`statusGoodBg` instead of `statusWarn`/`statusWarnBg`. Nothing is wrong today — the
-/// technician is simply not expected on site, and that is what this says.
-///
-/// `liveRegion`, like the state badge above it: /auth/me is re-read on every resume, so an approval
-/// that lands while the screen is open has to be announced, not silently drawn.
+/// `liveRegion`: /auth/me is re-read on every resume, so an approval that lands while the screen is
+/// open has to be announced, not silently drawn.
 class _SmartWorkingChip extends StatelessWidget {
   const _SmartWorkingChip();
 
   @override
   Widget build(BuildContext context) {
     final v = context.vetro;
-    return Semantics(
-      label: 'Giornata di smart working approvata',
-      liveRegion: true,
-      // The visible text says the same thing, so leaving it in the tree would have a screen
-      // reader announce the chip twice ("… approvata, Smart working").
-      child: ExcludeSemantics(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.xs),
-          decoration: BoxDecoration(
-            color: v.statusGoodBg,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // A laptop, not LucideIcons.home — that is the Dashboard tab's own glyph in
-              // bottom_nav.dart and would read as a navigation affordance here.
-              Icon(LucideIcons.laptop, size: 13, color: v.statusGood),
-              const SizedBox(width: 6),
-              Text(
-                'Smart working',
-                style: TextStyle(
-                  fontFamily: 'Archivo',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: v.statusGood,
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Semantics(
+        label: 'Giornata di smart working approvata',
+        liveRegion: true,
+        // The visible text says the same thing, so leaving it in the tree would have a screen
+        // reader announce the chip twice ("… approvata, Smart working").
+        child: ExcludeSemantics(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.xs),
+            decoration: BoxDecoration(
+              color: v.statusGoodBg,
+              borderRadius: AppRack.freeShape,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // A laptop, not LucideIcons.home — that is the Dashboard tab's own glyph in
+                // bottom_nav.dart and would read as a navigation affordance here.
+                Icon(LucideIcons.laptop, size: 13, color: v.statusGood),
+                const SizedBox(width: 6),
+                Text(
+                  'Smart working',
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: v.statusGood,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -792,52 +829,368 @@ class _SmartWorkingChip extends StatelessWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// _QrRequiredNotice
+// _PunchDeck  — the docked controls
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Shown instead of the punch/pause controls when the effective clock-in method is QrOnly — the
-/// server would reject a button punch anyway (WorkLogService.EnsureClockInMethodAllowedAsync), so
-/// this avoids a round trip to a state the client already knows about.
-class _QrRequiredNotice extends StatelessWidget {
-  const _QrRequiredNotice();
+/// The punch control, docked above the safe area and separated from the body by a hairline.
+///
+/// It used to sit inside the scrolling column, under the guard banner and the smart-working chip —
+/// which meant that on a short phone, or with two banners up, the one thing the technician opened
+/// the screen for could be pushed below the fold. The deck cannot scroll away, and it is where a
+/// thumb already rests.
+class _PunchDeck extends StatelessWidget {
+  const _PunchDeck({
+    required this.shiftState,
+    required this.isLoading,
+    required this.punchGuard,
+    required this.pauseGuard,
+    required this.hidePunch,
+    required this.showQrFallback,
+    required this.onPunch,
+    required this.onPause,
+  });
+
+  final TimbraState shiftState;
+  final bool isLoading;
+  final TimbraGuard punchGuard;
+  final TimbraGuard pauseGuard;
+  final bool hidePunch;
+  final bool showQrFallback;
+  final VoidCallback onPunch;
+  final VoidCallback onPause;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border(top: BorderSide(color: context.colors.borderLight)),
+      ),
+      // The deck owns the bottom inset itself: it sits outside the SafeArea that wraps the header,
+      // and a full-bleed fill has to reach the very edge of the glass before the padding starts.
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.md,
+        AppSpacing.pagePadding,
+        AppSpacing.md + MediaQuery.paddingOf(context).bottom,
+      ),
+      child: hidePunch
+          ? const _QrOnlyDeck()
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  // Both keys carry their own fixed height; `stretch` here would ask an
+                  // unbounded Column for an infinite height.
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: _PunchKey(
+                        shiftState: shiftState,
+                        isLoading: isLoading,
+                        guard: punchGuard,
+                        onTap: onPunch,
+                      ),
+                    ),
+                    if (shiftState.isOnShift) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: _PauseKey(
+                          shiftState: shiftState,
+                          isLoading: isLoading,
+                          guard: pauseGuard,
+                          onTap: onPause,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (showQrFallback) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  const _QrFallbackForOpenShift(),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+/// Full-width primary action. Flat saturated fill (no gradient — DESIGN.md's Documento material has
+/// none), no shadow: Il Documento is paper and ink, and the glow this control used to carry was the
+/// one piece of glass on the screen.
+///
+/// `AppColors.Y` for "starting" and `AppColors.stopDark` for "ending" are theme-invariant on
+/// purpose: white text/icon on top of them has to stay legible under BOTH themes, and the flipping
+/// `red`/`redSoft` pair is tuned to invert (`redSoft` goes near-white in light mode, `red` goes a
+/// light salmon in dark mode) — either one under fixed white text fails contrast in one theme or
+/// the other.
+class _PunchKey extends StatefulWidget {
+  const _PunchKey({
+    required this.shiftState,
+    required this.isLoading,
+    required this.onTap,
+    this.guard = TimbraGuard.allowed,
+  });
+
+  final TimbraState shiftState;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  /// A refusal the server already told us about — a closed payroll period, a shift another device
+  /// opened. The reason text itself is not rendered here; the parent promotes it to a banner above
+  /// the rail, before the tap is even attempted. This only governs the dimmed/inert visuals.
+  final TimbraGuard guard;
+
+  @override
+  State<_PunchKey> createState() => _PunchKeyState();
+}
+
+class _PunchKeyState extends State<_PunchKey> {
+  // A brief AnimatedScale press-down instead of an ink splash: a splash over a saturated fill read
+  // as a smudge on a real device, and the control answers a tap within the frame by swapping to a
+  // spinner anyway.
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isOnShift = widget.shiftState.isOnShift;
+    final label = isOnShift ? 'FINE TURNO' : 'INIZIA TURNO';
+    final icon = isOnShift ? LucideIcons.square : LucideIcons.play;
+    final blocked = widget.guard.blocked;
+    final enabled = !widget.isLoading && !blocked;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    final fillColor = isOnShift ? AppColors.stopDark : AppColors.Y;
+
+    // Dimmed and inert rather than hidden: a button that disappears leaves the user with no idea
+    // what happened, and the reason is in the banner above.
+    return Semantics(
+      button: true,
+      enabled: !blocked,
+      label: blocked && widget.guard.reason != null ? '$label — ${widget.guard.reason}' : label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+        onTap: enabled ? widget.onTap : null,
+        child: AnimatedScale(
+          scale: _pressed ? 0.97 : 1.0,
+          duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: Opacity(
+            opacity: blocked ? 0.4 : 1,
+            child: AnimatedContainer(
+              duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
+              height: _deckKeyHeight(context),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: AppRack.freeShape,
+                color: fillColor,
+              ),
+              child: widget.isLoading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(color: AppColors.WHITE, strokeWidth: 3),
+                    )
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(icon, size: 20, color: AppColors.WHITE),
+                          const SizedBox(width: 8),
+                          Text(
+                            label,
+                            maxLines: 1,
+                            style: const TextStyle(
+                              fontFamily: 'Archivo Narrow',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.9,
+                              color: AppColors.WHITE,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Secondary action, a flat outlined key in the pause ink. Deliberately quieter than [_PunchKey]:
+/// starting and ending the shift is the primary action; pause/resume happens mid-shift.
+class _PauseKey extends StatefulWidget {
+  const _PauseKey({
+    required this.shiftState,
+    required this.isLoading,
+    required this.onTap,
+    this.guard = TimbraGuard.allowed,
+  });
+
+  final TimbraState shiftState;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  /// Same server-driven refusal as [_PunchKey.guard], applied to StartBreak/EndBreak. The reason
+  /// itself is promoted to a banner above the rail, same as the punch guard's.
+  final TimbraGuard guard;
+
+  @override
+  State<_PauseKey> createState() => _PauseKeyState();
+}
+
+class _PauseKeyState extends State<_PauseKey> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isOnPause = widget.shiftState.isOnPause;
+    final label = isOnPause ? 'RIPRENDI' : 'PAUSA';
+    final icon = isOnPause ? LucideIcons.play : LucideIcons.coffee;
+    // amberInk, not amber: the paused control is a glyph and a hairline border on Sheet, and the
+    // fill value clears only 4.27:1 there. The fill is still amber where it is a fill (the band's
+    // solid, the icon's own chip).
+    final accent = context.colors.amberInk;
+    final blocked = widget.guard.blocked;
+    final enabled = !widget.isLoading && !blocked;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+
+    return Semantics(
+      button: true,
+      enabled: !blocked,
+      label: blocked && widget.guard.reason != null ? '$label — ${widget.guard.reason}' : label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+        onTap: enabled ? widget.onTap : null,
+        child: AnimatedScale(
+          scale: _pressed ? 0.97 : 1.0,
+          duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: Opacity(
+            opacity: blocked ? 0.4 : 1,
+            child: Container(
+              height: _deckKeyHeight(context),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: AppRack.freeShape,
+                color: context.colors.surface,
+                border: Border.all(color: accent.withAlpha(150)),
+              ),
+              child: widget.isLoading
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                    )
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(icon, size: 17, color: accent),
+                          const SizedBox(width: 7),
+                          Text(
+                            label,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontFamily: 'Archivo Narrow',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                              color: accent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const double _kDeckKeyHeight = 60;
+
+/// The deck key's height under the user's own font size, clamped.
+///
+/// The label sits in a [FittedBox] so a long word never overflows, but a FittedBox alone answers a
+/// larger system font by shrinking the label back to its base size — the control that is supposed
+/// to grow stays exactly as big as it was. Growing its box is what lets the label keep the size the
+/// user asked for; the clamp keeps the deck from eating the rail on the largest settings.
+double _deckKeyHeight(BuildContext context) {
+  final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.4);
+  return _kDeckKeyHeight * scaler.scale(1);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// QR paths
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Shown instead of the punch controls when the effective clock-in method is QrOnly — the server
+/// would reject a button punch anyway (WorkLogService.EnsureClockInMethodAllowedAsync), so this
+/// avoids a round trip to a state the client already knows about. In the deck, not above it: on
+/// such a tenant the scanner IS the primary action, and it belongs where the primary action lives.
+class _QrOnlyDeck extends StatelessWidget {
+  const _QrOnlyDeck();
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           'La tua azienda richiede la timbratura con QR.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
+          style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
         ),
-        const SizedBox(height: AppSpacing.md),
-        const _ScanQrButton(),
+        const SizedBox(height: AppSpacing.sm),
+        SizedBox(
+          height: _deckKeyHeight(context),
+          width: double.infinity,
+          child: Material(
+            color: context.colors.ink,
+            borderRadius: AppRack.freeShape,
+            child: InkWell(
+              borderRadius: AppRack.freeShape,
+              onTap: () => context.push(AppRoutes.timbraQr),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.qr_code_scanner, size: 20, color: AppColors.WHITE),
+                  const SizedBox(width: 8),
+                  Text(
+                    'SCANSIONA QR',
+                    style: TextStyle(
+                      fontFamily: 'Archivo Narrow',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.9,
+                      color: AppColors.WHITE,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
 }
 
-/// The scanner action both the QrOnly notice and the open-shift fallback below use — one widget, so
-/// the label, the icon and the destination cannot drift between the two places that offer it.
-class _ScanQrButton extends StatelessWidget {
-  const _ScanQrButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return AppButton(
-      label: 'Scansiona QR',
-      icon: const Icon(Icons.qr_code_scanner, size: 18),
-      onPressed: () => context.push(AppRoutes.timbraQr),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// _QrFallbackForOpenShift
-// ══════════════════════════════════════════════════════════════════════════════
-
-/// Sits under the punch control while a shift is open on a QrOnly tenant whose day is not a
-/// confirmed approved one.
+/// Sits under the punch key while a shift is open on a QrOnly tenant whose day is not a confirmed
+/// approved one.
 ///
 /// Why both controls: the button has to stay — the server judges an end-of-shift punch against the
 /// row's own day *and* tenant-local today, so a night shift opened on an approved day is legal
@@ -849,506 +1202,36 @@ class _QrFallbackForOpenShift extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          'Se il pulsante viene rifiutato, chiudi la giornata con il QR.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        const _ScanQrButton(),
-      ],
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// _PunchButton
-// ══════════════════════════════════════════════════════════════════════════════
-
-// TODO(design-consistency): _PunchButton (and _PauseButton below) hand-roll their own
-// loading/press states instead of using the shared `AppButton`/`AppButton.danger` this same
-// feature uses elsewhere (chiudi_turno_screen.dart's "Conferma uscita", cantiere_timbra_screen.
-// dart's "Inizia timbratura"/"Timbra uscita cantiere"). Deliberately NOT migrated — audited and
-// judged a case where `AppButton` cannot express the same behaviour without a real regression,
-// not just a style mismatch:
-//   - Colour: this button's fill is `AppColors.Y`/`AppColors.stopDark` — fixed, theme-invariant
-//     hex values, not one of `AppButton`'s five enum-selected variants. That's not an arbitrary
-//     choice: this class's own header comment (above, "sun-glare property") explains why a
-//     flipping token pair (e.g. `AppButtonVariant.danger`'s `redSoft`/`red`) fails contrast in one
-//     theme or the other for fixed-white icon/text on top of it, while `AppColors.Y`/`stopDark`
-//     clear >7:1 regardless of theme. `AppButton` has no variant, or any way to pass a custom
-//     fill, that reproduces this.
-//   - Press feedback: this button deliberately has NO ink splash (see the tap handler below) — a
-//     splash over a saturated flat fill read as a smudge on a real device, replaced with an
-//     `AnimatedScale` press-down instead. `AppButton` always wraps its content in a Material
-//     `InkWell` with a splash; adopting it would reintroduce exactly the smudge this screen's own
-//     redesign moved away from.
-//   - `_PauseButton` similarly needs an accent colour that changes with state (cyan on resume,
-//     amber on pause) — again outside `AppButton`'s fixed variant palette.
-// If `AppButton` grows a custom-fill-colour escape hatch and/or a no-splash press mode, this pair
-// is the one caller left that should migrate onto it.
-class _PunchButton extends StatefulWidget {
-  const _PunchButton({
-    required this.shiftState,
-    required this.isLoading,
-    required this.onTap,
-    this.guard = TimbraGuard.allowed,
-  });
-
-  final TimbraState shiftState;
-  final bool isLoading;
-  final VoidCallback onTap;
-
-  /// A refusal the server already told us about — a closed payroll period, a shift another
-  /// device opened. The reason text itself is not rendered here — the parent promotes it to
-  /// [_GuardBanner], above the button, before the tap is even attempted; this only governs the
-  /// dimmed/inert visuals.
-  final TimbraGuard guard;
-
-  @override
-  State<_PunchButton> createState() => _PunchButtonState();
-}
-
-class _PunchButtonState extends State<_PunchButton> {
-  // Drives a brief AnimatedScale press-down — see this class's own historical note on why the
-  // button has no InkWell splash instead.
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final isOnShift = widget.shiftState.isOnShift;
-    final label = isOnShift ? 'FINE TURNO' : 'INIZIA TURNO';
-    final icon = isOnShift ? LucideIcons.square : LucideIcons.play;
-    final blocked = widget.guard.blocked;
-    final enabled = !widget.isLoading && !blocked;
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
-
-    // Flat fill (no gradient — DESIGN.md's flat Documento material has none), checked against a
-    // simulated direct-sunlight wash before being kept — reads clearly against either app theme
-    // on its own, without needing a dedicated dark ground under it. AppColors.Y for "starting",
-    // the same theme-invariant brand-accent exception every other primary fill in the app reads;
-    // AppColors.stopDark for "ending" — not a flipping `context.colors.red`/`redSoft` pair,
-    // because the white icon/text on top of this fill has to stay legible under BOTH themes, and
-    // those two tokens are tuned to flip (`redSoft` goes near-white in light mode, `red` goes a
-    // light salmon in dark mode — either one under fixed white text fails contrast in one theme
-    // or the other). `stopDark` alone clears >7:1 against white regardless of theme, which is the
-    // same "does not flip, does not belong in AppPalette" reasoning `AppColors`'s own "Punch
-    // clock (theme-invariant)" section already documents this pair for.
-    final fillColor = isOnShift ? AppColors.stopDark : AppColors.Y;
-
-    // Dimmed and inert rather than hidden: a button that disappears leaves the user with no
-    // idea what happened, and the reason is shown above via _GuardBanner.
-    return Semantics(
-      button: true,
-      enabled: !blocked,
-      label: blocked && widget.guard.reason != null ? '$label — ${widget.guard.reason}' : label,
-      // The press target deliberately has no splash. It is a full-width saturated fill with a
-      // coloured glow; ink over that reads as a smudge rather than a press, and the control
-      // already answers a tap within the frame by swapping to a spinner. AnimatedScale gives it
-      // a tactile press-down instead, with no smudge risk. The secondary pause button below it
-      // did get a real splash, because it is flat and its own state change is a small icon swap.
-      child: GestureDetector(
-        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
-        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-        onTap: widget.isLoading || blocked ? null : widget.onTap,
-        child: AnimatedScale(
-          scale: _pressed ? 0.97 : 1.0,
-          duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-          child: Opacity(
-            opacity: blocked ? 0.4 : 1,
-            child: AnimatedContainer(
-              duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
-              width: double.infinity,
-              // 76 — full-width rounded rect instead of a floating disc: more touch target, no
-              // wasted side margins, and closer to AppButton's own full-width shape.
-              height: 76,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: fillColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: fillColor.withAlpha(110),
-                    blurRadius: 24,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: widget.isLoading
-                  ? const SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(color: AppColors.WHITE, strokeWidth: 3),
-                    )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // White on both fills — both AppColors.Y and stopDark are dark/saturated
-                        // enough that white reads clearly on either.
-                        Icon(icon, size: 24, color: AppColors.WHITE),
-                        const SizedBox(width: 10),
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            fontFamily: 'Archivo',
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                            color: AppColors.WHITE,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// _PauseButton
-// ══════════════════════════════════════════════════════════════════════════════
-
-/// Small secondary pill button for break start/end, shown only while on shift.
-///
-/// Deliberately understated next to [_PunchButton]: starting/ending the shift is the
-/// primary action, pause/resume is a secondary one that happens mid-shift.
-///
-/// Full-width to match [_PunchButton]'s shape, not the pill shape this used when it floated as a
-/// small centered chip. `AppCard`'s own default fill/border already flip with the app theme like
-/// the rest of the page now that this screen isn't a fixed-dark ground anymore — same
-/// `context.colors.surface`/`borderLight` pair `VetroGlass`'s own defaults used to read here.
-///
-/// Not migrated onto `AppButton` either — see the TODO on [_PunchButton] above (same accent-colour
-/// constraint applies here: cyan on resume vs. amber on pause, outside `AppButton`'s fixed variant
-/// palette).
-class _PauseButton extends StatelessWidget {
-  const _PauseButton({
-    required this.shiftState,
-    required this.isLoading,
-    required this.onTap,
-    this.guard = TimbraGuard.allowed,
-  });
-
-  final TimbraState shiftState;
-  final bool isLoading;
-  final VoidCallback onTap;
-
-  /// Same server-driven refusal as [_PunchButton.guard], applied to StartBreak/EndBreak.
-  final TimbraGuard guard;
-
-  @override
-  Widget build(BuildContext context) {
-    final isOnPause = shiftState.isOnPause;
-    final label = isOnPause ? 'RIPRENDI' : 'PAUSA';
-    final icon = isOnPause ? LucideIcons.play : LucideIcons.coffee;
-    final accent = isOnPause ? context.colors.cyan : context.colors.amber;
-    final blocked = guard.blocked;
-
-    final button = Semantics(
-      button: true,
-      enabled: !blocked,
-      label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
-      child: Opacity(
-        opacity: blocked ? 0.4 : 1,
-        child: SizedBox(
-          width: double.infinity,
-          height: 64,
-          child: AppCard(
-            onTap: isLoading || blocked ? null : onTap,
-            padding: EdgeInsets.zero,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (isLoading)
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: accent),
-                  )
-                else
-                  Icon(icon, size: 18, color: accent),
-                const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: 'Archivo Narrow',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                    color: accent,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    if (!blocked || guard.reason == null) return button;
-
-    return Column(
-      children: [
-        button,
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-          child: Text(
-            guard.reason!,
-            style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// _SessionsCard  — "Sessioni di oggi"
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _SessionsCard extends StatelessWidget {
-  const _SessionsCard({
-    required this.sessions,
-    required this.total,
-    required this.hasPendingSync,
-    required this.fillHeight,
-  });
-
-  final List<WorkSession> sessions;
-  final Duration total;
-  final bool hasPendingSync;
-
-  /// True when the card was given a bounded box to fill, so its rows scroll inside it. False in
-  /// the scrolling fallback, where the card is its natural height and the page moves instead.
-  final bool fillHeight;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      // A normal flipping AppCard now — the frame around the dark hero reads as the rest of
-      // the app, not a permanently-dark plate matching a header that no longer exists.
-      child: AppCard(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          // Matches the empty-state Expanded below: a min-sized Column asked to also host a flex
-          // child is an unstable combination (its own reported size and the flex child's allocated
-          // space can disagree), and `fillHeight` already tells this widget exactly which sizing it
-          // was actually given — max when the parent handed it a bounded box to fill, min when it's
-          // sitting in a scrolling fallback with unbounded height and must size to its own content.
-          mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Section title + optional pending-sync indicator
-            Row(
-              children: [
-                Text(
-                  'SESSIONI DI OGGI',
-                  style: TextStyle(
-                    fontFamily: 'Archivo',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.4,
-                    color: context.colors.inkMuted,
-                  ),
-                ),
-                if (hasPendingSync) ...[
-                  const SizedBox(width: 6),
-                  Tooltip(
-                    message: 'Non sincronizzato',
-                    child: Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: context.colors.amber,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // The heading and the running total are pinned; only the rows between them move. A
-            // long shift with many pauses used to push the day's total off the bottom, which is
-            // the one number on this card anybody is looking for.
-            if (sessions.isEmpty)
-              if (fillHeight) const Expanded(child: _NoSessionsYet()) else const _NoSessionsYet()
-            else
-              Flexible(
-                fit: FlexFit.loose,
-                child: ListView.builder(
-                  padding: EdgeInsets.zero,
-                  shrinkWrap: true,
-                  physics: fillHeight
-                      ? const ClampingScrollPhysics()
-                      : const NeverScrollableScrollPhysics(),
-                  itemCount: sessions.length,
-                  itemBuilder: (context, i) => _SessionRow(session: sessions[i]),
-                ),
-              ),
-            if (sessions.isNotEmpty) Divider(color: context.colors.divider, height: 24),
-
-            // Total row
-            _TotalRow(total: total),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NoSessionsYet extends StatelessWidget {
-  const _NoSessionsYet();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
-        child: Text(
-          'Nessuna timbratura oggi',
-          style: TextStyle(color: context.colors.inkMuted, fontSize: 13, fontFamily: 'Archivo'),
-        ),
-      ),
-    );
-  }
-}
-
-// ── _SessionRow ───────────────────────────────────────────────────────────────
-
-class _SessionRow extends ConsumerWidget {
-  const _SessionRow({required this.session});
-  final WorkSession session;
-
-  String _label(String type) {
-    switch (type) {
-      case 'ingresso':
-        return 'Ingresso';
-      case 'fine':
-        return 'Fine turno';
-      case 'pausa':
-        return 'Pausa';
-      case 'ripresa':
-        return 'Ripresa';
-      default:
-        return type;
-    }
-  }
-
-  IconData _icon(String type) {
-    switch (type) {
-      case 'ingresso':
-        return LucideIcons.logIn;
-      case 'fine':
-        return LucideIcons.logOut;
-      case 'pausa':
-        return LucideIcons.coffee;
-      case 'ripresa':
-        return LucideIcons.play;
-      default:
-        return LucideIcons.clock;
-    }
-  }
-
-  Color _color(BuildContext context, String type) {
-    switch (type) {
-      case 'ingresso':
-        return context.colors.green;
-      case 'fine':
-        return context.colors.red;
-      case 'pausa':
-        return context.colors.amber;
-      case 'ripresa':
-        return context.colors.cyan;
-      default:
-        return context.colors.inkMuted;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final timeStr = ref.watch(businessTimeProvider).formatInZone(session.eventTime, 'HH:mm');
-    final color = _color(context, session.eventType);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Row(
-        children: [
-          // Tinted at low alpha with the row's own event colour — the same "icon-coloured tile"
-          // pattern every other list row in the app uses, rather than one flat fill for every
-          // event type regardless of what it means.
-          RowIconTile(
-            size: 32,
-            color: color.withAlpha(26),
-            child: Icon(_icon(session.eventType), size: 16, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _label(session.eventType),
-              style: TextStyle(
-                fontFamily: 'Archivo',
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: context.colors.ink.withAlpha(220),
-              ),
-            ),
-          ),
-          Text(timeStr, style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink)),
-        ],
-      ),
-    );
-  }
-}
-
-// ── _TotalRow ─────────────────────────────────────────────────────────────────
-
-class _TotalRow extends StatelessWidget {
-  const _TotalRow({required this.total});
-  final Duration total;
-
-  @override
-  Widget build(BuildContext context) {
-    // Two unconstrained Texts in a spaceBetween Row overflowed the card on any narrow phone —
-    // 55dp at 320 and still 15dp at 360, the commonest Android width there is. The label yields,
-    // because the number is the reason the row exists.
     return Row(
       children: [
-        Flexible(
+        Expanded(
           child: Text(
-            'Totale ore',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'Archivo Narrow',
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: context.colors.ink,
-            ),
+            'Se il pulsante viene rifiutato, chiudi la giornata con il QR.',
+            style: TextStyle(fontFamily: 'Archivo', fontSize: 11, color: context.colors.inkMuted),
           ),
         ),
-        const SizedBox(width: 12),
-        Text(
-          _formatHoursMinutesSeconds(total),
-          style: TextStyle(
-            fontFamily: 'Archivo Narrow',
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            // accentInk, not raw Y — the sibling label above uses context.colors.ink, confirming
-            // this card sits on a flipping background, not a permanently-dark surface; see
-            // AppPalette.accentInk's own doc comment for the dark-mode AA bug this avoids.
-            color: context.colors.accentInk,
+        const SizedBox(width: AppSpacing.sm),
+        SizedBox(
+          height: 34,
+          child: OutlinedButton(
+            onPressed: () => context.push(AppRoutes.timbraQr),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: context.colors.ink,
+              side: BorderSide(color: context.colors.borderLight),
+              shape: const RoundedRectangleBorder(borderRadius: AppRack.freeShape),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            child: const Text(
+              // Named, not abbreviated: beside a caption that already says "QR", a button reading
+              // "QR" told the technician what the acronym was, not what the tap does.
+              'SCANSIONA QR',
+              style: TextStyle(
+                fontFamily: 'Archivo Narrow',
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+              ),
+            ),
           ),
         ),
       ],

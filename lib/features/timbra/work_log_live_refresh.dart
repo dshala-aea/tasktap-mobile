@@ -23,6 +23,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/timbratura/work_log_refresh_coordinator.dart';
+import 'timbra_providers.dart' show serverDayProvider;
 
 class WorkLogLiveRefresh extends ConsumerStatefulWidget {
   const WorkLogLiveRefresh({super.key, required this.child});
@@ -79,7 +80,14 @@ class _WorkLogLiveRefreshState extends ConsumerState<WorkLogLiveRefresh>
   /// Deferred to a microtask: this can be reached from didChangeDependencies, i.e. mid-build, and a
   /// provider (activeTrackersProvider) must not be invalidated while the tree is building.
   void _refresh() => Future.microtask(() {
-    if (mounted) unawaited(ref.read(workLogRefreshCoordinatorProvider).refreshNow());
+    if (!mounted) return;
+    unawaited(ref.read(workLogRefreshCoordinatorProvider).refreshNow());
+    // The Timbra screen's own day is a second read: the coordinator converges this phone's own
+    // punches, but a totem punch, a punch from another device and an office correction only ever
+    // arrive through `GET /api/WorkLog`. Without this the rail keeps showing the day as it stood
+    // when the screen opened. Cheap where it does not apply: the provider is autoDispose, so from
+    // the dashboard (no listener) this invalidates nothing.
+    ref.invalidate(serverDayProvider);
   });
 
   void _syncPoll() {

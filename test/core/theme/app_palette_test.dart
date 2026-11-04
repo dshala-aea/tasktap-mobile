@@ -123,6 +123,26 @@ void main() {
     });
   });
 
+  /// The warn family's text role. `amber` is tuned to sit under white ink as a *fill*; used as a
+  /// glyph on these surfaces it measures under 4.5:1 in light mode, which is the bug `amberInk`
+  /// exists to remove. Both surfaces, because warning text lands on the page (Paper) and inside a
+  /// sheet (Sheet) — the rejection notice and the pending rail label respectively.
+  group('the warn ink reads on both paper and sheet', () {
+    test('light, on the page and on a card', () {
+      const p = AppPalette.light;
+      expect(contrast(p.amberInk, p.bg2), greaterThan(4.5));
+      expect(contrast(p.amberInk, p.surface), greaterThan(4.5));
+      // The value it replaced, kept as the reason the split exists.
+      expect(contrast(p.amber, p.bg2), lessThan(4.5));
+    });
+
+    test('dark, on the near-black background', () {
+      const d = AppPalette.dark;
+      expect(contrast(d.amberInk, d.bg2), greaterThan(4.5));
+      expect(contrast(d.amberInk, d.surface), greaterThan(4.5));
+    });
+  });
+
   group('the theme carries the palette', () {
     // testWidgets, not test: building the theme constructs GoogleFonts styles, whose font load
     // resolves asynchronously. Outside a widget tester that lands in the test's zone as an

@@ -177,7 +177,9 @@ void main() {
       expect(find.text('INIZIA TURNO'), findsNothing);
       expect(find.text('FINE TURNO'), findsNothing);
       expect(find.text('La tua azienda richiede la timbratura con QR.'), findsOneWidget);
-      expect(find.text('Scansiona QR'), findsOneWidget);
+      // The scan control is a key on the docked deck, so it carries the deck's uppercase label
+      // (the wording is unchanged — only its case follows the surface's key style).
+      expect(find.text('SCANSIONA QR'), findsOneWidget);
       expect(find.text('Smart working'), findsNothing);
 
       await _teardownTimer(tester);
@@ -264,7 +266,7 @@ void main() {
 
         // The one refusal the button cannot resolve — the row day's approval was cancelled — has to
         // stay reachable, or this shift can only be closed from the tracker row on Home.
-        expect(find.text('Scansiona QR'), findsOneWidget);
+        expect(find.text('SCANSIONA QR'), findsOneWidget);
         expect(find.textContaining('chiudi la giornata con il QR'), findsOneWidget);
 
         await _teardownTimer(tester);
@@ -282,7 +284,7 @@ void main() {
 
       expect(find.text('FINE TURNO'), findsOneWidget);
       expect(find.text('PAUSA'), findsOneWidget);
-      expect(find.text('Scansiona QR'), findsNothing);
+      expect(find.text('SCANSIONA QR'), findsNothing);
 
       await _teardownTimer(tester);
     });
@@ -299,7 +301,7 @@ void main() {
 
       expect(find.text('FINE TURNO'), findsOneWidget);
       expect(find.text('PAUSA'), findsOneWidget);
-      expect(find.text('Scansiona QR'), findsNothing);
+      expect(find.text('SCANSIONA QR'), findsNothing);
 
       await _teardownTimer(tester);
     });
@@ -333,7 +335,7 @@ void main() {
       );
       // And the scanner stays reachable beside it — the one refusal the two-day rule cannot
       // resolve is a cancelled approval on the row's own day.
-      expect(find.text('Scansiona QR'), findsOneWidget);
+      expect(find.text('SCANSIONA QR'), findsOneWidget);
 
       await tester.tap(find.text('FINE TURNO'));
       await tester.pump();
@@ -409,7 +411,7 @@ void main() {
 
       expect(find.text('FINE TURNO'), findsOneWidget);
       expect(find.text('PAUSA'), findsOneWidget);
-      expect(find.text('Scansiona QR'), findsOneWidget);
+      expect(find.text('SCANSIONA QR'), findsOneWidget);
       expect(
         find.ancestor(of: find.text('FINE TURNO'), matching: find.byType(SingleChildScrollView)),
         findsNothing,
