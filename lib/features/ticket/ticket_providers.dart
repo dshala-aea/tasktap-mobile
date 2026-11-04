@@ -630,6 +630,11 @@ TicketWorkLogDto ticketWorkLogFromTimer(TicketTimer row) {
   );
 }
 
+/// Whether a start/stop tap for [ticketId] is still in flight.
+final ticketTimerBusyProvider = StateProvider.autoDispose.family<bool, String>(
+  (ref, ticketId) => false,
+);
+
 /// The running entry on this ticket, or null.
 ///
 /// Derived from [ticketWorklogsProvider] rather than fetched separately so the timer bar and the

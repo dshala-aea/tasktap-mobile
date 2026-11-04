@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 import '../../core/files/capture_store.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
-import '../../core/time/business_time.dart' show BusinessTime, formatWorkDate;
+import '../../core/time/business_time.dart' show formatWorkDate;
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/utils/error_message.dart' show humanErrorMessage;
 import '../../core/widgets/app_compartment_tile.dart';
@@ -42,6 +42,7 @@ import 'ticket_label.dart';
 import 'ticket_materiali_editor.dart';
 import 'ticket_providers.dart';
 import 'ticket_timer_actions.dart';
+import 'ticket_timer_hero.dart';
 import 'steps/step_assegnazione.dart' show techniciansProvider;
 import 'ticket_workflow_api_client.dart';
 import 'package:uuid/uuid.dart';
@@ -1943,16 +1944,6 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
 /// the dashboard's active-tracker strip uses, not the accent strap (that means selected/priority,
 /// not live; see LiveDot's own doc comment). A technician who has left a timer going overnight
 /// should see the same signal wherever they land.
-/// Elapsed time of a running ticket worklog at [now]. `workDate` + `startTime` is a Rome
-/// wall-clock label (legacy frame), not UTC, so it is converted with
-/// [BusinessTime.instantOfLegacyLabel]; clamped at zero against clock skew.
-@visibleForTesting
-Duration ticketTimerElapsed(TicketWorkLogDto running, DateTime now, BusinessTime businessTime) {
-  final start = businessTime.instantOfLegacyLabel(running.workDate, running.startTime);
-  final elapsed = now.toUtc().difference(start);
-  return elapsed.isNegative ? Duration.zero : elapsed;
-}
-
 class _TicketTimerBar extends ConsumerStatefulWidget {
   const _TicketTimerBar({required this.ticketId});
 
