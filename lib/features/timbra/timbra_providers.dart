@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
+import '../../presentation/providers/auth_providers.dart' show currentUserProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../data/sync/sync_service.dart';
@@ -12,6 +13,7 @@ import '../../data/timbratura/remote_shift.dart';
 import '../../data/timbratura/timbra_sync_service.dart';
 import '../../data/timbratura/work_session_repository.dart';
 import '../../data/timbratura/worklog_api_client.dart';
+import 'day_rail.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const _kIngresso = 'ingresso';
@@ -37,6 +39,44 @@ final workSessionRepositoryProvider = Provider<IWorkSessionRepository>((ref) {
 final todaySessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref) {
   final repo = ref.watch(workSessionRepositoryProvider);
   return repo.watchTodaySessions();
+});
+
+// ── The merged day (server rows + this phone's events) ────────────────────────
+
+/// The server's own attendance rows for today, with their type and origin.
+///
+/// **Its failure is data, not noise.** An unreachable day still lets the rail draw this phone's
+/// own punches — what is missing is only what the phone never knew — but the screen may not then
+/// say "Nessuna timbratura oggi": that is the very claim this screen exists to stop making. So the
+/// error is left on the `AsyncValue` for the surface to read (`hasError`/`hasValue`) instead of
+/// being flattened into an empty list, which is indistinguishable from a day the server really says
+/// is empty. [dayRailProvider] still folds it to `const []` for the merge itself.
+///
+/// This is the fix for the defect this screen carried: the sessions list and the total used to
+/// read the local table only, so a totem punch, a punch from another device and an office
+/// correction were all invisible and the total undercounted. `GET /worklog/mobile/today` is not
+/// the endpoint for it — it omits `workLogType`, so a break arrives indistinguishable from work
+/// and the day's arithmetic would be wrong in a new way. See [DayWorkLogEntry].
+final serverDayProvider = FutureProvider.autoDispose<List<DayWorkLogEntry>>((ref) async {
+  final userId = ref.watch(currentUserProvider.select((u) => u?.id));
+  if (userId == null) return const [];
+
+  final client = ref.watch(worklogApiClientProvider);
+  // The date window binds `WorkDate`, whose labels live in the legacy (Rome) frame — not the
+  // device zone. Same anchoring step_ore.dart uses for the same endpoint.
+  final today = ref.watch(businessTimeProvider).legacyToday();
+  return client.fetchDayEntries(userId: userId, day: today);
+});
+
+/// Today as one line: the server's rows merged with this phone's own punches.
+///
+/// `now` is read once here, on a data change (a punch, a sync, the 15s refresh). The running
+/// band in the rail ticks on its own inside that widget; a whole-screen rebuild every second to
+/// age one number is what the old hero deliberately avoided and this keeps avoiding.
+final dayRailProvider = Provider.autoDispose<DayRail>((ref) {
+  final local = ref.watch(todaySessionsProvider).valueOrNull ?? const <WorkSession>[];
+  final server = ref.watch(serverDayProvider).valueOrNull ?? const <DayWorkLogEntry>[];
+  return buildDayRail(localEvents: local, serverRows: server, now: DateTime.now());
 });
 
 /// True when at least one of today's events has not yet been synced.

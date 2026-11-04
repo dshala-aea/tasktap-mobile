@@ -23,7 +23,8 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
-import 'package:tasktap_mobile/features/timbra/timbra_providers.dart' show giornataProvider, todaySessionsProvider;
+import 'package:tasktap_mobile/features/timbra/timbra_providers.dart'
+    show giornataProvider, serverDayProvider, todaySessionsProvider;
 import 'package:tasktap_mobile/features/timbra/timbra_screen.dart';
 
 // ── No-op stubs (prevent Dio from being constructed by providers) ─────────────
@@ -88,6 +89,16 @@ class _NoopApiClient extends WorklogApiClient {
 
   @override
   Future<List<TodayWorkLogDto>> getToday() async => [];
+
+  // The rail reads the server's own day through this endpoint (the typed rows, not
+  // `/worklog/mobile/today` — see serverDayProvider). A widget test must not reach the network for
+  // it: the provider treats any failure as "offline", which would silently pass either way.
+  @override
+  Future<List<DayWorkLogEntry>> fetchDayEntries({
+    required String userId,
+    required DateTime day,
+    BusinessTime? businessTime,
+  }) async => [];
 }
 
 TimbraSyncService _makeNoopSyncService() =>
@@ -109,6 +120,7 @@ Widget _buildApp(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       timbraSyncServiceProvider.overrideWithValue(_makeNoopSyncService()),
+      worklogApiClientProvider.overrideWithValue(_NoopApiClient()),
       // Real LocationService touches platform channels (Geolocator) that no widget test here
       // mocks, and PunchNotifier now calls it (best-effort, silent GPS capture — see
       // PunchNotifier._captureGpsSilently) on every punch/pause. DisabledLocationService is the
@@ -154,10 +166,13 @@ void main() {
     await _teardownTimer(tester);
   });
 
-  testWidgets('shows Sessioni di oggi section heading', (tester) async {
+  testWidgets('offers a back control — this route is pushed on the root navigator', (tester) async {
+    // Defect: the screen sits on the root navigator, so the app's tab bar is not on screen and
+    // the header declared no leading control. Android's system gesture was the only way out.
     await tester.pumpWidget(_buildApp(db));
     await tester.pump();
-    expect(find.text('SESSIONI DI OGGI'), findsOneWidget);
+
+    expect(find.bySemanticsLabel('Indietro'), findsOneWidget);
     await _teardownTimer(tester);
   });
 
@@ -168,7 +183,7 @@ void main() {
     await _teardownTimer(tester);
   });
 
-  testWidgets('punch button tap adds Ingresso session row', (tester) async {
+  testWidgets('punch button tap puts the first stretch on the day', (tester) async {
     await tester.pumpWidget(_buildApp(db));
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -176,11 +191,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('Ingresso'), findsOneWidget);
+    expect(find.text('Turno'), findsOneWidget);
+    // The whole point of the rebuild: every stretch says who recorded it.
+    expect(find.textContaining('questo telefono'), findsOneWidget);
     await _teardownTimer(tester);
   });
 
-  testWidgets('sync dot appears when isPendingSync events exist', (tester) async {
+  testWidgets('an unsent punch is marked on its own row', (tester) async {
     // Pre-seed a pending session directly into the DB.
     await db
         .into(db.workSessions)
@@ -195,8 +212,47 @@ void main() {
     await tester.pumpWidget(_buildApp(db));
     await tester.pump(const Duration(milliseconds: 100));
 
-    // The amber sync dot has tooltip "Non sincronizzato".
-    expect(find.byTooltip('Non sincronizzato'), findsOneWidget);
+    expect(find.textContaining('in attesa'), findsOneWidget);
+    await _teardownTimer(tester);
+  });
+
+  // The defect this screen was rebuilt for: a punch made on the totem, on another device, or
+  // corrected by the office never appeared, so the total undercounted and the technician had no
+  // way to see it was wrong. The row now comes from the server's day, merged with this phone's
+  // own unsent punches, and it says where it came from.
+  testWidgets('a punch this phone never made is in the day, and says so', (tester) async {
+    final clock = DateTime.utc(2026, 7, 10, 7); // 09:00 Rome
+    await tester.pumpWidget(
+      _buildApp(
+        db,
+        extraOverrides: [
+          businessTimeProvider.overrideWithValue(
+            BusinessTime('Europe/Rome', clock: () => clock),
+          ),
+          nowProvider.overrideWith((ref) => Stream.value(clock)),
+          serverDayProvider.overrideWith(
+            (ref) async => [
+              DayWorkLogEntry(
+                id: 'srv-1',
+                clientId: null,
+                start: DateTime.utc(2026, 7, 10, 6), // 08:00 Rome
+                end: DateTime.utc(2026, 7, 10, 7), // 09:00 Rome
+                kind: DayWorkLogKind.ordinary,
+                sorgente: 'totem',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Turno'), findsOneWidget);
+    expect(find.textContaining('totem'), findsOneWidget);
+    // …and it is inside the total, which is the number that used to undercount.
+    expect(find.bySemanticsLabel('Ore lavorate oggi 1h 00m'), findsOneWidget);
+
     await _teardownTimer(tester);
   });
 
@@ -289,7 +345,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('Ripresa'), findsOneWidget);
+      // Two worked stretches now — the one before the pause and the one after it.
+      expect(find.text('Turno'), findsNWidgets(2));
       expect(find.text('PAUSA'), findsOneWidget);
       await _teardownTimer(tester);
     });
@@ -544,7 +601,9 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      expect(find.text('08:00'), findsOneWidget);
+      // The rail's own label, not a bare `08:00` — the gutter prints the same string as an hour
+      // tick, so a substring match would count the scale as well as the punch.
+      expect(find.textContaining('dal 08:00'), findsOneWidget);
       await _teardownTimer(tester);
     });
 

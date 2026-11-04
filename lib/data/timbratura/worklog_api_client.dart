@@ -186,6 +186,107 @@ class TodayWorkLogDto {
   }
 }
 
+// ── One day's attendance rows (GET /api/WorkLog) ──────────────────────────────
+
+/// What one attendance row of a day actually was.
+///
+/// `WorkLogTypeEnum` on the wire is a number, not a name (only `WorkLogApprovalStatusEnum`
+/// carries a `JsonStringEnumConverter`), and an older server sends nothing at all — hence
+/// [unknown] rather than a silent default to work. A break rendered as work is the exact
+/// misreading this type exists to prevent: it inflates the day and hides the pause.
+enum DayWorkLogKind { ordinary, breakTime, shortBreak, longBreak, unknown }
+
+/// One attendance row of a single day, as `GET /api/WorkLog` returns it.
+///
+/// Why this endpoint and not `GET /worklog/mobile/today`: the mobile endpoint returns whole
+/// sessions (id, clientId, start, end, open) and deliberately omits the row's type, so a break
+/// arrived looking exactly like a stretch of work. `/api/WorkLog` returns the rows themselves,
+/// which carry `workLogType` and `sorgente` — the two facts the day's rail needs and the reason
+/// this DTO exists instead of [TodayWorkLogDto].
+///
+/// Times: `startUtc`/`endUtc` are the true instants and are preferred whenever present. Legacy
+/// rows predate them, so the fallback combines `workDate` with the `TimeSpan` `startTime` in the
+/// business (Rome) frame — an approximation good enough for a single day's rail, and the only
+/// thing those rows ever recorded.
+class DayWorkLogEntry {
+  const DayWorkLogEntry({
+    required this.id,
+    required this.clientId,
+    required this.start,
+    required this.end,
+    required this.kind,
+    required this.sorgente,
+  });
+
+  final String id;
+
+  /// The phone-generated id of the session that created this row, when it came from an app.
+  /// Null for rows written by the kiosk, the office, or an older client — it is the join key
+  /// that lets the rail skip a server row the phone already shows from its own events.
+  final String? clientId;
+
+  final DateTime start;
+  final DateTime? end;
+
+  final DayWorkLogKind kind;
+
+  /// `Manuale` | `Totem` | `QrCode` | `App`, lowercase, or null when the server did not say.
+  final String? sorgente;
+
+  static DayWorkLogKind _kindOf(Object? raw) => switch (raw) {
+    0 => DayWorkLogKind.ordinary,
+    1 => DayWorkLogKind.breakTime,
+    2 => DayWorkLogKind.shortBreak,
+    3 => DayWorkLogKind.longBreak,
+    _ => DayWorkLogKind.unknown,
+  };
+
+  static String? _sorgenteOf(Object? raw) => switch (raw) {
+    0 => 'manuale',
+    1 => 'totem',
+    2 => 'qr',
+    3 => 'app',
+    _ => null,
+  };
+
+  factory DayWorkLogEntry.fromJson(Map<String, dynamic> json, {required BusinessTime businessTime}) {
+    final workDate = parseDateOnlyOrThrow(json['workDate']);
+
+    DateTime instant(Object? utcRaw, Object? spanRaw) {
+      if (utcRaw is String && utcRaw.isNotEmpty) {
+        final parsed = DateTime.tryParse(utcRaw);
+        if (parsed != null) return parsed.toUtc();
+      }
+      final span = parseTimeSpan(spanRaw);
+      if (span == null) {
+        // No usable clock reading at all: anchor at the row's date so the row still exists on
+        // the rail rather than making the whole day unreadable.
+        return businessTime.instantOfLegacyLabel(workDate, Duration.zero);
+      }
+      return businessTime.instantOfLegacyLabel(workDate, span);
+    }
+
+    final start = instant(json['startUtc'], json['startTime']);
+    var end = json['endTime'] == null && json['endUtc'] == null
+        ? null
+        : instant(json['endUtc'], json['endTime']);
+    // A row that ran past midnight keeps its opener's work date but may carry a smaller
+    // time-of-day for its end. Only the legacy pair can produce that; an endUtc never does.
+    if (end != null && end.isBefore(start)) {
+      end = end.add(const Duration(days: 1));
+    }
+
+    return DayWorkLogEntry(
+      id: json['id'] as String,
+      clientId: json['clientId'] as String?,
+      start: start,
+      end: end,
+      kind: _kindOf(json['workLogType']),
+      sorgente: _sorgenteOf(json['sorgente']),
+    );
+  }
+}
+
 // ── Kiosk scan (POST /api/worklog/kiosk/scan) ─────────────────────────────────
 
 /// Why a `kioskScan` call failed, mirroring the 5-check authorization formula
@@ -456,6 +557,47 @@ class WorklogApiClient {
 
     final raw = data['items'] as List<dynamic>? ?? [];
     return raw.cast<Map<String, dynamic>>().map(UserWorkLogDto.fromJson).toList();
+  }
+
+  /// The caller's own attendance rows for one business day, typed.
+  ///
+  /// Backs the Timbra screen's day rail: the rows a phone cannot know about — a kiosk punch, a
+  /// punch from another device, an office correction — arrive here with their `workLogType`, so
+  /// a break reads as a break and the rail's arithmetic matches the payroll one.
+  ///
+  /// Sends the caller's own id, which `ScopedUserIdAsync` permits for a technician and which
+  /// [fetchForUser] already relies on. The window is a single day in the legacy (Rome) frame
+  /// because `dateFrom`/`dateTo` bound `WorkDate`, and `WorkDate` labels live in that frame.
+  ///
+  /// Throws [DioException] on network/server error — offline is a normal condition of this phone
+  /// and the caller decides what it means, exactly as with [getGiornata].
+  Future<List<DayWorkLogEntry>> fetchDayEntries({
+    required String userId,
+    required DateTime day,
+    BusinessTime? businessTime,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/WorkLog',
+      queryParameters: {
+        'userId': userId,
+        'dateFrom': _dateOnly(day),
+        'dateTo': _dateOnly(day),
+        // A day of ordinary/break pairs is a handful of rows; the default 20 would silently clip
+        // a day that accumulated corrections.
+        'pageSize': 100,
+        'page': 1,
+      },
+    );
+
+    final data = response.data;
+    if (data == null) return [];
+
+    final bt = businessTime ?? BusinessTime.fallback();
+    final raw = data['items'] as List<dynamic>? ?? [];
+    return raw
+        .cast<Map<String, dynamic>>()
+        .map((json) => DayWorkLogEntry.fromJson(json, businessTime: bt))
+        .toList();
   }
 
   static String _dateOnly(DateTime d) =>

@@ -42,6 +42,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.shadow,
     required this.shadowInset,
     required this.amber,
+    required this.amberInk,
     required this.green,
     required this.blue,
     required this.cyan,
@@ -109,6 +110,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
   // [bg2], not a different hue — the meaning has to survive the theme.
 
   final Color amber;
+
+  /// [amber] as TEXT, not as a fill. The fill value is tuned to sit under white ink and measures
+  /// under 4.5:1 when used as a glyph color on the cream surfaces (3.89:1 on Paper, 4.27:1 on
+  /// Sheet) — so a pending line or a warning sentence gets this darker value instead. Dark theme
+  /// uses [amber] itself: on the near-black ground it already clears 10.5:1.
+  final Color amberInk;
   final Color green;
   final Color blue;
   final Color cyan;
@@ -192,6 +199,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     shadow: [],
     shadowInset: [],
     amber: Color(0xFFFFB200),
+    amberInk: Color(0xFF8A4C00),
     green: Color(0xFF4CAF50),
     blue: Color(0xFF2563EB),
     cyan: Color(0xFF06AED5),
@@ -245,6 +253,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     shadow: [],
     shadowInset: [],
     amber: Color(0xFFFFC44D),
+    amberInk: Color(0xFFFFC44D),
     green: Color(0xFF6FCF74),
     blue: Color(0xFF7AA7F5),
     cyan: Color(0xFF4DD0E8),
@@ -276,6 +285,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     List<BoxShadow>? shadow,
     List<BoxShadow>? shadowInset,
     Color? amber,
+    Color? amberInk,
     Color? green,
     Color? blue,
     Color? cyan,
@@ -304,6 +314,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
       shadow: shadow ?? this.shadow,
       shadowInset: shadowInset ?? this.shadowInset,
       amber: amber ?? this.amber,
+      amberInk: amberInk ?? this.amberInk,
       green: green ?? this.green,
       blue: blue ?? this.blue,
       cyan: cyan ?? this.cyan,
@@ -341,6 +352,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
       shadow: t < 0.5 ? shadow : other.shadow,
       shadowInset: t < 0.5 ? shadowInset : other.shadowInset,
       amber: c(amber, other.amber),
+      amberInk: c(amberInk, other.amberInk),
       green: c(green, other.green),
       blue: c(blue, other.blue),
       cyan: c(cyan, other.cyan),

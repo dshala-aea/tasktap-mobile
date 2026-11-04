@@ -96,7 +96,9 @@ Paper and ink, with exactly one saturated color.
 ### Neutral
 - **Carbon Ink** (`#22252E`): primary text. 13.21:1 on Paper.
 - **Slate** (`#5E6878`): secondary text — captions, list-row subtitles. 4.86:1 on Paper.
-- **Paper** (`#F1EEE7`): the page ground (`bg1`/`bg2`).
+- **Paper** (`#F1EEE7` light, `#17181C` dark): the page ground (`bg1`). `bg2` is the same value in
+  light but *equals `surface` in dark* (`#1E1F24`), so a screen placed on `bg2` has no visible step
+  under its Sheet surfaces — which is why a screen that owns cards uses `bg1`.
 - **Sheet** (`#FBF9F4`): a card, an input, a dialog — the raised paper surface.
 - **Muted Fill** (`#EDEAE3`): an input/muted fill (`bg3`).
 - **Rule** (`#DED9CE`): the one hairline border/divider value. Every border in the app is this,
@@ -110,6 +112,13 @@ Paper and ink, with exactly one saturated color.
 - **In lavorazione / warn** (`#B36200` light, `#FFB238` dark): actively being worked.
 - **Non valido / bad** (`#FF3B30` light, `#FF6961` dark): cancelled, expired, suspended, rejected
   — the one family that also carries a coarse ink texture, reserved for exactly this severity.
+
+Each family has two jobs, and the fill value is tuned for the first one. **A family used as text
+takes its darker `*Ink` variant.** The warn family is the shipped case: `amber` (`#FFB200`) sits
+under white ink as a fill, but as a glyph on Paper it measures 3.89:1, so `AppPalette.amberInk`
+(`#8A4C00` light — 5.8:1 on Paper, 6.4:1 on Sheet; `#FFC44D` dark, which already clears 10.5:1)
+carries every pending line, warning sentence and outlined pause key. `AppPalette.accentInk` is the
+same split for Stamp Red on a background that flips with the theme.
 
 ### Named Rules
 **The One Accent Rule.** Stamp Red is the primary action and the active state. It is not a
@@ -170,7 +179,8 @@ Borders are always 1px, the single `Rule` color.
 **Known drift (honest, not aspirational):** several widgets still carry pre-Documento radii that
 were never migrated onto these tokens — the bottom nav's pill (10–16px) and a scattered handful
 of others in `lib/core/widgets/`. Treat the 2px token as the standard for new work; migrating the
-stragglers is tracked, not yet done.
+stragglers is tracked, not yet done. The Timbra rebuild (2026-11-04) is fully on-token: deck keys,
+guard banners and the rail's own hairline are all 2px / 1px `Rule`.
 
 ## Components
 
@@ -203,6 +213,52 @@ border, no blur, no gradient. The active tab is a solid Stamp Red fill with whit
 tabs are icon-only in muted ink. See Shapes' honesty note on this component's own un-migrated
 radius.
 
+### Time Rail (`lib/features/timbra/day_rail_view.dart`)
+The app's one *diagram*: a vertical measured line of the day, built for Timbra and reusable
+wherever "what happened, and when" must be read at a glance.
+
+- **Axis:** first recorded instant → now (or the last recorded instant, once the day is closed).
+  Never the calendar day — a technician who punched 07:40–17:10 must not see the evening drawn
+  as missing time.
+- **Bands:** a stretch of work is a solid Carbon Ink bar on the spine; a paid pause is solid
+  In-lavorazione amber (the *fill* value — a bar darkened to the text `amberInk` came too close to
+  Carbon Ink to be told apart); an unpaid or not-yet-frozen break is an amber hairline *outline*
+  stroked in `amberInk` (its kind is not decided, so its fill is not decided either, and a 1.2px
+  stroke on Sheet needs the legible value); a void between two recorded stretches is a
+  dashed 2-on/2.5-off `Rule` line, labelled "Non timbrato" with its own duration. Bars keep true
+  proportional geometry, floored at 4px so a short stretch is still visible; the printed duration
+  carries the real measurement.
+- **Provenance:** every band is labelled with its clock range and where it came from — `questo
+  telefono` (+ `in attesa` while unsent), `totem`, `qr`, `altro dispositivo`, `ufficio`. This is
+  the point of the device: the day includes punches this phone never made.
+- **Nodes and the live dot:** a 1.9r node at each recorded instant; while anything runs, a 3.4r
+  Stamp Red dot pulses once every 1600ms at the open end. That pulse is the surface's single
+  authored motion.
+- **Labels are a separate layer from bands.** Bands keep true geometry; labels are pushed down
+  only as far as they need to be (and distributed evenly when even that will not fit), so two
+  punches five minutes apart never collide as text. Every label prints exact clock times, and
+  label boxes scale with the ambient text scaler. The provenance line is allowed two lines: at
+  360dp with the system font at 1.3, a single line ellipsised away the very words the merge exists
+  to show (`questo telefono · in attesa`).
+- **The day sits on its own field.** The rail is a Sheet fill inside a 1px `Rule` with the world's
+  2px corner — the only filled surface on the screen, so the drawn day reads as the object and the
+  head above it as the page's title. The empty state stands on the same sheet. Its layer is only
+  visible if the page ground is the *other* paper value: these screens use `bg1`, not `bg2`, because
+  in dark `bg2` equals `surface` and the step collapsed into a hairline.
+- **An empty rail has three subjects.** `DayCoverage` carries which sources answered: a complete day
+  may say "nessuna timbratura oggi"; an unanswered server day says "su questo telefono" and names
+  what may be missing; an unreadable phone table claims nothing about the day at all.
+
+### Docked Action Deck (`timbra_screen.dart`)
+Full-bleed `Sheet` strip pinned above the safe area, a 1px `Rule` along its top and nothing else
+— no shadow, no floating card, no blur. Primary action is a flat saturated key: Stamp Red to
+start (`AppColors.Y`), `stopDark` to end, white icon + uppercase Archivo Narrow label, 2px radius,
+press-down scale instead of an ink splash. Key height follows the system text scaler (clamped at
+1.4) so the label grows instead of being shrunk back by its own `FittedBox`. Secondary break key is
+an outlined amber key at
+two-thirds width; when it does not apply, it does not exist. The deck is the only place a *task*
+action lives on these screens — nothing that changes recorded time may float mid-screen.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -213,6 +269,10 @@ radius.
 - **Do** verify a new color pair against both themes' own AA floor before shipping it (see
   `app_palette_contrast_test.dart` and `AppPalette.accentInk`'s own doc comment for the shape of
   bug this catches).
+- **Do** keep a review raster traceable to the build it came from. `test/capture/` renders the
+  shipped widget tree at 390×844 dp / 2× with the app's real fonts into `.impeccable/review/`;
+  those PNGs are evidence of that tree, not device screenshots, and the owner's device run stays
+  the authority on field conditions.
 
 ### Don't:
 - **Don't** add card shadows, gradients, or `BackdropFilter` blur — three prior visual eras of
@@ -220,7 +280,10 @@ radius.
   against all three.
 - **Don't** hardcode `fontFamily: 'Inter'` (or any font literal) in a new widget — use
   `AppTextStyles`/the theme's own `TextTheme`, so the display/body/mono split stays real instead
-  of aspirational.
+  of aspirational. **Known drift:** `timbra_screen.dart` and `day_rail_view.dart` still name
+  Archivo / Archivo Narrow / IBM Plex Mono as literals rather than through `AppTextStyles`; the
+  split they express (`data` in mono, `prose` in Archivo, `state` in Archivo Narrow) is the
+  intended one, and migrating them onto the tokens is tracked, not done.
 - **Don't** build a second literal "paper office" reading (registration marks, a masthead strip,
   an Indice sidebar) for the technician's own screens — that furniture belongs to the web app's
   desktop context, not a gloved phone in direct sun. It is fair game for Altro's admin surface,
