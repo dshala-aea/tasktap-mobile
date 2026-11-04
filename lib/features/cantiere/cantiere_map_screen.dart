@@ -13,16 +13,19 @@ import 'package:latlong2/latlong.dart';
 
 import '../../core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/maps_launcher.dart';
-import '../../core/widgets/widgets.dart';
 import '../timbra/cantiere_timbra_screen.dart'
-    show cantiereActiveSessionProvider, cantiereTodayHoursProvider, formatHoursMinutes;
+    show
+        cantiereActiveSessionProvider,
+        cantiereCrewAssignmentsProvider,
+        cantiereTodayHoursProvider,
+        formatHoursMinutes;
 import 'cantiere_close_sheet.dart';
 import 'cantiere_day.dart';
+import 'cantiere_design.dart';
 import 'cantiere_providers.dart';
 
 const String _osmUserAgentPackageName = 'com.advantedge.tasktap.tasktap_mobile';
@@ -46,6 +49,7 @@ class CantiereMapScreen extends ConsumerWidget {
     final active = ref.watch(cantiereActiveSessionProvider);
     final activeHere = active?.cantiereId == cantiereId;
     final todayHours = ref.watch(cantiereTodayHoursProvider(cantiereId));
+    final crewCount = ref.watch(cantiereCrewAssignmentsProvider(cantiereId)).valueOrNull?.length;
 
     final address = [
       cantiere?.address,
@@ -80,22 +84,15 @@ class CantiereMapScreen extends ConsumerWidget {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _RoundIconButton(
-                      icon: LucideIcons.chevronLeft,
-                      semanticLabel: 'Indietro',
-                      onTap: () => context.pop(),
-                    ),
+                    _SquareBackButton(onTap: () => context.pop()),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: AppCard(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.base,
-                          vertical: AppSpacing.sm,
-                        ),
+                      child: CantiereCard(
+                        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -103,16 +100,14 @@ class CantiereMapScreen extends ConsumerWidget {
                               cantiere?.name ?? 'Cantiere',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
+                              style: cantiereDisplay(context, 15),
                             ),
                             if (address.isNotEmpty)
                               Text(
                                 address,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: context.colors.inkMuted,
-                                ),
+                                style: cantiereBody(context, 10, color: context.colors.inkMuted),
                               ),
                           ],
                         ),
@@ -129,41 +124,57 @@ class CantiereMapScreen extends ConsumerWidget {
             bottom: 0,
             child: SafeArea(
               top: false,
-              child: AppCard(
+              minimum: const EdgeInsets.only(bottom: 12),
+              child: CantiereCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        StatusPill(stato: _statusLabel(cantiere?.status ?? 0)),
-                        const Spacer(),
+                        CantiereStamp(
+                          label: _statusLabel(cantiere?.status ?? 0),
+                          color: (cantiere?.status ?? 0) == 0
+                              ? context.colors.green
+                              : context.colors.inkMuted,
+                        ),
                         if (activeHere)
                           CantiereLiveElapsed(
                             start: active!.startTime,
-                            style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
+                            clock: true,
+                            style: cantiereTimer(context, size: 19),
                           )
                         else
                           Text(
                             formatHoursMinutes(todayHours),
-                            style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
+                            style: cantiereTimer(
+                              context,
+                              size: 19,
+                            ).copyWith(color: context.colors.ink),
                           ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      activeHere
-                          ? 'Sei in cantiere dalle ${_hm(active!.startTime)}'
-                          : todayHours > Duration.zero
-                          ? 'Oggi su questo cantiere'
-                          : 'Pronto a timbrare',
-                      style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5, bottom: 12),
+                      child: activeHere
+                          ? CantiereHeroCopy(
+                              before: 'Sei in cantiere dalle ',
+                              bold: _hm(active!.startTime),
+                              after: crewCount != null && crewCount > 0
+                                  ? ' · squadra di $crewCount'
+                                  : '',
+                            )
+                          : CantiereHeroCopy(
+                              before: todayHours > Duration.zero
+                                  ? 'Oggi su questo cantiere'
+                                  : 'Pronto a timbrare',
+                            ),
                     ),
-                    const SizedBox(height: 12),
                     if (activeHere)
-                      AppButton.danger(
+                      CantiereButton(
                         label: 'Timbra uscita',
-                        icon: const Icon(LucideIcons.logOut),
                         onPressed: () => showCantiereCloseSheet(
                           context,
                           cantiereId: cantiereId,
@@ -172,9 +183,8 @@ class CantiereMapScreen extends ConsumerWidget {
                         ),
                       )
                     else
-                      AppButton(
+                      CantiereButton(
                         label: 'Timbra cantiere',
-                        icon: const Icon(LucideIcons.logIn),
                         onPressed: () =>
                             context.push(AppRoutes.cantiereTimbraPath(cantiereId: cantiereId)),
                       ),
@@ -182,17 +192,19 @@ class CantiereMapScreen extends ConsumerWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: AppButton.secondary(
+                          child: CantiereButton(
                             label: 'Indicazioni',
-                            icon: const Icon(LucideIcons.mapPin, size: 16),
+                            kind: CantiereButtonKind.secondary,
+                            compact: true,
                             onPressed: address.isEmpty ? null : () => openMapsForAddress(address),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: AppButton.ghost(
+                          child: CantiereButton(
                             label: 'Dettagli',
-                            icon: const Icon(LucideIcons.hardHat, size: 16),
+                            kind: CantiereButtonKind.ghost,
+                            compact: true,
                             onPressed: () => context.pop(),
                           ),
                         ),
@@ -253,7 +265,7 @@ class _CantiereMapState extends State<_CantiereMap> {
               point: widget.point,
               width: 44,
               height: 44,
-              child: const Icon(LucideIcons.mapPin, color: AppColors.Y, size: 44),
+              child: Icon(LucideIcons.mapPin, color: context.colors.accentInk, size: 44),
             ),
           ],
         ),
@@ -294,22 +306,29 @@ class _MapMessage extends StatelessWidget {
   }
 }
 
-class _RoundIconButton extends StatelessWidget {
-  const _RoundIconButton({required this.icon, required this.semanticLabel, required this.onTap});
+/// `.back` over the map: 32px square, sheet fill, 1px rule, 2px radius.
+class _SquareBackButton extends StatelessWidget {
+  const _SquareBackButton({required this.onTap});
 
-  final IconData icon;
-  final String semanticLabel;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: context.colors.surface,
-      shape: const CircleBorder(),
-      child: IconButton(
-        onPressed: onTap,
-        tooltip: semanticLabel,
-        icon: Icon(icon, size: 20, color: context.colors.ink),
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: Material(
+        color: context.colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(2),
+          side: BorderSide(color: context.colors.borderLight),
+        ),
+        child: IconButton(
+          padding: EdgeInsets.zero,
+          onPressed: onTap,
+          tooltip: 'Indietro',
+          icon: Icon(LucideIcons.chevronLeft, size: 22, color: context.colors.ink),
+        ),
       ),
     );
   }

@@ -15,7 +15,7 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_detail_screen.dart';
-import 'package:tasktap_mobile/features/cantiere/cantiere_map_card.dart';
+import 'package:tasktap_mobile/features/cantiere/cantiere_design.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_map_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
@@ -170,10 +170,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Cantiere Alpha'), findsOneWidget);
-    // Twice: the info card's own address line, plus CantiereMapCard's fallback AppMapCard (the
-    // geocoder above never resolves, so the map falls back to the same pin-and-address panel
-    // admin_cantiere_detail_screen.dart's own map section already shows alongside its own
-    // address row — this screen now matches that same accepted duplication).
+    // Twice: the sub line under the title, plus the map card's footer row.
     expect(find.text('Via Roma 1'), findsNWidgets(2));
     expect(find.text('Timbra cantiere'), findsOneWidget);
     expect(find.text('Nessun ticket collegato'), findsOneWidget);
@@ -298,7 +295,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Crea rapporto di intervento'), findsOneWidget);
+      expect(find.text('Crea rapportino'), findsOneWidget);
 
       await db.close();
     });
@@ -340,7 +337,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Crea rapporto di intervento'));
+        await tester.tap(find.text('Crea rapportino'));
         await tester.pumpAndSettle();
 
         expect(fakeApi.calledWithCantiereId, 'c1');
@@ -384,7 +381,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Crea rapporto di intervento'));
+      await tester.tap(find.text('Crea rapportino'));
       await tester.pumpAndSettle();
 
       expect(find.text('Accedi per creare un rapporto di intervento.'), findsOneWidget);
@@ -433,7 +430,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Crea rapporto di intervento'));
+        await tester.tap(find.text('Crea rapportino'));
         await tester.pumpAndSettle();
 
         expect(fakeApi.calledWithCantiereId, 'c1');
@@ -515,7 +512,7 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       final client = await buildOffline(tester, db);
 
-      expect(find.text('Squadra assegnata'), findsOneWidget);
+      expect(find.text('Squadra'), findsOneWidget);
       expect(find.text('Mario Rossi'), findsOneWidget);
       expect(find.text('LEAD'), findsOneWidget);
       expect(client.calls, 0, reason: 'offline is answered from the Drift mirror');
@@ -529,7 +526,7 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       await buildOffline(tester, db, seedMirroredCrew: false);
 
-      expect(find.text('Squadra assegnata'), findsOneWidget);
+      expect(find.text('Squadra'), findsOneWidget);
       expect(find.text('Nessuna squadra assegnata'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -591,12 +588,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final timbraY = tester.getTopLeft(find.text('Timbra cantiere')).dy;
-      final creaRapportinoY = tester.getTopLeft(find.text('Crea rapporto di intervento')).dy;
+      final creaRapportinoY = tester.getTopLeft(find.text('Crea rapportino')).dy;
       final giornoY = tester.getTopLeft(find.text('Il giorno')).dy;
-      final squadraY = tester.getTopLeft(find.text('Squadra assegnata')).dy;
+      final squadraY = tester.getTopLeft(find.text('Squadra')).dy;
       final ticketsY = tester.getTopLeft(find.text('Ticket collegati')).dy;
-      final dettagliY = tester.getTopLeft(find.text('Dettagli')).dy;
-      final mapY = tester.getTopLeft(find.byType(CantiereMapCard)).dy;
+      final dettagliY = tester.getTopLeft(find.text('Dossier')).dy;
+      final mapY = tester.getTopLeft(find.byType(CantiereMapArt)).dy;
 
       expect(timbraY, lessThan(creaRapportinoY));
       expect(creaRapportinoY, lessThan(giornoY));
@@ -651,7 +648,11 @@ void main() {
 
       expect(find.text('Timbra uscita'), findsOneWidget);
       expect(find.text('Il giorno'), findsOneWidget);
-      expect(find.text('In corso'), findsOneWidget);
+      expect(find.text('Sessione in corso'), findsOneWidget);
+      expect(find.text('IN CANTIERE'), findsOneWidget);
+      // The hero timer is the design's HH:MM:SS readout.
+      expect(find.textContaining(RegExp(r'^\d{2}:\d{2}:\d{2}$')), findsOneWidget);
+      expect(find.text('CANTIERE'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -757,19 +758,16 @@ void main() {
       await db.close();
     });
 
-    testWidgets(
-      'says the shifts were never downloaded, not that none were worked',
-      (tester) async {
-        final db = await dbWithCantiere();
+    testWidgets('says the shifts were never downloaded, not that none were worked', (tester) async {
+      final db = await dbWithCantiere();
 
-        // A fresh device that has never completed a sync: the empty mirror is "we don't know".
-        await pumpOffline(tester, db);
+      // A fresh device that has never completed a sync: the empty mirror is "we don't know".
+      await pumpOffline(tester, db);
 
-        expect(find.text('Timbrature non ancora scaricate'), findsOneWidget);
-        expect(find.text('Nessuna timbratura registrata'), findsNothing);
+      expect(find.text('Timbrature non ancora scaricate'), findsOneWidget);
+      expect(find.text('Nessuna timbratura registrata'), findsNothing);
 
-        await db.close();
-      },
-    );
+      await db.close();
+    });
   });
 }
