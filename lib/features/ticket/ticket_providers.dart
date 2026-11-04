@@ -4,20 +4,24 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/error_message.dart' show isTransportOrServerFault;
-import '../../data/attachments/attachment_content_cache.dart' show AllegatoEntityType;
+import '../../data/attachments/attachment_content_cache.dart'
+    show AllegatoEntityType;
 import '../../data/local/app_database.dart';
-import '../../data/reference/reference_cache_repository.dart' show referenceCacheProvider;
+import '../../data/reference/reference_cache_repository.dart'
+    show ReferenceCacheRepository, referenceCacheProvider;
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 // The JSON-text list decoder `Tickets.prodottoAssistenzaIdsJson` shares with the pending-ticket
 // outbox — one decoder for one format, per its own doc comment.
-import '../../data/tickets/pending_ticket_repository.dart' show decodePendingStringList;
+import '../../data/tickets/pending_ticket_repository.dart'
+    show decodePendingStringList;
 import '../../data/timbratura/ticket_timer_sync_service.dart'
     show ticketTimerRepositoryProvider;
 import '../admin/admin_api_client.dart';
-import '../checklist/checklist_providers.dart' show checklistReadRepositoryProvider;
+import '../checklist/checklist_providers.dart'
+    show checklistReadRepositoryProvider;
 import 'ticket_controls_mirror.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_workflow_api_client.dart';
@@ -87,13 +91,13 @@ final ticketStatusesProvider = StreamProvider.autoDispose<List<TicketStatuse>>((
 /// null `closedAt` until the next sync — and anything that only looked at `closedAt` kept offering
 /// to start new work on it. The server uses the same flag (it stamps `ClosedAt` when a ticket
 /// enters such a status), so the two agree; see [ticketIsClosed] for the combined rule.
-final closedTicketStatusIdsProvider = StreamProvider.autoDispose<Set<int>>((ref) {
+final closedTicketStatusIdsProvider = StreamProvider.autoDispose<Set<int>>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(
-    db.ticketStatuses,
-  )..where((t) => t.isClosed.equals(true))).watch().map(
-    (rows) => {for (final r in rows) r.id},
-  );
+  return (db.select(db.ticketStatuses)..where((t) => t.isClosed.equals(true)))
+      .watch()
+      .map((rows) => {for (final r in rows) r.id});
 });
 
 /// Whether [ticket] is closed: it sits in one of the tenant's closing statuses, or the server
@@ -246,10 +250,11 @@ final schedulesForTicketProvider = StreamProvider.autoDispose
 final ticketReportsProvider = FutureProvider.autoDispose
     .family<List<TicketReportSummary>, String>((ref, ticketId) async {
       final db = ref.watch(appDatabaseProvider);
-      final rows = await (db.select(db.draftReports)
-            ..where((r) => r.ticketId.equals(ticketId))
-            ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
-          .get();
+      final rows =
+          await (db.select(db.draftReports)
+                ..where((r) => r.ticketId.equals(ticketId))
+                ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
+              .get();
       final local = rows
           .map(
             (r) => TicketReportSummary.fromMirror(
@@ -303,12 +308,12 @@ final ticketReportsProvider = FutureProvider.autoDispose
 /// answer.
 final ticketProdottiProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, String>((ref, ticketId) async {
-      List<Map<String, dynamic>> byName(List<Map<String, dynamic>> rows) => rows
-        ..sort(
-          (a, b) => ((a['name'] as String?) ?? '').toLowerCase().compareTo(
-            ((b['name'] as String?) ?? '').toLowerCase(),
-          ),
-        );
+      List<Map<String, dynamic>> byName(List<Map<String, dynamic>> rows) =>
+          rows..sort(
+            (a, b) => ((a['name'] as String?) ?? '').toLowerCase().compareTo(
+              ((b['name'] as String?) ?? '').toLowerCase(),
+            ),
+          );
 
       /// The ticket's own coverage ids, resolved against the reference mirror. Empty when the
       /// ticket carries none (older payload, or genuinely no unit).
@@ -343,22 +348,23 @@ final ticketProdottiProvider = FutureProvider.autoDispose
 
         final db = ref.watch(appDatabaseProvider);
         final query = db.select(db.ticketAssets).join([
-          innerJoin(db.assets, db.assets.id.equalsExp(db.ticketAssets.prodottoAssistenzaId)),
+          innerJoin(
+            db.assets,
+            db.assets.id.equalsExp(db.ticketAssets.prodottoAssistenzaId),
+          ),
         ])..where(db.ticketAssets.ticketId.equals(ticketId));
         final rows = await query.get();
         if (rows.isEmpty) throw const TicketDetailOfflineException();
         return byName(
-          rows
-              .map((row) {
-                final asset = row.readTable(db.assets);
-                return <String, dynamic>{
-                  'id': asset.id,
-                  'name': asset.name,
-                  'serialNumber': asset.serialNumber,
-                  'matricola': asset.matricola,
-                };
-              })
-              .toList(),
+          rows.map((row) {
+            final asset = row.readTable(db.assets);
+            return <String, dynamic>{
+              'id': asset.id,
+              'name': asset.name,
+              'serialNumber': asset.serialNumber,
+              'matricola': asset.matricola,
+            };
+          }).toList(),
         );
       }
 
@@ -368,7 +374,9 @@ final ticketProdottiProvider = FutureProvider.autoDispose
               .watch(ticketDetailApiClientProvider)
               .fetchCoveredProdottoIds(ticketId);
           final admin = ref.watch(adminApiClientProvider);
-          final rows = await Future.wait(ids.map(admin.fetchProdottoAssistenzaById));
+          final rows = await Future.wait(
+            ids.map(admin.fetchProdottoAssistenzaById),
+          );
           return byName(rows.whereType<Map<String, dynamic>>().toList());
         } catch (e) {
           if (!isTransportOrServerFault(e)) rethrow;
@@ -391,42 +399,65 @@ final ticketProdottiProvider = FutureProvider.autoDispose
 final ticketAttachmentsProvider = FutureProvider.autoDispose
     .family<List<TicketAttachmentDto>, String>((ref, ticketId) async {
       Future<List<TicketAttachmentDto>> fromMirror() async {
-        final db = ref.watch(appDatabaseProvider);
-        final rows =
-            await (db.select(db.reportAllegati)
-                  ..where(
-                    (a) =>
-                        a.entityType.equals(AllegatoEntityType.ticket) &
-                        a.entityId.equals(ticketId) &
-                        a.isActive.equals(true) &
-                        a.isPendingUpload.equals(false),
-                  )
-                  ..orderBy([(a) => OrderingTerm.desc(a.createdAt)]))
-                .get();
-        if (rows.isEmpty) throw const TicketDetailOfflineException();
-        return rows
-            .map(
-              (a) => TicketAttachmentDto(
-                id: a.id,
-                fileName: a.fileName,
-                contentType: a.contentType,
-                sizeBytes: a.sizeBytes,
-                contentUrl: a.url,
-                createdAt: a.createdAt,
-              ),
-            )
-            .toList();
+        final list = await _ticketAttachmentsFromMirror(
+          ref.watch(appDatabaseProvider),
+          ticketId,
+        );
+        if (list.isEmpty) throw const TicketDetailOfflineException();
+        return list;
       }
 
       if (ref.watch(isOnlineProvider)) {
         try {
-          return await ref.watch(ticketDetailApiClientProvider).fetchAttachments(ticketId);
+          return await ref
+              .watch(ticketDetailApiClientProvider)
+              .fetchAttachments(ticketId);
         } catch (e) {
           if (!isTransportOrServerFault(e)) rethrow;
         }
       }
       return fromMirror();
     });
+
+Future<List<TicketAttachmentDto>> _ticketAttachmentsFromMirror(
+  AppDatabase db,
+  String ticketId,
+) async {
+  final rows =
+      await (db.select(db.reportAllegati)
+            ..where(
+              (a) =>
+                  a.entityType.equals(AllegatoEntityType.ticket) &
+                  a.entityId.equals(ticketId) &
+                  a.isActive.equals(true) &
+                  a.isPendingUpload.equals(false),
+            )
+            ..orderBy([(a) => OrderingTerm.desc(a.createdAt)]))
+          .get();
+  return [
+    for (final a in rows)
+      TicketAttachmentDto(
+        id: a.id,
+        fileName: a.fileName,
+        contentType: a.contentType,
+        sizeBytes: a.sizeBytes,
+        contentUrl: a.url,
+        createdAt: a.createdAt,
+      ),
+  ];
+}
+
+/// The attachments this device already knows about, read from the sync mirror ONLY — never the
+/// network. The detail page's inline Allegati rows watch this so opening a ticket issues no
+/// request; the full Allegati sheet keeps [ticketAttachmentsProvider]. An empty mirror yields
+/// `[]` ("not known here"), which the caller must not present as "no attachments".
+final ticketAttachmentsMirrorProvider = FutureProvider.autoDispose
+    .family<List<TicketAttachmentDto>, String>(
+      (ref, ticketId) => _ticketAttachmentsFromMirror(
+        ref.watch(appDatabaseProvider),
+        ticketId,
+      ),
+    );
 
 /// Attachments picked from this ticket's Allegati tab that have not yet reached the server —
 /// waiting for connectivity, currently uploading, or failed (needs a manual retry). Surfaced
@@ -469,7 +500,10 @@ final ticketControlsProvider = FutureProvider.autoDispose
         // stream subscription to deliver a second time. See the repository's own note.
         final controls = await repository.getTicketControlRows(ticketId);
         final groups = await repository.getControlGroups();
-        final result = ticketControlGroupsFromMirror(controls: controls, groups: groups);
+        final result = ticketControlGroupsFromMirror(
+          controls: controls,
+          groups: groups,
+        );
         if (result.isEmpty) throw const TicketDetailOfflineException();
         return result;
       }
@@ -573,9 +607,7 @@ final ticketWorklogsProvider = FutureProvider.autoDispose
       return _ticketWorklogsFromMirror(rows);
     });
 
-List<TicketWorkLogDto> _ticketWorklogsFromMirror(
-  List<TicketTimer> rows,
-) {
+List<TicketWorkLogDto> _ticketWorklogsFromMirror(List<TicketTimer> rows) {
   if (rows.isEmpty) {
     // An empty mirror is not evidence of "no hours booked": it may simply never have synced.
     // Saying so beats drawing a zero the technician cannot distinguish from real work.
@@ -671,25 +703,43 @@ final ticketHistoryProvider = FutureProvider.autoDispose
           if (!isTransportOrServerFault(e)) rethrow;
         }
       }
-      final rows = await ref
-          .watch(referenceCacheProvider)
-          .ticketHistoryFor(ticketId);
-      if (rows.isEmpty) throw const TicketDetailOfflineException();
-      return [
-        for (final r in rows)
-          TicketHistoryEntryDto(
-            id: r.id,
-            ticketId: r.ticketId,
-            fieldName: r.fieldName,
-            changedByUserId: r.changedByUserId,
-            // Re-stamped to UTC: Drift hands a `DateTimeColumn` back as a LOCAL-kind instant, and
-            // the tab's `.toLocal()` must land on the same wall clock the server's copy does.
-            changedAt: r.changedAt.toUtc(),
-            oldValue: r.oldValue,
-            newValue: r.newValue,
-          ),
-      ];
+      final list = await _ticketHistoryFromMirror(
+        ref.watch(referenceCacheProvider),
+        ticketId,
+      );
+      if (list.isEmpty) throw const TicketDetailOfflineException();
+      return list;
     });
+
+Future<List<TicketHistoryEntryDto>> _ticketHistoryFromMirror(
+  ReferenceCacheRepository repo,
+  String ticketId,
+) async {
+  final rows = await repo.ticketHistoryFor(ticketId);
+  return [
+    for (final r in rows)
+      TicketHistoryEntryDto(
+        id: r.id,
+        ticketId: r.ticketId,
+        fieldName: r.fieldName,
+        changedByUserId: r.changedByUserId,
+        // Re-stamped to UTC: Drift hands a `DateTimeColumn` back as a LOCAL-kind instant, and
+        // the tab's `.toLocal()` must land on the same wall clock the server's copy does.
+        changedAt: r.changedAt.toUtc(),
+        oldValue: r.oldValue,
+        newValue: r.newValue,
+      ),
+  ];
+}
+
+/// Field changes already on this device, from the sync mirror ONLY — never the network. The
+/// detail page's Attività timeline watches this so opening a ticket issues no history request;
+/// the Storico sheet keeps [ticketHistoryProvider]. Empty mirror yields `[]`.
+final ticketHistoryMirrorProvider = FutureProvider.autoDispose
+    .family<List<TicketHistoryEntryDto>, String>(
+      (ref, ticketId) =>
+          _ticketHistoryFromMirror(ref.watch(referenceCacheProvider), ticketId),
+    );
 
 /// The contract a ticket is tied to (feature audit module #11, Gap D) — keyed by `contractId`,
 /// not `ticketId`, so a cantiere or another ticket pointing at the same contract shares this
@@ -707,12 +757,16 @@ final contractByIdProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, contractId) async {
       if (ref.watch(isOnlineProvider)) {
         try {
-          return await ref.watch(adminApiClientProvider).fetchContractById(contractId);
+          return await ref
+              .watch(adminApiClientProvider)
+              .fetchContractById(contractId);
         } catch (e) {
           if (!isTransportOrServerFault(e)) rethrow;
         }
       }
-      final row = await ref.watch(referenceCacheProvider).contractById(contractId);
+      final row = await ref
+          .watch(referenceCacheProvider)
+          .contractById(contractId);
       if (row == null) throw const TicketDetailOfflineException();
       return {
         'id': row.id,
@@ -742,12 +796,16 @@ final commessaByIdProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>?, String>((ref, commessaId) async {
       if (ref.watch(isOnlineProvider)) {
         try {
-          return await ref.watch(adminApiClientProvider).fetchCommessaById(commessaId);
+          return await ref
+              .watch(adminApiClientProvider)
+              .fetchCommessaById(commessaId);
         } catch (e) {
           if (!isTransportOrServerFault(e)) rethrow;
         }
       }
-      final row = await ref.watch(referenceCacheProvider).commessaById(commessaId);
+      final row = await ref
+          .watch(referenceCacheProvider)
+          .commessaById(commessaId);
       if (row == null) throw const TicketDetailOfflineException();
       return {
         'id': row.id,

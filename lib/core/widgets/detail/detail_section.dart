@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_text_styles.dart';
 
+/// Minimum height/width of a tappable header element.
+const double kDetailTapTarget = 44;
+
 class DetailSectionData {
   const DetailSectionData({
     required this.title,
@@ -51,11 +54,22 @@ class DetailSectionLink extends StatelessWidget {
       label: label,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Text(
-            label.toUpperCase(),
-            style: TextStyle(color: context.colors.accentInk),
+        // 44px minimum touch target (padding only; the glyphs are unchanged).
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: kDetailTapTarget,
+            minWidth: kDetailTapTarget,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Center(
+              widthFactor: 1,
+              heightFactor: 1,
+              child: Text(
+                label.toUpperCase(),
+                style: TextStyle(color: context.colors.accentInk),
+              ),
+            ),
           ),
         ),
       ),
@@ -73,6 +87,8 @@ class DetailSection extends StatelessWidget {
     if (data.isEmpty) return const SizedBox.shrink();
 
     final colors = context.colors;
+    final tappable =
+        data.onTitleTap != null || data.trailing is DetailSectionLink;
 
     Widget title = Text(
       data.title,
@@ -84,7 +100,17 @@ class DetailSection extends StatelessWidget {
       ),
     );
     if (data.onTitleTap != null) {
-      title = InkWell(onTap: data.onTitleTap, child: title);
+      title = InkWell(
+        onTap: data.onTitleTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kDetailTapTarget),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            widthFactor: 1,
+            child: title,
+          ),
+        ),
+      );
     }
 
     return Column(
@@ -108,7 +134,8 @@ class DetailSection extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 8),
+        // A tappable header is already 44px tall; the touch padding stands in for the gap.
+        SizedBox(height: tappable ? 0 : 8),
         data.child,
       ],
     );

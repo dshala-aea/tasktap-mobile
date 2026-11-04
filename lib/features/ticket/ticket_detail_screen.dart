@@ -11,6 +11,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/time/business_time.dart' show formatWorkDate;
+import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/utils/error_message.dart' show humanErrorMessage;
 import '../../core/widgets/app_compartment_tile.dart';
 import '../../core/widgets/detail/detail_activity_timeline.dart';
@@ -1185,10 +1186,77 @@ const int _timelineLimit = 4;
 
 /// The latest activity on a ticket, newest [_timelineLimit] events in chronological order.
 ///
-/// Built only from what the Ore and Storico compartments already read — [ticketWorklogsProvider]
-/// (session start/end) and [ticketHistoryProvider] (field changes) — so it adds no request and no
-/// table. A fetch error or an empty answer simply contributes no events; the compartments below
-/// still carry the explanatory offline/error states.
+/// Computed once per input change, not per build. Worklogs come from [ticketWorklogsProvider]
+/// (already watched by the hero's timer, so it adds no request); field changes come from
+/// [ticketHistoryMirrorProvider], the local mirror, so opening the page never fetches history —
+/// the Storico sheet does that on demand. An error or empty answer contributes no events.
+///
+/// Times are instants shown in the device zone: a worklog's `workDate` + `startTime` is a Rome
+/// wall-clock label, converted with `BusinessTime.instantOfLegacyLabel` exactly as the hero's
+/// elapsed clock does, and history instants are UTC; both go through `.toLocal()`.
+final _ticketTimelineProvider = Provider.autoDispose
+    .family<List<DetailActivityEvent>, String>((ref, ticketId) {
+      final worklogs = ref.watch(ticketWorklogsProvider(ticketId)).valueOrNull ?? const [];
+      final history = ref.watch(ticketHistoryMirrorProvider(ticketId)).valueOrNull ?? const [];
+      final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? const {};
+      final typeMap = ref.watch(ticketTypeMapProvider).valueOrNull ?? const {};
+      final businessTime = ref.watch(businessTimeProvider);
+      final now = DateTime.now();
+
+      String when(DateTime t) {
+        final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
+        return DateFormat(sameDay ? 'HH:mm' : 'dd/MM HH:mm', 'it').format(t);
+      }
+
+      final entries = <(DateTime, DetailActivityEvent)>[];
+      for (final w in worklogs) {
+        final start = businessTime.instantOfLegacyLabel(w.workDate, w.startTime).toLocal();
+        entries.add((
+          start,
+          DetailActivityEvent(
+            time: when(start),
+            title: w.isRunning ? 'Intervento in corso' : 'Intervento avviato',
+            meta: [
+              if (w.isManualEntry) 'inserimento manuale',
+              if (w.description != null && w.description!.isNotEmpty) w.description!,
+            ].join(' · ').nullIfEmpty,
+            tone: DetailEventTone.good,
+          ),
+        ));
+        if (!w.isRunning && w.endTime != null) {
+          // Closed-session end = start instant + duration when known (survives an overnight
+          // session); otherwise the end label in the same frame.
+          final end = (w.duration != null
+                  ? businessTime.instantOfLegacyLabel(w.workDate, w.startTime).add(w.duration!)
+                  : businessTime.instantOfLegacyLabel(w.workDate, w.endTime!))
+              .toLocal();
+          entries.add((
+            end,
+            DetailActivityEvent(
+              time: when(end),
+              title: 'Intervento chiuso',
+              meta: w.duration == null ? null : 'Durata ${_hhmm(w.duration!)}',
+            ),
+          ));
+        }
+      }
+      for (final h in history) {
+        final at = h.changedAt.toLocal();
+        entries.add((
+          at,
+          DetailActivityEvent(
+            time: when(at),
+            title: _StoricoTab._fieldLabel(h.fieldName),
+            meta: _StoricoTab._change(h, statusMap, typeMap),
+            tone: h.fieldName == 'StatusId' ? DetailEventTone.warn : DetailEventTone.neutral,
+          ),
+        ));
+      }
+
+      entries.sort((a, b) => b.$1.compareTo(a.$1));
+      return [for (final e in entries.take(_timelineLimit).toList().reversed) e.$2];
+    });
+
 class _TicketActivityTimeline extends ConsumerWidget {
   const _TicketActivityTimeline({required this.ticketId});
 
@@ -1196,65 +1264,11 @@ class _TicketActivityTimeline extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final worklogs = ref.watch(ticketWorklogsProvider(ticketId)).valueOrNull ?? const [];
-    final history = ref.watch(ticketHistoryProvider(ticketId)).valueOrNull ?? const [];
-    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? {};
-    final typeMap = ref.watch(ticketTypeMapProvider).valueOrNull ?? {};
-    final now = DateTime.now();
-
-    String when(DateTime t) {
-      final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
-      return DateFormat(sameDay ? 'HH:mm' : 'dd/MM HH:mm', 'it').format(t);
-    }
-
-    final entries = <(DateTime, DetailActivityEvent)>[];
-    for (final w in worklogs) {
-      final day = DateTime(w.workDate.year, w.workDate.month, w.workDate.day);
-      final start = day.add(w.startTime);
-      entries.add((
-        start,
-        DetailActivityEvent(
-          time: when(start),
-          title: w.isRunning ? 'Intervento in corso' : 'Intervento avviato',
-          meta: [
-            if (w.isManualEntry) 'inserimento manuale',
-            if (w.description != null && w.description!.isNotEmpty) w.description!,
-          ].join(' · ').nullIfEmpty,
-          tone: DetailEventTone.good,
-        ),
-      ));
-      if (!w.isRunning && w.endTime != null) {
-        final end = day.add(w.endTime!);
-        entries.add((
-          end,
-          DetailActivityEvent(
-            time: when(end),
-            title: 'Intervento chiuso',
-            meta: w.duration == null ? null : 'Durata ${_hhmm(w.duration!)}',
-          ),
-        ));
-      }
-    }
-    for (final h in history) {
-      final at = h.changedAt.toLocal();
-      entries.add((
-        at,
-        DetailActivityEvent(
-          time: when(at),
-          title: _StoricoTab._fieldLabel(h.fieldName),
-          meta: _StoricoTab._change(h, statusMap, typeMap),
-          tone: h.fieldName == 'StatusId' ? DetailEventTone.warn : DetailEventTone.neutral,
-        ),
-      ));
-    }
-
-    if (entries.isEmpty) return const SizedBox.shrink();
-    entries.sort((a, b) => b.$1.compareTo(a.$1));
-    final latest = entries.take(_timelineLimit).toList().reversed.map((e) => e.$2).toList();
-
+    final events = ref.watch(_ticketTimelineProvider(ticketId));
+    if (events.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.base),
-      child: DetailActivityTimeline(events: latest),
+      child: DetailActivityTimeline(events: events),
     );
   }
 }
@@ -1272,7 +1286,7 @@ class _InlineAttachmentsMeta extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(ticketAttachmentsProvider(ticketId)).valueOrNull?.length;
+    final count = ref.watch(ticketAttachmentsMirrorProvider(ticketId).select((a) => a.valueOrNull?.length));
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1292,16 +1306,17 @@ class _InlineAttachments extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final attachments = ref.watch(ticketAttachmentsProvider(ticketId)).valueOrNull ?? const [];
-    final dio = ref.watch(dioProvider);
+    // Mirror only: no request at page open. An empty mirror means "not known here", not "none".
+    final attachments = ref.watch(ticketAttachmentsMirrorProvider(ticketId)).valueOrNull ?? const [];
 
     if (attachments.isEmpty) {
       return Text(
-        'Nessun allegato da mostrare. Apri per aggiungere una foto.',
+        'Apri per vedere o aggiungere allegati.',
         style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: context.colors.inkMuted),
       );
     }
 
+    final dio = ref.watch(dioProvider);
     return Column(
       children: [
         for (final a in attachments)

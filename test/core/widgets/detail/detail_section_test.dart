@@ -35,4 +35,26 @@ void main() {
     expect(find.text('Documenti'), findsNothing);
     expect(find.text('non deve apparire'), findsNothing);
   });
+
+  testWidgets('APRI link and tappable title are at least 44px tall', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DetailSection(
+            data: DetailSectionData(
+              title: 'Allegati',
+              onTitleTap: () {},
+              trailing: DetailSectionLink(label: 'Apri', onTap: () {}),
+              child: const Text('x'),
+            ),
+          ),
+        ),
+      ),
+    );
+    final title = tester.getSize(find.byType(InkWell).first);
+    final link = tester.getSize(find.byType(InkWell).last);
+    expect(title.height, greaterThanOrEqualTo(44));
+    expect(link.height, greaterThanOrEqualTo(44));
+    expect(link.width, greaterThanOrEqualTo(44));
+  });
 }
