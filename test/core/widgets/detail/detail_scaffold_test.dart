@@ -58,4 +58,46 @@ void main() {
     final content = tester.getSize(find.byKey(const Key('detail-content')));
     expect(content.width, lessThanOrEqualTo(600));
   });
+
+  testWidgets(
+    'collapsed bar appears after the hero scrolls away and hides on return',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DetailScaffold(
+            screenTitle: 'Ticket',
+            hero: DetailHeroData(
+              variant: DetailHeroVariant.operational,
+              title: 'Ticket lungo',
+              status: DetailStatus(label: 'In corso'),
+              primaryAction: DetailAction(
+                label: 'Chiudi intervento',
+                onPressed: () {},
+              ),
+            ),
+            sections: [
+              DetailSectionData(
+                title: 'Attività',
+                child: SizedBox(height: 1200, child: Text('attività')),
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('detail-collapsed-bar')), findsNothing);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -700));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('detail-collapsed-bar')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('detail-collapsed-bar')),
+          matching: find.text('Chiudi intervento'),
+        ),
+        findsOneWidget,
+      );
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 700));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('detail-collapsed-bar')), findsNothing);
+    },
+  );
 }
