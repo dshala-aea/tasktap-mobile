@@ -450,24 +450,22 @@ class _RapportinoViewBody extends ConsumerWidget {
           title: 'Materiali',
           isEmpty: materiali.isEmpty && !draft.materialiNotRequired,
           child: AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.base,
+              AppSpacing.md,
+              AppSpacing.base,
+              AppSpacing.base,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
-                  child: SectionTitle(title: 'Materiali'),
-                ),
                 if (materiali.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    child: Text(
-                      'Nessun materiale utilizzato — confermato dal tecnico.',
-                      style: TextStyle(
-                        fontFamily: 'Archivo',
-                        fontSize: 13,
-                        color: context.colors.inkMuted,
-                      ),
+                  Text(
+                    'Nessun materiale utilizzato — confermato dal tecnico.',
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 13,
+                      color: context.colors.inkMuted,
                     ),
                   ),
                 ...materiali.map((m) {
@@ -507,14 +505,15 @@ class _RapportinoViewBody extends ConsumerWidget {
           title: 'Controlli',
           isEmpty: controlli.isEmpty,
           child: AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.base,
+              AppSpacing.md,
+              AppSpacing.base,
+              AppSpacing.base,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.xs),
-                  child: SectionTitle(title: 'Controlli'),
-                ),
                 ...groupControlliByAsset(controlli, controlLabels).expand((group) {
                   return <Widget>[
                     if (group.assetId != null) ...[

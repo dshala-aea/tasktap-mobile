@@ -872,7 +872,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Materiali'), findsWidgets);
+      expect(find.text('Materiali'), findsOneWidget);
       expect(find.text('Nessun materiale utilizzato — confermato dal tecnico.'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1013,7 +1013,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db, dio: dio));
       await tester.pumpAndSettle();
 
-      expect(find.text('Controlli'), findsWidgets);
+      expect(find.text('Controlli'), findsOneWidget);
       expect(find.text('Pressione OK'), findsOneWidget);
       // A Checkbox control reads back as a tick, not as the Sì/No pair a TrueFalse control gets.
       expect(find.text('Spuntato'), findsOneWidget);
@@ -1038,7 +1038,7 @@ void main() {
       await tester.pumpWidget(_buildView(db: db, dio: dio));
       await tester.pumpAndSettle();
 
-      expect(find.text('Controlli'), findsWidgets);
+      expect(find.text('Controlli'), findsOneWidget);
       expect(find.text('Controllo tc-9'), findsOneWidget);
       expect(find.text('Tutto ok'), findsOneWidget);
 
@@ -1084,11 +1084,10 @@ void main() {
 
       const titles = ['Attività', 'Sintesi', 'Ore', 'Materiali', 'Controlli', 'Documenti & mappa'];
       final tops = [
-        for (final title in titles)
-          tester.getTopLeft(find.widgetWithText(DetailSection, title).first).dy,
+        for (final title in titles) tester.getTopLeft(find.widgetWithText(DetailSection, title)).dy,
       ];
       for (var i = 0; i < titles.length; i++) {
-        expect(find.widgetWithText(DetailSection, titles[i]), findsWidgets);
+        expect(find.widgetWithText(DetailSection, titles[i]), findsOneWidget);
       }
       for (var i = 0; i < tops.length - 1; i++) {
         expect(tops[i], lessThan(tops[i + 1]), reason: '${titles[i]} before ${titles[i + 1]}');
