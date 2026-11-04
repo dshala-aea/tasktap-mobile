@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_scaffold.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_section.dart';
@@ -153,4 +154,34 @@ void main() {
       expect(visibleNode.hasFocus, isTrue);
     },
   );
+
+  testWidgets(
+    'loading shows a header and a hero skeleton, never a full-screen spinner',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(home: DetailScaffold.loading(screenTitle: 'Ticket')),
+      );
+      expect(find.text('Ticket'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byKey(const Key('detail-loading-skeleton')), findsOneWidget);
+    },
+  );
+
+  testWidgets('unavailable shows the reason and retry', (tester) async {
+    var retried = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DetailScaffold.unavailable(
+          screenTitle: 'Ticket',
+          icon: LucideIcons.ticket,
+          title: 'Ticket non trovato',
+          reason: 'Il ticket non è disponibile in cache.',
+          onRetry: () => retried = true,
+        ),
+      ),
+    );
+    expect(find.text('Ticket non trovato'), findsOneWidget);
+    await tester.tap(find.text('Riprova'));
+    expect(retried, isTrue);
+  });
 }
