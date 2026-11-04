@@ -519,14 +519,14 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders one compartment grid per section with all eight section labels', (
+    testWidgets('renders one compartment grid per section with all nine section labels', (
       tester,
     ) async {
       await seedBase(db);
       // A taller surface, for the same reason the Pianificazioni test below already uses one: the
       // grids live well down a CustomScrollView, slivers build lazily, and on the default 600dp
       // test window the later sections sit below the fold. The assertion is that the screen
-      // renders eight section labels, not that they fit in 600dp.
+      // renders nine section labels, not that they fit in 600dp.
       await tester.binding.setSurfaceSize(const Size(800, 1600));
       await pump(tester);
 
@@ -538,6 +538,7 @@ void main() {
       expect(find.text('Pianificazioni'), findsOneWidget);
       expect(find.text('Ore'), findsOneWidget);
       expect(find.text('Fabbisogno'), findsOneWidget);
+      expect(find.text('Asset'), findsOneWidget);
       expect(find.text('Storico'), findsOneWidget);
       await tester.binding.setSurfaceSize(null);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -562,7 +563,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('groups the eight compartments into the four sections', (tester) async {
+    testWidgets('groups the nine compartments into the four sections', (tester) async {
       await seedBase(db);
       // Same reason as the order test: every section's grid must be laid out, not just the first.
       await tester.binding.setSurfaceSize(const Size(800, 1600));
@@ -572,6 +573,7 @@ void main() {
       expect(find.text('Dettagli'), findsOneWidget);
       expect(find.text('Pianificazioni'), findsOneWidget);
       expect(find.text('Fabbisogno'), findsOneWidget);
+      expect(find.text('Asset'), findsOneWidget);
       expect(find.text('Report'), findsOneWidget);
       expect(find.text('Controllo'), findsOneWidget);
       expect(find.text('Allegati'), findsOneWidget);
@@ -1274,12 +1276,118 @@ void main() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Report / Controllo / Allegati / Fabbisogno — each must distinguish three
-  // outcomes: real data, a genuine empty list, and "we couldn't check" (offline,
-  // nothing mirrored). Controllo answers from the sync mirror offline; its
-  // empty-mirror case is the third outcome, never an empty-list claim. See
-  // ticket_providers.dart.
+  // Report / Controllo / Allegati / Fabbisogno / Prodotti — each must
+  // distinguish three outcomes: real data, a genuine empty list, and "we
+  // couldn't check" (offline, nothing mirrored). Controllo and Prodotti answer
+  // from the sync mirror offline; their empty-mirror case is the third
+  // outcome, never an empty-list claim. See ticket_providers.dart.
   // ══════════════════════════════════════════════════════════════════════════
+  group('TicketDetailScreen — Prodotti compartment', () {
+    void stubTicketAndProdotti(
+      MockDio dio,
+      Map<String, dynamic> ticket,
+      Map<String, Map<String, dynamic>> prodotti,
+    ) {
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/ticket-1')).thenAnswer(
+        (_) async => _okResponse(ticket, '/api/tickets/ticket-1'),
+      );
+      prodotti.forEach((id, body) {
+        when(() => dio.get<Map<String, dynamic>>('/api/prodottoassistenza/$id')).thenAnswer(
+          (_) async => _okResponse(body, '/api/prodottoassistenza/$id'),
+        );
+      });
+    }
+
+    testWidgets('lists the prodotti the ticket covers, by name with code and serial', (tester) async {
+      await seedBase(db);
+      final dio = MockDio();
+      stubTicketAndProdotti(
+        dio,
+        {'id': 'ticket-1', 'prodottoAssistenzaIds': ['p2', 'p1'], 'prodottoAssistenzaId': 'p1'},
+        {
+          'p1': {
+            'id': 'p1',
+            'name': 'Caldaia Murale',
+            'codice': 'CAL-1',
+            'serialNumber': 'SN-9',
+            'marchio': 'Vaillant',
+            'modello': 'X1',
+          },
+          'p2': {'id': 'p2', 'name': 'Bruciatore', 'codice': null},
+        },
+      );
+
+      // The Asset tile now lives in Relazioni, below the fold at the default test surface.
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester, dio: dio, isOnline: true);
+      await tester.tap(find.text('Asset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Caldaia Murale'), findsOneWidget);
+      expect(find.text('CAL-1 · S/N: SN-9 · Vaillant X1'), findsOneWidget);
+      expect(find.text('Bruciatore'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('says plainly when the ticket covers no prodotto', (tester) async {
+      await seedBase(db);
+      final dio = MockDio();
+      stubTicketAndProdotti(dio, {'id': 'ticket-1', 'prodottoAssistenzaIds': <String>[]}, {});
+
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester, dio: dio, isOnline: true);
+      await tester.tap(find.text('Asset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun asset'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('says it is offline instead of showing an empty list', (tester) async {
+      await seedBase(db);
+
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester, isOnline: false);
+      await tester.tap(find.text('Asset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Asset non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun asset'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('offline, lists the covered assets from the local mirror', (tester) async {
+      await seedBase(db);
+      // The sync mirrors the ticket's coverage (`ticket_assets`) and the asset identities
+      // (`assets`). The Prodotti compartment must read them rather than going blank on site — the
+      // same rows already drive the checklist card on the Controllo tab.
+      await applyChecklistBatch(
+        db,
+        ChecklistBatch(
+          authoritativeTicketIds: {'ticket-1'},
+          controlGroups: const [],
+          ticketControls: const [],
+          ticketAssets: const [
+            SyncTicketAssetDto(ticketId: 'ticket-1', prodottoAssistenzaId: 'a0'),
+          ],
+          assets: const [
+            SyncAssetDto(id: 'a0', name: 'Caldaia Murale', serialNumber: 'SN-9'),
+          ],
+        ),
+      );
+
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester, isOnline: false);
+      await tester.tap(find.text('Asset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Caldaia Murale'), findsOneWidget);
+      expect(find.text('S/N: SN-9'), findsOneWidget);
+      expect(find.text('Asset non disponibili offline'), findsNothing);
+      await resetAndDispose(tester);
+    });
+  });
+
   group('TicketDetailScreen — Report tab (index 0)', () {
     testWidgets('shows rapportini returned by the backend', (tester) async {
       await seedBase(db);

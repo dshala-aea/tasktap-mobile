@@ -287,9 +287,17 @@ class _TicketDetailBody extends ConsumerWidget {
         ),
       ),
       sections: [
-        // Ordered by who is holding the phone: the work being done, then the reference record it
-        // hangs off. Each compartment is a bottom sheet over the ticket rather than page growth,
-        // so the ticket's own shape stays constant no matter what is open.
+        // Ordered by who is holding the phone.
+        //
+        // This was a pinned horizontal strip (four tabs fit a phone, the rest sat past the visible
+        // edge), then an accordion (every name on screen, but the page grew as long as whichever
+        // section was open, and a technician had to scroll past a long one to reach the next).
+        // Now a grid of compartments: every name is on screen at a constant size regardless of
+        // what is open, and opening one is a bottom sheet over the ticket rather than the ticket
+        // itself growing and shrinking underneath you. The order survives from the tab era for the
+        // same reason it was chosen then — Dettagli/Report/Controllo/Allegati/Ore is the
+        // technician's own path through a ticket; Pianificazioni, Fabbisogno, Asset and Storico are
+        // office/lookup concerns and sit lower, not removed.
         DetailSectionData(
           title: 'Attività',
           child: _TicketCompartmentGrid(
@@ -361,10 +369,10 @@ class _TicketDetailBody extends ConsumerWidget {
                     );
                   },
                 ),
-                const SizedBox(height: AppSpacing.base),
+                const SizedBox(height: AppSpacing.md),
               ],
               _TicketCompartmentGrid(
-                labels: const ['Pianificazioni', 'Fabbisogno'],
+                labels: const ['Pianificazioni', 'Fabbisogno', 'Asset'],
                 contentBuilder: compartmentContent,
               ),
             ],
