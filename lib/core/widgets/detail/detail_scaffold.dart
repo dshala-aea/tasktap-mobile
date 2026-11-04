@@ -168,19 +168,22 @@ class _DetailScaffoldState extends State<DetailScaffold> {
                       right: 0,
                       child: IgnorePointer(
                         ignoring: !_barVisible,
-                        child: ExcludeSemantics(
+                        child: ExcludeFocus(
                           excluding: !_barVisible,
-                          child: AnimatedSlide(
-                            offset: _barVisible
-                                ? Offset.zero
-                                : const Offset(0, -1),
-                            duration: duration,
-                            curve: Curves.easeOut,
-                            child: AnimatedOpacity(
-                              opacity: _barVisible ? 1 : 0,
+                          child: ExcludeSemantics(
+                            excluding: !_barVisible,
+                            child: AnimatedSlide(
+                              offset: _barVisible
+                                  ? Offset.zero
+                                  : const Offset(0, -1),
                               duration: duration,
                               curve: Curves.easeOut,
-                              child: _collapsedBar(context),
+                              child: AnimatedOpacity(
+                                opacity: _barVisible ? 1 : 0,
+                                duration: duration,
+                                curve: Curves.easeOut,
+                                child: _collapsedBar(context),
+                              ),
                             ),
                           ),
                         ),

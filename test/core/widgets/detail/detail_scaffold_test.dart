@@ -100,4 +100,57 @@ void main() {
       expect(find.byKey(const Key('detail-collapsed-bar')), findsNothing);
     },
   );
+
+  testWidgets(
+    'the collapsed bar action cannot take focus while the bar is hidden',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DetailScaffold(
+            screenTitle: 'Ticket',
+            hero: DetailHeroData(
+              variant: DetailHeroVariant.operational,
+              title: 'Ticket lungo',
+              status: DetailStatus(label: 'In corso'),
+              primaryAction: DetailAction(
+                label: 'Chiudi intervento',
+                onPressed: () {},
+              ),
+            ),
+            sections: [
+              DetailSectionData(
+                title: 'Attività',
+                child: SizedBox(height: 1200, child: Text('attività')),
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('detail-collapsed-bar')), findsNothing);
+
+      final hiddenAction = find.descendant(
+        of: find.byType(ExcludeFocus),
+        matching: find.text('Chiudi intervento'),
+      );
+      expect(hiddenAction, findsOneWidget);
+      final hiddenNode = Focus.of(tester.element(hiddenAction));
+      hiddenNode.requestFocus();
+      await tester.pump();
+      expect(hiddenNode.hasFocus, isFalse);
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -700));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('detail-collapsed-bar')), findsOneWidget);
+
+      final visibleAction = find.descendant(
+        of: find.byKey(const Key('detail-collapsed-bar')),
+        matching: find.text('Chiudi intervento'),
+      );
+      expect(visibleAction, findsOneWidget);
+      final visibleNode = Focus.of(tester.element(visibleAction));
+      visibleNode.requestFocus();
+      await tester.pump();
+      expect(visibleNode.hasFocus, isTrue);
+    },
+  );
 }
