@@ -32,7 +32,7 @@ class DetailScaffold extends StatefulWidget {
   const DetailScaffold({
     super.key,
     required this.screenTitle,
-    required this.hero,
+    required DetailHeroData this.hero,
     this.headerActions = const [],
     this.expandedExtra,
     required this.sections,
@@ -313,7 +313,10 @@ class _DetailScaffoldState extends State<DetailScaffold> {
       motivo: widget._unavailableReason!,
       action: onRetry == null
           ? null
-          : AppButton(label: 'Riprova', onPressed: onRetry),
+          : ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: _minTouchTarget),
+              child: AppButton(label: 'Riprova', onPressed: onRetry),
+            ),
     );
   }
 

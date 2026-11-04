@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_scaffold.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_section.dart';
@@ -181,6 +182,10 @@ void main() {
       ),
     );
     expect(find.text('Ticket non trovato'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(AppButton)).height,
+      greaterThanOrEqualTo(48),
+    );
     await tester.tap(find.text('Riprova'));
     expect(retried, isTrue);
   });
