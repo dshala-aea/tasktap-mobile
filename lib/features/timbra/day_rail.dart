@@ -21,6 +21,13 @@
 //
 // What survives is exactly: every stretch this phone knows about, plus every stretch it does
 // not — which is the set the rail draws.
+//
+// ORDINARY ATTENDANCE ONLY. Cantiere time is a different record of the day (`CantiereWorkLog`,
+// written by the cantiere screen and the badge/totem flows, with its own payroll treatment); it is
+// NOT merged here, so a day spent on a cantiere can read short on this screen. That is the ruled
+// boundary (2026-11-04), not an omission: this surface is the technician's simple timbratura, and
+// the office pays cantiere hours through their own. Do not "fix" a short day by folding those rows
+// in — that is a product decision with payroll consequences, not a bug fix.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import '../../data/local/app_database.dart' show WorkSession;
