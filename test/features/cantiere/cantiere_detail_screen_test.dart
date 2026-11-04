@@ -16,6 +16,7 @@ import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart'
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_detail_screen.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_map_card.dart';
+import 'package:tasktap_mobile/features/cantiere/cantiere_map_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
@@ -554,59 +555,144 @@ void main() {
   });
 
   group('section order', () {
-    testWidgets(
-      'renders Dettagli, then Squadra assegnata, then the map, then the CTA buttons '
-      '(ADR: details before map, map before actions)',
-      (tester) async {
-        final db = AppDatabase(NativeDatabase.memory());
-        await db
-            .into(db.cantieri)
-            .insert(
-              CantieriCompanion.insert(
-                id: 'c1',
-                tenantId: 'tenant1',
-                createdAt: DateTime.utc(2026, 8, 31),
-                name: 'Cantiere Alpha',
-                address: const Value('Via Roma 1'),
-                notes: const Value('Nota di cantiere'),
-              ),
-            );
+    testWidgets('renders the day hero first, then crew/tickets, then the dossier and map '
+        '(ADR: act before reading, details before map)', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'c1',
+              tenantId: 'tenant1',
+              createdAt: DateTime.utc(2026, 8, 31),
+              name: 'Cantiere Alpha',
+              address: const Value('Via Roma 1'),
+              notes: const Value('Nota di cantiere'),
+            ),
+          );
 
-        // Non-empty crew + a non-empty Dettagli field, so every section this test checks the
-        // position of actually renders instead of collapsing to SizedBox.shrink.
-        final crewClient = _FakeCantiereWorklogApiClient()
-          ..assignments = const [
-            CantiereCrewAssignmentDto(id: 'a1', userId: 'user-1', isLead: true),
-          ];
+      // Non-empty crew + a non-empty Dettagli field, so every section this test checks the
+      // position of actually renders instead of collapsing to SizedBox.shrink.
+      final crewClient = _FakeCantiereWorklogApiClient()
+        ..assignments = const [CantiereCrewAssignmentDto(id: 'a1', userId: 'user-1', isLead: true)];
 
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              appDatabaseProvider.overrideWithValue(db),
-              geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
-              cantiereWorklogApiClientProvider.overrideWithValue(crewClient),
-              // Online path: see the note in the first test's overrides above.
-              isOnlineProvider.overrideWithValue(true),
-            ],
-            child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
-          ),
-        );
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+            cantiereWorklogApiClientProvider.overrideWithValue(crewClient),
+            // Online path: see the note in the first test's overrides above.
+            isOnlineProvider.overrideWithValue(true),
+          ],
+          child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        final dettagliY = tester.getTopLeft(find.text('Dettagli')).dy;
-        final squadraY = tester.getTopLeft(find.text('Squadra assegnata')).dy;
-        final mapY = tester.getTopLeft(find.byType(CantiereMapCard)).dy;
-        final timbraY = tester.getTopLeft(find.text('Timbra cantiere')).dy;
-        final creaRapportinoY = tester.getTopLeft(find.text('Crea rapporto di intervento')).dy;
+      final timbraY = tester.getTopLeft(find.text('Timbra cantiere')).dy;
+      final creaRapportinoY = tester.getTopLeft(find.text('Crea rapporto di intervento')).dy;
+      final giornoY = tester.getTopLeft(find.text('Il giorno')).dy;
+      final squadraY = tester.getTopLeft(find.text('Squadra assegnata')).dy;
+      final ticketsY = tester.getTopLeft(find.text('Ticket collegati')).dy;
+      final dettagliY = tester.getTopLeft(find.text('Dettagli')).dy;
+      final mapY = tester.getTopLeft(find.byType(CantiereMapCard)).dy;
 
-        expect(dettagliY, lessThan(squadraY));
-        expect(squadraY, lessThan(mapY));
-        expect(mapY, lessThan(timbraY));
-        expect(timbraY, lessThan(creaRapportinoY));
+      expect(timbraY, lessThan(creaRapportinoY));
+      expect(creaRapportinoY, lessThan(giornoY));
+      expect(giornoY, lessThan(squadraY));
+      expect(squadraY, lessThan(ticketsY));
+      expect(ticketsY, lessThan(dettagliY));
+      expect(dettagliY, lessThan(mapY));
 
-        await db.close();
-      },
-    );
+      await db.close();
+    });
+  });
+
+  group('Il giorno', () {
+    testWidgets('an open session shows the live state and the clock-out action', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'c1',
+              tenantId: 'tenant1',
+              createdAt: DateTime.utc(2026, 8, 31),
+              name: 'Cantiere Alpha',
+            ),
+          );
+      await db
+          .into(db.cantierePunches)
+          .insert(
+            CantierePunchesCompanion.insert(
+              id: 'p1',
+              eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
+              eventType: 'ingresso',
+              cantiereId: const Value('c1'),
+              isPendingSync: const Value(false),
+            ),
+          );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+            cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+            isOnlineProvider.overrideWithValue(true),
+          ],
+          child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
+        ),
+      );
+      // Not pumpAndSettle: the open session mounts a 1-second live ticker by design.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Timbra uscita'), findsOneWidget);
+      expect(find.text('Il giorno'), findsOneWidget);
+      expect(find.text('In corso'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await db.close();
+    });
+  });
+
+  group('CantiereMapScreen', () {
+    testWidgets('renders the map-led site card with its primary action', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'c1',
+              tenantId: 'tenant1',
+              createdAt: DateTime.utc(2026, 8, 31),
+              name: 'Cantiere Alpha',
+              address: const Value('Via Roma 1'),
+            ),
+          );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+            cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+            isOnlineProvider.overrideWithValue(true),
+          ],
+          child: const MaterialApp(home: CantiereMapScreen(cantiereId: 'c1')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cantiere Alpha'), findsOneWidget);
+      expect(find.text('Timbra cantiere'), findsOneWidget);
+      expect(find.text('Indicazioni'), findsOneWidget);
+
+      await db.close();
+    });
   });
 
   group('Le tue timbrature (mirror)', () {

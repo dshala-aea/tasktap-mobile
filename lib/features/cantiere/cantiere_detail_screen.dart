@@ -25,7 +25,14 @@ import '../../data/sync/sync_freshness_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../rapportino/create_draft.dart';
 import '../ticket/ticket_providers.dart' show commessaByIdProvider;
-import '../timbra/cantiere_timbra_screen.dart' show cantiereCrewAssignmentsProvider;
+import '../timbra/cantiere_timbra_screen.dart'
+    show
+        cantiereActiveSessionProvider,
+        cantiereCrewAssignmentsProvider,
+        cantiereTodayHoursProvider,
+        formatHoursMinutes;
+import 'cantiere_close_sheet.dart';
+import 'cantiere_day.dart';
 import 'cantiere_map_card.dart';
 import 'cantiere_providers.dart';
 
@@ -67,7 +74,6 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final cantiereAsync = ref.watch(cantiereByIdProvider(widget.cantiereId));
-    final ticketsAsync = ref.watch(ticketsForCantiereProvider(widget.cantiereId));
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -164,11 +170,28 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                             ),
                           ),
 
-                          // ── Dettagli ───────────────────────────────────────────────
-                          _DettagliSection(cantiere: cantiere),
+                          const SizedBox(height: 12),
+                          _SiteStateCard(
+                            cantiere: cantiere,
+                            ticketId: widget.ticketId,
+                            isCreatingRapportino: _isCreatingRapportino,
+                            onCreateRapportino: () => _handleCreateRapportino(cantiere),
+                          ),
+
+                          const SizedBox(height: 8),
+                          CantiereDayLedger(cantiereId: cantiere.id),
 
                           // ── Squadra assegnata ─────────────────────────────────────
+                          const SizedBox(height: 8),
                           _SquadraSection(cantiereId: cantiere.id),
+
+                          // ── Ticket collegati ─────────────────────────────────────
+                          const SizedBox(height: 8),
+                          _TicketsSection(cantiereId: cantiere.id),
+
+                          // ── Dossier ───────────────────────────────────────────────
+                          const SizedBox(height: 8),
+                          _DettagliSection(cantiere: cantiere),
 
                           // ── Timbrature ────────────────────────────────────────────
                           //
@@ -195,83 +218,15 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                                 cantiere.postalCode,
                               ].where((s) => s != null && s.isNotEmpty).join(', '),
                             ),
+                            const SizedBox(height: 8),
+                            AppButton.secondary(
+                              label: 'Apri mappa',
+                              icon: const Icon(LucideIcons.mapPin, size: 16),
+                              onPressed: () => context.push(AppRoutes.cantiereMapPath(cantiere.id)),
+                            ),
                           ],
 
-                          const SizedBox(height: 8),
-                          AppButton(
-                            label: 'Timbra cantiere',
-                            icon: const Icon(LucideIcons.mapPin),
-                            onPressed: () => context.push(
-                              AppRoutes.cantiereTimbraPath(
-                                cantiereId: cantiere.id,
-                                ticketId: widget.ticketId,
-                              ),
-                            ),
-                          ),
                           const SizedBox(height: 12),
-                          // ── Crea rapportino ──────────────────────────────────────────
-                          //
-                          // The office/admin equivalent of this button (admin_cantiere_detail_
-                          // screen.dart) creates a purely local draft with blank hours via
-                          // createLocalDraft. A technician standing on-site has already logged
-                          // hours against this cantiere (Timbra cantiere, above) — this button
-                          // calls the cantiere-only report endpoint instead, so the editor opens
-                          // with those hours (and, if this technician started the batch as squadra
-                          // lead, their whole team's hours) already filled in.
-                          AppButton(
-                            label: 'Crea rapporto di intervento',
-                            icon: const Icon(LucideIcons.fileText),
-                            isLoading: _isCreatingRapportino,
-                            onPressed: _isCreatingRapportino
-                                ? null
-                                : () => _handleCreateRapportino(cantiere),
-                          ),
-                          const SizedBox(height: 24),
-                          const SectionTitle(title: 'Ticket collegati'),
-                          const SizedBox(height: 8),
-                          ticketsAsync.when(
-                            loading: () => const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(AppSpacing.xxxl),
-                                child: CircularProgressIndicator(),
-                              ),
-                            ),
-                            error: (e, _) => UnavailableState(
-                              icon: LucideIcons.ticket,
-                              titolo: 'Impossibile caricare i ticket collegati',
-                              motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
-                              action: AppButton(
-                                label: 'Riprova',
-                                size: AppButtonSize.sm,
-                                fullWidth: false,
-                                onPressed: () =>
-                                    ref.invalidate(ticketsForCantiereProvider(widget.cantiereId)),
-                              ),
-                            ),
-                            data: (tickets) {
-                              if (tickets.isEmpty) {
-                                return const EmptyState(
-                                  icon: LucideIcons.ticket,
-                                  title: 'Nessun ticket collegato',
-                                  body: 'I ticket collegati a questo cantiere appariranno qui.',
-                                );
-                              }
-                              return AppCard(
-                                padding: EdgeInsets.zero,
-                                child: Column(
-                                  children: tickets.asMap().entries.map((entry) {
-                                    final i = entry.key;
-                                    final t = entry.value;
-                                    return ListRow(
-                                      title: t.title,
-                                      showDivider: i != tickets.length - 1,
-                                      onTap: () => context.push(AppRoutes.ticketDetailPath(t.id)),
-                                    );
-                                  }).toList(),
-                                ),
-                              );
-                            },
-                          ),
                         ],
                       ),
                     );
@@ -332,6 +287,192 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Site state + primary action — the "Il giorno" hero. One card answers "am I on site",
+// "how long today", and offers the single next action, instead of a bare Timbra button at the
+// bottom of the page. A live timer is mounted only for an open session.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _SiteStateCard extends ConsumerWidget {
+  const _SiteStateCard({
+    required this.cantiere,
+    this.ticketId,
+    required this.isCreatingRapportino,
+    required this.onCreateRapportino,
+  });
+
+  final CantieriData cantiere;
+  final String? ticketId;
+  final bool isCreatingRapportino;
+  final VoidCallback onCreateRapportino;
+
+  static String _hm(DateTime t) {
+    final local = t.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final active = ref.watch(cantiereActiveSessionProvider);
+    final activeHere = active?.cantiereId == cantiere.id;
+    final activeElsewhere = active != null && !activeHere;
+    final today = ref.watch(cantiereTodayHoursProvider(cantiere.id));
+    final closed = cantiere.status != 0;
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'OGGI',
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
+                  color: context.colors.inkMuted,
+                ),
+              ),
+              const Spacer(),
+              if (activeHere)
+                CantiereLiveElapsed(
+                  start: active!.startTime,
+                  style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
+                )
+              else
+                Text(
+                  formatHoursMinutes(today),
+                  style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            activeHere
+                ? 'In cantiere dalle ${_hm(active!.startTime)}'
+                : today > Duration.zero
+                ? 'Ore lavorate oggi su questo cantiere'
+                : 'Nessuna timbratura oggi',
+            style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+          ),
+          if (activeElsewhere) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Sei già in cantiere su un altro sito. Chiudi quella sessione prima di timbrare qui.',
+              style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+            ),
+          ],
+          const SizedBox(height: 12),
+          if (closed)
+            Text(
+              'Cantiere chiuso: non è possibile timbrare.',
+              style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+            )
+          else if (activeHere)
+            AppButton.danger(
+              label: 'Timbra uscita',
+              icon: const Icon(LucideIcons.logOut),
+              onPressed: () => showCantiereCloseSheet(
+                context,
+                cantiereId: cantiere.id,
+                cantiereName: cantiere.name,
+                startTime: active!.startTime,
+              ),
+            )
+          else
+            AppButton(
+              label: 'Timbra cantiere',
+              icon: const Icon(LucideIcons.logIn),
+              onPressed: activeElsewhere
+                  ? null
+                  : () => context.push(
+                      AppRoutes.cantiereTimbraPath(cantiereId: cantiere.id, ticketId: ticketId),
+                    ),
+            ),
+          if (!closed && !activeHere) ...[
+            const SizedBox(height: 8),
+            AppButton.secondary(
+              label: 'Crea rapporto di intervento',
+              icon: const Icon(LucideIcons.fileText, size: 16),
+              isLoading: isCreatingRapportino,
+              onPressed: isCreatingRapportino ? null : onCreateRapportino,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Ticket collegati — read from `ticketsForCantiereProvider`, same as before the redesign; moved
+// up beside crew so the operational context comes before the dossier.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _TicketsSection extends ConsumerWidget {
+  const _TicketsSection({required this.cantiereId});
+
+  final String cantiereId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ticketsAsync = ref.watch(ticketsForCantiereProvider(cantiereId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionTitle(title: 'Ticket collegati'),
+        const SizedBox(height: 8),
+        ticketsAsync.when(
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.xxxl),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+          error: (e, _) => UnavailableState(
+            icon: LucideIcons.ticket,
+            titolo: 'Impossibile caricare i ticket collegati',
+            motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+            action: AppButton(
+              label: 'Riprova',
+              size: AppButtonSize.sm,
+              fullWidth: false,
+              onPressed: () => ref.invalidate(ticketsForCantiereProvider(cantiereId)),
+            ),
+          ),
+          data: (tickets) {
+            if (tickets.isEmpty) {
+              return const EmptyState(
+                icon: LucideIcons.ticket,
+                title: 'Nessun ticket collegato',
+                body: 'I ticket collegati a questo cantiere appariranno qui.',
+              );
+            }
+            return AppCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: tickets.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final t = entry.value;
+                  return ListRow(
+                    title: t.title,
+                    showDivider: i != tickets.length - 1,
+                    onTap: () => context.push(AppRoutes.ticketDetailPath(t.id)),
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 }
 

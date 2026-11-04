@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/app_button.dart';
+import '../../core/widgets/app_text_field.dart';
 
 /// Asks for the mandatory rejection reason and submits it.
 ///
@@ -90,14 +91,13 @@ class _RejectReasonSheetState extends State<_RejectReasonSheet> {
             ).textTheme.bodySmall?.copyWith(color: context.colors.inkMuted),
           ),
           const SizedBox(height: AppSpacing.sm),
-          TextField(
+          AppTextField.multiline(
+            label: 'Motivo del rifiuto',
             controller: _controller,
             autofocus: true,
             maxLength: 1000,
             maxLines: 3,
-            textInputAction: TextInputAction.newline,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(labelText: 'Motivo del rifiuto'),
           ),
           if (_error != null) ...[
             const SizedBox(height: AppSpacing.xs),
