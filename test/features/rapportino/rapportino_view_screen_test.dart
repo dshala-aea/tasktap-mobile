@@ -11,6 +11,7 @@
 //   5. Shows "not found" empty state for unknown report id.
 //   6. Scarica PDF button present.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -30,11 +31,28 @@ import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/reports/report_pdf_cache.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportino_view_screen.dart';
 
 class _MockDio extends Mock implements Dio {}
+
+/// A cache whose one resolve never finishes, so a test can inspect the hero while the download is
+/// in flight without touching the filesystem or the platform viewer.
+class _HangingReportPdfCache extends ReportPdfCache {
+  _HangingReportPdfCache()
+    : super(download: (_) async => const <int>[], rootLoader: () async => Directory.systemTemp);
+
+  final Completer<File> pending = Completer<File>();
+  int resolves = 0;
+
+  @override
+  Future<File> resolve(String reportId, {required bool online}) {
+    resolves++;
+    return pending.future;
+  }
+}
 
 /// Never geocodes for real — every test in this file overrides `geocodingServiceProvider` with
 /// this, so a report location with an address exercises `GeoMapCard`'s fallback path
@@ -225,11 +243,13 @@ Widget _buildView({
   String reportId = 'report-1',
   Dio? dio,
   bool isOnline = true,
+  ReportPdfCache? pdfCache,
 }) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       if (dio != null) dioProvider.overrideWithValue(dio),
+      if (pdfCache != null) reportPdfCacheProvider.overrideWithValue(pdfCache),
       isOnlineProvider.overrideWithValue(isOnline),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
     ],
@@ -1091,6 +1111,36 @@ void main() {
       expect(find.descendant(of: hero, matching: find.text('Sede')), findsOneWidget);
       expect(find.descendant(of: hero, matching: find.text('Tecnico')), findsOneWidget);
       expect(find.descendant(of: hero, matching: find.text('INVIATA')), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a second tap while the PDF downloads does not start another download', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db);
+      final cache = _HangingReportPdfCache();
+
+      await tester.pumpWidget(_buildView(db: db, pdfCache: cache));
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      final pdfLabel = find.descendant(of: hero, matching: find.text('Scarica PDF'));
+      await tester.tap(pdfLabel);
+      await tester.pump();
+
+      expect(cache.resolves, 1);
+      expect(find.descendant(of: hero, matching: find.text('Download in corso…')), findsOneWidget);
+      final primary = tester.widget<AppButton>(
+        find.ancestor(of: pdfLabel, matching: find.byType(AppButton)),
+      );
+      expect(primary.onPressed, equals(null));
+
+      // The disabled action must ignore the second tap: no concurrent write to the same .part.
+      await tester.tap(pdfLabel);
+      await tester.pump();
+      expect(cache.resolves, 1);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
