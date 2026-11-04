@@ -9,12 +9,11 @@ import '../../core/utils/error_message.dart' show humanErrorMessage;
 import '../../core/widgets/app_toast.dart' show ToastTone, showAppToast;
 import '../../core/widgets/detail/detail_hero.dart' show DetailAction;
 import '../../core/widgets/live_dot.dart';
-import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../dashboard/active_trackers_provider.dart' show formatElapsed, nowProvider;
 import 'ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import 'ticket_providers.dart';
-import 'ticket_workflow_api_client.dart'
-    show TicketWorkLogDto, TicketWorkflowFailure, ticketWorkflowApiClientProvider;
+import 'ticket_timer_actions.dart' show startTicketTimer, stopTicketTimer;
+import 'ticket_workflow_api_client.dart' show TicketWorkLogDto, TicketWorkflowFailure;
 
 /// The one sentence used wherever the ticket timer cannot be shown or driven.
 const String _offlineTimerReason = 'Timer non disponibile offline';
@@ -69,18 +68,8 @@ class TicketTimerLiveValue extends ConsumerWidget {
 
 /// The hero's primary action for the ticket clock: start it, or close it.
 DetailAction ticketTimerAction(BuildContext context, WidgetRef ref, String ticketId) {
-  final worklogs = ref.watch(ticketWorklogsProvider(ticketId));
   final running = ref.watch(runningTicketWorklogProvider(ticketId));
   final busy = ref.watch(ticketTimerBusyProvider(ticketId));
-  final offline = !ref.watch(isOnlineProvider) || _isOffline(worklogs);
-
-  if (offline) {
-    return DetailAction(
-      label: running == null ? 'Avvia intervento' : 'Chiudi intervento',
-      enabled: false,
-      disabledReason: _offlineTimerReason,
-    );
-  }
 
   if (busy) {
     return DetailAction(
@@ -100,13 +89,22 @@ bool _isOffline(AsyncValue<List<TicketWorkLogDto>> worklogs) =>
     worklogs.hasError && worklogs.error is TicketDetailOfflineException;
 
 Future<void> _toggle(BuildContext context, WidgetRef ref, String ticketId, bool isRunning) async {
+  // A rapid second tap can land before the busy rebuild paints the disabled action.
+  if (ref.read(ticketTimerBusyProvider(ticketId))) return;
   ref.read(ticketTimerBusyProvider(ticketId).notifier).state = true;
   try {
-    final api = ref.read(ticketWorkflowApiClientProvider);
+    var queued = false;
     if (isRunning) {
-      await api.stopTimer(ticketId);
+      queued = await stopTicketTimer(ref, ticketId);
     } else {
-      await api.startTimer(ticketId);
+      await startTicketTimer(ref, ticketId);
+    }
+    if (queued && context.mounted) {
+      showAppToast(
+        context,
+        message: 'Fermata registrata: verrà inviata al ritorno della connessione.',
+        tone: ToastTone.warning,
+      );
     }
     ref.invalidate(ticketWorklogsProvider(ticketId));
     try {

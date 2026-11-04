@@ -14,6 +14,20 @@ import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart'
 import 'package:tasktap_mobile/features/ticket/ticket_providers.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_timer_hero.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_workflow_api_client.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
+    show internalUserIdProvider;
+
+class _ActionProbe extends ConsumerWidget {
+  const _ActionProbe({required this.onAction});
+
+  final void Function(DetailAction action) onAction;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    onAction(ticketTimerAction(context, ref, 't1'));
+    return const SizedBox.shrink();
+  }
+}
 
 class _TimerHarness extends ConsumerWidget {
   const _TimerHarness();
@@ -91,7 +105,7 @@ void main() {
     }
   }
 
-  testWidgets('offline timer shows the reason and disables the action', (tester) async {
+  testWidgets('offline timer shows the reason without hiding the action', (tester) async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -105,8 +119,32 @@ void main() {
       ],
     );
 
-    expect(find.text('Timer non disponibile offline'), findsAtLeastNWidgets(1));
+    expect(find.text('Timer non disponibile offline'), findsOneWidget);
     expect(find.text('Avvia intervento'), findsOneWidget);
+  });
+
+  testWidgets('offline action stays enabled so the offline queue can run', (tester) async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    late DetailAction action;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
+          isOnlineProvider.overrideWithValue(false),
+        ],
+        child: MaterialApp(
+          home: Scaffold(body: _ActionProbe(onAction: (value) => action = value)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(action.enabled, isTrue);
+    expect(action.onPressed, isNotNull);
   });
 
   testWidgets('idle timer says no timer is active and offers a start', (tester) async {
@@ -142,11 +180,16 @@ void main() {
   });
 
   testWidgets('the action starts the clock and refreshes the worklogs', (tester) async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
     final client = _ScriptedWorkflowClient();
 
     await pumpHero(
       tester,
       overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        internalUserIdProvider.overrideWith((ref) async => 'user-1'),
         isOnlineProvider.overrideWithValue(true),
         businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
         ticketWorkflowApiClientProvider.overrideWithValue(client),
@@ -162,11 +205,15 @@ void main() {
   });
 
   testWidgets('the action stops the clock when it is running', (tester) async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
     final client = _ScriptedWorkflowClient();
 
     await pumpHero(
       tester,
       overrides: [
+        appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(true),
         businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
         nowProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 7, 10, 8, 5))),
@@ -185,12 +232,24 @@ void main() {
   });
 
   testWidgets('a workflow failure is shown instead of swallowed', (tester) async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final options = RequestOptions(path: '/x');
     final client = _ScriptedWorkflowClient()
-      ..failure = const TicketWorkflowFailure('Errore del timer');
+      ..failure = TicketWorkflowFailure(
+        'Errore del timer',
+        cause: DioException(
+          requestOptions: options,
+          type: DioExceptionType.badResponse,
+          response: Response<dynamic>(requestOptions: options, statusCode: 400),
+        ),
+      );
 
     await pumpHero(
       tester,
       overrides: [
+        appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(true),
         businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
         ticketWorkflowApiClientProvider.overrideWithValue(client),
