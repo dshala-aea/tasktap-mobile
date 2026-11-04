@@ -231,11 +231,11 @@ Rules for the contract:
 | Pianificazione | Summary | Stato, Data, Squadra | Sintesi, Relazioni, Attività | Modifica |
 | Report admin | Summary | Stato, Cliente, Periodo | Sintesi, Attività, Documenti | Apri / Modifica |
 
-**Ticket compartment mapping.** The existing eight-compartment grid becomes the body of the four sections:
+**Ticket compartment mapping.** The existing nine-compartment grid becomes the body of the four sections:
 
 - **Sintesi** ← Dettagli
 - **Attività** ← Ore + Storico
-- **Relazioni** ← Pianificazioni + Fabbisogno
+- **Relazioni** ← Pianificazioni + Fabbisogno + Asset
 - **Documenti & mappa** ← Report + Controllo + Allegati + Mappa
 
 **Ticket primary action.** The hero owns the existing ticket worklog timer: `Avvia intervento` / `Chiudi intervento`. A secondary `Timbra cantiere` action appears only when the ticket has a `cantiereId`; it routes to the existing cantiere timbra screen. The cantiere punch is never faked as the ticket hero action.
@@ -262,7 +262,7 @@ Each step is its own branch/PR. Do not start the next screen until the previous 
 
 ## Risks and builder notes
 
-- **Ticket is the hardest migration.** It currently owns an 8-compartment grid and a timer bar. The first feat should wrap the existing section content rather than rewrite it; the grid can stay as the body of its sections.
+- **Ticket is the hardest migration.** It currently owns a 9-compartment grid and a timer bar. The first feat should wrap the existing section content rather than rewrite it; the grid can stay as the body of its sections.
 - **Collapse measurement:** measure against the hero’s laid-out bottom, not a hard-coded scroll offset. Use a sliver/scroll listener; do not rebuild the whole page on every scroll tick.
 - **Long titles and long facts:** two-line clamp, ellipsis, and `maxLines` on facts. Test with Italian strings, not placeholders.
 - **Offline:** the shell must never introduce a network read. If the existing screen reads a mirror, the shell inherits that; if it does not, the shell does not add one.
@@ -273,7 +273,7 @@ Each step is its own branch/PR. Do not start the next screen until the previous 
 ## Decisions resolved by the builder check
 
 - Ticket hero = existing worklog timer; cantiere timbra is a conditional secondary action.
-- Ticket's eight compartments map into the four sections as listed above.
+- Ticket's nine compartments map into the four sections as listed above.
 - Rapportino feat 2 targets the read-only view screen; the wizard stays out of scope.
 - The four sections are the default, with the explicit specialist-section exception.
 

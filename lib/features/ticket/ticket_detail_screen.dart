@@ -235,22 +235,36 @@ class _TicketDetailBody extends ConsumerWidget {
           DetailFact(label: 'Tecnico', value: tecnicoLabel),
         ],
         liveValue: TicketTimerLiveValue(ticketId: ticket.id),
-        primaryAction: ticketTimerAction(context, ref, ticket.id),
-        // Both secondary actions mint a rapportino for this ticket, and a closed ticket is
+        primaryAction: ticketTimerAction(context, ref, ticket.id, isClosed: closed),
+        // Both report secondary actions mint a rapportino for this ticket, and a closed ticket is
         // finished work: the server would take the submit and leave the ticket closed. The
         // expanded row says why and where the way back is (the status pill reopens it).
-        secondaryActions: hasOwner && !closed
-            ? [
-                DetailAction(
-                  label: 'AI Copilot',
-                  onPressed: () => context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
+        //
+        // "Timbra cantiere" is independent of the ticket's own workflow: it only makes sense when
+        // this ticket is linked to a cantiere, and it opens the cantiere clock rather than
+        // pretending the ticket timer is a cantiere punch.
+        secondaryActions: [
+          if (hasOwner && !closed) ...[
+            DetailAction(
+              label: 'AI Copilot',
+              onPressed: () => context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
+            ),
+            DetailAction(
+              label: 'Crea rapportino',
+              onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
+            ),
+          ],
+          if (ticket.cantiereId != null)
+            DetailAction(
+              label: 'Timbra cantiere',
+              onPressed: () => context.push(
+                AppRoutes.cantiereTimbraPath(
+                  cantiereId: ticket.cantiereId!,
+                  ticketId: ticket.id,
                 ),
-                DetailAction(
-                  label: 'Crea rapportino',
-                  onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
-                ),
-              ]
-            : const [],
+              ),
+            ),
+        ],
       ),
       expandedExtra: Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.md),

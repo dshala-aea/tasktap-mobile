@@ -596,7 +596,7 @@ testWidgets('renders the four ticket sections in order', (tester) async {
   expect(relazioni, lessThan(documenti));
 });
 
-testWidgets('groups the eight compartments into the four sections', (tester) async {
+testWidgets('groups the nine compartments into the four sections', (tester) async {
   await seedBase(db);
   await pump(tester);
   expect(find.text('Ore'), findsOneWidget);
@@ -604,6 +604,7 @@ testWidgets('groups the eight compartments into the four sections', (tester) asy
   expect(find.text('Dettagli'), findsOneWidget);
   expect(find.text('Pianificazioni'), findsOneWidget);
   expect(find.text('Fabbisogno'), findsOneWidget);
+  expect(find.text('Asset'), findsOneWidget);
   expect(find.text('Report'), findsOneWidget);
   expect(find.text('Controllo'), findsOneWidget);
   expect(find.text('Allegati'), findsOneWidget);
@@ -620,7 +621,7 @@ Expected: FAIL — only one temporary section exists.
 Replace the temporary `Attività` section with:
 1. `Attività`: grid labels `Ore`, `Storico`.
 2. `Sintesi`: the Contract/Commessa `KeyVal` rows plus a `Dettagli` tile. Do not repeat Cliente/Sede/Tecnico (they are hero facts).
-3. `Relazioni`: the existing cantiere chip + grid labels `Pianificazioni`, `Fabbisogno`.
+3. `Relazioni`: the existing cantiere chip + grid labels `Pianificazioni`, `Fabbisogno`, `Asset`.
 4. `Documenti & mappa`: `GeoMapCard` when the address is non-empty + grid labels `Report`, `Controllo`, `Allegati`.
 
 Extract the repeated `GridView` into `_TicketCompartmentGrid`; pass `_sectionContent(label, ticket.id)` and the `Dettagli` special case exactly as today. Preserve `openCompartmentSheet` and every sheet's behaviour.

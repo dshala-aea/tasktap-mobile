@@ -20,13 +20,14 @@ import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
     show internalUserIdProvider;
 
 class _ActionProbe extends ConsumerWidget {
-  const _ActionProbe({required this.onAction});
+  const _ActionProbe({required this.onAction, this.isClosed = false});
 
   final void Function(DetailAction action) onAction;
+  final bool isClosed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    onAction(ticketTimerAction(context, ref, 't1'));
+    onAction(ticketTimerAction(context, ref, 't1', isClosed: isClosed));
     return const SizedBox.shrink();
   }
 }
@@ -201,6 +202,74 @@ void main() {
     expect(find.text('05:00'), findsOneWidget);
     expect(find.text('Chiudi intervento'), findsOneWidget);
     expect(find.text('Avvia intervento'), findsNothing);
+  });
+
+  testWidgets('a timer running for another technician cannot be closed', (tester) async {
+    late DetailAction action;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          internalUserIdProvider.overrideWith((ref) async => 'u2'),
+          isOnlineProvider.overrideWithValue(true),
+          ticketWorklogsProvider('t1').overrideWith((ref) async => [_running()]),
+        ],
+        child: MaterialApp(
+          home: Scaffold(body: _ActionProbe(onAction: (value) => action = value)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(action.label, 'Chiudi intervento');
+    expect(action.enabled, isFalse);
+    expect(action.disabledReason, 'Timer avviato da un altro tecnico');
+    expect(action.onPressed, isNull);
+  });
+
+  testWidgets('a closed ticket offers no start until it is reopened', (tester) async {
+    late DetailAction action;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          isOnlineProvider.overrideWithValue(true),
+          ticketWorklogsProvider('t1').overrideWith((ref) async => const <TicketWorkLogDto>[]),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: _ActionProbe(isClosed: true, onAction: (value) => action = value),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(action.label, 'Avvia intervento');
+    expect(action.enabled, isFalse);
+    expect(action.disabledReason, 'Intervento chiuso: riaprilo dallo stato qui sopra.');
+    expect(action.onPressed, isNull);
+  });
+
+  testWidgets('a closed ticket still lets a running timer be stopped', (tester) async {
+    late DetailAction action;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          internalUserIdProvider.overrideWith((ref) async => 'u1'),
+          isOnlineProvider.overrideWithValue(true),
+          ticketWorklogsProvider('t1').overrideWith((ref) async => [_running()]),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: _ActionProbe(isClosed: true, onAction: (value) => action = value),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(action.label, 'Chiudi intervento');
+    expect(action.enabled, isTrue);
+    expect(action.onPressed, isNotNull);
   });
 
   testWidgets('an offline running timer still ticks and carries the offline note', (tester) async {

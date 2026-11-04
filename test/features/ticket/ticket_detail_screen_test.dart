@@ -155,6 +155,18 @@ GoRouter _makeChipRouter({required String ticketId}) => GoRouter(
         ),
       ),
     ),
+    GoRoute(
+      path: AppRoutes.cantiereTimbra,
+      builder: (_, state) => Scaffold(
+        body: Center(
+          child: Text(
+            'CANTIERE-TIMBRA-MARKER:'
+            'cantiereId=${state.uri.queryParameters['cantiereId']}:'
+            'ticketId=${state.uri.queryParameters['ticketId']}',
+          ),
+        ),
+      ),
+    ),
   ],
 );
 
@@ -946,8 +958,13 @@ void main() {
 
       expect(find.text('Crea rapportino'), findsNothing);
       expect(find.text('AI Copilot'), findsNothing);
+      // The hero explains why the timer cannot start, not just hiding the action.
+      expect(
+        find.text('Intervento chiuso: riaprilo dallo stato qui sopra.'),
+        findsOneWidget,
+      );
       // Not silence: the screen says the ticket is closed and where the way back is.
-      expect(find.textContaining('Intervento chiuso'), findsOneWidget);
+      expect(find.textContaining('Intervento chiuso'), findsNWidgets(2));
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -1075,6 +1092,38 @@ void main() {
       expect(find.text('CANTIERE-DETAIL-MARKER:ticketId=ticket-1'), findsOneWidget);
 
       await tester.binding.setSurfaceSize(null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the hero offers Timbra cantiere only when a cantiere is linked', (tester) async {
+      await seedWithCantiere(db);
+      final router = _makeChipRouter(ticketId: 'ticket-1');
+      await tester.pumpWidget(_buildDetailWithRouter(db: db, repo: repo, router: router));
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final timbra = find.text('Timbra cantiere');
+      expect(timbra, findsOneWidget);
+
+      await tester.tap(timbra);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('CANTIERE-TIMBRA-MARKER:cantiereId=cant-1:ticketId=ticket-1'),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the hero hides Timbra cantiere when the ticket has no cantiere', (tester) async {
+      await seedBase(db);
+      await pump(tester);
+
+      expect(find.text('Timbra cantiere'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

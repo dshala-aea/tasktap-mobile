@@ -11,6 +11,7 @@ import '../../core/widgets/app_toast.dart' show ToastTone, showAppToast;
 import '../../core/widgets/detail/detail_hero.dart' show DetailAction;
 import '../../core/widgets/live_dot.dart';
 import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
+import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../dashboard/active_trackers_provider.dart' show formatElapsed, nowProvider;
 import 'ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import 'ticket_providers.dart';
@@ -107,20 +108,51 @@ class TicketTimerLiveValue extends ConsumerWidget {
 }
 
 /// The hero's primary action for the ticket clock: start it, or close it.
-DetailAction ticketTimerAction(BuildContext context, WidgetRef ref, String ticketId) {
+///
+/// [isClosed] comes from the screen's own closed-state check. A closed ticket cannot start a new
+/// session until it is reopened from the status pill, but a session already running (including one
+/// opened before the close) can still be stopped.
+DetailAction ticketTimerAction(
+  BuildContext context,
+  WidgetRef ref,
+  String ticketId, {
+  bool isClosed = false,
+}) {
   final running = ref.watch(runningTicketWorklogProvider(ticketId));
   final busy = ref.watch(ticketTimerBusyProvider(ticketId));
+  final currentUserId = ref.watch(internalUserIdProvider).valueOrNull;
+
+  final label = running == null ? 'Avvia intervento' : 'Chiudi intervento';
 
   if (busy) {
     return DetailAction(
-      label: running == null ? 'Avvia intervento' : 'Chiudi intervento',
+      label: label,
       enabled: false,
       disabledReason: 'Aggiornamento del timer…',
     );
   }
 
+  // The running entry belongs to someone else. Stopping it from this device would close another
+  // technician's session, so the action is visible but refuses with the reason.
+  final runningUserId = running?.userId;
+  if (runningUserId != null && currentUserId != null && runningUserId != currentUserId) {
+    return DetailAction(
+      label: label,
+      enabled: false,
+      disabledReason: 'Timer avviato da un altro tecnico',
+    );
+  }
+
+  if (isClosed && running == null) {
+    return const DetailAction(
+      label: 'Avvia intervento',
+      enabled: false,
+      disabledReason: 'Intervento chiuso: riaprilo dallo stato qui sopra.',
+    );
+  }
+
   return DetailAction(
-    label: running == null ? 'Avvia intervento' : 'Chiudi intervento',
+    label: label,
     onPressed: () => _toggle(context, ref, ticketId, running != null),
   );
 }
@@ -139,7 +171,8 @@ Future<void> _toggle(BuildContext context, WidgetRef ref, String ticketId, bool 
     } else {
       await startTicketTimer(ref, ticketId);
     }
-    if (queued && context.mounted) {
+    if (!context.mounted) return;
+    if (queued) {
       showAppToast(
         context,
         message: 'Fermata registrata: verrà inviata al ritorno della connessione.',

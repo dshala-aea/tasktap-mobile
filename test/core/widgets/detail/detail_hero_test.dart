@@ -104,6 +104,41 @@ void main() {
     },
   );
 
+  testWidgets('long fact values clamp at 320px without a layout exception', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DetailHero(
+            data: DetailHeroData(
+              variant: DetailHeroVariant.operational,
+              title: 'Ticket',
+              status: const DetailStatus(label: 'Aperto'),
+              facts: const [
+                DetailFact(
+                  label: 'Tecnico',
+                  value:
+                      'Giovanni Battista Alessandro Michelangelo Della Valle '
+                      'di Torrente Montanari',
+                ),
+                DetailFact(label: 'Sede', value: 'Milano'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Giovanni Battista'), findsOneWidget);
+  });
+
   testWidgets('actions and tappable facts meet the 48px touch target', (
     tester,
   ) async {

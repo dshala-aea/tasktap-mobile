@@ -180,11 +180,15 @@ class _FactTile extends StatelessWidget {
       children: [
         Text(
           fact.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: AppTextStyles.labelSmall.copyWith(color: colors.inkMuted),
         ),
         const SizedBox(height: 2),
         Text(
           fact.value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: AppTextStyles.bodyMedium.copyWith(
             color: colors.ink,
             fontWeight: FontWeight.w600,
