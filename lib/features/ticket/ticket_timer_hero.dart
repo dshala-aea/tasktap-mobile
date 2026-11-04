@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/time/business_time.dart' show BusinessTime;
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
@@ -49,35 +50,59 @@ class TicketTimerLiveValue extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final worklogs = ref.watch(ticketWorklogsProvider(ticketId));
+    final offline = !ref.watch(isOnlineProvider);
+    final running = ref.watch(runningTicketWorklogProvider(ticketId));
+
+    // A running clock is the one thing the hero can still show offline: the entry is in the local
+    // mirror, and its elapsed value keeps ticking. The offline note is added underneath rather
+    // than replacing it, exactly as the old timer bar did.
+    if (running != null) {
+      final elapsed = ticketTimerElapsed(
+        running,
+        ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc(),
+        ref.watch(businessTimeProvider),
+      );
+      final value = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const LiveDot(),
+          const SizedBox(width: 8),
+          Text(
+            formatElapsed(elapsed),
+            style: AppTextStyles.docCode.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+        ],
+      );
+
+      if (!offline && !_isOffline(worklogs)) return value;
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          value,
+          const SizedBox(height: 4),
+          Text(
+            _isOffline(worklogs) ? _offlineMirrorEmptyTimerReason : _offlineTimerReason,
+            textAlign: TextAlign.right,
+            style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+          ),
+        ],
+      );
+    }
+
+    // No running clock: the old bar still said why the mirror cannot answer, or that it is still
+    // checking, before falling back to "no timer".
     if (_isOffline(worklogs)) {
       return const Text(_offlineMirrorEmptyTimerReason);
     }
-    if (!ref.watch(isOnlineProvider)) {
+    if (worklogs.isLoading) {
+      return const Text('Verifica timer…');
+    }
+    if (offline) {
       return const Text(_offlineTimerReason);
     }
-
-    final running = ref.watch(runningTicketWorklogProvider(ticketId));
-    if (running == null) {
-      return const Text('Nessun timer attivo');
-    }
-
-    final elapsed = ticketTimerElapsed(
-      running,
-      ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc(),
-      ref.watch(businessTimeProvider),
-    );
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const LiveDot(),
-        const SizedBox(width: 8),
-        Text(
-          formatElapsed(elapsed),
-          style: AppTextStyles.docCode.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
-        ),
-      ],
-    );
+    return const Text('Nessun timer attivo');
   }
 }
 

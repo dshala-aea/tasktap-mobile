@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
@@ -199,6 +201,41 @@ void main() {
     expect(find.text('05:00'), findsOneWidget);
     expect(find.text('Chiudi intervento'), findsOneWidget);
     expect(find.text('Avvia intervento'), findsNothing);
+  });
+
+  testWidgets('an offline running timer still ticks and carries the offline note', (tester) async {
+    await pumpHero(
+      tester,
+      overrides: [
+        isOnlineProvider.overrideWithValue(false),
+        businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
+        nowProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 7, 10, 8, 5))),
+        ticketWorklogsProvider('t1').overrideWith((ref) async => [_running()]),
+      ],
+      settle: false,
+    );
+
+    // The mirrored running entry keeps ticking offline; the note is below it, not instead of it.
+    expect(find.text('05:00'), findsOneWidget);
+    expect(
+      find.text('Offline: il timer funziona e verrà inviato appena torni online.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('loading says the timer is being checked', (tester) async {
+    await pumpHero(
+      tester,
+      overrides: [
+        isOnlineProvider.overrideWithValue(true),
+        ticketWorklogsProvider(
+          't1',
+        ).overrideWith((ref) => Completer<List<TicketWorkLogDto>>().future),
+      ],
+    );
+
+    expect(find.text('Verifica timer…'), findsOneWidget);
+    expect(find.text('Nessun timer attivo'), findsNothing);
   });
 
   testWidgets('the action starts the clock and refreshes the worklogs', (tester) async {
