@@ -17,6 +17,9 @@ const double _collapsedBarHeight = 56;
 /// The app's minimum touch target, shared with [DetailHero].
 const double _minTouchTarget = 48;
 
+/// Space above each section (the mockup's `.section{margin-top:19px}`).
+const double _sectionGap = 19;
+
 /// The height of the placeholder hero used by [DetailScaffold.loading].
 const double _loadingHeroHeight = 168;
 
@@ -207,7 +210,10 @@ class _DetailScaffoldState extends State<DetailScaffold> {
         SliverToBoxAdapter(
           child: _framed(
             key: const Key('detail-content'),
-            child: DetailHero(key: _heroKey, data: hero),
+            child: Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: DetailHero(key: _heroKey, data: hero),
+            ),
           ),
         ),
         if (widget.expandedExtra != null)
@@ -215,7 +221,7 @@ class _DetailScaffoldState extends State<DetailScaffold> {
         for (final section in widget.sections.where((s) => !s.isEmpty))
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xl),
+              padding: const EdgeInsets.only(top: _sectionGap),
               child: _framed(child: DetailSection(data: section)),
             ),
           ),

@@ -74,29 +74,44 @@ Header → compact hero → chronological activity feed, with facts in a sheet.
 SafeArea
   ScreenHeader (back, generic screen title, header actions)
   CustomScrollView
-    Hero (entity title + subtitle, expanded)
+    Hero: kicker · entity title · subtitle (outside the card), then the hero card
     [expandedExtra]          optional, screen-specific
     DetailSection …
   CollapsedBar (56px)        pinned under the header once the hero leaves
   [fab]                      only when a screen has a secondary create action
 ```
 
-**Identity split:** the header names the *screen* ("Ticket", "Cliente") and owns back/overflow; the hero owns the *entity* (job title, customer name) and its subtitle. Your eye reads the generic screen type first, then the specific record. The mockup in `docs/design/detail-layouts.html` follows this split.
+**Identity split:** the header names the *screen* ("Ticket", "Cliente") and owns back/overflow; the hero owns the *entity* (job title, customer name) and its subtitle. Your eye reads the generic screen type first, then the specific record.
+
+**Source of truth.** Option A of `prototypes/detail-layouts.html` ("Hero + stack") defines the visual. Where this spec and that mockup disagree, the mockup wins.
 
 ### Hero
 
 Two variants, one contract:
 
-- **OperationalHero** — status stamp, live value (timer or day total), up to three facts, primary action (`Timbra ingresso` / `Timbra uscita`), secondary actions (`Crea rapportino`, `Dettagli`).
-- **SummaryHero** — status stamp, up to three facts, primary action (`Modifica`), optional secondary action. No timer, no fake “day”.
+- **OperationalHero** — a mono state label and a live value (timer or day total) at the top of the card, a copy line, the primary action (`Timbra ingresso` / `Timbra uscita`) and secondary actions (`Crea rapportino`, `Dettagli`).
+- **SummaryHero** — state label, primary action (`Modifica`), optional secondary action. No timer, no fake “day”.
+
+The hero has two parts.
+
+**Header (outside the card).** In this order:
+
+1. Kicker row — mono 9px / 600, uppercase, letter-spacing .1em, muted: the document kind + reference in Stamp Red (`TICKET · INT-2026-0412`), then `·`, then a muted context (`OGGI`). `DetailHeroData.kicker` / `kickerContext`.
+2. Entity title — Archivo Narrow 30, line-height .98, letter-spacing -.025em, at most two lines, then ellipsis.
+3. Subtitle — Archivo 11.5, line-height 1.45, muted, up to two lines (typically “who · where” and “assigned to”).
+
+**Card.** A `Sheet` surface, 1px `Rule` border, 2px radius, 14px padding, no shadow:
+
+- Top row: mono 9px uppercase muted **state label** (e.g. `IN CORSO`) on the left, live value on the right (mono 22, tabular, Stamp Red for a timer).
+- Copy line (`heroCopy`): 11.5 muted, emphasis in bold ink (`Ingresso alle **09:12** · sessione aperta`).
+- Primary action: full width, Stamp Red fill, 12/600 Archivo, 2px radius. The mockup draws it 42px; the shell keeps a 48px minimum.
+- Secondary row: first action is secondary (Muted Fill + Rule border), the rest ghost; 11px, drawn 36px in the mockup, kept at 44px minimum.
 
 Rules:
 
-- The hero is a `Sheet` surface with a 1px `Rule` border and the standard 2px radius. No shadow.
-- The entity title lives in the hero, not in the header; the header stays generic and stable while the hero collapses.
-- The primary action is full width. Secondary actions sit in one row below it.
-- The hero shows **at most three** facts; those facts do not repeat in Sintesi.
-- A status is a Stamp, never a pill. Closed/archived states use the semantic stamp family.
+- The entity title lives in the hero header, not in the app header and not inside the card.
+- **Facts do not live in the hero card.** Cliente / Sede / Tecnico (and the rest) render in the Sintesi section's `DetailFactsGrid`. This is the no-duplication rule: one place, Sintesi.
+- A disabled primary action stays visible with one line of reason under it.
 - Long titles wrap to two lines, then ellipsis; they never push the action off-screen.
 
 ### Collapsed bar
@@ -111,10 +126,10 @@ Rules:
 
 Fixed vocabulary and order:
 
-1. **Sintesi** — the full fact set, minus the hero facts.
+1. **Sintesi** — the full fact set, as a two-column `DetailFactsGrid` (Cliente, Sede, Tecnico, Commessa, …). Trailing: mono count (`4 CAMPI`).
 2. **Relazioni** — customer, site, commessa, contract, technician, crew, linked tickets.
-3. **Attività** — timeline, hours, punches, state changes, notes.
-4. **Documenti & mappa** — attachments, photos, signatures, map.
+3. **Attività** — a `DetailActivityTimeline` (1px left rule, 9px dot per event, outline when neutral and filled green / Stamp Red / amber by tone, mono time, 11.5/600 title, 10.5 muted meta) fed only from data the screen already has; trailing mono `APRI` link opens the full detail.
+4. **Documenti & mappa** — attachments as inline rows (28px icon box on Fill with a Rule border, 11/600 name, mono 8.5 size, top/bottom 1px rules; trailing `N FILE`), photos, signatures, map.
 
 Operational screens (Ticket, Cantiere, Rapportino) put **Attività** directly under the hero; the screen supplies the ordered section list, so the scaffold stays agnostic. Master data keeps Sintesi first.
 
@@ -124,9 +139,9 @@ Rules:
 
 - Empty sections are not rendered. Never an empty card.
 - A section is a title plus content; it is not necessarily a card. Use rules and spacing before adding a container.
-- Section titles use Archivo Narrow 18/600. No uppercase eyebrow over every section.
-- Section trailing links are mono, uppercase, small: `APRI`, `TUTTE`.
-- 24px between sections; 8px between title and content.
+- Section titles use Archivo Narrow 17/600. No uppercase eyebrow over every section.
+- Section trailing slot is mono 9px, uppercase: a count (`4 CAMPI`, `2 FILE`) in muted, or a link (`APRI`, `TUTTE`) in Stamp Red.
+- 19px between sections; 8px between title and content.
 
 ### States
 
@@ -148,10 +163,10 @@ No action is removed for a transient state. Permission is the only reason to hid
 ### Typography, spacing, colour
 
 - Il Documento tokens only: Paper ground, Sheet surface, Carbon Ink, Slate, Stamp Red as the sole accent.
-- Display: Archivo Narrow 26–32 for the screen-level title only when the entity title lives in the hero; otherwise the header title is the display.
+- Display: Archivo Narrow 30 for the entity title in the hero header (the app header stays generic).
 - Body: Archivo 12–16. Mono: IBM Plex only for references, timestamps, clocks and counts.
-- Primary button: Stamp Red, `brandOn` text. Secondary: Muted Fill with a Rule border. Ghost: text only.
-- Standard page padding; 24px section rhythm; 2px radius on every surface.
+- Primary button: Stamp Red, `brandOn` text, 2px radius. Secondary: Muted Fill with a Rule border. Ghost: text only. Hero buttons are `DetailHeroButton` (Archivo 12/11, 2px radius), not the app-wide `AppButton`.
+- Standard page padding; 19px section rhythm; 2px radius on every surface.
 - Max content width: 600px for master data, 720px for operational screens; centered above the breakpoint.
 
 ### Accessibility
@@ -181,9 +196,11 @@ DetailScaffold(
 DetailHeroData(
   variant: DetailHeroVariant.operational | .summary,
   title: String,                   // entity title, two-line clamp
-  subtitle: String?,
+  kicker: String?,                 // red part of the mono kicker row
+  kickerContext: String?,          // muted part after the "·"
+  subtitle: String?,               // two-line clamp
   status: DetailStatus(label, tone),
-  facts: List<DetailFact>,         // max 3
+  heroCopy: Widget?,               // 11.5 muted line under the state row
   liveValue: Widget?,              // mono timer / day total
   primaryAction: DetailAction?,
   secondaryActions: List<DetailAction>,
@@ -199,7 +216,7 @@ DetailAction(
 
 DetailSection(
   title: String,
-  trailing: Widget?,
+  trailing: Widget?,               // DetailSectionMeta('4 campi') | DetailSectionLink('Apri')
   child: Widget,
   isEmpty: bool,                   // scaffold skips it
 )
@@ -208,7 +225,7 @@ DetailSection(
 Rules for the contract:
 
 - The scaffold renders both the expanded hero and the collapsed bar from `DetailHeroData`.
-- `expandedExtra` is the only place a screen may inject custom hero-adjacent content. It must not duplicate the hero facts.
+- `expandedExtra` is the only place a screen may inject custom hero-adjacent content. It must not duplicate Sintesi facts.
 - The screen supplies sections in its own order; the scaffold does not know about `activityFirst`.
 - No FAB when the hero has a primary action. A FAB remains only for a genuinely different secondary create action.
 - The scaffold owns pull-to-refresh, page padding, max width and the sticky bar.
@@ -216,9 +233,9 @@ Rules for the contract:
 
 ## Per-screen mapping
 
-| Screen | Hero | Hero facts | Section order | Primary |
+| Screen | Hero | Sintesi facts (not in hero) | Section order | Primary |
 |---|---|---|---|---|
-| Ticket | Operational | Cliente, Sede, Tecnico | Attività, Sintesi, Relazioni, Documenti & mappa | Avvia / Chiudi intervento |
+| Ticket | Operational | Cliente, Sede, Tecnico, Commessa, Contratto | Attività, Sintesi, Relazioni, Allegati, Documenti & mappa | Avvia / Chiudi intervento |
 | Cantiere | Operational | Cliente, Squadra, Ticket aperti | Attività (Il giorno), Sintesi, Relazioni, Documenti & mappa | Timbra ingresso/uscita |
 | Rapportino (view) | Operational | Cliente, Sede, Tecnico | Attività (Cronologia), Sintesi, Ore, Materiali, Controlli, Documenti & mappa | Scarica PDF / Rilavora (respinto) |
 | Cliente | Summary | Stato, Sedi, Contratti | Sintesi, Relazioni (sedi, contratti, referenti), Attività, Documenti | Modifica |
@@ -236,7 +253,7 @@ Rules for the contract:
 - **Sintesi** ← Dettagli
 - **Attività** ← Ore + Storico
 - **Relazioni** ← Pianificazioni + Fabbisogno + Asset
-- **Documenti & mappa** ← Report + Controllo + Allegati + Mappa
+- **Allegati** (own section, inline rows; header opens the full list with upload) and **Documenti & mappa** ← Report + Controllo + Mappa
 
 **Ticket primary action.** The hero owns the existing ticket worklog timer: `Avvia intervento` / `Chiudi intervento`. A secondary `Timbra cantiere` action appears only when the ticket has a `cantiereId`; it routes to the existing cantiere timbra screen. The cantiere punch is never faked as the ticket hero action.
 
