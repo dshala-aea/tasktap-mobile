@@ -220,7 +220,7 @@ Rules for the contract:
 |---|---|---|---|---|
 | Ticket | Operational | Cliente, Sede, Tecnico | Attività, Sintesi, Relazioni, Documenti & mappa | Avvia / Chiudi intervento |
 | Cantiere | Operational | Cliente, Squadra, Ticket aperti | Attività (Il giorno), Sintesi, Relazioni, Documenti & mappa | Timbra ingresso/uscita |
-| Rapportino (view) | Operational | Cliente, Sede, Stato firma | Attività, Sintesi, Ore, Materiali, Controlli, Documenti | Modifica / Firma (stato) |
+| Rapportino (view) | Operational | Cliente, Sede, Tecnico | Attività (Cronologia), Sintesi, Ore, Materiali, Controlli, Documenti & mappa | Scarica PDF / Rilavora (respinto) |
 | Cliente | Summary | Stato, Sedi, Contratti | Sintesi, Relazioni (sedi, contratti, referenti), Attività, Documenti | Modifica |
 | Sede | Summary | Cliente, Città, Stato | Sintesi, Relazioni, Attività, Documenti & mappa | Modifica |
 | Commessa | Summary | Cliente, Stato, Periodo | Sintesi, Relazioni, Attività, Documenti | Modifica |
@@ -240,15 +240,15 @@ Rules for the contract:
 
 **Ticket primary action.** The hero owns the existing ticket worklog timer: `Avvia intervento` / `Chiudi intervento`. A secondary `Timbra cantiere` action appears only when the ticket has a `cantiereId`; it routes to the existing cantiere timbra screen. The cantiere punch is never faked as the ticket hero action.
 
-**Rapportino target.** Feat 2 migrates `RapportinoViewScreen` (read-only). The hero primary is `Modifica` or `Firma` depending on the report state; the wizard/review step is out of scope.
+**Rapportino target.** Feat 2 migrates `RapportinoViewScreen` (read-only). The view has no Modifica/Firma: the hero primary is `Scarica PDF`, or `Rilavora` when the report was rejected; the secondary is `Condividi`. The wizard/review step is out of scope.
 
 The mapping is a starting contract, not a reason to invent data. If a screen lacks the data for a fact, drop the fact; do not add a fetch.
 
 ## Migration plan — one core feature at a time
 
 1. **Core feat 1 — the shell + Ticket.** Build `DetailScaffold`, `DetailHero`, `DetailSection`, `DetailAction`, the collapse behaviour, the state matrix and their widget tests. Migrate only the ticket detail. No other screen changes.
-2. **Core feat 2 — Rapportino view.** Adopt the shell on `RapportinoViewScreen`; hero primary is `Modifica` or `Firma` depending on state; preserve the existing section internals. The wizard/review step is out of scope.
-3. **Core feat 3 — Cantiere alignment.** The reference implementation is branch `feat/cantiere-giorno` (pushed, PR pending; it is not yet on `main`). Once merged, replace that bespoke header/hero wrapper with the shared shell; keep the day logic and the map screen unchanged.
+2. **Core feat 2 — Rapportino view.** Adopt the shell on `RapportinoViewScreen`; hero primary is `Scarica PDF` / `Rilavora` when rejected, secondary `Condividi`; preserve the existing section internals. The wizard/review step is out of scope.
+3. **Core feat 3 — Cantiere alignment.** The cantiere reference is merged on `main` (PR #192). Replace its bespoke header/hero wrapper with the shared shell; keep the day logic and the map screen unchanged.
 4. **Core feat 4+ — Admin master data.** Cliente + Sede, then Commessa + Contratto, then Prodotto + Materiale + Magazzino, then Squadra + Pianificazione + Report. Batch only screens that share the same hero shape.
 
 Each step is its own branch/PR. Do not start the next screen until the previous one is merged and its tests are green.
@@ -274,7 +274,7 @@ Each step is its own branch/PR. Do not start the next screen until the previous 
 
 - Ticket hero = existing worklog timer; cantiere timbra is a conditional secondary action.
 - Ticket's nine compartments map into the four sections as listed above.
-- Rapportino feat 2 targets the read-only view screen; the wizard stays out of scope.
+- Rapportino feat 2 targets the read-only view screen; the hero primary is `Scarica PDF` or `Rilavora` when rejected; the wizard stays out of scope.
 - The four sections are the default, with the explicit specialist-section exception.
 
 ## Open questions for the human partner
