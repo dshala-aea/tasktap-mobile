@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/widgets/app_button.dart';
+import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
+
+void _noop() {}
 
 void main() {
   testWidgets('renders entity title, subtitle, stamp and three facts', (
@@ -32,43 +36,111 @@ void main() {
     expect(find.text('Rossi Srl'), findsOneWidget);
   });
 
-  testWidgets('more than three facts are rejected', (tester) async {
-    expect(
-      () => DetailHeroData(
-        variant: DetailHeroVariant.summary,
-        title: 'Cliente',
-        status: const DetailStatus(label: 'Attivo'),
-        facts: const [
-          DetailFact(label: 'A', value: '1'),
-          DetailFact(label: 'B', value: '2'),
-          DetailFact(label: 'C', value: '3'),
-          DetailFact(label: 'D', value: '4'),
-        ],
-      ),
-      throwsAssertionError,
+  testWidgets('renders at most three facts and accepts a const data literal', (
+    tester,
+  ) async {
+    const data = DetailHeroData(
+      variant: DetailHeroVariant.summary,
+      title: 'Cliente',
+      status: DetailStatus(label: 'Attivo'),
+      facts: [
+        DetailFact(label: 'A', value: '1'),
+        DetailFact(label: 'B', value: '2'),
+        DetailFact(label: 'C', value: '3'),
+        DetailFact(label: 'D', value: '4'),
+      ],
     );
+
+    await tester.pumpWidget(MaterialApp(home: DetailHero(data: data)));
+
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(find.text('4'), findsNothing);
   });
 
-  testWidgets('long titles clamp to two lines without overflowing', (
+  testWidgets(
+    'long titles and actions fit a 320px viewport without overflowing',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DetailHero(
+              data: DetailHeroData(
+                variant: DetailHeroVariant.operational,
+                title:
+                    'Perdita acqua sotto il lavello della cucina del piano primo con allagamento',
+                status: const DetailStatus(label: 'In corso'),
+                facts: const [
+                  DetailFact(label: 'Cliente', value: 'Rossi Srl'),
+                  DetailFact(label: 'Sede', value: 'Milano'),
+                  DetailFact(label: 'Tecnico', value: 'D. Shala'),
+                ],
+                primaryAction: const DetailAction(
+                  label: 'Avvia intervento',
+                  onPressed: _noop,
+                ),
+                secondaryActions: const [
+                  DetailAction(label: 'AI Copilot', onPressed: _noop),
+                  DetailAction(label: 'Crea rapportino', onPressed: _noop),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.byType(DetailHero)).width, 320);
+      expect(find.textContaining('Perdita acqua sotto'), findsOneWidget);
+      expect(find.text('Avvia intervento'), findsOneWidget);
+      expect(find.text('AI Copilot'), findsOneWidget);
+      expect(find.text('Crea rapportino'), findsOneWidget);
+    },
+  );
+
+  testWidgets('actions and tappable facts meet the 48px touch target', (
     tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: SizedBox(
-          width: 320,
-          child: DetailHero(
+        home: Scaffold(
+          body: DetailHero(
             data: DetailHeroData(
               variant: DetailHeroVariant.operational,
-              title:
-                  'Perdita acqua sotto il lavello della cucina del piano primo con allagamento',
-              status: const DetailStatus(label: 'In corso'),
+              title: 'Ticket',
+              status: const DetailStatus(label: 'Aperto'),
+              facts: const [
+                DetailFact(label: 'Cliente', value: 'Rossi Srl', onTap: _noop),
+              ],
+              primaryAction: const DetailAction(
+                label: 'Avvia intervento',
+                onPressed: _noop,
+              ),
+              secondaryActions: const [
+                DetailAction(label: 'AI Copilot', onPressed: _noop),
+                DetailAction(label: 'Crea rapportino', onPressed: _noop),
+              ],
             ),
           ),
         ),
       ),
     );
-    expect(tester.takeException(), isNull);
-    expect(find.textContaining('Perdita acqua sotto'), findsOneWidget);
+
+    final buttons = find.byType(AppButton);
+    expect(buttons, findsNWidgets(3));
+    for (var i = 0; i < 3; i++) {
+      expect(tester.getSize(buttons.at(i)).height, greaterThanOrEqualTo(48));
+    }
+    expect(
+      tester.getSize(find.byType(AppTappable)).height,
+      greaterThanOrEqualTo(48),
+    );
   });
 
   testWidgets('disabled primary action shows its reason and never fires', (

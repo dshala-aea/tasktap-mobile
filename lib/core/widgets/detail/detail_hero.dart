@@ -9,6 +9,10 @@ import '../app_card.dart';
 import '../app_tappable.dart';
 import '../status_stamp.dart';
 
+/// The app's minimum touch target. `AppButton` floors at 44; the hero lifts every actionable
+/// element to 48 without changing the shared button widget itself.
+const double _minTouchTarget = 48;
+
 /// How a detail hero presents its entity.
 ///
 /// [operational] screens (ticket, cantiere, rapportino) may show a live value — a running timer or
@@ -61,6 +65,8 @@ class DetailAction {
 }
 
 /// Everything a detail hero renders. Presentation only — no provider or network access.
+///
+/// More than three facts may be supplied; [DetailHero] renders only the first three.
 class DetailHeroData {
   const DetailHeroData({
     required this.title,
@@ -71,7 +77,7 @@ class DetailHeroData {
     this.liveValue,
     this.primaryAction,
     this.secondaryActions = const [],
-  }) : assert(facts.length <= 3, 'A detail hero shows at most three facts.');
+  });
 
   final String title;
   final DetailHeroVariant variant;
@@ -141,7 +147,9 @@ class DetailHero extends StatelessWidget {
             Wrap(
               spacing: AppSpacing.xl,
               runSpacing: AppSpacing.md,
-              children: [for (final fact in data.facts) _FactTile(fact: fact)],
+              children: [
+                for (final fact in data.facts.take(3)) _FactTile(fact: fact),
+              ],
             ),
           ],
           if (data.primaryAction != null) ...[
@@ -187,11 +195,14 @@ class _FactTile extends StatelessWidget {
 
     if (fact.onTap == null) return content;
 
-    return AppTappable(
-      onTap: fact.onTap,
-      borderRadius: AppRack.insetShape,
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: content,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: _minTouchTarget),
+      child: AppTappable(
+        onTap: fact.onTap,
+        borderRadius: AppRack.insetShape,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Center(widthFactor: 1, child: content),
+      ),
     );
   }
 }
@@ -208,11 +219,14 @@ class _PrimaryAction extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AppButton(
-          label: action.label,
-          icon: action.icon,
-          onPressed: action.enabled ? action.onPressed : null,
-          fullWidth: true,
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: _minTouchTarget),
+          child: AppButton(
+            label: action.label,
+            icon: action.icon,
+            onPressed: action.enabled ? action.onPressed : null,
+            fullWidth: true,
+          ),
         ),
         if (reason != null) ...[
           const SizedBox(height: AppSpacing.xs),
@@ -240,19 +254,26 @@ class _SecondaryActions extends StatelessWidget {
         for (var i = 0; i < actions.length; i++) ...[
           if (i > 0) const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: i == 0
-                ? AppButton.secondary(
-                    label: actions[i].label,
-                    icon: actions[i].icon,
-                    onPressed: actions[i].enabled ? actions[i].onPressed : null,
-                    fullWidth: true,
-                  )
-                : AppButton.ghost(
-                    label: actions[i].label,
-                    icon: actions[i].icon,
-                    onPressed: actions[i].enabled ? actions[i].onPressed : null,
-                    fullWidth: true,
-                  ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: _minTouchTarget),
+              child: i == 0
+                  ? AppButton.secondary(
+                      label: actions[i].label,
+                      icon: actions[i].icon,
+                      onPressed: actions[i].enabled
+                          ? actions[i].onPressed
+                          : null,
+                      fullWidth: true,
+                    )
+                  : AppButton.ghost(
+                      label: actions[i].label,
+                      icon: actions[i].icon,
+                      onPressed: actions[i].enabled
+                          ? actions[i].onPressed
+                          : null,
+                      fullWidth: true,
+                    ),
+            ),
           ),
         ],
       ],
