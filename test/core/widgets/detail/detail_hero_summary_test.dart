@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 import 'package:tasktap_mobile/core/theme/status_colors.dart';
 import 'package:tasktap_mobile/core/widgets/status_stamp.dart';
@@ -112,6 +113,51 @@ void main() {
 
           final stamp = tester.widget<StatusStamp>(find.byType(StatusStamp));
           expect(stamp.family, family, reason: label);
+        }
+      },
+    );
+
+    testWidgets(
+      'an omitted tone keeps the statusFamilyOf fallback for known labels',
+      (tester) async {
+        final cases = [
+          ('Attivo', StatusFamily.good, AppVetroPalette.light.statusGood),
+          ('Inviato', StatusFamily.info, AppVetroPalette.light.tint),
+        ];
+
+        for (final (label, family, ink) in cases) {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: buildAppTheme(brightness: Brightness.light),
+              home: Scaffold(
+                body: DetailHero(
+                  data: DetailHeroData(
+                    variant: DetailHeroVariant.summary,
+                    title: 'Entità',
+                    status: DetailStatus(label: label),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          expect(statusFamilyOf(label), family, reason: label);
+
+          final stamp = tester.widget<StatusStamp>(find.byType(StatusStamp));
+          expect(
+            stamp.family,
+            isNull,
+            reason:
+                '$label must not be forced to neutral when no tone is supplied',
+          );
+
+          final text = tester.widget<Text>(
+            find.descendant(
+              of: find.byType(StatusStamp),
+              matching: find.text(label.toUpperCase()),
+            ),
+          );
+          expect(text.style?.color, ink, reason: label);
         }
       },
     );

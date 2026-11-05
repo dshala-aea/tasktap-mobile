@@ -37,7 +37,7 @@ Notes:
 
 | API | When to use | Replaces |
 |---|---|---|
-| `DetailHeroData.kind` + `DetailHeroVariant.summary` | The 10 master-data details. The summary layout puts the entity title and facts (`subtitle`) **inside** the hero card, with a rotated `StatusStamp` top-right and the primary action (`Modifica`, or `Apri PDF` for Report admin). | A per-screen hero rebuilt in each detail. |
+| `DetailHeroData.kind` + `DetailHeroVariant.summary` | The 10 master-data details. The summary layout puts the entity title and facts (`subtitle`) **inside** the hero card, with a rotated `StatusStamp` top-right and the primary action (`Modifica`, or `Apri PDF` for Report admin). Set `DetailStatus.tone` only for labels outside the `statusFamilyOf` vocabulary (`Attiva`, `In garanzia`, `6 sotto scorta`, `Oggi`, …); omitting it keeps the label-based mapping. | A per-screen hero rebuilt in each detail. |
 | `DetailLinkRow` | A row in the prototype's section stack: bold name left, mono meta right, hairline, 44px target. Use for section links (`Relazioni`), date/scadenza facts and movement lines. | Per-screen `_SectionRow` copies. |
 
 Existing pieces to reuse, not rebuild: `DetailScaffold` (frame, loading/unavailable, collapsed bar),

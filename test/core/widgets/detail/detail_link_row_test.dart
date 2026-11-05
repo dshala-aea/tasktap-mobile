@@ -114,6 +114,26 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('semanticsLabel is honoured on a non-tappable row too', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(
+        _app(
+          const DetailLinkRow(
+            title: 'Sintesi',
+            meta: '4 campi',
+            semanticsLabel: 'Sintesi. Quattro campi',
+          ),
+        ),
+      );
+
+      expect(find.bySemanticsLabel('Sintesi. Quattro campi'), findsOneWidget);
+
+      handle.dispose();
+    });
+
     testWidgets('a custom trailing widget replaces the meta text', (
       tester,
     ) async {

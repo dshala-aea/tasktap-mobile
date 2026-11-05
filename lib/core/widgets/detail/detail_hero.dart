@@ -25,20 +25,22 @@ enum DetailHeroVariant { operational, summary }
 /// The semantic family a status belongs to, for consumers that need to react to its meaning
 /// without parsing the Italian label.
 ///
-/// The visible [StatusStamp] still resolves its own family through `statusFamilyOf`, exactly like
-/// every other status display in the app; this enum is the data-level tone the shell can later use
-/// for the collapsed bar and action gating.
+/// This is an override, not a replacement for the label mapping: when [DetailStatus.tone] is
+/// null the visible `StatusStamp` resolves its own family through `statusFamilyOf`, exactly like
+/// every other status display in the app. Set it only for labels outside that vocabulary
+/// (`Attiva`, `In garanzia`, `6 sotto scorta`, `Oggi`, …).
 enum DetailStatusTone { neutral, info, good, warn, bad }
 
-/// One status line in a detail hero: the label rendered in the stamp, plus its semantic tone.
+/// One status line in a detail hero: the label rendered in the stamp, plus an optional semantic
+/// tone override.
 class DetailStatus {
-  const DetailStatus({
-    required this.label,
-    this.tone = DetailStatusTone.neutral,
-  });
+  const DetailStatus({required this.label, this.tone});
 
   final String label;
-  final DetailStatusTone tone;
+
+  /// Explicit family override. Null lets the stamp derive the family from [label] via
+  /// `statusFamilyOf`.
+  final DetailStatusTone? tone;
 }
 
 /// One compact label/value pair, rendered by `DetailFactsGrid`.
@@ -361,8 +363,9 @@ class DetailHero extends StatelessWidget {
     );
   }
 
-  static StatusFamily _familyForTone(DetailStatusTone tone) {
+  static StatusFamily? _familyForTone(DetailStatusTone? tone) {
     return switch (tone) {
+      null => null,
       DetailStatusTone.neutral => StatusFamily.neutral,
       DetailStatusTone.info => StatusFamily.info,
       DetailStatusTone.good => StatusFamily.good,

@@ -99,7 +99,14 @@ class DetailLinkRow extends StatelessWidget {
       ),
     );
 
-    if (onTap == null) return content;
+    if (onTap == null) {
+      if (semanticsLabel == null) return content;
+      return Semantics(
+        label: semanticsLabel,
+        excludeSemantics: true,
+        child: content,
+      );
+    }
 
     // The label must describe what is actually on screen: when `trailing` replaces `meta`, the
     // hidden meta string must not be announced, and the trailing widget must keep its own
