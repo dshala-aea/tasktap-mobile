@@ -12,9 +12,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart' show BusinessTime, formatDateOnly;
-import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
-import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
+import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/features/ticket/ticket_list_screen.dart';
@@ -200,14 +198,6 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         connectivityProvider.overrideWith(_FakeConnectivity.new),
         internalUserIdProvider.overrideWith((ref) async => 'u1'),
-        cachedEntitlementProvider.overrideWith(
-          (ref) async => Entitlement(
-            features: const {'interventi'},
-            capabilities: const {'interventi.ticket.write'},
-            seatType: 'field',
-            fetchedAt: DateTime.utc(2026, 11, 2),
-          ),
-        ),
       ],
     );
 

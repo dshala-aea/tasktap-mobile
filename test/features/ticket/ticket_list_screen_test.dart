@@ -12,9 +12,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart' show BusinessTime, formatDateOnly;
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
-import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
+import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
@@ -35,17 +33,9 @@ class _FakeConnectivity extends ConnectivityNotifier {
   Future<bool> build() async => _value;
 }
 
-Entitlement _withCapabilities(Set<String> capabilities) => Entitlement(
-  features: const {},
-  capabilities: capabilities,
-  seatType: 'field',
-  fetchedAt: DateTime.utc(2026, 11, 2),
-);
-
 Widget _buildList({
   required AppDatabase db,
   required MockAuthRepository repo,
-  Entitlement? entitlement,
   bool online = true,
   String? myId = 'u1',
 }) {
@@ -56,7 +46,6 @@ Widget _buildList({
       dioProvider.overrideWithValue(MockDio()),
       connectivityProvider.overrideWith(() => _FakeConnectivity(online)),
       internalUserIdProvider.overrideWith((ref) async => myId),
-      if (entitlement != null) cachedEntitlementProvider.overrideWith((ref) async => entitlement),
     ],
     child: const MaterialApp(home: TicketListScreen()),
   );
@@ -94,15 +83,8 @@ void main() {
     await db.close();
   });
 
-  Future<void> pump(
-    WidgetTester tester, {
-    Entitlement? entitlement,
-    bool online = true,
-    String? myId = 'u1',
-  }) async {
-    await tester.pumpWidget(
-      _buildList(db: db, repo: repo, entitlement: entitlement, online: online, myId: myId),
-    );
+  Future<void> pump(WidgetTester tester, {bool online = true, String? myId = 'u1'}) async {
+    await tester.pumpWidget(_buildList(db: db, repo: repo, online: online, myId: myId));
     await tester.pump();
     authStream.add(fakeUser);
     await tester.pumpAndSettle(const Duration(seconds: 2));
@@ -284,6 +266,25 @@ void main() {
       await disposeScreen(tester);
     });
 
+    testWidgets('the Oggi chip shows due-today tickets, not every open ticket', (tester) async {
+      final todayCivil = BusinessTime.fallback().businessToday();
+      final todayLabel = formatDateOnly(todayCivil)!;
+      final tomorrowLabel = formatDateOnly(todayCivil.add(const Duration(days: 1)))!;
+
+      await seedStatus(1, 'Aperto');
+      await seedTicket(id: 't-oggi', title: 'Oggi per scadenza', dueDate: todayLabel);
+      await seedTicket(id: 't-domani', title: 'Aperto ma domani', dueDate: tomorrowLabel);
+
+      await pump(tester);
+
+      await tester.tap(find.text('OGGI'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Oggi per scadenza'), findsOneWidget);
+      expect(find.text('Aperto ma domani'), findsNothing);
+      await disposeScreen(tester);
+    });
+
     testWidgets('shows a status stamp with the resolved status name', (tester) async {
       await seedStatus(1, 'Aperto');
       await seedTicket(id: 't1', title: 'Un ticket');
@@ -446,19 +447,11 @@ void main() {
       await disposeScreen(tester);
     });
 
-    testWidgets('Nuovo is shown with the ticket write capability', (tester) async {
-      await pump(tester, entitlement: _withCapabilities(const {'interventi.ticket.write'}));
+    testWidgets('Nuovo is always shown', (tester) async {
+      await pump(tester);
 
       expect(find.byType(ListHeaderAction), findsOneWidget);
       expect(find.text('NUOVO'), findsOneWidget);
-      await disposeScreen(tester);
-    });
-
-    testWidgets('Nuovo is hidden when the capability is denied', (tester) async {
-      await pump(tester);
-
-      expect(find.byType(ListHeaderAction), findsNothing);
-      expect(find.text('NUOVO'), findsNothing);
       await disposeScreen(tester);
     });
 
@@ -485,7 +478,7 @@ void main() {
     // has no inline action slot, so Correggi/Riprova/Elimina live in a row action sheet; these
     // tests open it and assert the same choices the previous inline row offered.
 
-    testWidgets('a failed pending ticket offers retry in its action sheet', (tester) async {
+    testWidgets('a failed pending ticket offers retry inline', (tester) async {
       await db
           .into(db.pendingTickets)
           .insert(
@@ -532,10 +525,8 @@ void main() {
 
       expect(find.text('Ticket in coda'), findsOneWidget);
       expect(find.textContaining('attesa di connessione'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('pending-pt-2')));
-      await tester.pumpAndSettle();
       expect(find.text('Riprova'), findsNothing);
-      expect(find.text('Elimina'), findsOneWidget);
+      expect(find.byTooltip('Elimina'), findsOneWidget);
       await disposeScreen(tester);
     });
 
@@ -663,8 +654,6 @@ void main() {
           );
 
       await pump(tester);
-      await tester.tap(find.byKey(const ValueKey('pending-pt-rep3')));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Correggi'));
       await tester.pumpAndSettle();
 
