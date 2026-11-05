@@ -6,8 +6,13 @@ import '../../data/local/app_database.dart';
 import '../../data/reference/reference_cache_repository.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
+import '../ticket/ticket_providers.dart'
+    show closedTicketStatusIdsProvider, ticketIsClosed, ticketsProvider;
 
-/// All active customers, alphabetical by company name.
+/// Active customers only, alphabetical by company name.
+///
+/// Kept for call sites that genuinely want the active set; the Clienti list uses
+/// [allClientiCustomersProvider] so its `Attivi · Tutti · Inattivi` chips and groups have real data.
 final customersProvider = StreamProvider.autoDispose<List<Customer>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.customers)
@@ -15,6 +20,53 @@ final customersProvider = StreamProvider.autoDispose<List<Customer>>((ref) {
         ..orderBy([(c) => OrderingTerm.asc(c.companyName)]))
       .watch();
 });
+
+/// Every mirrored customer — active and inactive — alphabetical by company name.
+final allClientiCustomersProvider = StreamProvider.autoDispose<List<Customer>>((
+  ref,
+) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(
+    db.customers,
+  )..orderBy([(c) => OrderingTerm.asc(c.companyName)])).watch();
+});
+
+/// Open-ticket count per customer id, from the local mirror.
+///
+/// "Open" uses the same predicate as the ticket list (`closedAt` or a closing status), not the
+/// raw row count: a plain count includes every mirrored ticket, closed ones included, which is
+/// not what the prototype's `ticket aperti` says.
+final customerOpenTicketCountsProvider = Provider.autoDispose<Map<String, int>>(
+  (ref) {
+    final tickets = ref.watch(ticketsProvider).valueOrNull ?? const <Ticket>[];
+    final closedStatusIds =
+        ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const <int>{};
+    final counts = <String, int>{};
+    for (final ticket in tickets) {
+      if (ticketIsClosed(ticket, closedStatusIds)) continue;
+      counts[ticket.customerId] = (counts[ticket.customerId] ?? 0) + 1;
+    }
+    return counts;
+  },
+);
+
+/// Active-contract count per customer id, from the local reference mirror.
+///
+/// The mirror is technician-scoped (it carries the contracts this device's payload included), so
+/// this is a local, possibly partial view — never invented, and never a network read.
+final activeContractCountsByCustomerProvider =
+    StreamProvider.autoDispose<Map<String, int>>((ref) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(
+        db.contracts,
+      )..where((c) => c.isActive.equals(true))).watch().map((rows) {
+        final counts = <String, int>{};
+        for (final row in rows) {
+          counts[row.customerId] = (counts[row.customerId] ?? 0) + 1;
+        }
+        return counts;
+      });
+    });
 
 /// Look up a single [Customer] by id from the local cache.
 /// (Re-exported convenience alias — original lives in schedule_providers.dart)
@@ -24,16 +76,6 @@ final customerDetailProvider = StreamProvider.autoDispose
       return (db.select(
         db.customers,
       )..where((c) => c.id.equals(id))).watchSingleOrNull();
-    });
-
-/// Count of tickets belonging to [customerId] from the local Drift cache.
-final ticketCountForCustomerProvider = StreamProvider.autoDispose
-    .family<int, String>((ref, customerId) {
-      final db = ref.watch(appDatabaseProvider);
-      return (db.select(db.tickets)
-            ..where((t) => t.customerId.equals(customerId)))
-          .watch()
-          .map((rows) => rows.length);
     });
 
 /// All tickets for a given [customerId], most-recent first.
@@ -89,6 +131,7 @@ final clienteOverviewProvider = FutureProvider.autoDispose
 /// now carries the rows, so this reads the cache the way every other list on that screen does.
 final customerContactsProvider = StreamProvider.autoDispose
     .family<List<CustomerContactRow>, String>(
-      (ref, customerId) =>
-          ref.watch(referenceCacheProvider).watchContactsForCustomer(customerId),
+      (ref, customerId) => ref
+          .watch(referenceCacheProvider)
+          .watchContactsForCustomer(customerId),
     );
