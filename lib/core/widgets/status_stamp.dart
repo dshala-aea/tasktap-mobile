@@ -28,12 +28,21 @@ class StatusStamp extends StatelessWidget {
     required this.stato,
     this.size = StampSize.medium,
     this.animate = false,
+    this.family,
   });
 
   /// Italian status string — same vocabulary [statusFamilyOf] already maps.
   final String stato;
 
   final StampSize size;
+
+  /// Overrides the family [statusFamilyOf] would pick from [stato].
+  ///
+  /// List shells need this: their data carries a semantic tone (`Pianificato`, `In scadenza`,
+  /// `Principale`, … are not all in the status vocabulary), while the stamp text must stay the
+  /// exact label the list shows. Null keeps the string-based behaviour every existing call site
+  /// relies on.
+  final StatusFamily? family;
 
   /// Plays the "stamping" in-flight entrance once on mount: scale 1.18 → 0.95 → 1 over 220ms with
   /// a 1° rotation settle, no bounce after (frontend DESIGN.md's States section). Off by default —
@@ -43,8 +52,12 @@ class StatusStamp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final family = statusFamilyOf(stato);
-    final style = _StampStyle.forFamily(family, context.colors, context.vetro);
+    final resolvedFamily = family ?? statusFamilyOf(stato);
+    final style = _StampStyle.forFamily(
+      resolvedFamily,
+      context.colors,
+      context.vetro,
+    );
     final label = stato.trim().toUpperCase();
 
     final metrics = switch (size) {
