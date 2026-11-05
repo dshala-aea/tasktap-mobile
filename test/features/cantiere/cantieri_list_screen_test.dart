@@ -64,18 +64,24 @@ Future<void> _insertCustomer(AppDatabase db, String id, String name) {
       );
 }
 
-/// Inserts a closed ingresso→uscita interval at 08:00–09:00 of the business day today.
-Future<void> _insertPunchToday(AppDatabase db, String cantiereId) async {
+/// Inserts a closed ingresso→uscita interval on the business day today.
+Future<void> _insertPunchInterval(
+  AppDatabase db,
+  String cantiereId, {
+  required int startHour,
+  required int endHour,
+  required String suffix,
+}) async {
   final bt = BusinessTime.fallback();
   final start = bt
       .utcRangeForBusinessDate(bt.businessToday())
       .$1
-      .add(const Duration(hours: 8));
+      .add(Duration(hours: startHour));
   await db
       .into(db.cantierePunches)
       .insert(
         CantierePunchesCompanion.insert(
-          id: 'e-$cantiereId-1',
+          id: 'e-$cantiereId-$suffix-in',
           eventTime: start,
           eventType: 'ingresso',
           cantiereId: Value(cantiereId),
@@ -85,12 +91,16 @@ Future<void> _insertPunchToday(AppDatabase db, String cantiereId) async {
       .into(db.cantierePunches)
       .insert(
         CantierePunchesCompanion.insert(
-          id: 'e-$cantiereId-2',
-          eventTime: start.add(const Duration(hours: 1)),
+          id: 'e-$cantiereId-$suffix-out',
+          eventTime: start.add(Duration(hours: endHour - startHour)),
           eventType: 'uscita',
         ),
       );
 }
+
+/// Inserts the default 08:00–09:00 interval used by most tests.
+Future<void> _insertPunchToday(AppDatabase db, String cantiereId) =>
+    _insertPunchInterval(db, cantiereId, startHour: 8, endHour: 9, suffix: '1');
 
 void main() {
   // The empty state's own copy tells the technician to "trascina in basso per aggiornare" —
@@ -348,6 +358,123 @@ void main() {
     },
   );
 
+  testWidgets('the Cliente facet narrows to that customer', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _insertCustomer(db, 'cust1', 'Rossi Srl');
+    await _insertCustomer(db, 'cust2', 'Bianchi Srl');
+    await _insertCantiere(
+      db,
+      id: 'c1',
+      name: 'Alfa Rossi',
+      customerId: 'cust1',
+      city: 'Milano',
+    );
+    await _insertCantiere(
+      db,
+      id: 'c2',
+      name: 'Bravo Bianchi',
+      customerId: 'cust2',
+      city: 'Sesto',
+    );
+
+    await _pumpScreen(tester, db);
+
+    await tester.tap(find.text('FILTRI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cantieriFilterCliente')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rossi Srl').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cantieriFilterApply')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alfa Rossi'), findsOneWidget);
+    expect(find.text('Bravo Bianchi'), findsNothing);
+
+    await db.close();
+  });
+
+  testWidgets('the Sede facet narrows to that city', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _insertCantiere(db, id: 'c1', name: 'Alfa Milano', city: 'Milano');
+    await _insertCantiere(db, id: 'c2', name: 'Bravo Sesto', city: 'Sesto');
+
+    await _pumpScreen(tester, db);
+
+    await tester.tap(find.text('FILTRI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cantieriFilterSede')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sesto').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cantieriFilterApply')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bravo Sesto'), findsOneWidget);
+    expect(find.text('Alfa Milano'), findsNothing);
+
+    await db.close();
+  });
+
+  testWidgets('the Periodo facet narrows by cantiere dates', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final bt = BusinessTime.fallback();
+    final todayStart = bt.utcRangeForBusinessDate(bt.businessToday()).$1;
+    await _insertCantiere(
+      db,
+      id: 'c1',
+      name: 'Alfa Passato',
+      startDate: todayStart.subtract(const Duration(days: 40)),
+      endDate: todayStart.subtract(const Duration(days: 30)),
+    );
+    await _insertCantiere(
+      db,
+      id: 'c2',
+      name: 'Bravo Futuro',
+      startDate: todayStart.subtract(const Duration(days: 5)),
+      endDate: todayStart.add(const Duration(days: 30)),
+    );
+
+    await _pumpScreen(tester, db);
+
+    await tester.tap(find.text('FILTRI'));
+    await tester.pumpAndSettle();
+    // Accept the picker's default (today) as the `Da` bound; the fixture has a wide margin.
+    await tester.tap(find.text('Da'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('cantieriFilterApply')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bravo Futuro'), findsOneWidget);
+    expect(find.text('Alfa Passato'), findsNothing);
+
+    await db.close();
+  });
+
+  testWidgets('the today toggle is hidden for planned and closed presets', (
+    tester,
+  ) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _insertCantiere(db, id: 'c1', name: 'Alfa Attivo');
+
+    await _pumpScreen(tester, db);
+
+    await tester.tap(find.text('FILTRI'));
+    await tester.pumpAndSettle();
+    expect(find.text('Solo da seguire oggi'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('cantieriFilterStato')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Chiusi').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Solo da seguire oggi'), findsNothing);
+
+    await db.close();
+  });
+
   testWidgets('row meta shows customer, place and crew size', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     await _insertCustomer(db, 'cust1', 'Rossi Srl');
@@ -386,9 +513,8 @@ void main() {
 
   // ── "Timbrato oggi" per-row indicator ───────────────────────────────────
   //
-  // Reuses cantiereTodayHoursProvider/cantiereActiveSessionProvider — the same "did I log any
-  // cantiere worklog today for this cantiere" signal cantiere_timbra_screen.dart's own OGGI
-  // header already reads — rather than a new query.
+  // Derived from the same `todayCantiereEventsProvider` local stream that backs
+  // `cantiereTodayHoursProvider`, plus `cantiereActiveSessionProvider` for the live visit.
 
   testWidgets(
     'shows a "Timbrato oggi" line for a cantiere with a closed interval today',
@@ -401,6 +527,36 @@ void main() {
 
       expect(find.textContaining('Timbrato oggi'), findsOneWidget);
       expect(find.textContaining('08:00–09:00'), findsOneWidget);
+
+      await db.close();
+    },
+  );
+
+  testWidgets(
+    'two visits to the same cantiere show the summed total, not an envelope',
+    (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _insertCantiere(db, id: 'c1', name: 'Alfa Cantiere');
+      await _insertPunchInterval(
+        db,
+        'c1',
+        startHour: 8,
+        endHour: 9,
+        suffix: 'a',
+      );
+      await _insertPunchInterval(
+        db,
+        'c1',
+        startHour: 12,
+        endHour: 13,
+        suffix: 'b',
+      );
+
+      await _pumpScreen(tester, db);
+
+      expect(find.textContaining('Timbrato oggi · 2h 00m'), findsOneWidget);
+      // 08:00–13:00 would claim the two-hour gap between visits.
+      expect(find.textContaining('08:00–13:00'), findsNothing);
 
       await db.close();
     },

@@ -36,11 +36,7 @@ import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../presentation/providers/schedule_providers.dart'
     show allCantieriProvider, allCustomersProvider;
 import '../timbra/cantiere_timbra_screen.dart'
-    show
-        cantiereActiveSessionProvider,
-        cantiereTodayHoursProvider,
-        formatHoursMinutes,
-        todayCantiereEventsProvider;
+    show cantiereActiveSessionProvider, formatHoursMinutes, todayCantiereEventsProvider;
 
 /// The four quick-filter presets from `filterConfig.cantieri` / the prototype chip row.
 enum _CantiereFilter { attivi, tutti, pianificati, chiusi }
@@ -54,6 +50,10 @@ extension on _CantiereFilter {
     _CantiereFilter.pianificati => 'Pianificati',
     _CantiereFilter.chiusi => 'Chiusi',
   };
+
+  /// Only the presets that can contain a cantiere punched today. Under `Pianificati`/`Chiusi`
+  /// the `Solo da seguire oggi` toggle is guaranteed to empty the list, so it is not offered.
+  bool get supportsTodayFilter => this == _CantiereFilter.attivi || this == _CantiereFilter.tutti;
 }
 
 /// The quick chip plus every facet reachable from the `Filtri` sheet.
@@ -134,12 +134,16 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
   }
 
   void _selectFilter(ListFilterChipData chip) {
+    final status = _CantiereFilter.values.firstWhere(
+      (f) => f.id == chip.id,
+      orElse: () => _CantiereFilter.attivi,
+    );
     setState(() {
       _filters = _filters.copyWith(
-        status: _CantiereFilter.values.firstWhere(
-          (f) => f.id == chip.id,
-          orElse: () => _CantiereFilter.attivi,
-        ),
+        status: status,
+        // A today-only restriction cannot be met by a planned/closed-only set; clear it rather
+        // than leave the quick chip showing an empty list for a reason the user cannot see.
+        onlyToday: status.supportsTodayFilter ? _filters.onlyToday : false,
       );
     });
   }
@@ -173,42 +177,32 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
     final activeSession = ref.watch(cantiereActiveSessionProvider);
     final activeCantiereId = activeSession?.cantiereId;
 
-    final todayHoursById = <String, Duration>{
-      for (final c in allCantieri) c.id: ref.watch(cantiereTodayHoursProvider(c.id)),
-    };
-
-    // First ingresso / last uscita per cantiere today, for the prototype's `08:30–12:30` line.
+    // Today's punches already come from one local stream. Pair them ingresso→uscita sequentially
+    // (exactly like `cantiereTodayHoursProvider`) so multiple visits to the same cantiere stay
+    // separate intervals; a min-start/max-end envelope would include time spent elsewhere.
     final todayEvents = ref.watch(todayCantiereEventsProvider).valueOrNull ?? const [];
-    final todayRanges = <String, ({DateTime? start, DateTime? end})>{};
+    final todayIntervals = <String, List<({DateTime start, DateTime end})>>{};
+    final todayHoursById = <String, Duration>{};
     CantierePunche? opener;
     for (final event in todayEvents) {
       switch (event.eventType) {
         case 'ingresso':
           opener = event;
-          final cantiereId = event.cantiereId;
-          if (cantiereId != null) {
-            final current = todayRanges[cantiereId];
-            final start = current?.start;
-            if (start == null || event.eventTime.isBefore(start)) {
-              todayRanges[cantiereId] = (start: event.eventTime, end: current?.end);
-            }
-          }
         case 'uscita':
-          final cantiereId = opener?.cantiereId;
-          if (cantiereId != null) {
-            final current = todayRanges[cantiereId];
-            final start = current?.start ?? opener!.eventTime;
-            final end = current?.end;
-            if (end == null || event.eventTime.isAfter(end)) {
-              todayRanges[cantiereId] = (start: start, end: event.eventTime);
-            }
+          final open = opener;
+          final cantiereId = open?.cantiereId;
+          if (open != null && cantiereId != null && !event.eventTime.isBefore(open.eventTime)) {
+            (todayIntervals[cantiereId] ??= []).add((start: open.eventTime, end: event.eventTime));
+            todayHoursById[cantiereId] =
+                (todayHoursById[cantiereId] ?? Duration.zero) +
+                event.eventTime.difference(open.eventTime);
           }
           opener = null;
       }
     }
 
     bool isPlanned(CantieriData c) =>
-        c.status == 0 && c.startDate != null && c.startDate!.isAfter(businessTime.nowInstant());
+        c.status == 0 && c.startDate != null && c.startDate!.isAfter(businessTime.businessToday());
 
     bool isToday(CantieriData c) =>
         c.status == 0 &&
@@ -269,10 +263,13 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
         if (activeCantiereId == c.id && todayLabel != null) {
           secondary = 'In corso · dalle $todayLabel';
         } else {
-          final range = todayRanges[c.id];
-          final rangeLabel = range?.start != null && range?.end != null
-              ? '${businessTime.formatInZone(range!.start!, 'HH:mm')}–'
-                    '${businessTime.formatInZone(range.end!, 'HH:mm')}'
+          final intervals = todayIntervals[c.id] ?? const [];
+          // One visit keeps the prototype's `08:30–12:30` range. Two or more visits cannot be
+          // collapsed into one range without claiming time spent on another cantiere, so show
+          // the day's summed duration instead.
+          final rangeLabel = intervals.length == 1
+              ? '${businessTime.formatInZone(intervals.single.start, 'HH:mm')}–'
+                    '${businessTime.formatInZone(intervals.single.end, 'HH:mm')}'
               : null;
           secondary = rangeLabel == null
               ? 'Timbrato oggi · ${formatHoursMinutes(todayHoursById[c.id] ?? Duration.zero)}'
@@ -327,8 +324,10 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
     // "Da seguire oggi" reads as the day's sequence, not as an alphabet: order it by the first
     // check-in. Other groups stay alphabetical, matching the list's existing order.
     today.sort((a, b) {
-      final startA = todayRanges[a.id]?.start;
-      final startB = todayRanges[b.id]?.start;
+      final intervalsA = todayIntervals[a.id];
+      final intervalsB = todayIntervals[b.id];
+      final startA = intervalsA == null || intervalsA.isEmpty ? null : intervalsA.first.start;
+      final startB = intervalsB == null || intervalsB.isEmpty ? null : intervalsB.first.start;
       if (startA == null && startB == null) {
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       }
@@ -537,7 +536,13 @@ class _CantiereFilterSheetState extends State<_CantiereFilterSheet> {
                     DropdownMenuItem(value: f, child: Text(f.label)),
                 ],
                 onChanged: (v) {
-                  if (v != null) setState(() => _draft = _draft.copyWith(status: v));
+                  if (v == null) return;
+                  setState(() {
+                    _draft = _draft.copyWith(
+                      status: v,
+                      onlyToday: v.supportsTodayFilter ? _draft.onlyToday : false,
+                    );
+                  });
                 },
               ),
             ),
@@ -614,14 +619,16 @@ class _CantiereFilterSheetState extends State<_CantiereFilterSheet> {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              key: const Key('cantieriFilterOnlyToday'),
-              contentPadding: EdgeInsets.zero,
-              value: _draft.onlyToday,
-              onChanged: (v) => setState(() => _draft = _draft.copyWith(onlyToday: v)),
-              title: const Text('Solo da seguire oggi'),
-            ),
+            if (_draft.status.supportsTodayFilter) ...[
+              const SizedBox(height: 8),
+              SwitchListTile(
+                key: const Key('cantieriFilterOnlyToday'),
+                contentPadding: EdgeInsets.zero,
+                value: _draft.onlyToday,
+                onChanged: (v) => setState(() => _draft = _draft.copyWith(onlyToday: v)),
+                title: const Text('Solo da seguire oggi'),
+              ),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [
