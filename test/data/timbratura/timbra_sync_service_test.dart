@@ -504,4 +504,26 @@ void main() {
       },
     );
   });
+
+  group('events that can never form an interval', () {
+    // The upload queue carries only the PENDING rows of an earlier day. When that day's opener
+    // already reached the server, its later pausa/fine arrive without it; the assembler has nothing
+    // to close and emits no interval. Such a row can never be sent, and left pending it is counted
+    // by the "in coda" banner and freezes the reconciler forever.
+    test('a past-day pausa/fine whose opener is already synced is drained, not stuck', () async {
+      final repo = _FakeRepo(
+        [],
+        pendingBeyondToday: [
+          _ws('late-pause', 'pausa', DateTime.utc(2026, 6, 20, 12)),
+          _ws('late-out', 'fine', DateTime.utc(2026, 6, 20, 17)),
+        ],
+      );
+      final api = _FakeApiClient();
+      final svc = TimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(repo.markedSynced, containsAll(['late-pause', 'late-out']));
+    });
+  });
 }

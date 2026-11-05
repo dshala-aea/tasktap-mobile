@@ -248,7 +248,21 @@ class TimbraSyncService {
     if (!day.any((s) => s.isPendingSync)) return true;
 
     final intervals = assembleIntervals(day, businessDateOf: _businessTime.businessDateOf);
-    if (intervals.isEmpty) return true;
+    if (intervals.isEmpty) {
+      // Nothing here can be sent: a closing event (pausa/fine) whose opener is not in this batch
+      // — the opener already reached the server, and the upload queue only carries the PENDING
+      // rows of an earlier day. Returning without marking them left them pending forever: counted
+      // by the "in coda" banner, freezing the reconciler, and never drained by any later sync.
+      final stranded = day.where((s) => s.isPendingSync).map((s) => s.id).toList();
+      if (stranded.isNotEmpty) {
+        CrashReporter.instance.addBreadcrumb(
+          'timbra sync: retired ${stranded.length} event(s) with no interval to send',
+          category: 'sync',
+        );
+        await _repo.markSynced(stranded);
+      }
+      return true;
+    }
 
     MobileSessionDto toDto(WorkInterval i) => MobileSessionDto(
       clientId: i.clientId,
@@ -322,22 +336,19 @@ class TimbraSyncService {
     return at != null && _clock().isBefore(at);
   }
 
-  /// The batch endpoint is whole-batch atomic (one refused item fails everything), so what to do
-  /// depends on WHY, read from the ProblemDetails `code`:
+  /// The batch endpoint is whole-batch atomic. A PERMANENT refusal (any 4xx that is not transient:
+  /// 409 `active_session_exists`, `payroll_period_locked`, 400/403/404/413/422 ...) means the
+  /// server has looked at this data and decided.
   ///
-  /// - 409 `active_session_exists`: the server already holds an open row. The data is still the
-  ///   technician's record, so NOTHING is retired. The events stay pending and visible, are retried
-  ///   with the same backoff as any other refusal, and the technician is told once that they are
-  ///   waiting. Retiring them used to hide the break (or the whole shift) from the day and from the
-  ///   unsent count: the phone showed a pausa the office never received, with no way back except a
-  ///   support visit. The reconciler's own unsynced guard deliberately keeps the local view in
-  ///   charge until the batch is accepted or the office resolves the server's shift.
-  /// - EVERYTHING ELSE (403, 400, 404, 413, 422, `payroll_period_locked`, other 409s): the server
-  ///   refused, but the data is the technician's record. Nothing is retired or discarded; events
-  ///   stay pending. We back off (30s, 60s, 120s, ...), stop after 5 attempts per app session, and
-  ///   show ONE accurate message per failure kind. Held events count as unsynced, so the
-  ///   reconciler leaves the phone's own view in charge and visible — the safe payroll direction —
-  ///   until the office resolves it or a later attempt succeeds.
+  /// The server is the authority and the phone only suggests: the events are retired from the
+  /// queue — kept on the device under [syncFailedMarker] for support, never uploaded again, no
+  /// longer pending — and the reconciler adopts whatever the server holds. Holding them pending
+  /// instead (the previous behaviour) made the queue grow for ever: the same refused batch was
+  /// retried until the backoff gave up, the "in coda" banner never cleared, and pending events
+  /// froze the reconciler so the phone kept showing a day the office had already settled.
+  ///
+  /// The queue always drains. Resolving a disagreement is the office's job, on the server, not a
+  /// state the phone sits in. The technician is told once per failure kind.
   ///
   /// Every permanent refusal is also reported to the crash reporter (status, stable code and
   /// event count only — no ids, no times). In a release build `debugPrint` is compiled out, so
@@ -349,9 +360,11 @@ class TimbraSyncService {
     final pending = sessions.where((s) => s.isPendingSync).toList();
     if (pending.isEmpty) return;
 
-    _batchFailures++;
-    final backoff = Duration(seconds: 30 * (1 << (_batchFailures - 1).clamp(0, 6)));
-    _batchRetryAt = _clock().add(backoff);
+    for (final s in pending) {
+      await _repo.markSyncFailed(s.id);
+    }
+    _batchFailures = 0;
+    _batchRetryAt = null;
 
     final status = e.response?.statusCode;
     final conflict = status == 409 && code == 'active_session_exists';
@@ -361,8 +374,7 @@ class TimbraSyncService {
       if (conflict) {
         final n = pending.length;
         _onNotice?.call(
-          '$batchConflictMessage Restano sul telefono ($n '
-          '${n == 1 ? 'timbratura' : 'timbrature'}) e verranno ritentate.',
+          '$batchConflictMessage ($n ${n == 1 ? 'evento conservato' : 'eventi conservati'})',
         );
       } else {
         _onNotice?.call(
@@ -372,10 +384,11 @@ class TimbraSyncService {
         );
       }
     }
+    _onRemoteCommandsApplied?.call();
 
     final summary =
-        'timbra sync refused: status=${status ?? e.type.name} code=${code ?? '-'} '
-        'events=${pending.length} attempt=$_batchFailures/$_maxBatchAttempts';
+        'timbra sync refused, retired: status=${status ?? e.type.name} code=${code ?? '-'} '
+        'events=${pending.length}';
     debugPrint('TimbraSyncService: $summary');
     CrashReporter.instance.addBreadcrumb(summary, category: 'sync');
     unawaited(CrashReporter.instance.captureMessage(summary));
