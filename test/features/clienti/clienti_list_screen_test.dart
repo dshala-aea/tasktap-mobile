@@ -118,7 +118,7 @@ void main() {
             tenantId: 'tenant-1',
             createdAt: DateTime.utc(2021, 1, 1),
             companyName: 'ACME Srl',
-            city: const Value('Milano'),
+            city: const Value(' Milano '),
             taxId: const Value('01234567890'),
           ),
         );
@@ -377,6 +377,27 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('a city with stray whitespace still matches the city facet', (
+    tester,
+  ) async {
+    await seedCustomers(db);
+    await pump(tester);
+    await openFilters(tester);
+
+    await tester.tap(find.byKey(const Key('clienti-filter-city')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Milano').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('clienti-filter-apply')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ACME Srl'), findsOneWidget);
+    expect(find.text('Beta SpA'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('the Filtri sheet filters by active contract', (tester) async {
     await seedCustomers(db);
     await seedContracts(db);
@@ -468,6 +489,29 @@ void main() {
       ),
     );
     expect(find.byType(ListHeaderAction), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a status-only filter that matches nothing says no result', (
+    tester,
+  ) async {
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'only-inactive',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2021, 1, 1),
+            companyName: 'Gamma Snc',
+            isActive: const Value(false),
+          ),
+        );
+    await pump(tester);
+
+    expect(find.text('Nessun risultato'), findsOneWidget);
+    expect(find.text('Nessun cliente'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

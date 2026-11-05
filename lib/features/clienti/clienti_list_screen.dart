@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/time/business_time_providers.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_freshness_provider.dart';
@@ -124,11 +125,15 @@ class _ClientiListBody extends ConsumerWidget {
     final contractCounts =
         ref.watch(activeContractCountsByCustomerProvider).valueOrNull ??
         const <String, int>{};
+    final businessTime = ref.watch(businessTimeProvider);
 
     final filtered = allCustomers.where((c) {
       if (!_matchesStatus(c, filters.status)) return false;
       if (!_matchesQuery(c, query)) return false;
-      if (filters.city != null && c.city != filters.city) return false;
+      if (_cityKey(filters.city) != null &&
+          _cityKey(c.city) != _cityKey(filters.city)) {
+        return false;
+      }
       final contractCount = contractCounts[c.id] ?? 0;
       if (filters.contracts == _ContractFilter.conAttivo &&
           contractCount == 0) {
@@ -160,6 +165,7 @@ class _ClientiListBody extends ConsumerWidget {
                   c,
                   openTickets: openTicketCounts[c.id] ?? 0,
                   contracts: contractCounts[c.id] ?? 0,
+                  fromYear: businessTime.businessDateOf(c.createdAt).year,
                   context: context,
                 ),
               )
@@ -176,6 +182,7 @@ class _ClientiListBody extends ConsumerWidget {
                   c,
                   openTickets: openTicketCounts[c.id] ?? 0,
                   contracts: contractCounts[c.id] ?? 0,
+                  fromYear: businessTime.businessDateOf(c.createdAt).year,
                   context: context,
                 ),
               )
@@ -374,15 +381,6 @@ class _ClientiListBody extends ConsumerWidget {
     required bool neverSynced,
     required bool hasCustomers,
   }) {
-    if (query.isNotEmpty || filters.hasFacets) {
-      return EmptyState(
-        icon: LucideIcons.searchX,
-        title: 'Nessun risultato',
-        body: query.isNotEmpty
-            ? 'Nessun cliente corrisponde a "$query".'
-            : 'Nessun cliente corrisponde ai filtri selezionati.',
-      );
-    }
     if (!hasCustomers && neverSynced) {
       return const EmptyState(
         icon: LucideIcons.cloudOff,
@@ -399,10 +397,14 @@ class _ClientiListBody extends ConsumerWidget {
         body: 'Non ci sono clienti da mostrare.',
       );
     }
-    return const EmptyState(
-      icon: LucideIcons.users,
-      title: 'Nessun cliente',
-      body: 'Nessun cliente corrisponde allo stato selezionato.',
+    return EmptyState(
+      icon: LucideIcons.searchX,
+      title: 'Nessun risultato',
+      body: query.isNotEmpty
+          ? 'Nessun cliente corrisponde a "$query".'
+          : filters.hasFacets || filters.status != _CustomerStatusFilter.tutti
+          ? 'Nessun cliente corrisponde ai filtri selezionati.'
+          : 'Nessun cliente corrisponde allo stato selezionato.',
     );
   }
 
@@ -412,6 +414,11 @@ class _ClientiListBody extends ConsumerWidget {
       _CustomerStatusFilter.inattivi => !c.isActive,
       _CustomerStatusFilter.tutti => true,
     };
+  }
+
+  static String? _cityKey(String? city) {
+    final trimmed = city?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
   }
 
   static bool _matchesQuery(Customer c, String query) {
@@ -427,11 +434,12 @@ class _ClientiListBody extends ConsumerWidget {
     Customer customer, {
     required int openTickets,
     required int contracts,
+    required int fromYear,
     required BuildContext context,
   }) {
+    final city = _cityKey(customer.city);
     final parts = <String>[
-      if (customer.city != null && customer.city!.trim().isNotEmpty)
-        customer.city!.trim(),
+      ?city,
       _ticketLabel(openTickets),
       _contractLabel(contracts),
     ];
@@ -439,7 +447,7 @@ class _ClientiListBody extends ConsumerWidget {
     return ListRowData(
       title: customer.companyName,
       meta: parts.join(' · '),
-      secondary: 'Cliente dal ${customer.createdAt.toLocal().year}',
+      secondary: 'Cliente dal $fromYear',
       status: customer.isActive ? 'Attivo' : 'Inattivo',
       statusTone: customer.isActive ? ListStatusTone.good : ListStatusTone.bad,
       onTap: () => context.push(AppRoutes.clientiDetail(customer.id)),

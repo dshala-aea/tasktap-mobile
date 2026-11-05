@@ -34,8 +34,8 @@ final allClientiCustomersProvider = StreamProvider.autoDispose<List<Customer>>((
 /// Open-ticket count per customer id, from the local mirror.
 ///
 /// "Open" uses the same predicate as the ticket list (`closedAt` or a closing status), not the
-/// raw row count: [ticketCountForCustomerProvider] counts every echoed ticket, archived ones
-/// included, which is not what the prototype's `ticket aperti` says.
+/// raw row count: a plain count includes every mirrored ticket, closed ones included, which is
+/// not what the prototype's `ticket aperti` says.
 final customerOpenTicketCountsProvider = Provider.autoDispose<Map<String, int>>(
   (ref) {
     final tickets = ref.watch(ticketsProvider).valueOrNull ?? const <Ticket>[];
@@ -76,16 +76,6 @@ final customerDetailProvider = StreamProvider.autoDispose
       return (db.select(
         db.customers,
       )..where((c) => c.id.equals(id))).watchSingleOrNull();
-    });
-
-/// Count of tickets belonging to [customerId] from the local Drift cache.
-final ticketCountForCustomerProvider = StreamProvider.autoDispose
-    .family<int, String>((ref, customerId) {
-      final db = ref.watch(appDatabaseProvider);
-      return (db.select(db.tickets)
-            ..where((t) => t.customerId.equals(customerId)))
-          .watch()
-          .map((rows) => rows.length);
     });
 
 /// All tickets for a given [customerId], most-recent first.
