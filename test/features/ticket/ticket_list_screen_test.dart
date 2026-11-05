@@ -475,8 +475,8 @@ void main() {
     // ── Pending tickets (2026-08-30 polish pass) ────────────────────────────
     //
     // Pending rows are grouped under `In sospeso` at the top of the list. The shared row contract
-    // has no inline action slot, so Correggi/Riprova/Elimina live in a row action sheet; these
-    // tests open it and assert the same choices the previous inline row offered.
+    // has no action slot, so each shared row is followed by its original inline action strip;
+    // these tests assert the same choices that existed before the redesign.
 
     testWidgets('a failed pending ticket offers retry inline', (tester) async {
       await db
