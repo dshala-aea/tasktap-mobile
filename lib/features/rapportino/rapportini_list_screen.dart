@@ -20,11 +20,15 @@ import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
 import '../../data/reports/import_server_report.dart' show ServerReportNotEditableException;
+import '../../data/sync/connectivity_provider.dart' show connectivityProvider;
 import '../../data/sync/sync_freshness_provider.dart';
 import '../../data/sync/sync_service.dart';
+import '../../domain/reports/customer_signature_absence_reason.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import '../../presentation/providers/schedule_providers.dart'
     show allColleaguesProvider, allCustomersProvider, allLocationsProvider;
+import '../admin/admin_providers.dart' show adminCustomersProvider;
+import '../admin/locations/admin_location_list_screen.dart' show adminLocationsProvider;
 import '../ticket/ticket_label.dart' show ticketReference;
 import 'create_draft.dart';
 import 'import_server_report_action.dart';
@@ -220,13 +224,16 @@ class _RapportiniListBody extends ConsumerWidget {
     final allDrafts = draftsAsync.valueOrNull ?? const <DraftReport>[];
     final businessTime = ref.watch(businessTimeProvider);
 
-    // One stream each for the whole list, not one per row: the old row opened two live Drift
-    // subscriptions per visible report, and this list can run long.
+    // One stream each for the whole list, not one per row. These are deliberately the UNFILTERED
+    // admin streams: a report's customer/site can be deactivated after the report was written, and
+    // its mirror row still exists. Filtering the lookup to active rows would make the meta line
+    // silently drop a name the report still references (the view screen resolves names unfiltered
+    // too). The sheet's Cliente/Sede pickers keep their active-only streams.
     final customersById = {
-      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[]) c.id: c,
+      for (final c in ref.watch(adminCustomersProvider).valueOrNull ?? const <Customer>[]) c.id: c,
     };
     final locationsById = {
-      for (final l in ref.watch(allLocationsProvider).valueOrNull ?? const <Location>[]) l.id: l,
+      for (final l in ref.watch(adminLocationsProvider).valueOrNull ?? const <Location>[]) l.id: l,
     };
 
     final filtered = allDrafts.where((draft) {
@@ -244,7 +251,6 @@ class _RapportiniListBody extends ConsumerWidget {
 
     return Column(
       children: [
-        const OfflineSyncBanner(),
         ScreenHeader(
           title: 'Rapportini',
           subtitle: 'Il documento che deve uscire dal cantiere: bozza, firma, invio.',
@@ -585,7 +591,9 @@ class _RapportinoRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summary = ref.watch(rapportinoRowSummaryProvider(draft.id));
+    // Only the hours label is used here. `rapportinoRowSummaryProvider` also opens the staff and
+    // materiali streams, which this row never reads.
+    final oreLabel = ref.watch(rapportinoOreProvider(draft.id));
 
     final statusLabel = rapportinoStatusLabel(draft);
     final opensEditor = rapportinoOpensEditor(draft);
@@ -598,7 +606,7 @@ class _RapportinoRow extends ConsumerWidget {
     ].where((part) => part.isNotEmpty).join(' · ');
 
     final signature = _signatureLabel(draft);
-    final secondary = [signature, if (summary.oreLabel != '—') summary.oreLabel].join(' · ');
+    final secondary = [signature, if (oreLabel != '—') oreLabel].join(' · ');
 
     final reference = ticketReference(draft.numero);
     final title = reference == null ? draft.title : '${draft.title} · $reference';
@@ -660,6 +668,11 @@ class _RapportinoRow extends ConsumerWidget {
       if (draft.stato == 'Bozza' && !draft.isLocalOnly) {
         if (!_importingReportIds.add(draft.id)) return;
         try {
+          // The duplicate OfflineSyncBanner is gone (HomeShell owns the global one), and the
+          // import below reads `isOnlineProvider`. Without a settled connectivity answer that
+          // convenience bool is false while the notifier is still loading, which would send an
+          // online phone down the mirror-only path. Wait for the real verdict first.
+          await ref.read(connectivityProvider.future);
           await importServerReportForEditing(ref, reportId: draft.id);
         } on ServerReportNotEditableException {
           if (!context.mounted) return;
@@ -695,10 +708,15 @@ class _RapportinoRow extends ConsumerWidget {
 String _signatureLabel(DraftReport draft) {
   final hasTechnician = draft.technicianSignatureAllegatoId != null;
   final hasCustomer = draft.customerSignatureAllegatoId != null;
-  final hasAbsenceReason = draft.customerSignatureAbsenceReason != null;
+  final absenceReason = CustomerSignatureAbsenceReason.fromWire(
+    draft.customerSignatureAbsenceReason,
+  );
 
   if (hasTechnician && hasCustomer) return '2 firme';
-  if (hasTechnician && hasAbsenceReason) return 'Firma cliente non richiesta';
+  // The absence column is "why the customer did not sign" (`Assente/Rifiuta/Altro`), not a
+  // blanket "not required". Show what was actually recorded; an unknown wire value falls back to
+  // the neutral missing-signature wording.
+  if (hasTechnician && absenceReason != null) return absenceReason.summaryLabel;
   if (hasTechnician) return 'Firma cliente mancante';
   if (hasCustomer) return 'Firma tecnico mancante';
   return 'Nessuna firma';

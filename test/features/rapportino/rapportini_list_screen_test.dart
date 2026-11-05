@@ -150,7 +150,12 @@ Future<void> _seedDraft(
       );
 }
 
-Future<void> _seedCustomer(AppDatabase db, {required String id, required String name}) async {
+Future<void> _seedCustomer(
+  AppDatabase db, {
+  required String id,
+  required String name,
+  bool isActive = true,
+}) async {
   await db
       .into(db.customers)
       .insert(
@@ -159,6 +164,7 @@ Future<void> _seedCustomer(AppDatabase db, {required String id, required String 
           tenantId: 'tenant-1',
           createdAt: DateTime.utc(2026, 1, 1),
           companyName: name,
+          isActive: Value(isActive),
         ),
       );
 }
@@ -168,6 +174,7 @@ Future<void> _seedLocation(
   required String id,
   required String customerId,
   required String name,
+  bool isActive = true,
 }) async {
   await db
       .into(db.locations)
@@ -178,6 +185,7 @@ Future<void> _seedLocation(
           createdAt: DateTime.utc(2026, 1, 1),
           customerId: customerId,
           name: name,
+          isActive: Value(isActive),
         ),
       );
 }
@@ -431,6 +439,62 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Firma cliente mancante'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a recorded absence reason is shown instead of a generic missing signature', (
+      tester,
+    ) async {
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        technicianSignatureId: 'tech-sig',
+        customerSignatureAbsenceReason: 0,
+        createdAt: DateTime.now().toUtc(),
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Cliente assente'), findsOneWidget);
+      expect(find.textContaining('Firma cliente non richiesta'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a deactivated customer and site still show in the row and stay searchable', (
+      tester,
+    ) async {
+      await _seedCustomer(db, id: 'cus-old', name: 'Cliente Dismesso', isActive: false);
+      await _seedLocation(
+        db,
+        id: 'loc-old',
+        customerId: 'cus-old',
+        name: 'Sede Dismessa',
+        isActive: false,
+      );
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'Rapportino storico',
+        customerId: 'cus-old',
+        locationId: 'loc-old',
+        createdAt: DateTime.now().toUtc(),
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cliente Dismesso · Sede Dismessa · oggi'), findsOneWidget);
+
+      for (final query in ['dismesso', 'sede dismessa']) {
+        await tester.enterText(find.byType(TextField), query);
+        await tester.pumpAndSettle();
+        expect(find.text('Rapportino storico'), findsOneWidget, reason: query);
+      }
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -785,6 +849,81 @@ void main() {
 
       expect(find.text('Rapportino Marco'), findsOneWidget);
       expect(find.text('Rapportino Daniel'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the Periodo Da facet excludes reports before the chosen date', (tester) async {
+      await _useTallSurface(tester);
+      final now = DateTime.now();
+      // Far enough from "today" that a device-zone/business-zone day skew cannot flip the verdict.
+      await _seedDraft(
+        db,
+        id: 'recent',
+        title: 'Futuro vicino',
+        updatedAt: now.add(const Duration(days: 5)).toUtc(),
+      );
+      await _seedDraft(
+        db,
+        id: 'old',
+        title: 'Passato lontano',
+        updatedAt: now.subtract(const Duration(days: 30)).toUtc(),
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Qualsiasi').first);
+      await tester.tap(find.text('Qualsiasi').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Futuro vicino'), findsOneWidget);
+      expect(find.text('Passato lontano'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the Periodo A facet excludes reports after the chosen date', (tester) async {
+      await _useTallSurface(tester);
+      final now = DateTime.now();
+      await _seedDraft(
+        db,
+        id: 'recent',
+        title: 'Passato vicino',
+        updatedAt: now.subtract(const Duration(days: 5)).toUtc(),
+      );
+      await _seedDraft(
+        db,
+        id: 'future',
+        title: 'Futuro lontano',
+        updatedAt: now.add(const Duration(days: 30)).toUtc(),
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Qualsiasi').last);
+      await tester.tap(find.text('Qualsiasi').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Passato vicino'), findsOneWidget);
+      expect(find.text('Futuro lontano'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
