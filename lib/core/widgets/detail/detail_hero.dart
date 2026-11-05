@@ -6,6 +6,7 @@ import '../../theme/app_spacing.dart';
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
 import '../app_card.dart';
+import '../status_stamp.dart';
 
 /// The app's minimum touch target for the hero's primary action. The mockup draws it at 42; the
 /// extra 6px keeps it a 48px target without visibly changing the layout.
@@ -75,6 +76,7 @@ class DetailHeroData {
     required this.title,
     required this.variant,
     required this.status,
+    this.kind,
     this.kicker,
     this.kickerContext,
     this.subtitle,
@@ -87,6 +89,12 @@ class DetailHeroData {
   final String title;
   final DetailHeroVariant variant;
   final DetailStatus status;
+
+  /// The mono label inside a summary hero's top row, e.g. `Summary · cliente`.
+  ///
+  /// Operational heroes keep the current status-label treatment; summary heroes (the 10 master
+  /// data details) render a [StatusStamp] on the right instead, matching `other-details.html`.
+  final String? kind;
 
   /// The red part of the mono kicker row above the title, e.g. `TICKET · INT-2026-0412`.
   final String? kicker;
@@ -120,11 +128,17 @@ class DetailHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final showLive =
-        data.variant == DetailHeroVariant.operational && data.liveValue != null;
-    final hasKicker = data.kicker != null || data.kickerContext != null;
+    return switch (data.variant) {
+      DetailHeroVariant.operational => _buildOperational(context),
+      DetailHeroVariant.summary => _buildSummary(context),
+    };
+  }
 
+  Widget _buildKicker(BuildContext context) {
+    if (data.kicker == null && data.kickerContext == null) {
+      return const SizedBox.shrink();
+    }
+    final colors = context.colors;
     final kickerStyle = AppTextStyles.docCode.copyWith(
       fontSize: 9,
       fontWeight: FontWeight.w600,
@@ -132,36 +146,40 @@ class DetailHero extends StatelessWidget {
       color: colors.inkMuted,
     );
 
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        children: [
+          if (data.kicker != null)
+            Flexible(
+              child: Text(
+                data.kicker!.toUpperCase(),
+                key: const Key('detail-hero-kicker'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: kickerStyle.copyWith(color: colors.accentInk),
+              ),
+            ),
+          if (data.kicker != null && data.kickerContext != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              child: Text('·', style: kickerStyle),
+            ),
+          if (data.kickerContext != null)
+            Text(data.kickerContext!.toUpperCase(), style: kickerStyle),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperational(BuildContext context) {
+    final colors = context.colors;
+    final showLive = data.liveValue != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (hasKicker)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-            child: Row(
-              children: [
-                if (data.kicker != null)
-                  Flexible(
-                    child: Text(
-                      data.kicker!.toUpperCase(),
-                      key: const Key('detail-hero-kicker'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: kickerStyle.copyWith(color: colors.accentInk),
-                    ),
-                  ),
-                if (data.kicker != null && data.kickerContext != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm,
-                    ),
-                    child: Text('·', style: kickerStyle),
-                  ),
-                if (data.kickerContext != null)
-                  Text(data.kickerContext!.toUpperCase(), style: kickerStyle),
-              ],
-            ),
-          ),
+        _buildKicker(context),
         Text(
           data.title,
           key: const Key('detail-hero-title'),
@@ -234,6 +252,97 @@ class DetailHero extends StatelessWidget {
               ],
               if (data.primaryAction != null) ...[
                 SizedBox(height: data.heroCopy != null ? 13 : AppSpacing.md),
+                _PrimaryAction(action: data.primaryAction!),
+              ],
+              if (data.secondaryActions.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _SecondaryActions(actions: data.secondaryActions),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The master-data variant from `other-details.html`: the entity title and its facts line live
+  /// inside the hero card, with a rotated status stamp in the top-right. `kind` names the subject
+  /// (`Summary · cliente`); [DetailHeroData.kicker] stays the mono line above the card.
+  Widget _buildSummary(BuildContext context) {
+    final colors = context.colors;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildKicker(context),
+        AppCard(
+          key: const Key('detail-hero-card'),
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  if (data.kind != null)
+                    Expanded(
+                      child: Text(
+                        data.kind!.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.docCode.copyWith(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.64,
+                          color: colors.inkMuted,
+                        ),
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  const SizedBox(width: 8),
+                  StatusStamp(stato: data.status.label, size: StampSize.small),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                data.title,
+                key: const Key('detail-hero-title'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.displayLarge.copyWith(
+                  fontSize: 22,
+                  height: 1,
+                  letterSpacing: -0.44,
+                  color: colors.ink,
+                ),
+              ),
+              if (data.subtitle != null) ...[
+                const SizedBox(height: 3),
+                Text(
+                  data.subtitle!,
+                  key: const Key('detail-hero-subtitle'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    fontSize: 9.5,
+                    height: 1.4,
+                    color: colors.inkMuted,
+                  ),
+                ),
+              ],
+              if (data.heroCopy != null) ...[
+                const SizedBox(height: 6),
+                DefaultTextStyle.merge(
+                  style: AppTextStyles.bodySmall.copyWith(
+                    fontSize: 9.5,
+                    height: 1.4,
+                    color: colors.inkMuted,
+                  ),
+                  child: data.heroCopy!,
+                ),
+              ],
+              if (data.primaryAction != null) ...[
+                const SizedBox(height: 8),
                 _PrimaryAction(action: data.primaryAction!),
               ],
               if (data.secondaryActions.isNotEmpty) ...[
