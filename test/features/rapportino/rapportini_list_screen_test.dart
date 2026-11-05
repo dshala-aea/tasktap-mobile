@@ -1,33 +1,40 @@
 // dart format width=100
 // test/features/rapportino/rapportini_list_screen_test.dart
 //
-// Widget tests for RapportiniListScreen (D3b-2).
+// Widget tests for RapportiniListScreen (redesigned "Il Documento" list).
 //
 // Covers:
-//   1. Renders ListRows from seeded drafts.
-//   2. Filter chip "Bozza" narrows results.
-//   3. EmptyState shown when no drafts.
-//   4. AppFab is present.
-//   5. Submitted draft tap navigates to view route (not editor).
+//   - header / search / quick chips / summary
+//   - prototype group order and data-derived counts
+//   - row anatomy: title+number, cliente/sede/data, firme/ore, status stamp
+//   - the real filter sheet (statuses, Cliente, Sede, Tecnico, Periodo, Solo da inviare)
+//   - search by report, cliente, sede and date
+//   - empty filter vs empty catalogue vs never-synced
+//   - delete (swipe and button), and the Bozza-only editor rule
+//   - 320px layout
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
-import 'package:tasktap_mobile/data/sync/connectivity_provider.dart' show isOnlineProvider;
-import 'package:tasktap_mobile/data/sync/sync_service.dart';
-import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/data/reports/server_report_api_client.dart';
 import 'package:tasktap_mobile/data/reports/server_report_dto.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart'
+    show ConnectivityNotifier, connectivityProvider;
+import 'package:tasktap_mobile/data/sync/pending_sync_count_provider.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportini_list_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
+    show internalUserIdProvider;
 
 import '../../data/reports/server_report_dto_test.dart' show backendFixture;
 
@@ -52,15 +59,19 @@ class _NoopSync extends SyncNotifier {
   Future<void> performSync() async {}
 }
 
-/// [online] is the connectivity answer the screen reads. It defaults to true here because
-/// `isOnlineProvider` is false whenever `connectivity_plus` has no plugin answer, and the offline
-/// branch of `importServerReportForEditing` then promotes the mirrored row instead of fetching —
-/// a different flow, with its own refusal (`ServerReportNotMirroredException`) for a header-only
-/// row. These tests are about the fetch-and-mirror flow, so they must say they are online.
+class _FakeConnectivity extends ConnectivityNotifier {
+  _FakeConnectivity(this._value);
+  final bool _value;
+
+  @override
+  Future<bool> build() async => _value;
+}
+
 Widget _buildRouted({
   required AppDatabase db,
   required ServerReportApiClient api,
   bool online = true,
+  String? internalUserId = 'user-1',
 }) {
   final router = GoRouter(
     routes: [
@@ -80,7 +91,10 @@ Widget _buildRouted({
       appDatabaseProvider.overrideWithValue(db),
       syncProvider.overrideWith((ref) => _NoopSync(db)),
       serverReportApiClientProvider.overrideWithValue(api),
-      isOnlineProvider.overrideWithValue(online),
+      connectivityProvider.overrideWith(() => _FakeConnectivity(online)),
+      pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+      lastSyncProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 6, 1))),
+      internalUserIdProvider.overrideWith((ref) async => internalUserId),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -90,7 +104,11 @@ class MockDio extends Mock implements Dio {}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
+Future<AppDatabase> _makeDb({bool synced = true}) async {
+  final db = AppDatabase(NativeDatabase.memory());
+  if (synced) await db.setLastSync(DateTime.utc(2026, 6, 1));
+  return db;
+}
 
 Future<void> _seedDraft(
   AppDatabase db, {
@@ -100,6 +118,14 @@ Future<void> _seedDraft(
   String stato = 'Bozza',
   bool isLocalOnly = true,
   String? numero,
+  String? customerId,
+  String locationId = 'loc-1',
+  String insertedUserId = 'user-1',
+  String? technicianSignatureId,
+  String? customerSignatureId,
+  int? customerSignatureAbsenceReason,
+  DateTime? updatedAt,
+  DateTime? createdAt,
 }) async {
   await db
       .into(db.draftReports)
@@ -107,23 +133,95 @@ Future<void> _seedDraft(
         DraftReportsCompanion.insert(
           id: id,
           tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 6, 1),
+          createdAt: createdAt ?? DateTime.utc(2026, 6, 1),
+          updatedAt: Value(updatedAt),
           title: title,
           numero: Value(numero),
-          insertedUserId: 'user-1',
-          locationId: 'loc-1',
+          insertedUserId: insertedUserId,
+          customerId: Value(customerId),
+          locationId: locationId,
           isLocalOnly: Value(isLocalOnly),
           stato: Value(stato),
           submissionState: Value(submissionState),
+          technicianSignatureAllegatoId: Value(technicianSignatureId),
+          customerSignatureAllegatoId: Value(customerSignatureId),
+          customerSignatureAbsenceReason: Value(customerSignatureAbsenceReason),
+        ),
+      );
+}
+
+Future<void> _seedCustomer(AppDatabase db, {required String id, required String name}) async {
+  await db
+      .into(db.customers)
+      .insert(
+        CustomersCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          companyName: name,
+        ),
+      );
+}
+
+Future<void> _seedLocation(
+  AppDatabase db, {
+  required String id,
+  required String customerId,
+  required String name,
+}) async {
+  await db
+      .into(db.locations)
+      .insert(
+        LocationsCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          customerId: customerId,
+          name: name,
+        ),
+      );
+}
+
+Future<void> _seedColleague(AppDatabase db, {required String id, required String name}) async {
+  await db.into(db.colleagues).insert(ColleaguesCompanion.insert(id: id, displayName: name));
+}
+
+Future<void> _seedHours(AppDatabase db, {required String reportId, required double hours}) async {
+  await db
+      .into(db.reportStaffTable)
+      .insert(
+        ReportStaffTableCompanion.insert(
+          id: 'staff-$reportId',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 6, 1),
+          reportId: reportId,
+          userId: 'user-1',
+          hoursWorked: Value(hours),
         ),
       );
 }
 
 Widget _buildList({required AppDatabase db}) {
   return ProviderScope(
-    overrides: [appDatabaseProvider.overrideWithValue(db)],
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      connectivityProvider.overrideWith(() => _FakeConnectivity(true)),
+      pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+      lastSyncProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 6, 1))),
+    ],
     child: const MaterialApp(home: RapportiniListScreen()),
   );
+}
+
+/// The quick chips live in [ListFilterRow]; group headings share the same texts, so always
+/// scope a chip lookup to the filter row.
+Finder _quickChip(String label) =>
+    find.descendant(of: find.byType(ListFilterRow), matching: find.text(label.toUpperCase()));
+
+/// A tall surface so a whole bottom sheet, and every group heading in a long list, is built.
+Future<void> _useTallSurface(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(800, 1600));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -135,8 +233,73 @@ void main() {
   });
 
   late AppDatabase db;
-  setUp(() => db = _makeDb());
+  setUp(() async => db = await _makeDb());
   tearDown(() async => db.close());
+
+  group('RapportiniListScreen — header and shell', () {
+    testWidgets('shows the prototype title, subtitle, search hint and Nuovo action', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rapportini'), findsOneWidget);
+      expect(
+        find.text('Il documento che deve uscire dal cantiere: bozza, firma, invio.'),
+        findsOneWidget,
+      );
+      expect(find.text('Cerca rapportino, cliente, sede o data…'), findsOneWidget);
+      expect(find.text('NUOVO'), findsOneWidget);
+      expect(find.byType(AppFab), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('quick chips map to the prototype, with Tutti selected by default', (tester) async {
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(_quickChip('Tutti'), findsOneWidget);
+      expect(_quickChip('Da inviare'), findsOneWidget);
+      expect(_quickChip('In revisione'), findsOneWidget);
+      expect(_quickChip('Fatturati'), findsOneWidget);
+      expect(_quickChip('Firmati'), findsNothing);
+      expect(find.text('FILTRI'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Nuovo creates a local draft and opens its editor', (tester) async {
+      await tester.pumpWidget(_buildRouted(db: db, api: _FakeServerApi()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('NUOVO'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('editor:'), findsOneWidget);
+      expect(await db.select(db.draftReports).get(), hasLength(1));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Nuovo without a signed-in author warns and does not navigate', (tester) async {
+      await tester.pumpWidget(_buildRouted(db: db, api: _FakeServerApi(), internalUserId: null));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('NUOVO'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Accedi per creare un rapporto di intervento.'), findsOneWidget);
+      expect(find.textContaining('editor:'), findsNothing);
+      expect(await db.select(db.draftReports).get(), isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
 
   group('RapportiniListScreen — row rendering', () {
     testWidgets('renders one row per seeded draft, titled', (tester) async {
@@ -146,8 +309,6 @@ void main() {
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
-      // Vetro (module #3) replaced ListRow with a bespoke priority-striped row, same as the
-      // ticket list — the behaviour that matters is "one row per draft, showing its title."
       expect(find.text('Intervento idraulico'), findsOneWidget);
       expect(find.text('Revisione caldaia'), findsOneWidget);
 
@@ -155,22 +316,20 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows StatusPill with Bozza for a draft-state report', (tester) async {
+    testWidgets('shows the status stamp label for a draft', (tester) async {
       await _seedDraft(db, id: 'draft-1', submissionState: 'draft');
 
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.byType(StatusPill), findsWidgets);
-      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
-      // status_pill_test.dart's own note on this rendering change.
+      expect(find.byType(StatusStamp), findsWidgets);
       expect(find.text('BOZZA'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows StatusPill with Inviata for a submitted report', (tester) async {
+    testWidgets('shows Inviata for a submitted report', (tester) async {
       await _seedDraft(
         db,
         id: 'draft-1',
@@ -181,8 +340,6 @@ void main() {
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
-      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
-      // status_pill_test.dart's own note on this rendering change.
       expect(find.text('INVIATA'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -198,19 +355,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('INVIO FALLITO'), findsWidgets);
-      expect(
-        find.text('BOZZA'),
-        findsNothing,
-        reason: 'a background-flush failure must be visible without opening the draft',
-      );
+      expect(find.text('BOZZA'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    // Field-parity gap: the server numbers a rapportino (`numero`) and mobile never stored it, so
-    // the list could only show a title — two "Manutenzione caldaia" rows were indistinguishable.
-    testWidgets('a numbered report leads its subtitle with the number', (tester) async {
+    testWidgets('a numbered report shows its number next to the title', (tester) async {
       await _seedDraft(
         db,
         id: 'draft-1',
@@ -239,6 +390,491 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    testWidgets('the meta line is cliente · sede · data and the secondary is firme · ore', (
+      tester,
+    ) async {
+      await _seedCustomer(db, id: 'cus-1', name: 'Rossi Srl');
+      await _seedLocation(db, id: 'loc-1', customerId: 'cus-1', name: 'Milano');
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'Rapportino 2026-0412',
+        customerId: 'cus-1',
+        technicianSignatureId: 'tech-sig',
+        customerSignatureId: 'cust-sig',
+        createdAt: DateTime.now().toUtc(),
+      );
+      await _seedHours(db, reportId: 'draft-1', hours: 4.5);
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rossi Srl · Milano · oggi'), findsOneWidget);
+      expect(find.text('2 firme · 4h 30min'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a report with only the technician signature says the customer is missing', (
+      tester,
+    ) async {
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        technicianSignatureId: 'tech-sig',
+        createdAt: DateTime.now().toUtc(),
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Firma cliente mancante'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportiniListScreen — groups and summary', () {
+    testWidgets('groups server states in the prototype order with derived counts', (tester) async {
+      await _useTallSurface(tester);
+      await _seedDraft(db, id: 'bozza-1', title: 'Bozza 1');
+      await _seedDraft(
+        db,
+        id: 'inviata-1',
+        title: 'Inviata 1',
+        stato: 'Inviato',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+      await _seedDraft(
+        db,
+        id: 'controllata-1',
+        title: 'Controllata 1',
+        stato: 'Controllato',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+      await _seedDraft(
+        db,
+        id: 'fatturata-1',
+        title: 'Fatturata 1',
+        stato: 'Fatturato',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+      await _seedDraft(
+        db,
+        id: 'respinta-1',
+        title: 'Respinta 1',
+        stato: 'Respinto',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+      await _seedDraft(
+        db,
+        id: 'annullata-1',
+        title: 'Annullata 1',
+        stato: 'Annullato',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      final headings = tester
+          .widgetList<ListGroupHeader>(find.byType(ListGroupHeader))
+          .map((h) => h.title)
+          .toList();
+      expect(headings, [
+        'Da inviare',
+        'In revisione',
+        'Controllati',
+        'Fatturati',
+        'Respinti',
+        'Annullati',
+      ]);
+      expect(find.text('6 RAPPORTINI'), findsOneWidget);
+      expect(find.text('1 DA INVIARE'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the summary follows the filtered set', (tester) async {
+      await _seedDraft(db, id: 'bozza-1', title: 'Bozza 1');
+      await _seedDraft(
+        db,
+        id: 'inviata-1',
+        title: 'Inviata 1',
+        stato: 'Inviato',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+      await tester.tap(_quickChip('In revisione'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 RAPPORTINO'), findsOneWidget);
+      expect(find.text('0 DA INVIARE'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportiniListScreen — quick status filters', () {
+    testWidgets('Da inviare keeps every unsent draft and hides submitted reports', (tester) async {
+      await _seedDraft(db, id: 'bozza-1', title: 'Bozza A', submissionState: 'draft');
+      await _seedDraft(db, id: 'pronta-1', title: 'Pronta B', submissionState: 'readyToSubmit');
+      await _seedDraft(db, id: 'fallita-1', title: 'Fallita C', submissionState: 'failed');
+      await _seedDraft(
+        db,
+        id: 'inviata-1',
+        title: 'Inviata D',
+        stato: 'Inviato',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+      await tester.tap(_quickChip('Da inviare'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bozza A'), findsOneWidget);
+      expect(find.text('Pronta B'), findsOneWidget);
+      expect(find.text('Fallita C'), findsOneWidget);
+      expect(find.text('Inviata D'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('In revisione shows only submitted reports', (tester) async {
+      await _seedDraft(db, id: 'bozza-1', title: 'Bozza locale', submissionState: 'draft');
+      await _seedDraft(
+        db,
+        id: 'inviata-1',
+        title: 'Già inviato',
+        stato: 'Inviato',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+      await tester.tap(_quickChip('In revisione'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Già inviato'), findsOneWidget);
+      expect(find.text('Bozza locale'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Fatturati with no local data shows the empty-filter state', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Bozza A');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+      await tester.tap(_quickChip('Fatturati'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.text('Nessun risultato'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Fatturati maps to the invoiced (Pagata) server state', (tester) async {
+      await _seedDraft(db, id: 'bozza-1', title: 'Bozza A');
+      await _seedDraft(
+        db,
+        id: 'fatturata-1',
+        title: 'Fatturata B',
+        stato: 'Fatturato',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+      await tester.tap(_quickChip('Fatturati'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fatturata B'), findsOneWidget);
+      expect(find.text('Bozza A'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the old status filters all remain reachable in the Filtri sheet', (tester) async {
+      await _useTallSurface(tester);
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+
+      for (final label in ['Tutti', 'Bozza', 'Inviata', 'Respinta', 'Pagata', 'Annullato']) {
+        expect(find.widgetWithText(AppChip, label), findsOneWidget, reason: label);
+      }
+      expect(find.text('CLIENTE'), findsOneWidget);
+      expect(find.text('SEDE'), findsOneWidget);
+      expect(find.text('TECNICO'), findsOneWidget);
+      expect(find.text('PERIODO'), findsOneWidget);
+      expect(find.text('Solo da inviare'), findsOneWidget);
+      expect(find.text('Applica'), findsOneWidget);
+      expect(find.text('Azzera'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('applying the retained Respinta facet filters the list', (tester) async {
+      await _useTallSurface(tester);
+      await _seedDraft(db, id: 'bozza-1', title: 'Bozza A');
+      await _seedDraft(
+        db,
+        id: 'respinta-1',
+        title: 'Respinta B',
+        stato: 'Respinto',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppChip, 'Respinta'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Respinta B'), findsOneWidget);
+      expect(find.text('Bozza A'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Azzera clears an applied filter', (tester) async {
+      await _useTallSurface(tester);
+      await _seedDraft(db, id: 'bozza-1', title: 'Bozza A');
+      await _seedDraft(
+        db,
+        id: 'respinta-1',
+        title: 'Respinta B',
+        stato: 'Respinto',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppChip, 'Respinta'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bozza A'), findsNothing);
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Azzera'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bozza A'), findsOneWidget);
+      expect(find.text('Respinta B'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the Cliente facet filters by customer', (tester) async {
+      await _useTallSurface(tester);
+      await _seedCustomer(db, id: 'cus-1', name: 'Rossi Srl');
+      await _seedCustomer(db, id: 'cus-2', name: 'Bianchi Srl');
+      await _seedDraft(db, id: 'rossi', title: 'Cliente Rossi', customerId: 'cus-1');
+      await _seedDraft(db, id: 'bianchi', title: 'Cliente Bianchi', customerId: 'cus-2');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byType(DropdownButtonFormField<String?>).first);
+      await tester.tap(find.byType(DropdownButtonFormField<String?>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rossi Srl').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cliente Rossi'), findsOneWidget);
+      expect(find.text('Cliente Bianchi'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the Sede facet filters by location', (tester) async {
+      await _useTallSurface(tester);
+      await _seedLocation(db, id: 'loc-1', customerId: 'cus-1', name: 'Milano');
+      await _seedLocation(db, id: 'loc-2', customerId: 'cus-1', name: 'Sesto');
+      await _seedDraft(db, id: 'milano', title: 'Sede Milano', locationId: 'loc-1');
+      await _seedDraft(db, id: 'sesto', title: 'Sede Sesto', locationId: 'loc-2');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byType(DropdownButtonFormField<String?>).at(1));
+      await tester.tap(find.byType(DropdownButtonFormField<String?>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sesto').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sede Sesto'), findsOneWidget);
+      expect(find.text('Sede Milano'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the Tecnico facet filters by the inserted user', (tester) async {
+      await _useTallSurface(tester);
+      await _seedColleague(db, id: 'user-1', name: 'Daniel Shala');
+      await _seedColleague(db, id: 'user-2', name: 'Marco Rossi');
+      await _seedDraft(db, id: 'daniel', title: 'Rapportino Daniel', insertedUserId: 'user-1');
+      await _seedDraft(db, id: 'marco', title: 'Rapportino Marco', insertedUserId: 'user-2');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byType(DropdownButtonFormField<String?>).at(2));
+      await tester.tap(find.byType(DropdownButtonFormField<String?>).at(2));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Marco Rossi').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rapportino Marco'), findsOneWidget);
+      expect(find.text('Rapportino Daniel'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Solo da inviare keeps only unsent reports', (tester) async {
+      await _useTallSurface(tester);
+      await _seedDraft(db, id: 'bozza-1', title: 'Bozza A');
+      await _seedDraft(
+        db,
+        id: 'inviata-1',
+        title: 'Inviata B',
+        stato: 'Inviato',
+        submissionState: 'submitted',
+        isLocalOnly: false,
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(AppToggle));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bozza A'), findsOneWidget);
+      expect(find.text('Inviata B'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportiniListScreen — search', () {
+    testWidgets('matches report title, customer, site and date', (tester) async {
+      await _seedCustomer(db, id: 'cus-1', name: 'Rossi Srl');
+      await _seedLocation(db, id: 'loc-1', customerId: 'cus-1', name: 'Milano');
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'Manutenzione caldaia',
+        customerId: 'cus-1',
+        createdAt: DateTime.utc(2026, 11, 12),
+      );
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      for (final query in ['manutenzione', 'rossi', 'milano', '12/11/26']) {
+        await tester.enterText(find.byType(TextField), query);
+        await tester.pumpAndSettle();
+        expect(find.text('Manutenzione caldaia'), findsOneWidget, reason: query);
+      }
+
+      await tester.enterText(find.byType(TextField), 'inesistente');
+      await tester.pumpAndSettle();
+      expect(find.text('Nessun risultato'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportiniListScreen — empty states', () {
+    testWidgets('an empty catalogue shows "Nessun rapportino" once synced', (tester) async {
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.text('Nessun rapportino'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a never-synced device says the data is not downloaded yet', (tester) async {
+      final fresh = await _makeDb(synced: false);
+      addTearDown(fresh.close);
+
+      await tester.pumpWidget(_buildList(db: fresh));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rapportini non ancora scaricati'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 
   group('RapportiniListScreen — opening a server-created Bozza', () {
@@ -252,7 +888,9 @@ void main() {
 
       expect(find.text('editor:srv-1'), findsOneWidget);
       expect(await db.select(db.reportStaffTable).get(), hasLength(1));
-      final row = await (db.select(db.draftReports)..where((r) => r.id.equals('srv-1'))).getSingle();
+      final row = await (db.select(
+        db.draftReports,
+      )..where((r) => r.id.equals('srv-1'))).getSingle();
       expect(row.diagnosi, 'Pompa bloccata');
       expect(row.isLocalOnly, isTrue);
 
@@ -327,117 +965,6 @@ void main() {
     });
   });
 
-  group('RapportiniListScreen — filter chip', () {
-    testWidgets('filter Bozza shows only bozza drafts', (tester) async {
-      await _seedDraft(db, id: 'draft-1', title: 'Bozza A', submissionState: 'draft');
-      await _seedDraft(db, id: 'draft-2', title: 'Inviata B', submissionState: 'submitted');
-
-      await tester.pumpWidget(_buildList(db: db));
-      await tester.pumpAndSettle();
-
-      // Both visible initially under "Tutti"
-      expect(find.text('Bozza A'), findsOneWidget);
-      expect(find.text('Inviata B'), findsOneWidget);
-
-      // Tap "Bozza" chip
-      final bozzaChip = find.widgetWithText(AppChip, 'Bozza').first;
-      await tester.ensureVisible(bozzaChip);
-      await tester.tap(bozzaChip);
-      await tester.pumpAndSettle();
-
-      // Only Bozza A should remain
-      expect(find.text('Bozza A'), findsOneWidget);
-      expect(find.text('Inviata B'), findsNothing);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('filter Bozza keeps a draft whose last send failed', (tester) async {
-      await _seedDraft(db, id: 'draft-1', title: 'Invio andato male', submissionState: 'failed');
-      await _seedDraft(db, id: 'draft-2', title: 'Inviata B', submissionState: 'submitted');
-
-      await tester.pumpWidget(_buildList(db: db));
-      await tester.pumpAndSettle();
-
-      final bozzaChip = find.widgetWithText(AppChip, 'Bozza').first;
-      await tester.ensureVisible(bozzaChip);
-      await tester.tap(bozzaChip);
-      await tester.pumpAndSettle();
-
-      // It is still an unsent draft on this device — its own pill just says so. Matching on the
-      // pill label alone would drop it out of every chip but "Tutti".
-      expect(find.text('Invio andato male'), findsOneWidget);
-      expect(find.text('Inviata B'), findsNothing);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('filter Inviata shows only submitted drafts', (tester) async {
-      await _seedDraft(db, id: 'draft-1', title: 'Bozza locale', submissionState: 'draft');
-      await _seedDraft(db, id: 'draft-2', title: 'Già inviato', submissionState: 'submitted');
-
-      await tester.pumpWidget(_buildList(db: db));
-      await tester.pumpAndSettle();
-
-      final inviataCip = find.widgetWithText(AppChip, 'Inviata').first;
-      await tester.ensureVisible(inviataCip);
-      await tester.tap(inviataCip);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Già inviato'), findsOneWidget);
-      expect(find.text('Bozza locale'), findsNothing);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('filter Pagata shows empty state (no local data yet)', (tester) async {
-      await _seedDraft(db, id: 'draft-1', title: 'Bozza A');
-
-      await tester.pumpWidget(_buildList(db: db));
-      await tester.pumpAndSettle();
-
-      final pagataChip = find.widgetWithText(AppChip, 'Pagata').first;
-      await tester.ensureVisible(pagataChip);
-      await tester.tap(pagataChip);
-      await tester.pumpAndSettle();
-
-      expect(find.byType(EmptyState), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-  });
-
-  group('RapportiniListScreen — empty state', () {
-    testWidgets('shows EmptyState when no drafts exist', (tester) async {
-      await tester.pumpWidget(_buildList(db: db));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(EmptyState), findsOneWidget);
-      expect(find.text('Nessun rapporto di intervento'), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-  });
-
-  group('RapportiniListScreen — FAB', () {
-    testWidgets('AppFab is present', (tester) async {
-      await tester.pumpWidget(_buildList(db: db));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(AppFab), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-  });
-
-  // Item 13: edit/delete now follow the backend's own "before office review" boundary
-  // (ReportStateMachine.CanEditOrDelete — Bozza/Inviato/Respinto), not draft-only.
   group('RapportiniListScreen — delete a draft (swipe, before office review)', () {
     late MockDio mockDio;
 
@@ -452,6 +979,9 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),
+        connectivityProvider.overrideWith(() => _FakeConnectivity(true)),
+        pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+        lastSyncProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 6, 1))),
       ],
       child: const MaterialApp(home: RapportiniListScreen()),
     );
@@ -472,6 +1002,22 @@ void main() {
 
       expect(find.text('Da eliminare'), findsNothing);
       expect(await db.select(db.draftReports).get(), isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the inline Elimina button offers the same delete path', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Da eliminare', submissionState: 'draft');
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Elimina'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Elimina'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Da eliminare'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -560,7 +1106,6 @@ void main() {
   // whose first autosave rewrites `stato:'Bozza'` + `isLocalOnly:true` over the server's copy.
   group('RapportiniListScreen — only a Bozza opens the editor', () {
     for (final caso in const [
-      // (stato, submissionState) — every shape a synced non-Bozza report arrives in.
       ('Inviato', 'submitted'),
       ('Respinto', 'submitted'),
       ('Controllato', 'submitted'),
@@ -583,11 +1128,12 @@ void main() {
 
         expect(find.text('view:srv-1'), findsOneWidget);
         expect(find.text('editor:srv-1'), findsNothing);
-        // Nothing was imported (or rewritten) either.
-        expect((await (db.select(db.draftReports)
-                  ..where((r) => r.id.equals('srv-1')))
-              .getSingle())
-            .stato, caso.$1);
+        expect(
+          (await (db.select(
+            db.draftReports,
+          )..where((r) => r.id.equals('srv-1'))).getSingle()).stato,
+          caso.$1,
+        );
 
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();
@@ -611,6 +1157,9 @@ void main() {
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             dioProvider.overrideWithValue(mockDio),
+            connectivityProvider.overrideWith(() => _FakeConnectivity(true)),
+            pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+            lastSyncProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 6, 1))),
           ],
           child: const MaterialApp(home: RapportiniListScreen()),
         ),
@@ -623,8 +1172,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('serve la connessione'), findsOneWidget);
-      // Not deleted: the server copy still exists, so a local delete would have resurrected it
-      // on the next sync.
       expect(find.text('Da eliminare'), findsOneWidget);
       expect(await db.select(db.draftReports).get(), hasLength(1));
 
@@ -644,6 +1191,9 @@ void main() {
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             dioProvider.overrideWithValue(mockDio),
+            connectivityProvider.overrideWith(() => _FakeConnectivity(true)),
+            pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+            lastSyncProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 6, 1))),
           ],
           child: const MaterialApp(home: RapportiniListScreen()),
         ),
@@ -664,25 +1214,32 @@ void main() {
     });
   });
 
-  group('RapportiniListScreen — header', () {
-    testWidgets('ScreenHeader shows title Rapportini', (tester) async {
+  group('RapportiniListScreen — narrow layout', () {
+    testWidgets('320px wide with long Italian strings does not overflow', (tester) async {
+      tester.view.physicalSize = const Size(320 * 2, 844 * 2);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+
+      await _seedCustomer(db, id: 'cus-1', name: 'Azienda Costruzioni Rossi & Figli Srl');
+      await _seedLocation(
+        db,
+        id: 'loc-1',
+        customerId: 'cus-1',
+        name: 'Cantiere di ristrutturazione Via Roma angolo Via Verdi',
+      );
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title:
+            'Manutenzione straordinaria dell\'impianto di riscaldamento e verifica delle valvole '
+            'di sicurezza',
+        customerId: 'cus-1',
+      );
+
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rapporti'), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('header subtitle shows totali count', (tester) async {
-      await _seedDraft(db, id: 'draft-1');
-      await _seedDraft(db, id: 'draft-2');
-
-      await tester.pumpWidget(_buildList(db: db));
-      await tester.pumpAndSettle();
-
-      expect(find.text('2 totali'), findsOneWidget);
+      expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
