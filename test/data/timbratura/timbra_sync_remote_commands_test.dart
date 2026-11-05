@@ -493,8 +493,8 @@ void main() {
     );
   });
 
-  group('batch refused with a NON-conflict 4xx: events are held, never retired', () {
-    final held = <(String, DioException, String)>[
+  group('batch refused with a permanent 4xx: the server decides, the queue drains', () {
+    final refused = <(String, DioException, String)>[
       ('403', _problem(403, null), serverErrorMessage),
       ('400', _problem(400, null), serverErrorMessage),
       ('404', _problem(404, null), serverErrorMessage),
@@ -513,58 +513,32 @@ void main() {
       ),
     ];
 
-    for (final (name, error, message) in held) {
-      test(
-        '$name: stays pending, data untouched, one accurate message, capped at 5 attempts',
-        () async {
-          final repo = _Repo([_cmd('i', 'ingresso', _ago(10)), _cmd('f', 'fine', _ago(5))]);
-          final before = List.of(repo.sessions);
-          final failing = _FailingBatchApi(error);
-          final s = TimbraSyncService(
-            repo: repo,
-            apiClient: failing,
-            onRemoteCommandsApplied: () => applied++,
-            onNotice: notices.add,
-            clock: () => clock,
-          );
+    for (final (name, error, message) in refused) {
+      test('$name: retired (kept for support), not pending, one message, sent once', () async {
+        final repo = _Repo([_cmd('i', 'ingresso', _ago(10)), _cmd('f', 'fine', _ago(5))]);
+        final failing = _FailingBatchApi(error);
+        final s = TimbraSyncService(
+          repo: repo,
+          apiClient: failing,
+          onRemoteCommandsApplied: () => applied++,
+          onNotice: notices.add,
+          clock: () => clock,
+        );
 
-          for (var i = 0; i < 12; i++) {
-            await s.syncNow();
-            clock = clock.add(const Duration(hours: 1)); // well past any backoff
-          }
+        for (var i = 0; i < 6; i++) {
+          await s.syncNow();
+          clock = clock.add(const Duration(hours: 1));
+        }
 
-          expect(failing.batchCalls, 5, reason: 'cap of 5 attempts per app session');
-          expect(repo.isPending('i') && repo.isPending('f'), isTrue);
-          expect(repo.sessions.map((e) => e.notes), [
-            null,
-            null,
-          ], reason: 'no marker, nothing retired');
-          expect(repo.sessions.map((e) => e.id), before.map((e) => e.id));
-          expect(applied, 0);
-          expect(notices, [message], reason: 'ONE message per failure kind');
-        },
-      );
+        expect(failing.batchCalls, 1, reason: 'refused once, never retried: nothing is pending');
+        expect(repo.isPending('i') || repo.isPending('f'), isFalse);
+        expect(repo.sessions.map((e) => e.notes), [syncFailedMarker, syncFailedMarker]);
+        expect(applied, 1, reason: 'the reconciler is told to adopt the server\'s view');
+        expect(notices, [message], reason: 'ONE message per failure kind');
+      });
     }
 
-    test('backoff: an immediate second attempt is not made', () async {
-      final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
-      final failing = _FailingBatchApi(_problem(403, null));
-      final s = TimbraSyncService(repo: repo, apiClient: failing, clock: () => clock);
-      await s.syncNow();
-      await s.syncNow();
-      expect(failing.batchCalls, 1);
-    });
-
-    test('a manual sync clears the hold', () async {
-      final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
-      final failing = _FailingBatchApi(_problem(403, null));
-      final s = TimbraSyncService(repo: repo, apiClient: failing, clock: () => clock);
-      await s.syncNow();
-      await s.syncNow(manual: true);
-      expect(failing.batchCalls, 2);
-    });
-
-    test('401 stays transient: no message, no hold', () async {
+    test('401 stays transient: no message, nothing retired, retried', () async {
       final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
       final failing = _FailingBatchApi(_status(401));
       final s = TimbraSyncService(
@@ -576,12 +550,13 @@ void main() {
       await s.syncNow();
       await s.syncNow();
       expect(failing.batchCalls, 2);
+      expect(repo.isPending('i'), isTrue);
       expect(notices, isEmpty);
     });
   });
 
   group('a permanently failing batch (e.g. 409 active_session_exists)', () {
-    test('keeps the events pending and visible, tells the user, never retires them', () async {
+    test('is retired, the user is told how many events were kept, the server view wins', () async {
       final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
       final failing = _FailingBatchApi(_problem(409, 'active_session_exists'));
       final service = TimbraSyncService(
@@ -593,18 +568,16 @@ void main() {
       );
       await service.syncNow();
 
-      // The hours are the technician's record: keep them pending and visible, not retired into a
-      // support-only marker. A retired break is exactly the data the office never receives.
-      expect(repo.isPending('i'), isTrue);
-      expect(repo.sessions.single.notes, isNull);
+      // The phone only suggests; the server already holds an open row, so the queue drains and the
+      // office resolves it. The event stays on the device under a support-only marker.
+      expect(repo.isPending('i'), isFalse);
+      expect(repo.sessions.single.notes, syncFailedMarker);
       expect(notices.single, startsWith(batchConflictMessage));
-      expect(notices.single, contains('Restano sul telefono'));
-      expect(notices.single, contains('1 timbratura'));
-      expect(applied, 0, reason: 'local unsynced punches keep the local view in charge');
-      expect(failing.batchCalls, 1);
+      expect(notices.single, contains('1 evento conservato'));
+      expect(applied, 1);
 
       await service.syncNow();
-      expect(failing.batchCalls, 1, reason: 'the refusal backs off; it is retried later');
+      expect(failing.batchCalls, 1, reason: 'nothing left to send');
     });
 
     test('a transient batch failure (no response) is untouched', () async {
