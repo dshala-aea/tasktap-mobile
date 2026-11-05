@@ -4,43 +4,92 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_rack.dart';
-import '../../core/theme/app_vetro_palette.dart';
+import '../../core/theme/app_palette.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
+import '../../core/time/business_time_providers.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_freshness_provider.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../data/tickets/ticket_deletion.dart';
+import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../../presentation/providers/schedule_providers.dart'
-    show allLocationsProvider, allCustomersProvider;
+    show allColleaguesProvider, allCustomersProvider, allLocationsProvider;
 import 'new_ticket_form_screen.dart';
 import 'ticket_label.dart';
 import 'ticket_providers.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
-/// Filter options for the ticket list.
-enum _TicketFilter { tutti, aperti, inCorso, inAttesa, completati }
+/// Quick-filter presets from the prototype's chip row.
+///
+/// The labels are the prototype's; `Aperti`/`Completati` map onto the same status strings they
+/// always did, under the prototype's copy (`Oggi`/`Chiusi`). The filter sheet mirrors these plus
+/// the combinable facets.
+enum _TicketFilter { tutti, oggi, inCorso, inAttesa, chiusi }
 
-extension _TicketFilterLabel on _TicketFilter {
+extension _TicketFilterX on _TicketFilter {
   String get label => switch (this) {
     _TicketFilter.tutti => 'Tutti',
-    _TicketFilter.aperti => 'Aperti',
+    _TicketFilter.oggi => 'Oggi',
     _TicketFilter.inCorso => 'In corso',
     _TicketFilter.inAttesa => 'In attesa',
-    _TicketFilter.completati => 'Completati',
+    _TicketFilter.chiusi => 'Chiusi',
   };
 
   String? get statusMatch => switch (this) {
     _TicketFilter.tutti => null,
-    _TicketFilter.aperti => 'aperto',
+    _TicketFilter.oggi => 'aperto',
     _TicketFilter.inCorso => 'in corso',
     _TicketFilter.inAttesa => 'in attesa',
-    _TicketFilter.completati => 'completato',
+    _TicketFilter.chiusi => 'completato',
   };
+}
+
+/// Everything the list filters on. Quick chips change [status]; the `Filtri` sheet owns the rest.
+class _TicketFilters {
+  const _TicketFilters({
+    this.status = _TicketFilter.tutti,
+    this.customerId,
+    this.locationId,
+    this.technicianId,
+    this.priority,
+    this.dueFrom,
+    this.dueTo,
+    this.onlyMine = false,
+  });
+
+  final _TicketFilter status;
+  final String? customerId;
+  final String? locationId;
+  final String? technicianId;
+  final String? priority;
+
+  /// Civil dates (`DateTime.utc(y, m, d)`) compared with `Ticket.dueDate`'s civil label.
+  final DateTime? dueFrom;
+  final DateTime? dueTo;
+  final bool onlyMine;
+
+  bool get isActive =>
+      status != _TicketFilter.tutti ||
+      customerId != null ||
+      locationId != null ||
+      technicianId != null ||
+      priority != null ||
+      dueFrom != null ||
+      dueTo != null ||
+      onlyMine;
+
+  _TicketFilters withStatus(_TicketFilter next) => _TicketFilters(
+    status: next,
+    customerId: customerId,
+    locationId: locationId,
+    technicianId: technicianId,
+    priority: priority,
+    dueFrom: dueFrom,
+    dueTo: dueTo,
+    onlyMine: onlyMine,
+  );
 }
 
 class TicketListScreen extends StatefulWidget {
@@ -51,7 +100,7 @@ class TicketListScreen extends StatefulWidget {
 }
 
 class _TicketListScreenState extends State<TicketListScreen> {
-  _TicketFilter _filter = _TicketFilter.tutti;
+  _TicketFilters _filters = const _TicketFilters();
   String _query = '';
   final _searchCtrl = TextEditingController();
 
@@ -61,427 +110,506 @@ class _TicketListScreenState extends State<TicketListScreen> {
     super.dispose();
   }
 
+  Future<void> _openFilters() async {
+    final result = await showModalBottomSheet<_TicketFilters>(
+      context: context,
+      // The ticket branch sits under HomeShell's floating nav (`extendBody: true`); pushing on the
+      // root navigator keeps the sheet above the pill, the same call the schedule list makes.
+      useRootNavigator: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _TicketFilterSheet(initial: _filters),
+    );
+    if (result != null && mounted) setState(() => _filters = result);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: _TicketListBody(
-          filter: _filter,
-          query: _query,
-          searchCtrl: _searchCtrl,
-          onFilterChanged: (f) => setState(() => _filter = f),
-          onQueryChanged: (q) => setState(() => _query = q),
-        ),
-      ),
-      floatingActionButton: Padding(
-        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
-        // this same change.
-        padding: EdgeInsets.only(bottom: context.navClearance),
-        child: AppFab(
-          tooltip: 'Nuovo ticket',
-          onPressed: () async {
-            final created = await context.push<bool>('/ticket/new');
-            if (created == true && mounted) {
-              // List auto-refreshes via StreamProvider, no manual refresh needed.
-            }
-          },
-        ),
-      ),
+    return _TicketListBody(
+      filters: _filters,
+      query: _query,
+      searchCtrl: _searchCtrl,
+      onFilterChanged: (f) => setState(() => _filters = f),
+      onQueryChanged: (q) => setState(() => _query = q),
+      onOpenFilters: _openFilters,
     );
   }
 }
 
+/// Group headings, in the prototype's order. `Chiusi` is the list's own answer to the `Chiusi`
+/// filter — the prototype carries no closed example but does offer the filter.
+const _groupOrder = ['Oggi', 'In corso', 'Altri aperti', 'In attesa', 'Chiusi'];
+
 class _TicketListBody extends ConsumerWidget {
   const _TicketListBody({
-    required this.filter,
+    required this.filters,
     required this.query,
     required this.searchCtrl,
     required this.onFilterChanged,
     required this.onQueryChanged,
+    required this.onOpenFilters,
   });
 
-  final _TicketFilter filter;
+  final _TicketFilters filters;
   final String query;
   final TextEditingController searchCtrl;
-  final ValueChanged<_TicketFilter> onFilterChanged;
+  final ValueChanged<_TicketFilters> onFilterChanged;
   final ValueChanged<String> onQueryChanged;
+  final VoidCallback onOpenFilters;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ticketsAsync = ref.watch(ticketsProvider);
     final statusMapAsync = ref.watch(ticketStatusMapProvider);
-    final pendingTickets = ref.watch(pendingTicketsProvider).valueOrNull ?? [];
+    final statuses = ref.watch(ticketStatusesProvider).valueOrNull ?? const <TicketStatuse>[];
+    final closedIds = ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const <int>{};
+    final pendingTickets = ref.watch(pendingTicketsProvider).valueOrNull ?? const <PendingTicket>[];
 
     // Which of those rows the server has refused over a reference this client can repair. The list
     // observes that fact through its own provider rather than deciding it — the queue owns the
-    // column, and a row leaves this set the moment a repair clears it. The blamed field's *name*
-    // still travels on the row itself, which is what the wizard is seeded from.
+    // column, and a row leaves this set the moment a repair clears it.
     final repairableIds = {
       for (final t in ref.watch(repairablePendingTicketsProvider).valueOrNull ?? <PendingTicket>[])
         t.id,
     };
 
-    final statusMap = statusMapAsync.valueOrNull ?? {};
-    final allTickets = ticketsAsync.valueOrNull ?? [];
+    final statusMap = statusMapAsync.valueOrNull ?? const <int, String>{};
+    final statusById = {for (final s in statuses) s.id: s};
+    final allTickets = ticketsAsync.valueOrNull ?? const <Ticket>[];
 
-    // One stream each for the whole list, not one per row: this list can run to hundreds of
-    // tickets, and a per-row locationByIdProvider/customerByIdProvider watch opened (and tore
-    // down, on scroll-out) two live Drift subscriptions per visible row.
+    // One stream each for the whole list, not one per row: a per-row location/customer/colleague
+    // watch would open (and tear down on scroll-out) live subscriptions for every visible row.
     final locationsById = {
-      for (final l in ref.watch(allLocationsProvider).valueOrNull ?? <Location>[]) l.id: l,
+      for (final l in ref.watch(allLocationsProvider).valueOrNull ?? const <Location>[]) l.id: l,
     };
     final customersById = {
-      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? <Customer>[]) c.id: c,
+      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[]) c.id: c,
     };
+    final colleaguesById = {
+      for (final c in ref.watch(allColleaguesProvider).valueOrNull ?? const <Colleague>[]) c.id: c,
+    };
+    final myId = ref.watch(internalUserIdProvider).valueOrNull;
+    final businessToday = ref.watch(businessTimeProvider).businessToday();
 
-    // Compute counts for subtitle.
-    final inCorsoCount = allTickets.where((t) {
-      final name = statusMap[t.statusId]?.toLowerCase() ?? '';
-      return name == 'in corso';
-    }).length;
+    bool isClosed(Ticket t) => t.closedAt != null || closedIds.contains(t.statusId);
 
-    // Filter + search.
+    String statusNameOf(Ticket t) => statusMap[t.statusId] ?? '';
+
+    bool isInProgress(Ticket t) {
+      final status = statusById[t.statusId];
+      if (status != null) return status.isInProgress;
+      return statusNameOf(t).toLowerCase() == 'in corso';
+    }
+
+    bool isWaiting(Ticket t) => statusNameOf(t).toLowerCase() == 'in attesa';
+
+    String? technicianNameOf(Ticket t) {
+      final id = t.assignedUserId ?? t.agentId;
+      if (id == null) return null;
+      return colleaguesById[id]?.displayName;
+    }
+
+    bool matchesStatus(Ticket t) {
+      switch (filters.status) {
+        case _TicketFilter.tutti:
+          return true;
+        case _TicketFilter.oggi:
+          // The prototype's `Oggi` replaced the old `Aperti` chip: same status under new copy.
+          return !isClosed(t) && statusNameOf(t).toLowerCase() == filters.status.statusMatch;
+        case _TicketFilter.inCorso:
+        case _TicketFilter.inAttesa:
+          return !isClosed(t) && statusNameOf(t).toLowerCase() == filters.status.statusMatch;
+        case _TicketFilter.chiusi:
+          return isClosed(t) || statusNameOf(t).toLowerCase() == filters.status.statusMatch;
+      }
+    }
+
+    final search = query.trim().toLowerCase();
     final filtered = allTickets.where((t) {
-      final statusName = statusMap[t.statusId]?.toLowerCase() ?? '';
-      final matchFilter = filter.statusMatch == null || statusName == filter.statusMatch;
-      final matchQuery =
-          query.isEmpty ||
-          t.title.toLowerCase().contains(query.toLowerCase()) ||
-          t.id.toLowerCase().contains(query.toLowerCase());
-      return matchFilter && matchQuery;
+      if (!matchesStatus(t)) return false;
+      if (filters.customerId != null && t.customerId != filters.customerId) return false;
+      if (filters.locationId != null && t.locationId != filters.locationId) return false;
+      if (filters.technicianId != null) {
+        if (t.assignedUserId != filters.technicianId && t.agentId != filters.technicianId) {
+          return false;
+        }
+      }
+      if (filters.priority != null && t.priority != filters.priority) return false;
+
+      final due = parseDateOnly(t.dueDate);
+      if (filters.dueFrom != null && (due == null || due.isBefore(filters.dueFrom!))) {
+        return false;
+      }
+      if (filters.dueTo != null && (due == null || due.isAfter(filters.dueTo!))) {
+        return false;
+      }
+      if (filters.onlyMine && (myId == null || t.assignedUserId != myId)) return false;
+
+      if (search.isEmpty) return true;
+      final customer = customersById[t.customerId]?.companyName ?? '';
+      final location = locationsById[t.locationId];
+      final where = '${location?.name ?? ''} ${location?.city ?? ''}';
+      final technician = technicianNameOf(t) ?? '';
+      final reference = ticketReference(t.numero) ?? '';
+      return t.title.toLowerCase().contains(search) ||
+          t.id.toLowerCase().contains(search) ||
+          reference.toLowerCase().contains(search) ||
+          customer.toLowerCase().contains(search) ||
+          where.toLowerCase().contains(search) ||
+          technician.toLowerCase().contains(search);
     }).toList();
 
-    // Three different things reach the empty branch, and only two of them are answers:
-    //  - a filter or a search that matches nothing is "no result" for a question the technician
-    //    just asked, not a statement about the tenant;
-    //  - an empty mirror on a device that has never completed a sync is "not downloaded yet";
-    //  - anything else is the tenant genuinely having no ticket in view.
-    // Printing the third message for all of them told a technician with a typo in the search field
-    // that the company has no tickets, and told a first-run phone the same.
-    final hasActiveFilter = query.isNotEmpty || filter != _TicketFilter.tutti;
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final buckets = <String, List<Ticket>>{for (final name in _groupOrder) name: <Ticket>[]};
+    for (final t in filtered) {
+      final due = parseDateOnly(t.dueDate);
+      final String bucket;
+      if (isClosed(t)) {
+        bucket = 'Chiusi';
+      } else if (due != null && due == businessToday) {
+        bucket = 'Oggi';
+      } else if (isInProgress(t)) {
+        bucket = 'In corso';
+      } else if (isWaiting(t)) {
+        bucket = 'In attesa';
+      } else {
+        bucket = 'Altri aperti';
+      }
+      buckets[bucket]!.add(t);
+    }
 
-    return RefreshIndicator(
-      onRefresh: () => refreshWithFeedback(context, ref),
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            // The filter icon that used to sit here was `onTap: () {}` — and redundant besides: the
-            // status chips twelve pixels below it are the filter, and they work. A dead control
-            // next to a live one doing the same job teaches the technician to distrust both.
-            child: ScreenHeader(
-              title: 'Ticket',
-              subtitle: '${allTickets.length} totali · $inCorsoCount in corso',
-            ),
-          ),
-          if (pendingTickets.isNotEmpty)
-            SliverToBoxAdapter(
-              child: _PendingTicketsSection(
-                pendingTickets: pendingTickets,
-                repairableIds: repairableIds,
-              ),
-            ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.pagePadding),
-              child: AppSearchBar(
-                controller: searchCtrl,
-                hint: 'Cerca ticket…',
-                onChanged: onQueryChanged,
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                0,
-                AppSpacing.pagePadding,
-                AppSpacing.md,
-              ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: _TicketFilter.values.map((f) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.sm),
-                      child: AppChip(
-                        label: f.label,
-                        active: filter == f,
-                        onTap: () => onFilterChanged(f),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-          ),
-          // Loading and empty are small, mutually-exclusive, non-virtualized widgets — safe to
-          // crossfade as a unit. The populated list is not part of this switcher: it's a real
-          // SliverList (see below), still lazily built by SliverChildBuilderDelegate — a list "up
-          // to hundreds of tickets" per this file's own comment must stay virtualized, so it is
-          // never made to live inside a single AnimatedSwitcher child (which would force it to
-          // build eagerly). Its own first-appearance polish is the per-row fade in _TicketRow.
-          SliverToBoxAdapter(
-            child: AnimatedSwitcher(
-              duration: MediaQuery.of(context).disableAnimations
-                  ? Duration.zero
-                  : const Duration(milliseconds: 220),
-              transitionBuilder: (child, animation) =>
-                  FadeTransition(opacity: animation, child: child),
-              child: ticketsAsync.isLoading
-                  ? const Padding(
-                      key: ValueKey('loading'),
-                      padding: EdgeInsets.all(AppSpacing.xxxl),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  : filtered.isEmpty
-                  ? hasActiveFilter
-                        ? const EmptyState(
-                            key: ValueKey('empty-filter'),
-                            icon: LucideIcons.searchX,
-                            title: 'Nessun risultato',
-                            body: 'Nessun ticket corrisponde ai filtri scelti.',
-                          )
-                        : neverSynced
-                        ? const EmptyState(
-                            key: ValueKey('empty-not-downloaded'),
-                            icon: LucideIcons.cloudOff,
-                            title: 'Ticket non ancora scaricati',
-                            body:
-                                'Questo telefono non ha ancora completato una sincronizzazione: '
-                                'i ticket compariranno qui appena i dati saranno scaricati.',
-                          )
-                        : const EmptyState(
-                            key: ValueKey('empty'),
-                            icon: LucideIcons.ticket,
-                            title: 'Nessun ticket',
-                            body: 'Non ci sono ticket da mostrare.',
-                          )
-                  : const SizedBox.shrink(key: ValueKey('list-placeholder')),
-            ),
-          ),
-          if (!ticketsAsync.isLoading && filtered.isNotEmpty)
-            SliverList(
-              delegate: SliverChildBuilderDelegate((context, i) {
-                final ticket = filtered[i];
-                final statusName = statusMap[ticket.statusId] ?? '';
-                final location = locationsById[ticket.locationId];
-                final customerName = location != null
-                    ? customersById[location.customerId]?.companyName
-                    : null;
-                final where = [
-                  customerName,
-                  location?.city,
-                ].where((s) => s != null && s.isNotEmpty).join(' · ');
-                return _TicketRow(
-                  key: ValueKey(ticket.id),
-                  ticket: ticket,
-                  statusName: statusName,
-                  where: where,
-                  isLast: i == filtered.length - 1,
-                );
-              }, childCount: filtered.length),
-            ),
-          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Pending (locally-created, not-yet-confirmed) tickets ───────────────────────
-
-class _PendingTicketsSection extends StatelessWidget {
-  const _PendingTicketsSection({required this.pendingTickets, required this.repairableIds});
-
-  final List<PendingTicket> pendingTickets;
-
-  /// Ids of the rows above the server refused for a repairable reference —
-  /// [repairablePendingTicketsProvider], watched by the list body. See [_PendingTicketRow].
-  final Set<String> repairableIds;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.pagePadding,
-        0,
-        AppSpacing.pagePadding,
-        AppSpacing.md,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'In sospeso (${pendingTickets.length})',
-            style: TextStyle(
-              fontFamily: 'Archivo',
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: context.colors.ink,
-            ),
-          ),
-          const SizedBox(height: 8),
-          for (final t in pendingTickets) ...[
-            _PendingTicketRow(
-              key: ValueKey(t.id),
-              ticket: t,
-              isRepairable: repairableIds.contains(t.id),
-            ),
-            const SizedBox(height: 8),
+    final groups = <ListGroupData>[];
+    if (pendingTickets.isNotEmpty) {
+      groups.add(
+        ListGroupData(
+          title: 'In sospeso',
+          count: pendingTickets.length,
+          rows: [
+            for (final t in pendingTickets)
+              _pendingRowData(context, ref, t, isRepairable: repairableIds.contains(t.id)),
           ],
-        ],
+        ),
+      );
+    }
+    for (final name in _groupOrder) {
+      final rows = buckets[name]!;
+      if (rows.isEmpty) continue;
+      groups.add(
+        ListGroupData(
+          title: name,
+          count: rows.length,
+          rows: [
+            for (final t in rows)
+              _ticketRowData(
+                context,
+                t,
+                statusName: statusNameOf(t),
+                isClosed: isClosed(t),
+                technicianName: technicianNameOf(t),
+                customerName: customersById[t.customerId]?.companyName,
+                location: locationsById[t.locationId],
+                today: businessToday,
+              ),
+          ],
+        ),
+      );
+    }
+
+    final inCorsoCount = filtered.where(isInProgress).length;
+    final hasActiveFilter = filters.isActive || search.isNotEmpty;
+
+    // Three different things reach the empty branch, and only two of them are answers:
+    //  - a filter or a search that matches nothing is "no result" for a question just asked;
+    //  - an empty mirror on a device that has never synced is "not downloaded yet";
+    //  - anything else is the tenant genuinely having no ticket in view.
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    Widget empty = const EmptyState(
+      key: ValueKey('empty'),
+      icon: LucideIcons.ticket,
+      title: 'Nessun ticket',
+      body: 'Non ci sono ticket da mostrare.',
+    );
+    if (allTickets.isEmpty) {
+      if (neverSynced) {
+        empty = const EmptyState(
+          key: ValueKey('empty-not-downloaded'),
+          icon: LucideIcons.cloudOff,
+          title: 'Ticket non ancora scaricati',
+          body:
+              'Questo telefono non ha ancora completato una sincronizzazione: '
+              'i ticket compariranno qui appena i dati saranno scaricati.',
+        );
+      }
+    } else if (hasActiveFilter) {
+      empty = const EmptyState(
+        key: ValueKey('empty-filter'),
+        icon: LucideIcons.searchX,
+        title: 'Nessun risultato',
+        body: 'Nessun ticket corrisponde ai filtri scelti.',
+      );
+    }
+
+    final state = ticketsAsync.isLoading && allTickets.isEmpty
+        ? ListShellState.loading
+        : ticketsAsync.hasError && allTickets.isEmpty
+        ? ListShellState.unavailable
+        : ListShellState.content;
+
+    return ListShell(
+      title: 'Ticket',
+      subtitle: 'Il lavoro aperto adesso, non l’archivio degli interventi.',
+      action: CapabilityGate(
+        capability: 'interventi.ticket.write',
+        child: ListHeaderAction(
+          label: 'Nuovo',
+          onPressed: () async {
+            final created = await context.push<bool>('/ticket/new');
+            if (created == true && context.mounted) {
+              // The list auto-refreshes via StreamProvider; nothing to do on return.
+            }
+          },
+        ),
       ),
+      banner: const OfflineSyncBanner(),
+      searchHint: 'Cerca ticket, cliente, sede o numero…',
+      searchController: searchCtrl,
+      onSearchChanged: onQueryChanged,
+      filters: const [
+        ListFilterChipData(label: 'Tutti', id: 'tutti'),
+        ListFilterChipData(label: 'Oggi', id: 'oggi'),
+        ListFilterChipData(label: 'In corso', id: 'inCorso'),
+        ListFilterChipData(label: 'In attesa', id: 'inAttesa'),
+        ListFilterChipData(label: 'Chiusi', id: 'chiusi'),
+      ],
+      activeFilterId: filters.status.name,
+      onFilterSelected: (chip) {
+        final next = _TicketFilter.values.firstWhere((f) => f.name == chip.id);
+        onFilterChanged(filters.withStatus(next));
+      },
+      onOpenFilters: onOpenFilters,
+      groups: groups,
+      summary: ListSummaryData(left: '${filtered.length} ticket', right: '$inCorsoCount in corso'),
+      state: state,
+      empty: empty,
+      unavailable: UnavailableState(
+        icon: LucideIcons.ticket,
+        titolo: 'Ticket non disponibili',
+        motivo: 'Non è stato possibile leggere i ticket salvati su questo dispositivo.',
+        action: AppButton(label: 'Riprova', onPressed: () => refreshWithFeedback(context, ref)),
+      ),
+      onRefresh: () => refreshWithFeedback(context, ref),
+    );
+  }
+
+  ListRowData _ticketRowData(
+    BuildContext context,
+    Ticket ticket, {
+    required String statusName,
+    required bool isClosed,
+    required String? technicianName,
+    required String? customerName,
+    required Location? location,
+    required DateTime today,
+  }) {
+    final place = location?.city ?? location?.name;
+    final meta = _joinNonEmpty([customerName, place, technicianName]);
+
+    final priority = ticket.priority;
+    final priorityLine = switch (priority) {
+      null => null,
+      'Urgente' => 'priorità urgente',
+      _ => '${priority.toLowerCase()} priorità',
+    };
+
+    final due = parseDateOnly(ticket.dueDate);
+    String? dueLine;
+    if (due != null) {
+      final label = formatWorkDate(due, 'dd/MM/yy', locale: 'it');
+      if (due == today) {
+        dueLine = 'oggi';
+      } else if (!isClosed && due.isBefore(today)) {
+        dueLine = 'scaduto · $label';
+      } else {
+        dueLine = 'scadenza $label';
+      }
+    }
+    final secondary = _joinNonEmpty([priorityLine, dueLine]);
+
+    return ListRowData(
+      title: ticket.title,
+      meta: meta.isEmpty ? null : meta,
+      secondary: secondary.isEmpty ? null : secondary,
+      status: statusName.isEmpty ? null : statusName,
+      statusTone: _toneForStatus(statusName),
+      onTap: () => context.push('/ticket/${ticket.id}'),
+      rowKey: ValueKey('ticket-${ticket.id}'),
+    );
+  }
+
+  ListRowData _pendingRowData(
+    BuildContext context,
+    WidgetRef ref,
+    PendingTicket ticket, {
+    required bool isRepairable,
+  }) {
+    final state = PendingTicketState.fromString(ticket.state);
+    final isSubmitting = state == PendingTicketState.submitting;
+    final label = switch (state) {
+      PendingTicketState.pendingSync => 'In sospeso',
+      PendingTicketState.submitting => 'Invio',
+      PendingTicketState.failed => isRepairable ? 'Da correggere' : 'Non inviato',
+      PendingTicketState.submitted => 'Inviato',
+    };
+    final tone = switch (state) {
+      PendingTicketState.pendingSync => ListStatusTone.warn,
+      PendingTicketState.submitting => ListStatusTone.info,
+      PendingTicketState.failed => ListStatusTone.bad,
+      PendingTicketState.submitted => ListStatusTone.good,
+    };
+
+    return ListRowData(
+      title: ticket.title,
+      meta: _pendingSubtitle(ticket, isRepairable: isRepairable),
+      status: label,
+      statusTone: tone,
+      leading: Icon(
+        state == PendingTicketState.failed ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
+        size: 16,
+        color: state == PendingTicketState.failed ? context.colors.red : context.colors.inkMuted,
+      ),
+      onTap: isSubmitting
+          ? null
+          : () => _showPendingActions(context, ref, ticket, isRepairable: isRepairable),
+      rowKey: ValueKey('pending-${ticket.id}'),
     );
   }
 }
 
-class _PendingTicketRow extends ConsumerWidget {
-  const _PendingTicketRow({super.key, required this.ticket, required this.isRepairable});
+/// `null`/empty parts are dropped and the rest joined with the prototype's middle dot.
+String _joinNonEmpty(Iterable<String?> parts) =>
+    parts.where((p) => p != null && p.trim().isNotEmpty).cast<String>().join(' · ');
+
+ListStatusTone? _toneForStatus(String statusName) {
+  // The prototype stamps `In attesa` amber, while the app's shared family maps it to info. The
+  // prototype wins for this one label; every other status keeps the shared mapping.
+  return statusName.trim().toLowerCase() == 'in attesa' ? ListStatusTone.warn : null;
+}
+
+String _pendingSubtitle(PendingTicket ticket, {required bool isRepairable}) {
+  final state = PendingTicketState.fromString(ticket.state);
+  return switch (state) {
+    PendingTicketState.pendingSync => 'In attesa di connessione — verrà inviato automaticamente',
+    PendingTicketState.submitting => 'Invio in corso…',
+    // A repairable row's stored message is the 404's own prose ("Non trovato sul server…"), which
+    // says what went wrong but not what to do about it — the action beside it says that.
+    PendingTicketState.failed =>
+      isRepairable
+          ? 'Un riferimento non è più valido: correggi il ticket per inviarlo'
+          : 'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
+    PendingTicketState.submitted => 'Inviato',
+  };
+}
+
+enum _PendingAction { repair, retry, delete }
+
+/// The shared row contract (`ListRowData`/`ListDocumentRow`) has no inline action slot, so a queued
+/// offline row carries its existing Correggi/Riprova/Elimina actions in a row action sheet. The
+/// actions themselves are unchanged: repair still opens the wizard seeded from the row, retry still
+/// asks the creation queue, delete still keeps its local-only confirmation.
+Future<void> _showPendingActions(
+  BuildContext context,
+  WidgetRef ref,
+  PendingTicket ticket, {
+  required bool isRepairable,
+}) async {
+  final action = await showModalBottomSheet<_PendingAction>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (_) => _PendingActionSheet(ticket: ticket, isRepairable: isRepairable),
+  );
+  if (action == null || !context.mounted) return;
+
+  switch (action) {
+    case _PendingAction.repair:
+      // A plain push, not `context.push('/ticket/new')`: the wizard needs the row itself, and the
+      // route carries no place to put it. Same call `ticket_detail_screen.dart` makes for
+      // `EditTicketScreen`.
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute<bool>(builder: (_) => NewTicketFormScreen(repairRow: ticket)));
+    case _PendingAction.retry:
+      await ref.read(ticketCreationQueueProvider).retry(ticket.id);
+    case _PendingAction.delete:
+      await _confirmDeletePendingTicket(context, ref, ticket);
+  }
+}
+
+class _PendingActionSheet extends StatelessWidget {
+  const _PendingActionSheet({required this.ticket, required this.isRepairable});
 
   final PendingTicket ticket;
-
-  /// The server refused this row over a reference that no longer resolves, so no resend will ever
-  /// be accepted: it is offered for repair instead of for retry (see [TicketCreationQueue]).
   final bool isRepairable;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final state = PendingTicketState.fromString(ticket.state);
     final isFailed = state == PendingTicketState.failed;
-    final reducedMotion = MediaQuery.of(context).disableAnimations;
 
-    final String subtitle = switch (state) {
-      PendingTicketState.pendingSync => 'In attesa di connessione — verrà inviato automaticamente',
-      PendingTicketState.submitting => 'Invio in corso…',
-      // A repairable row's stored message is the 404's own prose ("Non trovato sul server…"), which
-      // says what went wrong but not what to do about it — and the action beside it says that.
-      PendingTicketState.failed =>
-        isRepairable
-            ? 'Un riferimento non è più valido: correggi il ticket per inviarlo'
-            : 'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
-      PendingTicketState.submitted => 'Inviato',
-    };
-
-    // Queued → failed used to be a hard cut: background and icon both flip the instant a retry
-    // gives up, on a row whose whole job is telling the technician their offline work is
-    // accounted for — the one state change here that actually needs to register as "something
-    // changed," not just "something is different now."
-    return AnimatedContainer(
-      duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: isFailed ? context.colors.redSoft : context.colors.bg3,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          AnimatedSwitcher(
-            duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
-            transitionBuilder: (child, animation) =>
-                FadeTransition(opacity: animation, child: child),
-            child: Icon(
-              isFailed ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
-              key: ValueKey(isFailed),
-              size: 18,
-              color: isFailed ? context.colors.red : context.colors.inkMuted,
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.md),
+              child: Center(child: SheetHandle()),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        ticket.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Archivo',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.ink,
-                        ),
-                      ),
-                    ),
-                    if (isRepairable) ...[
-                      const SizedBox(width: AppSpacing.sm),
-                      AppBadge(
-                        label: 'Da correggere',
-                        small: true,
-                        outlined: true,
-                        fgColor: context.colors.red,
-                      ),
-                    ],
-                  ],
-                ),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Archivo',
-                    fontSize: 11,
-                    color: context.colors.inkMuted,
-                  ),
-                ),
-              ],
+            Text(
+              ticket.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-          ),
-          if (isRepairable) ...[
-            const SizedBox(width: 8),
-            // "Correggi", NOT "Riprova". A resend would carry the very id the server just refused,
-            // so this button could only fail again — the queue has already taken the row out of the
-            // automatic sweeps for that same reason. Nothing is lost by dropping it: repairing puts
-            // the row back on the ordinary retry path, which then does exactly what Riprova did,
-            // with a reference that resolves.
-            AppButton(
-              label: 'Correggi',
-              size: AppButtonSize.sm,
-              fullWidth: false,
-              // A plain push, not `context.push('/ticket/new')`: the wizard needs the row itself, and
-              // the route carries no place to put it. Same call `ticket_detail_screen.dart` makes for
-              // `EditTicketScreen`.
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<bool>(builder: (_) => NewTicketFormScreen(repairRow: ticket)),
+            const SizedBox(height: 4),
+            Text(
+              _pendingSubtitle(ticket, isRepairable: isRepairable),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            if (isRepairable)
+              // "Correggi", NOT "Riprova": a resend would carry the very id the server just
+              // refused, so it could only fail again.
+              AppButton(
+                label: 'Correggi',
+                onPressed: () => Navigator.pop(context, _PendingAction.repair),
+              )
+            else if (isFailed)
+              AppButton(
+                label: 'Riprova',
+                onPressed: () => Navigator.pop(context, _PendingAction.retry),
               ),
-            ),
-          ] else if (isFailed) ...[
-            const SizedBox(width: 8),
-            // fullWidth: false — AppButton defaults to full-width (wraps itself in
-            // SizedBox(width: double.infinity)) for every variant but ghost, and this sits
-            // directly in a Row with no Expanded/Flexible around it. A Row hands a non-flex child
-            // unbounded max width, so double.infinity-in-double.infinity threw
-            // "BoxConstraints forces an infinite width" at layout — a real crash on any failed
-            // pending ticket, not just a test artifact (nothing exercised this path before).
-            AppButton(
-              label: 'Riprova',
-              size: AppButtonSize.sm,
-              fullWidth: false,
-              onPressed: () => ref.read(ticketCreationQueueProvider).retry(ticket.id),
-            ),
+            // A `submitting` row is excluded from delete: a create request is in flight and its
+            // outcome is unknown, so removing the row could leave a server ticket unreconciled.
+            if (state != PendingTicketState.submitting) ...[
+              const SizedBox(height: AppSpacing.sm),
+              AppButton.ghost(
+                label: 'Elimina',
+                onPressed: () => Navigator.pop(context, _PendingAction.delete),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.sm),
+            AppButton.ghost(label: 'Chiudi', onPressed: () => Navigator.pop(context)),
           ],
-          // Delete a local-only ticket. Offered whenever the row is NOT mid-send: a `pendingSync`
-          // row (never sent) or a `failed` one (send refused/lost) can always go, with no network —
-          // this is the failed/duplicate ticket in the ClickUp title and its whole point is that it
-          // is removable without a connection. A `submitting` row is excluded because a create
-          // request is in flight and its outcome is unknown; removing the row here could leave a
-          // server ticket with no local row to reconcile it.
-          if (state != PendingTicketState.submitting) ...[
-            const SizedBox(width: 4),
-            IconButton(
-              icon: Icon(LucideIcons.trash2, size: 18, color: context.colors.inkMuted),
-              tooltip: 'Elimina',
-              onPressed: () => _confirmDeletePendingTicket(context, ref, ticket),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -489,12 +617,10 @@ class _PendingTicketRow extends ConsumerWidget {
 
 /// Permanently removes a ticket that only ever existed on this device.
 ///
-/// Pure local cleanup — no network, so it works with no signal, which is the whole point: this is
-/// the failed/duplicate ticket in the ClickUp title, and a technician must be able to get rid of it
-/// without waiting for a connection. Deliberately NOT gated on `sistema.tenant.admin` (unlike the
-/// server-side delete on the detail screen): this row exists only on this device, the server never
-/// saw it, and it is the technician's own offline draft — the server's own delete permission has
-/// nothing to say about it.
+/// Pure local cleanup — no network, so it works with no signal, which is the whole point: a
+/// technician must be able to get rid of a failed/duplicate row without waiting for a connection.
+/// Deliberately NOT gated on `sistema.tenant.admin` (unlike the server-side delete on the detail
+/// screen): the server never saw this row, and it is the technician's own offline draft.
 Future<void> _confirmDeletePendingTicket(
   BuildContext context,
   WidgetRef ref,
@@ -513,215 +639,264 @@ Future<void> _confirmDeletePendingTicket(
   }
 }
 
-/// Vetro (module #2). Was a [ListRow] — icon avatar, title, reference-number subtitle, status
-/// pill and date off to the side. Replaced because that told you *what kind of thing* a row was,
-/// not what to do about it: title alone rarely says where to go or how urgent it is, and opening
-/// every row just to triage a list of thirty is the exact complaint that started this redesign.
-///
-/// A priority stripe (real `Ticket.priority`, read from the server's `priorita` key — schema 20
-/// declared the column long before the key name was right, see `TicketDto.readKeys`)
-/// replaces the old leading icon tile; description, cliente/località (resolved the same way
-/// `work_queue_section.dart` already does, not a new lookup) and due date fill out the row. No
-/// blur here on purpose: this list can run to hundreds of rows, and a per-row backdrop filter
-/// during scroll is exactly the "many small instances" cost blur is expensive for — flat rows on
-/// the page ground, divided by a hairline border, read as the same system without paying for it.
-class _TicketRow extends StatelessWidget {
-  const _TicketRow({
-    super.key,
-    required this.ticket,
-    required this.statusName,
-    required this.where,
-    required this.isLast,
-  });
+// ── Filter sheet ────────────────────────────────────────────────────────────
 
-  final Ticket ticket;
-  final String statusName;
+class _TicketFilterSheet extends ConsumerStatefulWidget {
+  const _TicketFilterSheet({required this.initial});
 
-  /// Cliente · città, resolved once for the whole list — see `_TicketListBody`'s own comment on
-  /// why this is no longer a per-row provider watch.
-  final String where;
-  final bool isLast;
+  final _TicketFilters initial;
 
-  Color _priorityColor(BuildContext context, AppVetroPalette v, String? priority) =>
-      switch (priority) {
-        // statusBad/statusWarn: context.vetro's semantic status tokens, out of scope for this sweep
-        // (see status_colors.dart) — left as-is, not converted to a flat AppColors constant.
-        'Urgente' => v.statusBad,
-        'Alta' => v.statusWarn,
-        'Media' => AppColors.Y,
-        _ => context.colors.inkFaint, // Bassa, or unset — neutral, not a fifth accent colour
-      };
+  @override
+  ConsumerState<_TicketFilterSheet> createState() => _TicketFilterSheetState();
+}
 
-  /// The stripe's own colour is invisible to a colorblind technician or a screen reader —
-  /// spoken/announced priority instead of relying on hue alone to triage a list of thirty tickets.
-  String _priorityLabel(String? priority) => switch (priority) {
-    'Urgente' => 'Priorità urgente',
-    'Alta' => 'Priorità alta',
-    'Media' => 'Priorità media',
-    _ => 'Priorità bassa',
-  };
+class _TicketFilterSheetState extends ConsumerState<_TicketFilterSheet> {
+  late _TicketFilter _status = widget.initial.status;
+  late String? _customerId = widget.initial.customerId;
+  late String? _locationId = widget.initial.locationId;
+  late String? _technicianId = widget.initial.technicianId;
+  late String? _priority = widget.initial.priority;
+  late DateTime? _dueFrom = widget.initial.dueFrom;
+  late DateTime? _dueTo = widget.initial.dueTo;
+  late bool _onlyMine = widget.initial.onlyMine;
+
+  static const _priorities = ['Bassa', 'Media', 'Alta', 'Urgente'];
+  static const _statusOptions = [
+    _TicketFilter.oggi,
+    _TicketFilter.inCorso,
+    _TicketFilter.inAttesa,
+    _TicketFilter.chiusi,
+  ];
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final current = isFrom ? _dueFrom : _dueTo;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 730)),
+      lastDate: DateTime.now().add(const Duration(days: 1095)),
+    );
+    if (picked == null) return;
+    setState(() {
+      final civil = DateTime.utc(picked.year, picked.month, picked.day);
+      if (isFrom) {
+        _dueFrom = civil;
+      } else {
+        _dueTo = civil;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
-    final reference = ticketReference(ticket.numero);
+    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[];
+    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const <Location>[];
+    final colleagues = ref.watch(allColleaguesProvider).valueOrNull ?? const <Colleague>[];
+    final myId = ref.watch(internalUserIdProvider).valueOrNull;
 
-    // `dueDate` is a CIVIL date (`yyyy-MM-dd` TEXT read through `parseDateOnly`, i.e.
-    // `DateTime.utc(y, m, d)`) — see `Tickets.dueDate` in app_database.dart. So it is compared with
-    // a civil date, never with an instant: `.isBefore(DateTime.now())` pits a UTC midnight against
-    // the device clock, which flips the badge hours early or late by the device's own offset, and
-    // disagrees with the server's own overdue rule (`TicketOverdueSweep`: strictly before today's
-    // Italian date).
-    final dueDate = parseDateOnly(ticket.dueDate);
-    final now = DateTime.now();
-    final isOverdue =
-        dueDate != null &&
-        dueDate.isBefore(DateTime.utc(now.year, now.month, now.day)) &&
-        statusName.toLowerCase() != 'completato';
-    // `.toLocal()` here was the second half of the same bug: a civil date carries no instant to
-    // convert, and converting it anyway showed the previous day west of UTC.
-    final dueLabel = dueDate == null
-        ? null
-        : formatWorkDate(dueDate, 'dd/MM/yy', locale: 'it');
+    final visibleLocations = _customerId == null
+        ? locations
+        : locations.where((l) => l.customerId == _customerId).toList();
 
-    final row = Semantics(
-      // The stripe colour is a sighted-only cue; this is the same information for TalkBack/
-      // VoiceOver, and for a sighted colorblind technician who can't tell the hues apart either.
-      label:
-          '${_priorityLabel(ticket.priority)}. ${ticket.title}${statusName.isNotEmpty ? ', $statusName' : ''}',
-      button: true,
-      child: InkWell(
-        onTap: () => context.push('/ticket/${ticket.id}'),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.pagePadding,
-            vertical: AppSpacing.md,
-          ),
-          decoration: BoxDecoration(
-            border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
-          ),
-          // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: this row lives
-          // inside a SliverChildBuilderDelegate item, which sizes to its own content and hands the
-          // Row no bounded height — `stretch` needs one to stretch the stripe into, and without
-          // IntrinsicHeight giving it one first, layout throws (RenderFlex._computeSizes, unbounded
-          // height) rather than silently doing something wrong.
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            AppSpacing.pagePadding,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.md),
+              child: Center(child: SheetHandle()),
+            ),
+            Text('Filtri', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Restringi per stato, contesto e periodo. Nessun identificativo interno.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const AppFieldLabel(label: 'Stato', enabled: true),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: [
-                Container(
-                  width: 3,
-                  margin: const EdgeInsets.only(right: AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: _priorityColor(context, v, ticket.priority),
-                    borderRadius: BorderRadius.circular(3),
+                for (final option in _statusOptions)
+                  AppChip(
+                    label: option.label,
+                    active: _status == option,
+                    onTap: () => setState(() => _status = option),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            AppFieldShell(
+              label: 'Cliente',
+              child: DropdownButtonFormField<String?>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _customerId,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Tutti i clienti')),
+                  ...customers.map(
+                    (c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)),
+                  ),
+                ],
+                onChanged: (v) => setState(() {
+                  _customerId = v;
+                  if (v != null &&
+                      _locationId != null &&
+                      !locations.any((l) => l.id == _locationId && l.customerId == v)) {
+                    _locationId = null;
+                  }
+                }),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppFieldShell(
+              label: 'Sede',
+              child: DropdownButtonFormField<String?>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _locationId,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Tutte le sedi')),
+                  ...visibleLocations.map(
+                    (l) =>
+                        DropdownMenuItem(value: l.id, child: Text(_joinNonEmpty([l.name, l.city]))),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _locationId = v),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppFieldShell(
+              label: 'Tecnico',
+              child: DropdownButtonFormField<String?>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _technicianId,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Tutti i tecnici')),
+                  ...colleagues.map(
+                    (c) => DropdownMenuItem(value: c.id, child: Text(c.displayName)),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _technicianId = v),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppFieldShell(
+              label: 'Priorità',
+              child: DropdownButtonFormField<String?>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _priority,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Tutte le priorità')),
+                  ..._priorities.map((p) => DropdownMenuItem(value: p, child: Text(p))),
+                ],
+                onChanged: (v) => setState(() => _priority = v),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const AppFieldLabel(label: 'Periodo', enabled: true),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _DateField(
+                    label: 'Da',
+                    value: _dueFrom,
+                    onTap: () => _pickDate(isFrom: true),
                   ),
                 ),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          if (reference != null)
-                            Text(
-                              reference,
-                              style: TextStyle(
-                                fontFamily: 'Archivo',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: context.colors.inkFaint,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          const Spacer(),
-                          if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        ticket.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Archivo',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: context.colors.ink,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
-                      if (ticket.description != null && ticket.description!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          ticket.description!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: 'Archivo',
-                            fontSize: 12,
-                            color: context.colors.inkMuted,
-                          ),
-                        ),
-                      ],
-                      if (where.isNotEmpty || dueLabel != null) ...[
-                        const SizedBox(height: 5),
-                        Row(
-                          children: [
-                            if (where.isNotEmpty) ...[
-                              Icon(LucideIcons.mapPin, size: 11, color: context.colors.inkFaint),
-                              const SizedBox(width: 3),
-                              Flexible(
-                                child: Text(
-                                  where,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontFamily: 'Archivo',
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: context.colors.ink,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (dueLabel != null) ...[
-                              const Spacer(),
-                              Text(
-                                dueLabel,
-                                style: TextStyle(
-                                  fontFamily: 'Archivo',
-                                  fontSize: 11,
-                                  fontWeight: isOverdue ? FontWeight.w700 : FontWeight.w600,
-                                  color: isOverdue ? v.statusBad : context.colors.inkMuted,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ],
+                  child: _DateField(
+                    label: 'A',
+                    value: _dueTo,
+                    onTap: () => _pickDate(isFrom: false),
                   ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: AppSpacing.md),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Solo i miei ticket'),
+              subtitle: myId == null
+                  ? const Text('Disponibile dopo la prima sincronizzazione')
+                  : null,
+              value: _onlyMine,
+              onChanged: myId == null ? null : (v) => setState(() => _onlyMine = v),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton.ghost(
+                    label: 'Azzera',
+                    onPressed: () => Navigator.pop(context, const _TicketFilters()),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppButton(
+                    label: 'Applica',
+                    onPressed: () => Navigator.pop(
+                      context,
+                      _TicketFilters(
+                        status: _status,
+                        customerId: _customerId,
+                        locationId: _locationId,
+                        technicianId: _technicianId,
+                        priority: _priority,
+                        dueFrom: _dueFrom,
+                        dueTo: _dueTo,
+                        onlyMine: _onlyMine,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
+  }
+}
 
-    // A row's first appearance — scrolled into the viewport, freshly built by
-    // SliverChildBuilderDelegate — fades in rather than snapping into place. Runs once per
-    // Element lifetime (TweenAnimationBuilder does not replay on an ordinary rebuild of the same
-    // element, only when it is first created), so scrolling a row in and out of view does not
-    // re-trigger it, and it never touches the list's own virtualization above.
-    if (MediaQuery.of(context).disableAnimations) return row;
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-      builder: (context, value, child) => Opacity(opacity: value, child: child),
-      child: row,
+class _DateField extends StatelessWidget {
+  const _DateField({required this.label, required this.value, required this.onTap});
+
+  final String label;
+  final DateTime? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = value == null ? 'Qualsiasi' : formatWorkDate(value!, 'dd/MM/yyyy', locale: 'it');
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: AppFieldShell(
+        label: label,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Expanded(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              const Icon(LucideIcons.calendarDays, size: 16),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
