@@ -5,6 +5,7 @@ import '../../theme/app_rack.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/status_colors.dart';
 import '../app_card.dart';
 import '../status_stamp.dart';
 
@@ -300,7 +301,11 @@ class DetailHero extends StatelessWidget {
                   else
                     const Spacer(),
                   const SizedBox(width: 8),
-                  StatusStamp(stato: data.status.label, size: StampSize.small),
+                  StatusStamp(
+                    stato: data.status.label,
+                    size: StampSize.small,
+                    family: _familyForTone(data.status.tone),
+                  ),
                 ],
               ),
               const SizedBox(height: 6),
@@ -354,6 +359,16 @@ class DetailHero extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  static StatusFamily _familyForTone(DetailStatusTone tone) {
+    return switch (tone) {
+      DetailStatusTone.neutral => StatusFamily.neutral,
+      DetailStatusTone.info => StatusFamily.info,
+      DetailStatusTone.good => StatusFamily.good,
+      DetailStatusTone.warn => StatusFamily.warn,
+      DetailStatusTone.bad => StatusFamily.bad,
+    };
   }
 }
 

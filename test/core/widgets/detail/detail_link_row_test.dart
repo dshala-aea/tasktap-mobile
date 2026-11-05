@@ -65,6 +65,55 @@ void main() {
       expect(decoration.border, isNull);
     });
 
+    testWidgets(
+      'trailing keeps its semantics and hidden meta is not announced',
+      (tester) async {
+        final handle = tester.ensureSemantics();
+
+        await tester.pumpWidget(
+          _app(
+            DetailLinkRow(
+              title: 'Scadenze',
+              meta: 'ignorata',
+              trailing: const Text('31/12/2026'),
+              onTap: () {},
+            ),
+          ),
+        );
+
+        expect(find.bySemanticsLabel('Scadenze. ignorata'), findsNothing);
+        expect(find.bySemanticsLabel(RegExp('31/12/2026')), findsOneWidget);
+
+        handle.dispose();
+      },
+    );
+
+    testWidgets('an explicit semanticsLabel replaces the derived phrase', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(
+        _app(
+          DetailLinkRow(
+            title: 'Scadenze',
+            meta: 'ignorata',
+            trailing: const Text('31/12/2026'),
+            semanticsLabel: 'Scadenze. Scade il 31/12/2026',
+            onTap: () {},
+          ),
+        ),
+      );
+
+      expect(
+        find.bySemanticsLabel('Scadenze. Scade il 31/12/2026'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('Scadenze. ignorata'), findsNothing);
+
+      handle.dispose();
+    });
+
     testWidgets('a custom trailing widget replaces the meta text', (
       tester,
     ) async {

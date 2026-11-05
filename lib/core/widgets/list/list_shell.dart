@@ -243,11 +243,15 @@ class ListShell extends StatelessWidget {
           )
         else ...[
           for (final group in visibleGroups) ...[
-            SliverToBoxAdapter(
-              child: _framed(
-                child: ListGroupHeader(title: group.title, count: group.count),
+            if (group.title != null)
+              SliverToBoxAdapter(
+                child: _framed(
+                  child: ListGroupHeader(
+                    title: group.title!,
+                    count: group.count,
+                  ),
+                ),
               ),
-            ),
             SliverPadding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.pagePadding,

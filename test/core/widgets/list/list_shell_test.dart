@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
+import 'package:tasktap_mobile/core/widgets/list/list_group_header.dart';
 import 'package:tasktap_mobile/core/widgets/list/list_shell.dart';
 import 'package:tasktap_mobile/core/widgets/list/list_models.dart';
 import 'package:tasktap_mobile/core/widgets/unavailable_state.dart';
@@ -235,6 +236,35 @@ void main() {
         lessThan(tester.getTopLeft(find.text('Cantieri')).dy),
       );
     });
+
+    testWidgets(
+      'a group without a title renders a flat list with no header or rule',
+      (tester) async {
+        await tester.pumpWidget(
+          _app(
+            const ListShell(
+              title: 'Ferie',
+              groups: [
+                ListGroupData(
+                  rows: [
+                    ListRowData(
+                      title: 'Daniel Shala',
+                      meta: 'Ferie · 18–22/11',
+                      secondary: '3 giorni · in attesa',
+                      status: 'In attesa',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+
+        expect(find.byType(ListGroupHeader), findsNothing);
+        expect(find.text('Daniel Shala'), findsOneWidget);
+        expect(find.text('IN ATTESA'), findsOneWidget);
+      },
+    );
 
     testWidgets('long Italian strings clamp without overflowing at 320px', (
       tester,

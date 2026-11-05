@@ -73,11 +73,13 @@ class ListRowData {
 
 /// A group heading plus its rows: `Da seguire oggi` and its count.
 class ListGroupData {
-  const ListGroupData({required this.title, this.count, required this.rows});
+  const ListGroupData({this.title, this.count, required this.rows});
 
-  final String title;
+  /// Group heading. Null renders a headerless (flat) group: no heading, no rule and no count
+  /// spacing, so a flat list does not have to fake a group name.
+  final String? title;
 
-  /// Mono count on the right. Null hides the count.
+  /// Mono count on the right. Null hides the count; ignored when [title] is null.
   final int? count;
 
   final List<ListRowData> rows;

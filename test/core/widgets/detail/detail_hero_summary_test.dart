@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
+import 'package:tasktap_mobile/core/theme/status_colors.dart';
 import 'package:tasktap_mobile/core/widgets/status_stamp.dart';
 
 void _noop() {}
@@ -80,6 +81,38 @@ void main() {
         );
 
         expect(find.text('Apri PDF'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'maps DetailStatusTone even for labels outside the status vocabulary',
+      (tester) async {
+        const cases = [
+          ('Attiva', DetailStatusTone.good, StatusFamily.good),
+          ('In garanzia', DetailStatusTone.good, StatusFamily.good),
+          ('6 sotto scorta', DetailStatusTone.warn, StatusFamily.warn),
+          ('Oggi', DetailStatusTone.info, StatusFamily.info),
+        ];
+
+        for (final (label, tone, family) in cases) {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: buildAppTheme(brightness: Brightness.light),
+              home: Scaffold(
+                body: DetailHero(
+                  data: DetailHeroData(
+                    variant: DetailHeroVariant.summary,
+                    title: 'Entità',
+                    status: DetailStatus(label: label, tone: tone),
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          final stamp = tester.widget<StatusStamp>(find.byType(StatusStamp));
+          expect(stamp.family, family, reason: label);
+        }
       },
     );
 

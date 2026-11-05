@@ -28,6 +28,7 @@ class DetailLinkRow extends StatelessWidget {
     this.onTap,
     this.showDivider = true,
     this.trailing,
+    this.semanticsLabel,
   });
 
   final String title;
@@ -42,6 +43,11 @@ class DetailLinkRow extends StatelessWidget {
 
   /// Replaces [meta] when a caller needs something other than text (a stamp, a link).
   final Widget? trailing;
+
+  /// Explicit screen-reader label. Supply this when [trailing] carries meaning (a date, a stamp)
+  /// that the default title/meta phrase would otherwise miss. When omitted and [trailing] is set,
+  /// descendant semantics are kept so the trailing widget still announces itself.
+  final String? semanticsLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -95,11 +101,18 @@ class DetailLinkRow extends StatelessWidget {
 
     if (onTap == null) return content;
 
+    // The label must describe what is actually on screen: when `trailing` replaces `meta`, the
+    // hidden meta string must not be announced, and the trailing widget must keep its own
+    // semantics unless the caller supplied a complete label.
+    final resolvedLabel =
+        semanticsLabel ??
+        (trailing != null ? null : (meta == null ? title : '$title. $meta'));
+
     return Semantics(
       button: true,
-      label: meta == null ? title : '$title. $meta',
+      label: resolvedLabel,
       onTap: onTap,
-      excludeSemantics: true,
+      excludeSemantics: resolvedLabel != null,
       child: Material(
         color: Colors.transparent,
         child: InkWell(onTap: onTap, child: content),
