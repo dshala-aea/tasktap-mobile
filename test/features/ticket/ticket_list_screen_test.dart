@@ -123,6 +123,7 @@ void main() {
     String? dueDate,
     String? priority,
     String? assignedUserId,
+    String? agentId,
     DateTime? createdAt,
   }) async {
     await db
@@ -140,6 +141,7 @@ void main() {
             dueDate: Value(dueDate),
             priority: Value(priority),
             assignedUserId: Value(assignedUserId),
+            agentId: Value(agentId),
           ),
         );
   }
@@ -418,11 +420,52 @@ void main() {
       await disposeScreen(tester);
     });
 
-    testWidgets('Azzera clears the filter and shows every ticket again', (tester) async {
+    testWidgets('the Aperti sheet facet keeps the pre-redesign open-status filter', (tester) async {
       await seedStatus(1, 'Aperto');
-      await seedTicket(id: 't1', title: 'Aperto ancora');
-      await seedTicket(id: 't2', title: 'Chiuso non in status');
+      await seedStatus(2, 'In corso', isInProgress: true);
+      await seedTicket(id: 't1', title: 'Solo aperto');
+      await seedTicket(id: 't2', title: 'In lavorazione', statusId: 2);
       await pump(tester);
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(AppChip, 'Aperti'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Solo aperto'), findsOneWidget);
+      expect(find.text('In lavorazione'), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('a tenant status flagged in-progress groups and filters as In corso', (
+      tester,
+    ) async {
+      // A renamed status must not fall through to "Altri aperti" just because its string is not
+      // literally "In corso": chips, groups and the footer share the flag predicate.
+      await seedStatus(7, 'In lavorazione', isInProgress: true);
+      await seedTicket(id: 't1', title: 'Lavoro in corso', statusId: 7);
+      await pump(tester);
+
+      expect(find.text('In corso'), findsOneWidget);
+      await tester.tap(find.text('IN CORSO').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Lavoro in corso'), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('Azzera clears an applied filter and shows every ticket again', (tester) async {
+      await seedStatus(1, 'Aperto');
+      await seedStatus(2, 'In corso', isInProgress: true);
+      await seedTicket(id: 't1', title: 'Aperto ancora');
+      await seedTicket(id: 't2', title: 'Chiuso non in status', statusId: 2);
+      await pump(tester);
+
+      await tester.tap(find.text('IN CORSO').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Aperto ancora'), findsNothing);
 
       await tester.tap(find.text('FILTRI'));
       await tester.pumpAndSettle();
@@ -435,14 +478,72 @@ void main() {
       await disposeScreen(tester);
     });
 
-    testWidgets('the summary footer counts the visible tickets', (tester) async {
+    testWidgets('the Tecnico facet and row use the assignee, not the Riferimento agent', (
+      tester,
+    ) async {
+      await db
+          .into(db.colleagues)
+          .insert(ColleaguesCompanion.insert(id: 'agent-1', displayName: 'Riferimento Uno'));
+      await seedStatus(1, 'Aperto');
+      await seedTicket(id: 't1', title: 'Senza assegnatario', agentId: 'agent-1');
+      await pump(tester);
+
+      // `agentId` is the detail screen's Riferimento, not the technician working the job.
+      expect(find.textContaining('Riferimento Uno'), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('an empty filter result is shown even when pending rows are visible', (
+      tester,
+    ) async {
+      await seedStatus(1, 'Aperto');
+      await seedTicket(id: 't1', title: 'Ticket sincronizzato');
+      await db
+          .into(db.pendingTickets)
+          .insert(
+            PendingTicketsCompanion.insert(
+              id: 'pt-empty',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Ticket in coda',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+              state: const Value('pendingSync'),
+            ),
+          );
+      await pump(tester);
+
+      await tester.enterText(find.byType(TextField).first, 'inesistente');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ticket in coda'), findsOneWidget);
+      expect(find.text('Nessun risultato'), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('the summary footer counts pending rows too', (tester) async {
       await seedStatus(1, 'Aperto');
       await seedStatus(2, 'In corso', isInProgress: true);
       await seedTicket(id: 't1', title: 'Uno');
       await seedTicket(id: 't2', title: 'Due', statusId: 2);
+      await db
+          .into(db.pendingTickets)
+          .insert(
+            PendingTicketsCompanion.insert(
+              id: 'pt-summary',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Tre in coda',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+              state: const Value('pendingSync'),
+            ),
+          );
       await pump(tester);
 
-      expect(find.text('2 TICKET'), findsOneWidget);
+      expect(find.text('3 TICKET'), findsOneWidget);
       expect(find.text('1 IN CORSO'), findsOneWidget);
       await disposeScreen(tester);
     });

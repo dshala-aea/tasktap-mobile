@@ -27,23 +27,16 @@ import 'ticket_providers.dart';
 /// `Oggi` is the prototype's today preset (a civil-date predicate over `dueDate`), not a status.
 /// The remaining presets map onto the same status strings the list always filtered on, under the
 /// prototype's copy (`Chiusi` replaces `Completati`).
-enum _TicketFilter { tutti, oggi, inCorso, inAttesa, chiusi }
+enum _TicketFilter { tutti, oggi, aperti, inCorso, inAttesa, chiusi }
 
 extension _TicketFilterX on _TicketFilter {
   String get label => switch (this) {
     _TicketFilter.tutti => 'Tutti',
     _TicketFilter.oggi => 'Oggi',
+    _TicketFilter.aperti => 'Aperti',
     _TicketFilter.inCorso => 'In corso',
     _TicketFilter.inAttesa => 'In attesa',
     _TicketFilter.chiusi => 'Chiusi',
-  };
-
-  String? get statusMatch => switch (this) {
-    _TicketFilter.tutti => null,
-    _TicketFilter.oggi => null,
-    _TicketFilter.inCorso => 'in corso',
-    _TicketFilter.inAttesa => 'in attesa',
-    _TicketFilter.chiusi => 'completato',
   };
 }
 
@@ -211,8 +204,10 @@ class _TicketListBody extends ConsumerWidget {
       return due != null && due == businessToday;
     }
 
+    // `agentId` is the separate "Riferimento" field on the detail screen, not the technician
+    // working the job. A ticket with no assignee shows no technician rather than borrowing it.
     String? technicianNameOf(Ticket t) {
-      final id = t.assignedUserId ?? t.agentId;
+      final id = t.assignedUserId;
       if (id == null) return null;
       return colleaguesById[id]?.displayName;
     }
@@ -225,11 +220,18 @@ class _TicketListBody extends ConsumerWidget {
           // The prototype's `Oggi` is today's work, not "every open ticket": the same predicate the
           // `Oggi` group uses, over the ticket's civil due date.
           return !isClosed(t) && isDueToday(t);
+        case _TicketFilter.aperti:
+          // The pre-redesign `Aperti` facet, kept reachable through the sheet even though the
+          // prototype has no chip for it.
+          return !isClosed(t) && statusNameOf(t).toLowerCase() == 'aperto';
         case _TicketFilter.inCorso:
+          // Chips, groups and the footer share these three predicates, so a tenant status renamed
+          // away from the literal `In corso` still filters and groups the same way.
+          return !isClosed(t) && isInProgress(t);
         case _TicketFilter.inAttesa:
-          return !isClosed(t) && statusNameOf(t).toLowerCase() == filters.status.statusMatch;
+          return !isClosed(t) && isWaiting(t);
         case _TicketFilter.chiusi:
-          return isClosed(t) || statusNameOf(t).toLowerCase() == filters.status.statusMatch;
+          return isClosed(t);
       }
     }
 
@@ -238,10 +240,8 @@ class _TicketListBody extends ConsumerWidget {
       if (!matchesStatus(t)) return false;
       if (filters.customerId != null && t.customerId != filters.customerId) return false;
       if (filters.locationId != null && t.locationId != filters.locationId) return false;
-      if (filters.technicianId != null) {
-        if (t.assignedUserId != filters.technicianId && t.agentId != filters.technicianId) {
-          return false;
-        }
+      if (filters.technicianId != null && t.assignedUserId != filters.technicianId) {
+        return false;
       }
       if (filters.priority != null && t.priority != filters.priority) return false;
 
@@ -427,12 +427,20 @@ class _TicketListBody extends ConsumerWidget {
                 ),
               ),
             ],
+            if (regularGroups.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.md),
+                  child: framed(empty),
+                ),
+              ),
             if (regularGroups.isNotEmpty)
               SliverToBoxAdapter(
                 child: framed(
                   ListSummaryFooter(
                     data: ListSummaryData(
-                      left: '${filtered.length} ticket',
+                      // Pending rows are visible above, so they belong in the total too.
+                      left: '${filtered.length + pendingTickets.length} ticket',
                       right: '$inCorsoCount in corso',
                     ),
                   ),
@@ -719,6 +727,7 @@ class _TicketFilterSheetState extends ConsumerState<_TicketFilterSheet> {
   static const _priorities = ['Bassa', 'Media', 'Alta', 'Urgente'];
   static const _statusOptions = [
     _TicketFilter.oggi,
+    _TicketFilter.aperti,
     _TicketFilter.inCorso,
     _TicketFilter.inAttesa,
     _TicketFilter.chiusi,
@@ -733,6 +742,7 @@ class _TicketFilterSheetState extends ConsumerState<_TicketFilterSheet> {
       lastDate: DateTime.now().add(const Duration(days: 1095)),
     );
     if (picked == null) return;
+    if (!mounted) return;
     setState(() {
       final civil = DateTime.utc(picked.year, picked.month, picked.day);
       if (isFrom) {
