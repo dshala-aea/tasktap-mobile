@@ -112,23 +112,16 @@ class TimbraScreen extends ConsumerWidget {
       }
     });
 
-    // The one shared rule (entitlement_providers.dart's isButtonPunchWithheld): a QrOnly tenant may
-    // only withhold the button on an explicit `false`, and never while the shift is open — the flag
-    // may remove a way to START work, never a way to finish it. An unknown answer (cold start,
-    // signed out, another user, /auth/me not back yet) keeps the button too.
+    // The one shared rule (entitlement_providers.dart's isButtonPunchWithheld), on the same
+    // `startOnly` surface as Home: an effective QrOnly user gets the scanner and no punch keys at
+    // all, open shift or not — they close the day by scanning, or the office closes it from the
+    // web panel. Only an approved smart-working day (true) or an unknown answer (null) keeps keys.
     final hidePunch = isButtonPunchWithheld(
-      surface: ButtonPunchSurface.startOrFinish,
+      surface: ButtonPunchSurface.startOnly,
       clockInMethod: clockInMethod,
       smartWorkingToday: smartWorking,
       hasOpenShift: shiftState.isOnShift,
     );
-
-    // The one state the punch control cannot resolve on its own: an open shift on a QrOnly tenant
-    // whose day is not a confirmed approved one. The button stays (it may still be legal — the
-    // server's two-day rule covers a night shift opened on an approved day), so the scanner has to
-    // stay reachable beside it.
-    final showQrFallback =
-        clockInMethod == 'QrOnly' && shiftState.isOnShift && smartWorking != true;
 
     final banners = <Widget>[
       // The server compared this phone's clock with its own receipt instant and found them far
@@ -263,7 +256,6 @@ class TimbraScreen extends ConsumerWidget {
                 punchGuard: punchGuard,
                 pauseGuard: pauseGuard,
                 hidePunch: hidePunch,
-                showQrFallback: showQrFallback,
                 onPunch: () => ref.read(punchNotifierProvider.notifier).punch(shiftState),
                 onPause: () => ref.read(punchNotifierProvider.notifier).togglePause(shiftState),
               ),
@@ -845,7 +837,6 @@ class _PunchDeck extends StatelessWidget {
     required this.punchGuard,
     required this.pauseGuard,
     required this.hidePunch,
-    required this.showQrFallback,
     required this.onPunch,
     required this.onPause,
   });
@@ -855,7 +846,6 @@ class _PunchDeck extends StatelessWidget {
   final TimbraGuard punchGuard;
   final TimbraGuard pauseGuard;
   final bool hidePunch;
-  final bool showQrFallback;
   final VoidCallback onPunch;
   final VoidCallback onPause;
 
@@ -906,10 +896,6 @@ class _PunchDeck extends StatelessWidget {
                     ],
                   ],
                 ),
-                if (showQrFallback) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  const _QrFallbackForOpenShift(),
-                ],
               ],
             ),
     );
@@ -1170,7 +1156,7 @@ class _QrOnlyDeck extends StatelessWidget {
                   Icon(Icons.qr_code_scanner, size: 20, color: AppColors.WHITE),
                   const SizedBox(width: 8),
                   Text(
-                    'SCANSIONA QR',
+                    'TIMBRA CON QR',
                     style: TextStyle(
                       fontFamily: 'Archivo Narrow',
                       fontSize: 16,
@@ -1180,56 +1166,6 @@ class _QrOnlyDeck extends StatelessWidget {
                     ),
                   ),
                 ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Sits under the punch key while a shift is open on a QrOnly tenant whose day is not a confirmed
-/// approved one.
-///
-/// Why both controls: the button has to stay — the server judges an end-of-shift punch against the
-/// row's own day *and* tenant-local today, so a night shift opened on an approved day is legal
-/// after midnight even when this screen's flag has already rolled over. The QR has to stay
-/// reachable for the one refusal the button cannot resolve: the row day's approval was cancelled.
-/// Without this line the only route to closing such a shift was the tracker row on Home.
-class _QrFallbackForOpenShift extends StatelessWidget {
-  const _QrFallbackForOpenShift();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            'Se il pulsante viene rifiutato, chiudi la giornata con il QR.',
-            style: TextStyle(fontFamily: 'Archivo', fontSize: 11, color: context.colors.inkMuted),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        SizedBox(
-          height: 34,
-          child: OutlinedButton(
-            onPressed: () => context.push(AppRoutes.timbraQr),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: context.colors.ink,
-              side: BorderSide(color: context.colors.borderLight),
-              shape: const RoundedRectangleBorder(borderRadius: AppRack.freeShape),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-            child: const Text(
-              // Named, not abbreviated: beside a caption that already says "QR", a button reading
-              // "QR" told the technician what the acronym was, not what the tap does.
-              'SCANSIONA QR',
-              style: TextStyle(
-                fontFamily: 'Archivo Narrow',
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
               ),
             ),
           ),
