@@ -297,7 +297,6 @@ void main() {
         expect(find.text(key), findsNothing, reason: '$key must not be offered to a QR-only user');
       }
       expect(find.text('TIMBRA CON QR'), findsOneWidget);
-      expect(find.text('TIMBRA CON QR'), findsNothing);
 
       await _teardownTimer(tester);
     });

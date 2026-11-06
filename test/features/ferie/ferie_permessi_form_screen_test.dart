@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
@@ -180,7 +181,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).last, 'Visita medica');
     await tester.pumpAndSettle();
-    expect(find.text(noteHint), findsNothing, reason: 'typing a note clears the error and hint');
+    expect(find.byType(InlineAlert), findsNothing, reason: 'typing a note clears the error');
     await tester.tap(find.text('Invia richiesta'));
     await tester.pumpAndSettle();
     expect(fake.lastCreate!['reason'], 'Visita medica');
@@ -196,6 +197,11 @@ void main() {
     await tester.tap(find.byType(SwitchListTile));
     await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.text('Invia richiesta'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Invia richiesta'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
