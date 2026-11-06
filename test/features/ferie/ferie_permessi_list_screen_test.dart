@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:ui' show SemanticsAction;
+
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
@@ -17,6 +19,8 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/core/widgets/list/list_filter_row.dart';
 import 'package:tasktap_mobile/features/ferie/ferie_permessi_list_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
+    show internalUserIdProvider;
 
 class _FakeAbsenceRequestApiClient extends AbsenceRequestApiClient {
   _FakeAbsenceRequestApiClient(this._items) : super(Dio());
@@ -121,6 +125,7 @@ Widget _buildScreen(
   _FakeAbsenceRequestApiClient fake, {
   required AppDatabase db,
   bool online = true,
+  List<Override> extraOverrides = const [],
 }) {
   return ProviderScope(
     overrides: [
@@ -131,6 +136,7 @@ Widget _buildScreen(
       // harness and every cancel silently no-ops before it reaches the fake client.
       isOnlineProvider.overrideWithValue(online),
       cachedEntitlementProvider.overrideWith((ref) => null),
+      ...extraOverrides,
     ],
     child: const MaterialApp(home: FeriePermessiListScreen()),
   );
@@ -149,6 +155,13 @@ Future<void> _disposeScreen(WidgetTester tester) async {
 Finder _chip(String label) =>
     find.descendant(of: find.byType(ListFilterRow), matching: find.text(label));
 
+/// The screen opens on the prototype's `In attesa` preset, so tests that need the whole history
+/// first switch to `Tutte`.
+Future<void> _showAll(WidgetTester tester) async {
+  await tester.tap(_chip('TUTTE'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUpAll(() async {
     await initializeDateFormatting('it', null);
@@ -157,6 +170,22 @@ void main() {
   setUp(() {
     // The real provider reads the signed-in user's internal id from prefs on every read.
     SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'user-1'});
+  });
+
+  testWidgets('opens with In attesa active, like the prototype', (tester) async {
+    final fake = _FakeAbsenceRequestApiClient([
+      _request(id: 'ar-1', status: 0),
+      _request(id: 'ar-2', status: 1),
+    ]);
+
+    await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('In attesa'), findsOneWidget);
+    expect(find.text('Approvate'), findsNothing);
+    expect(_chip('IN ATTESA'), findsOneWidget);
+    expect(find.text('1 RICHIESTA'), findsOneWidget);
+    await _disposeScreen(tester);
   });
 
   testWidgets('renders requests the client returns, grouped by status', (tester) async {
@@ -170,6 +199,7 @@ void main() {
 
     await tester.pumpWidget(_buildScreen(fake, db: db));
     await tester.pumpAndSettle();
+    await _showAll(tester);
 
     // The row title is the person; this screen only ever reads the caller's own requests.
     expect(find.text('Daniel Shala'), findsNWidgets(3));
@@ -243,6 +273,7 @@ void main() {
 
     await tester.pumpWidget(_buildScreen(fake, db: db, online: false));
     await tester.pumpAndSettle();
+    await _showAll(tester);
 
     expect(find.textContaining('Permesso retribuito'), findsOneWidget);
     expect(find.text('Ferie e permessi non disponibili offline'), findsNothing);
@@ -282,6 +313,7 @@ void main() {
 
     await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
     await tester.pumpAndSettle();
+    await _showAll(tester);
 
     expect(find.byType(Dismissible), findsNothing);
     expect(find.text('Annulla'), findsNothing);
@@ -295,6 +327,7 @@ void main() {
 
     await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
     await tester.pumpAndSettle();
+    await _showAll(tester);
 
     expect(find.text('Annullate'), findsOneWidget);
     expect(find.text('ANNULLATA'), findsOneWidget);
@@ -311,6 +344,7 @@ void main() {
 
     await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
     await tester.pumpAndSettle();
+    await _showAll(tester);
 
     await tester.tap(_chip('IN ATTESA'));
     await tester.pumpAndSettle();
@@ -351,6 +385,12 @@ void main() {
     await tester.tap(find.byKey(const Key('ferie-filter-reset')));
     await tester.pumpAndSettle();
 
+    // Azzera returns to the prototype default, not to an all-status view.
+    expect(find.text('In attesa'), findsOneWidget);
+    expect(find.text('Approvate'), findsNothing);
+    expect(find.text('Respinte'), findsNothing);
+
+    await _showAll(tester);
     expect(find.text('In attesa'), findsOneWidget);
     expect(find.text('Approvate'), findsOneWidget);
     expect(find.text('Respinte'), findsOneWidget);
@@ -469,5 +509,188 @@ void main() {
 
     expect(tester.takeException(), isNull);
     await _disposeScreen(tester);
+  });
+
+  testWidgets('the person line reads the persisted id fresh, not the cached provider', (
+    tester,
+  ) async {
+    final db = _newDb();
+    await _seedColleague(db);
+    await _seedColleague(db, id: 'stale-user', name: 'Vecchio Utente');
+    final fake = _FakeAbsenceRequestApiClient([_request(id: 'ar-1')]);
+
+    await tester.pumpWidget(
+      _buildScreen(
+        fake,
+        db: db,
+        // The cached FutureProvider is the documented stale-id trap after a forced sign-out; the
+        // screen must use the persisted key instead.
+        extraOverrides: [internalUserIdProvider.overrideWith((ref) async => 'stale-user')],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Daniel Shala'), findsOneWidget);
+    expect(find.text('Vecchio Utente'), findsNothing);
+    await _disposeScreen(tester);
+  });
+
+  testWidgets('falls back to a neutral title when the colleague mirror has no name', (
+    tester,
+  ) async {
+    final fake = _FakeAbsenceRequestApiClient([_request(id: 'ar-1')]);
+
+    await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Le mie richieste'), findsOneWidget);
+    await _disposeScreen(tester);
+  });
+
+  testWidgets('sheet controls expose a semantic tap action', (tester) async {
+    final handle = tester.ensureSemantics();
+    final fake = _FakeAbsenceRequestApiClient([_request(id: 'ar-1')]);
+
+    await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('FILTRI'));
+    await tester.pumpAndSettle();
+
+    final choice = tester.getSemantics(find.byKey(const Key('ferie-filter-status-inAttesa')));
+    expect(choice.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+
+    final date = tester.getSemantics(find.byKey(const Key('ferie-filter-from')));
+    expect(date.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    handle.dispose();
+    await _disposeScreen(tester);
+  });
+
+  testWidgets('the Periodo facet opens the date picker', (tester) async {
+    final fake = _FakeAbsenceRequestApiClient([_request(id: 'ar-1')]);
+
+    await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('FILTRI'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('ferie-filter-from')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    await _disposeScreen(tester);
+  });
+
+  testWidgets('a DST-spanning two-day request renders 2 giorni', (tester) async {
+    // 29–30 March 2026 is the Europe/Rome spring-forward: a local-midnight difference is 23h and
+    // truncates to "1 giorno". The UI must count civil days, not elapsed hours.
+    final fake = _FakeAbsenceRequestApiClient([
+      _request(id: 'ar-1', startDate: '2026-03-29', endDate: '2026-03-30'),
+    ]);
+
+    await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('2 giorni'), findsOneWidget);
+    expect(find.textContaining('1 giorno'), findsNothing);
+    await _disposeScreen(tester);
+  });
+
+  testWidgets('a multi-day request with times renders days, not hours', (tester) async {
+    final fake = _FakeAbsenceRequestApiClient([
+      _request(
+        id: 'ar-1',
+        startDate: '2026-03-29',
+        endDate: '2026-03-31',
+        startTime: '09:00:00',
+        endTime: '11:00:00',
+      ),
+    ]);
+
+    await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('3 giorni'), findsOneWidget);
+    expect(find.textContaining('2 ore'), findsNothing);
+    await _disposeScreen(tester);
+  });
+
+  testWidgets('selecting Annullate from the sheet shows a visible preset', (tester) async {
+    final fake = _FakeAbsenceRequestApiClient([_request(id: 'ar-1', status: 3)]);
+
+    await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
+    await tester.pumpAndSettle();
+    await _showAll(tester);
+    expect(find.text('Annullate'), findsOneWidget);
+
+    await tester.tap(find.text('FILTRI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('ferie-filter-status-annullate')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Applica'));
+    await tester.pumpAndSettle();
+
+    expect(_chip('ANNULLATE'), findsOneWidget);
+    expect(find.text('Annullate'), findsOneWidget);
+    await _disposeScreen(tester);
+  });
+
+  testWidgets('the filter sheet does not overflow at 320px', (tester) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final fake = _FakeAbsenceRequestApiClient([_request(id: 'ar-1')]);
+
+    await tester.pumpWidget(_buildScreen(fake, db: _newDb()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('FILTRI'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Applica'), findsOneWidget);
+    await _disposeScreen(tester);
+  });
+
+  group('absenceRequestOverlapsPeriod', () {
+    final item = _request(id: 'ar-1', startDate: '2026-11-10', endDate: '2026-11-12');
+
+    test('keeps everything when no period is set', () {
+      expect(absenceRequestOverlapsPeriod(item), isTrue);
+    });
+
+    test('keeps a request intersecting either boundary', () {
+      expect(
+        absenceRequestOverlapsPeriod(
+          item,
+          from: DateTime(2026, 11, 12),
+          to: DateTime(2026, 11, 20),
+        ),
+        isTrue,
+      );
+      expect(
+        absenceRequestOverlapsPeriod(item, from: DateTime(2026, 11, 1), to: DateTime(2026, 11, 10)),
+        isTrue,
+      );
+    });
+
+    test('drops a disjoint request', () {
+      expect(
+        absenceRequestOverlapsPeriod(
+          item,
+          from: DateTime(2026, 11, 13),
+          to: DateTime(2026, 11, 20),
+        ),
+        isFalse,
+      );
+      expect(
+        absenceRequestOverlapsPeriod(item, from: DateTime(2026, 11, 1), to: DateTime(2026, 11, 9)),
+        isFalse,
+      );
+    });
+
+    test('honours an open-ended period', () {
+      expect(absenceRequestOverlapsPeriod(item, from: DateTime(2026, 11, 12)), isTrue);
+      expect(absenceRequestOverlapsPeriod(item, to: DateTime(2026, 11, 9)), isFalse);
+    });
   });
 }

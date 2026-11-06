@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
@@ -11,12 +12,23 @@ import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
 import '../../data/ferie/absence_request_api_client.dart';
 import '../../data/sync/sync_freshness_provider.dart' show hasSyncedAtLeastOnceProvider;
-import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../../presentation/providers/schedule_providers.dart' show colleagueNameProvider;
 
 const Set<int> _kCancellable = {0, 1}; // Pending, Approved
+
+/// The persisted internal user id, read fresh on every watch.
+///
+/// Deliberately not `internalUserIdProvider`: that FutureProvider is not autoDispose and nothing
+/// invalidates it, so after a forced sign-out (which keeps prefs) it can still name the PREVIOUS
+/// technician. The persisted key is the single source of truth — same rule
+/// `myAbsenceRequestsProvider` follows.
+final _freshInternalUserIdProvider = FutureProvider.autoDispose<String?>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString(internalUserIdPrefsKey);
+});
 
 /// Which absence states the list is showing. Mirrors the prototype's quick chips; [annullate] is
 /// the existing cancelled state, kept reachable through the `Filtri` sheet so no row disappears.
@@ -60,7 +72,7 @@ extension on _FerieTypeFilter {
 
 class _FerieFilters {
   const _FerieFilters({
-    this.status = _FerieStatusFilter.tutte,
+    this.status = _FerieStatusFilter.inAttesa,
     this.type = _FerieTypeFilter.tutti,
     this.from,
     this.to,
@@ -73,14 +85,8 @@ class _FerieFilters {
 
   bool matchesStatus(int value) => status.status == null || status.status == value;
 
-  bool matchesPeriod(AbsenceRequestDto item) {
-    if (from == null && to == null) return true;
-    final start = DateUtils.dateOnly(from ?? DateTime(1970));
-    final end = DateUtils.dateOnly(to ?? DateTime(2100));
-    final itemStart = DateUtils.dateOnly(item.startDate);
-    final itemEnd = DateUtils.dateOnly(item.endDate);
-    return !itemStart.isAfter(end) && !itemEnd.isBefore(start);
-  }
+  bool matchesPeriod(AbsenceRequestDto item) =>
+      absenceRequestOverlapsPeriod(item, from: from, to: to);
 }
 
 /// Self-service AbsenceRequest history.
@@ -117,12 +123,20 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
     super.dispose();
   }
 
+  /// The prototype's four presets, plus a visible `Annullate` preset only while it is the
+  /// applied status — so a sheet-selected cancelled filter is never an invisible state.
+  List<ListFilterChipData> get _visibleChips => [
+    ..._chips,
+    if (_filters.status == _FerieStatusFilter.annullate)
+      const ListFilterChipData(label: 'Annullate', id: 'annullate'),
+  ];
+
   String? get _activeChipId => switch (_filters.status) {
     _FerieStatusFilter.inAttesa => 'in-attesa',
     _FerieStatusFilter.approvate => 'approvate',
     _FerieStatusFilter.respinte => 'respinte',
     _FerieStatusFilter.tutte => 'tutte',
-    _FerieStatusFilter.annullate => null,
+    _FerieStatusFilter.annullate => 'annullate',
   };
 
   void _selectChip(ListFilterChipData chip) {
@@ -130,6 +144,7 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
       'in-attesa' => _FerieStatusFilter.inAttesa,
       'approvate' => _FerieStatusFilter.approvate,
       'respinte' => _FerieStatusFilter.respinte,
+      'annullate' => _FerieStatusFilter.annullate,
       _ => _FerieStatusFilter.tutte,
     };
     setState(
@@ -158,7 +173,7 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
   @override
   Widget build(BuildContext context) {
     final requestsAsync = ref.watch(myAbsenceRequestsProvider);
-    final meId = ref.watch(internalUserIdProvider).valueOrNull;
+    final meId = ref.watch(_freshInternalUserIdProvider).valueOrNull;
     final myName = meId == null ? null : ref.watch(colleagueNameProvider(meId)).valueOrNull;
 
     return Scaffold(
@@ -184,7 +199,7 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
               onChanged: (q) => setState(() => _query = q),
             ),
             ListFilterRow(
-              filters: _chips,
+              filters: _visibleChips,
               activeId: _activeChipId,
               onSelected: _selectChip,
               onOpenFilters: _openFilters,
@@ -349,12 +364,30 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
         child: Icon(LucideIcons.x, color: context.colors.red),
       ),
       confirmDismiss: (_) => _confirmCancel(context, ref, item),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          row,
-          _CancelAction(onCancel: () => _confirmCancel(context, ref, item)),
-        ],
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: context.colors.borderLight)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The shared row draws its own hairline; this block draws the one that belongs after
+            // the cancel strip, so the row's rule is covered while the strip stays inside the
+            // same ruled cell instead of floating below it.
+            Stack(
+              children: [
+                row,
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(height: 1, color: context.colors.bg2),
+                ),
+              ],
+            ),
+            _CancelAction(onCancel: () => _confirmCancel(context, ref, item)),
+          ],
+        ),
       ),
     );
   }
@@ -363,8 +396,8 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
     return ListRowData(
       title: myName ?? 'Le mie richieste',
       meta: '${absenceTypeLabel(item.type)} · ${_periodLabel(item)}',
-      secondary: '${_durationLabel(item)} · ${absenceStatusLabel(item.status).toLowerCase()}',
-      status: absenceStatusLabel(item.status),
+      secondary: '${_durationLabel(item)} · ${_statusLabel(item.status).toLowerCase()}',
+      status: _statusLabel(item.status),
       statusTone: switch (item.status) {
         0 => ListStatusTone.warn,
         1 => ListStatusTone.good,
@@ -381,7 +414,7 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
       myName ?? '',
       absenceTypeLabel(item.type),
       _periodLabel(item),
-      absenceStatusLabel(item.status),
+      _statusLabel(item.status),
       item.reason ?? '',
     ].join(' ').toLowerCase();
     return haystack.contains(q);
@@ -630,6 +663,7 @@ class _DateField extends StatelessWidget {
     return Semantics(
       button: true,
       label: '$label: $value',
+      onTap: onTap,
       excludeSemantics: true,
       child: AppTappable(
         onTap: onTap,
@@ -684,6 +718,7 @@ class _FilterChoice extends StatelessWidget {
       button: true,
       selected: active,
       label: label,
+      onTap: onTap,
       excludeSemantics: true,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
@@ -747,8 +782,8 @@ Future<bool> _confirmCancel(BuildContext context, WidgetRef ref, AbsenceRequestD
 }
 
 String _periodLabel(AbsenceRequestDto item) {
-  final start = DateUtils.dateOnly(item.startDate);
-  final end = DateUtils.dateOnly(item.endDate);
+  final start = _civilUtc(item.startDate);
+  final end = _civilUtc(item.endDate);
   final day = DateFormat('dd/MM', 'it');
   if (start == end) return day.format(start);
   if (start.year == end.year && start.month == end.month) {
@@ -760,9 +795,12 @@ String _periodLabel(AbsenceRequestDto item) {
 }
 
 String _durationLabel(AbsenceRequestDto item) {
+  final startDate = _civilUtc(item.startDate);
+  final endDate = _civilUtc(item.endDate);
+  final sameDay = startDate == endDate;
   final startTime = item.startTime;
   final endTime = item.endTime;
-  if (startTime != null && endTime != null) {
+  if (sameDay && startTime != null && endTime != null) {
     final start = _parseTimeMinutes(startTime);
     final end = _parseTimeMinutes(endTime);
     if (start != null && end != null && end > start) {
@@ -775,10 +813,31 @@ String _durationLabel(AbsenceRequestDto item) {
       return hours == 1 ? '1 ora' : '$text ore';
     }
   }
-  final days =
-      DateUtils.dateOnly(item.endDate).difference(DateUtils.dateOnly(item.startDate)).inDays + 1;
+  // UTC civil dates: a local-midnight difference loses an hour across a DST change and
+  // truncates 29–30 March in Europe/Rome to "1 giorno". UTC has no DST.
+  final days = endDate.difference(startDate).inDays + 1;
   return days == 1 ? '1 giorno' : '$days giorni';
 }
+
+/// A civil date as UTC midnight. Never use a device-local midnight for a day count.
+DateTime _civilUtc(DateTime value) => DateTime.utc(value.year, value.month, value.day);
+
+/// Whether a request's civil-date range intersects the selected period (inclusive on both ends).
+///
+/// Extracted so the Periodo facet's overlap rule can be tested without a date picker.
+@visibleForTesting
+bool absenceRequestOverlapsPeriod(AbsenceRequestDto item, {DateTime? from, DateTime? to}) {
+  if (from == null && to == null) return true;
+  final start = _civilUtc(from ?? DateTime(1970));
+  final end = _civilUtc(to ?? DateTime(2100));
+  final itemStart = _civilUtc(item.startDate);
+  final itemEnd = _civilUtc(item.endDate);
+  return !itemStart.isAfter(end) && !itemEnd.isBefore(start);
+}
+
+/// The list's status vocabulary: singular per row, but the rejected state is `Respinta` so it
+/// agrees with the prototype's `Respinte` group instead of the wire's legacy `Rifiutata`.
+String _statusLabel(int status) => status == 2 ? 'Respinta' : absenceStatusLabel(status);
 
 int? _parseTimeMinutes(String value) {
   final parts = value.split(':');
