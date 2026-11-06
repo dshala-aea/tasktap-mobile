@@ -88,6 +88,8 @@ class ListShell extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.showBack = false,
+    this.onBack,
     this.action,
     this.headerActions = const [],
     this.banner,
@@ -111,6 +113,14 @@ class ListShell extends StatelessWidget {
 
   final String title;
   final String? subtitle;
+
+  /// Shows the shared circled back chevron in the header. Admin lists reached by a push use this;
+  /// tab-root lists leave it off (the default).
+  final bool showBack;
+
+  /// Overrides the back chevron's action. Defaults to `Navigator.maybePop`, matching
+  /// [ScreenHeader].
+  final VoidCallback? onBack;
 
   /// The primary header action (`Nuovo`). Omit for read-only roles.
   final Widget? action;
@@ -158,6 +168,8 @@ class ListShell extends StatelessWidget {
       title: title,
       subtitle: subtitle,
       subtitleMaxLines: 2,
+      showBack: showBack,
+      onBack: onBack,
       actions: [...headerActions, ?action],
     );
 
