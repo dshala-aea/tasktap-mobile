@@ -76,6 +76,7 @@ import '../../features/cantiere/cantiere_detail_screen.dart';
 import '../../features/cantiere/cantiere_map_screen.dart';
 import '../../features/altro/forbidden_screen.dart';
 import '../../features/altro/session_recovery_screen.dart';
+import '../../features/altro/sync_queue_screen.dart';
 import '../../data/auth/session_recovery.dart';
 import '../../data/auth/session_recovery_providers.dart';
 import '../../data/entitlements/entitlement_providers.dart';
@@ -174,6 +175,9 @@ abstract final class AppRoutes {
 
   /// The worker's rotating badge QR, scanned by a team leader at the cantiere.
   static const String altroBadge = '/altro/badge';
+
+  /// The personal-timbra offline queue: review, delete, retry.
+  static const String altroCodaSync = '/altro/coda-sincronizzazione';
 
   /// Path for the shared "unavailable" placeholder; pass an
   /// `({String titolo, String motivo})` record as GoRouter extra so the
@@ -754,6 +758,10 @@ GoRouter buildRouter(WidgetRef ref) {
                         ),
                       ),
                     ],
+                  ),
+                  GoRoute(
+                    path: 'coda-sincronizzazione',
+                    builder: (context, state) => const SyncQueueScreen(),
                   ),
                   GoRoute(
                     path: 'preferenze-notifiche',

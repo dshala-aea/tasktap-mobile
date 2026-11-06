@@ -270,7 +270,18 @@ class ImpostazioniScreen extends ConsumerWidget {
             // ── Sistema ───────────────────────────────────────────────────
             const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Sistema')),
             SliverToBoxAdapter(
-              child: _SettingsGroup(children: [_LastSyncRow(), _LogoutSettingRow(ref: ref)]),
+              child: _SettingsGroup(
+                children: [
+                  _LastSyncRow(),
+                  _LinkRow(
+                    icon: LucideIcons.clock,
+                    title: 'Coda di sincronizzazione',
+                    subtitle: 'Timbrature in attesa o rifiutate: rivedi, elimina, riprova',
+                    onTap: () => context.push(AppRoutes.altroCodaSync),
+                  ),
+                  _LogoutSettingRow(ref: ref),
+                ],
+              ),
             ),
 
             // ── Version footer ─────────────────────────────────────────────
