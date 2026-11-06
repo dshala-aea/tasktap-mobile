@@ -1,14 +1,17 @@
 // dart format width=100
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_rack.dart';
-import '../../../core/theme/app_text_styles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/theme/app_palette.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/time/business_time.dart' show formatWorkDate;
+import '../../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
@@ -20,8 +23,6 @@ import '../../ticket/steps/step_assegnazione.dart';
 import '../admin_api_client.dart';
 import '../admin_widgets.dart';
 import '../squadre/admin_squadra_list_screen.dart' show adminSquadreProvider;
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// All schedules from Drift cache, ordered by date desc.
 final adminSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
@@ -51,6 +52,7 @@ class AdminScheduleFilters {
     this.statusId,
     this.technicianId,
     this.squadraId,
+    this.ticketId,
   });
 
   final DateTime? dateFrom;
@@ -58,16 +60,24 @@ class AdminScheduleFilters {
   final int? statusId;
   final String? technicianId;
   final String? squadraId;
+  final String? ticketId;
 
   bool get isEmpty =>
       dateFrom == null &&
       dateTo == null &&
       statusId == null &&
       technicianId == null &&
-      squadraId == null;
+      squadraId == null &&
+      ticketId == null;
 
+  /// One active *facet*, not one active bound: a date range is one filter even though it carries
+  /// two dates. The old code counted both, so `Oggi` (from = to = today) read as "2 filtri".
   int get activeCount =>
-      [dateFrom, dateTo, statusId, technicianId, squadraId].where((v) => v != null).length;
+      (dateFrom != null || dateTo != null ? 1 : 0) +
+      (statusId != null ? 1 : 0) +
+      (technicianId != null ? 1 : 0) +
+      (squadraId != null ? 1 : 0) +
+      (ticketId != null ? 1 : 0);
 
   AdminScheduleFilters copyWith({
     DateTime? Function()? dateFrom,
@@ -75,6 +85,7 @@ class AdminScheduleFilters {
     int? Function()? statusId,
     String? Function()? technicianId,
     String? Function()? squadraId,
+    String? Function()? ticketId,
   }) {
     return AdminScheduleFilters(
       dateFrom: dateFrom != null ? dateFrom() : this.dateFrom,
@@ -82,6 +93,7 @@ class AdminScheduleFilters {
       statusId: statusId != null ? statusId() : this.statusId,
       technicianId: technicianId != null ? technicianId() : this.technicianId,
       squadraId: squadraId != null ? squadraId() : this.squadraId,
+      ticketId: ticketId != null ? ticketId() : this.ticketId,
     );
   }
 }
@@ -99,9 +111,73 @@ final _squadraMemberIdsProvider = FutureProvider.autoDispose.family<Set<String>,
 
 enum _ViewMode { calendario, elenco }
 
-/// Admin schedule list — a real calendar (month grid) plus a filterable elenco: date range,
-/// status, squadra and technician, on top of the title search this screen used to be limited to.
-class AdminScheduleListScreen extends StatefulWidget {
+/// The prototype's quick date presets. Each is the same date-range facet the `Filtri` sheet
+/// already edits — no new date rule, just a shortcut to a range.
+enum _DatePreset { oggi, settimana, futuro, tutte }
+
+extension on _DatePreset {
+  String get id => name;
+
+  String get label => switch (this) {
+    _DatePreset.oggi => 'Oggi',
+    _DatePreset.settimana => 'Settimana',
+    _DatePreset.futuro => 'Futuro',
+    _DatePreset.tutte => 'Tutte',
+  };
+}
+
+/// The three sections the prototype's elenco is grouped into, plus `Passato`.
+///
+/// `Passato` is not in the mockup, but the old elenco showed every mirrored schedule; dropping
+/// past work from `Tutte` would have removed rows. It stays last and hidden while empty.
+enum _DateBucket { oggi, settimana, futuro, passato }
+
+extension on _DateBucket {
+  String get title => switch (this) {
+    _DateBucket.oggi => 'Oggi',
+    _DateBucket.settimana => 'Questa settimana',
+    _DateBucket.futuro => 'Futuro',
+    _DateBucket.passato => 'Passato',
+  };
+}
+
+DateTime _civilDate(DateTime value) {
+  final utc = value.toUtc();
+  return DateTime.utc(utc.year, utc.month, utc.day);
+}
+
+DateTime _weekStart(DateTime civilDay) => civilDay.subtract(Duration(days: civilDay.weekday - 1));
+
+bool _sameDay(DateTime? a, DateTime b) =>
+    a != null && a.year == b.year && a.month == b.month && a.day == b.day;
+
+_DatePresetMatch _presetOf(AdminScheduleFilters filters, DateTime today) {
+  final weekStart = _weekStart(today);
+  final weekEnd = weekStart.add(const Duration(days: 6));
+  final nextWeek = weekStart.add(const Duration(days: 7));
+
+  if (filters.dateFrom == null && filters.dateTo == null) return _DatePresetMatch.tutte;
+  if (_sameDay(filters.dateFrom, today) && _sameDay(filters.dateTo, today)) {
+    return _DatePresetMatch.oggi;
+  }
+  if (_sameDay(filters.dateFrom, weekStart) && _sameDay(filters.dateTo, weekEnd)) {
+    return _DatePresetMatch.settimana;
+  }
+  if (_sameDay(filters.dateFrom, nextWeek) && filters.dateTo == null) {
+    return _DatePresetMatch.futuro;
+  }
+  return _DatePresetMatch.custom;
+}
+
+/// `null` when the active date range came from the sheet rather than from a chip.
+enum _DatePresetMatch { oggi, settimana, futuro, tutte, custom }
+
+/// Admin schedule list — a real calendar (month grid) plus the prototype's grouped `elenco`.
+///
+/// The calendar/elenco toggle, the filter bottom sheet and every facet it carries (date range,
+/// status, technician, squadra, ticket) are the existing ones; only the elenco's presentation and
+/// the quick date chips are new.
+class AdminScheduleListScreen extends ConsumerStatefulWidget {
   const AdminScheduleListScreen({super.key, this.initialSquadraId});
 
   /// Pre-applies the squadra filter when navigated here from that squadra's detail screen (Gap 9
@@ -110,10 +186,10 @@ class AdminScheduleListScreen extends StatefulWidget {
   final String? initialSquadraId;
 
   @override
-  State<AdminScheduleListScreen> createState() => _AdminScheduleListScreenState();
+  ConsumerState<AdminScheduleListScreen> createState() => _AdminScheduleListScreenState();
 }
 
-class _AdminScheduleListScreenState extends State<AdminScheduleListScreen> {
+class _AdminScheduleListScreenState extends ConsumerState<AdminScheduleListScreen> {
   String _query = '';
   final _searchCtrl = TextEditingController();
   _ViewMode _viewMode = _ViewMode.calendario;
@@ -140,6 +216,25 @@ class _AdminScheduleListScreenState extends State<AdminScheduleListScreen> {
     super.dispose();
   }
 
+  void _selectPreset(ListFilterChipData chip) {
+    final preset = _DatePreset.values.firstWhere(
+      (p) => p.id == chip.id,
+      orElse: () => _DatePreset.tutte,
+    );
+    final today = ref.read(businessTimeProvider).businessToday();
+    final weekStart = _weekStart(today);
+    final (DateTime? from, DateTime? to) = switch (preset) {
+      _DatePreset.oggi => (today, today),
+      _DatePreset.settimana => (weekStart, weekStart.add(const Duration(days: 6))),
+      _DatePreset.futuro => (weekStart.add(const Duration(days: 7)), null),
+      _DatePreset.tutte => (null, null),
+    };
+    setState(() {
+      _filters = _filters.copyWith(dateFrom: () => from, dateTo: () => to);
+      _selectedDay = null;
+    });
+  }
+
   void _openFilterSheet() async {
     final result = await showModalBottomSheet<AdminScheduleFilters>(
       context: context,
@@ -159,6 +254,9 @@ class _AdminScheduleListScreenState extends State<AdminScheduleListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final today = ref.watch(businessTimeProvider).businessToday();
+    final preset = _presetOf(_filters, today);
+
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: SafeArea(
@@ -177,20 +275,13 @@ class _AdminScheduleListScreenState extends State<AdminScheduleListScreen> {
             _viewMode = _ViewMode.elenco;
           }),
           filters: _filters,
+          activePresetId: preset == _DatePresetMatch.custom ? null : preset.name,
+          onSelectPreset: _selectPreset,
           onOpenFilters: _openFilterSheet,
           onClearFilters: () => setState(() {
             _filters = const AdminScheduleFilters();
             _selectedDay = null;
           }),
-        ),
-      ),
-      floatingActionButton: Padding(
-        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
-        // this same change.
-        padding: EdgeInsets.only(bottom: context.navClearance),
-        child: AppFab(
-          tooltip: 'Nuova pianificazione',
-          onPressed: () => context.push('/altro/pianificazioni/nuova'),
         ),
       ),
     );
@@ -209,6 +300,8 @@ class _AdminScheduleListBody extends ConsumerWidget {
     required this.selectedDay,
     required this.onDayTap,
     required this.filters,
+    required this.activePresetId,
+    required this.onSelectPreset,
     required this.onOpenFilters,
     required this.onClearFilters,
   });
@@ -223,6 +316,8 @@ class _AdminScheduleListBody extends ConsumerWidget {
   final DateTime? selectedDay;
   final ValueChanged<DateTime> onDayTap;
   final AdminScheduleFilters filters;
+  final String? activePresetId;
+  final ValueChanged<ListFilterChipData> onSelectPreset;
   final VoidCallback onOpenFilters;
   final VoidCallback onClearFilters;
 
@@ -231,13 +326,60 @@ class _AdminScheduleListBody extends ConsumerWidget {
     final schedulesAsync = ref.watch(adminSchedulesProvider);
     final allSchedules = schedulesAsync.valueOrNull ?? [];
     final assigneeMap = ref.watch(scheduleAssigneeMapProvider).valueOrNull ?? const {};
+    final colleagues = ref.watch(allColleaguesProvider).valueOrNull ?? const [];
+    final colleaguesById = {for (final c in colleagues) c.id: c.displayName};
+    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
+    final locationsById = {for (final l in locations) l.id: l.name};
 
     final squadraMemberIds = filters.squadraId == null
         ? null
         : ref.watch(_squadraMemberIdsProvider(filters.squadraId!)).valueOrNull;
 
+    final businessToday = ref.watch(businessTimeProvider).businessToday();
+
+    String? technicianNameFor(Schedule s) {
+      final direct = colleaguesById[s.userId];
+      if (direct != null) return direct;
+      final assignees = assigneeMap[s.id] ?? const <String>{};
+      final names = <String>[
+        for (final id in assignees)
+          if (colleaguesById[id] != null) colleaguesById[id]!,
+      ];
+      return names.isEmpty ? null : names.join(', ');
+    }
+
+    final search = query.trim().toLowerCase();
+
+    bool matchesQuery(Schedule s) {
+      if (search.isEmpty) return true;
+      final date = _civilDate(s.activityDate);
+      final dateLabel = formatWorkDate(date, 'EEE d MMM y', locale: 'it');
+      final numeric =
+          '${date.day.toString().padLeft(2, '0')}/'
+          '${date.month.toString().padLeft(2, '0')}/${date.year}';
+      final iso =
+          '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}';
+      final relative = date == businessToday
+          ? 'oggi'
+          : date == businessToday.add(const Duration(days: 1))
+          ? 'domani'
+          : '';
+      final haystack = [
+        s.title,
+        locationsById[s.locationId] ?? '',
+        technicianNameFor(s) ?? '',
+        dateLabel,
+        numeric,
+        iso,
+        relative,
+      ].join(' ').toLowerCase();
+      return haystack.contains(search);
+    }
+
     bool matchesFilters(Schedule s) {
-      if (query.isNotEmpty && !s.title.toLowerCase().contains(query.toLowerCase())) return false;
+      if (!matchesQuery(s)) return false;
       if (filters.dateFrom != null) {
         final from = DateTime.utc(
           filters.dateFrom!.year,
@@ -255,6 +397,7 @@ class _AdminScheduleListBody extends ConsumerWidget {
         if (!s.activityDate.toUtc().isBefore(to)) return false;
       }
       if (filters.statusId != null && s.statusId != filters.statusId) return false;
+      if (filters.ticketId != null && s.ticketId != filters.ticketId) return false;
       if (filters.technicianId != null) {
         final assignees = assigneeMap[s.id] ?? const <String>{};
         if (s.userId != filters.technicianId && !assignees.contains(filters.technicianId)) {
@@ -272,188 +415,345 @@ class _AdminScheduleListBody extends ConsumerWidget {
 
     final filtered = allSchedules.where(matchesFilters).toList();
 
-    // Every filter here is client-side over the local mirror, so an empty result has the same three
+    final bucketOf = _bucketOf(businessToday);
+    final buckets = {for (final bucket in _DateBucket.values) bucket: <Schedule>[]};
+    for (final schedule in filtered) {
+      buckets[bucketOf(schedule)]!.add(schedule);
+    }
+    for (final rows in buckets.values) {
+      rows.sort((a, b) {
+        final byDate = a.activityDate.compareTo(b.activityDate);
+        if (byDate != 0) return byDate;
+        return a.timeStartMinutes.compareTo(b.timeStartMinutes);
+      });
+    }
+
+    String metaLine(Schedule s) {
+      final date = _civilDate(s.activityDate);
+      final time = s.allDay
+          ? 'Tutto il giorno'
+          : '${_fmtTime(s.timeStartMinutes)} – ${_fmtTime(s.timeEndMinutes)}';
+      final dayPrefix = date == businessToday
+          ? null
+          : date == businessToday.add(const Duration(days: 1))
+          ? 'Domani'
+          : formatWorkDate(date, 'EEE d MMM', locale: 'it');
+      final parts = <String>[
+        if (dayPrefix == null) time else '$dayPrefix $time',
+        if (technicianNameFor(s) != null) technicianNameFor(s)!,
+        if (locationsById[s.locationId] != null) locationsById[s.locationId]!,
+      ];
+      return parts.join(' · ');
+    }
+
+    final groups = <ListGroupData>[
+      for (final bucket in _DateBucket.values)
+        if (buckets[bucket]!.isNotEmpty)
+          ListGroupData(
+            title: bucket.title,
+            count: buckets[bucket]!.length,
+            rows: [
+              for (final s in buckets[bucket]!)
+                ListRowData(
+                  rowKey: ValueKey('schedule-${s.id}'),
+                  title: s.title.isNotEmpty ? s.title : 'Intervento',
+                  meta: metaLine(s),
+                  status: scheduleStatusName(s.statusId),
+                  // The prototype's `Pianificato` stamp is amber; the shared vocabulary maps that
+                  // label to neutral, so the list states the tone it means.
+                  statusTone: scheduleStatusName(s.statusId) == 'Pianificato'
+                      ? ListStatusTone.warn
+                      : null,
+                  onTap: () => context.push('/altro/pianificazioni/${s.id}'),
+                ),
+            ],
+          ),
+    ];
+
+    final todayCount = filtered.where((s) => _civilDate(s.activityDate) == businessToday).length;
+
+    // Every filter here is client-side over the local mirror, so an empty result has the same 3
     // possible causes as the other admin lists: no match, no sync yet, or genuinely none.
-    final hasActiveFilter =
-        query.isNotEmpty ||
-        filters.dateFrom != null ||
-        filters.dateTo != null ||
-        filters.statusId != null ||
-        filters.technicianId != null ||
-        filters.squadraId != null;
+    final hasActiveFilter = query.trim().isNotEmpty || !filters.isEmpty;
     final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
 
-    return RefreshIndicator(
-      onRefresh: () => refreshWithFeedback(context, ref),
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: ScreenHeader(
-              title: 'Pianificazioni',
-              subtitle: '${filtered.length} totali',
-              showBack: true,
+    final isLoading = schedulesAsync.isLoading && !schedulesAsync.hasValue;
+    final isUnavailable = schedulesAsync.hasError && !schedulesAsync.hasValue;
+
+    final content = _content(
+      context: context,
+      ref: ref,
+      viewMode: viewMode,
+      calendarMonth: calendarMonth,
+      onMonthChanged: onMonthChanged,
+      selectedDay: selectedDay,
+      onDayTap: onDayTap,
+      filtered: filtered,
+      groups: groups,
+      summary: ListSummaryData(left: _impegniLabel(filtered.length), right: '$todayCount oggi'),
+      isLoading: isLoading,
+      isUnavailable: isUnavailable,
+      hasActiveFilter: hasActiveFilter,
+      hasSchedules: allSchedules.isNotEmpty,
+      neverSynced: neverSynced,
+      query: query,
+    );
+
+    return Column(
+      children: [
+        const OfflineSyncBanner(),
+        ScreenHeader(
+          title: 'Pianificazioni',
+          subtitle: 'Gli impegni nel tempo, non i cantieri.',
+          subtitleMaxLines: 2,
+          showBack: true,
+          actions: [
+            ListHeaderAction(
+              label: 'Nuovo',
+              onPressed: () => context.push('/altro/pianificazioni/nuova'),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: AppTabs(
-              tabs: const [
-                AppTab(label: 'Calendario'),
-                AppTab(label: 'Elenco'),
-              ],
-              selectedIndex: viewMode.index,
-              onSelected: (i) => onViewModeChanged(_ViewMode.values[i]),
+          ],
+        ),
+        AppTabs(
+          tabs: const [
+            AppTab(label: 'Calendario'),
+            AppTab(label: 'Elenco'),
+          ],
+          selectedIndex: viewMode.index,
+          onSelected: (i) => onViewModeChanged(_ViewMode.values[i]),
+        ),
+        AppSearchBar(
+          controller: searchCtrl,
+          hint: 'Cerca titolo, sede, tecnico o data…',
+          onChanged: onQueryChanged,
+        ),
+        ListFilterRow(
+          filters: [
+            for (final preset in _DatePreset.values)
+              ListFilterChipData(label: preset.label, id: preset.id),
+          ],
+          activeId: activePresetId,
+          onSelected: onSelectPreset,
+          onOpenFilters: onOpenFilters,
+        ),
+        if (filters.activeCount > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              AppSpacing.sm,
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.pagePadding,
-                vertical: AppSpacing.sm,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: AppSearchBar(
-                      controller: searchCtrl,
-                      hint: 'Cerca per titolo…',
-                      onChanged: onQueryChanged,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: AppTappable(
+                onTap: onClearFilters,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.x, size: 12, color: context.colors.inkMuted),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Rimuovi filtri (${filters.activeCount})',
+                      style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  _FilterButton(activeCount: filters.activeCount, onTap: onOpenFilters),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-          if (!filters.isEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(
-                  left: AppSpacing.pagePadding,
-                  right: AppSpacing.pagePadding,
-                  bottom: AppSpacing.sm,
-                ),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: AppTappable(
-                    onTap: onClearFilters,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(LucideIcons.x, size: 12, color: context.colors.inkMuted),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Rimuovi filtri (${filters.activeCount})',
-                          style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          if (schedulesAsync.isLoading)
-            const SliverToBoxAdapter(
-              child: Center(
-                child: Padding(
-                  padding: EdgeInsets.all(AppSpacing.xxxl),
-                  child: CircularProgressIndicator(),
-                ),
-              ),
-            )
-          else if (viewMode == _ViewMode.calendario)
+        Expanded(child: content),
+      ],
+    );
+  }
+
+  _DateBucket Function(Schedule) _bucketOf(DateTime today) {
+    final weekStart = _weekStart(today);
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    return (schedule) {
+      final date = _civilDate(schedule.activityDate);
+      if (date.isBefore(today)) return _DateBucket.passato;
+      if (date == today) return _DateBucket.oggi;
+      if (!date.isAfter(weekEnd)) return _DateBucket.settimana;
+      return _DateBucket.futuro;
+    };
+  }
+
+  Widget _content({
+    required BuildContext context,
+    required WidgetRef ref,
+    required _ViewMode viewMode,
+    required DateTime calendarMonth,
+    required ValueChanged<DateTime> onMonthChanged,
+    required DateTime? selectedDay,
+    required ValueChanged<DateTime> onDayTap,
+    required List<Schedule> filtered,
+    required List<ListGroupData> groups,
+    required ListSummaryData summary,
+    required bool isLoading,
+    required bool isUnavailable,
+    required bool hasActiveFilter,
+    required bool hasSchedules,
+    required bool neverSynced,
+    required String query,
+  }) {
+    Future<void> onRefresh() => refreshWithFeedback(context, ref);
+
+    if (isLoading) {
+      return _scrollable(context, const ListLoadingSkeleton(), onRefresh);
+    }
+
+    if (isUnavailable) {
+      return _scrollable(
+        context,
+        UnavailableState(
+          icon: LucideIcons.alertTriangle,
+          titolo: 'Pianificazioni non disponibili',
+          motivo: 'Non è stato possibile leggere le pianificazioni salvate su questo telefono.',
+          action: AppButton(
+            label: 'Riprova',
+            onPressed: () => ref.invalidate(adminSchedulesProvider),
+          ),
+        ),
+        onRefresh,
+      );
+    }
+
+    if (viewMode == _ViewMode.calendario) {
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
             _CalendarSliver(
               month: calendarMonth,
               selectedDay: selectedDay ?? DateTime.now(),
               schedules: filtered,
               onMonthChanged: onMonthChanged,
               onDayTap: onDayTap,
-            )
-          else if (filtered.isEmpty)
-            SliverToBoxAdapter(
-              child: hasActiveFilter
-                  ? const EmptyState(
-                      icon: LucideIcons.searchX,
-                      title: 'Nessun risultato',
-                      body: 'Nessuna pianificazione corrisponde a ricerca e filtri attivi.',
-                    )
-                  : neverSynced
-                  ? const UnavailableState(
-                      icon: LucideIcons.cloudOff,
-                      titolo: 'Pianificazioni non ancora scaricate',
-                      motivo:
-                          'Questo telefono non ha ancora completato una sincronizzazione. '
-                          'Le pianificazioni compariranno qui dopo la prossima: trascina in basso '
-                          'per aggiornare.',
-                    )
-                  : const EmptyState(
-                      icon: LucideIcons.calendarDays,
-                      title: 'Nessuna pianificazione',
-                      body: 'Crea una nuova pianificazione con il pulsante +.',
-                    ),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate((context, i) {
-                final schedule = filtered[i];
-                final dateLabel = _scheduleRowLabel(schedule);
-                return _AdminScheduleRow(
-                  schedule: schedule,
-                  dateLabel: dateLabel,
-                  isLast: i == filtered.length - 1,
-                );
-              }, childCount: filtered.length),
             ),
-          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
-        ],
-      ),
-    );
-  }
-}
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+          ],
+        ),
+      );
+    }
 
-class _FilterButton extends StatelessWidget {
-  const _FilterButton({required this.activeCount, required this.onTap});
+    if (filtered.isEmpty) {
+      return _scrollable(
+        context,
+        _emptyState(
+          query: query,
+          hasActiveFilter: hasActiveFilter,
+          hasSchedules: hasSchedules,
+          neverSynced: neverSynced,
+        ),
+        onRefresh,
+      );
+    }
 
-  final int activeCount;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final active = activeCount > 0;
-    final tint = AppColors.Y;
-    // Computed from the tint's own luminance rather than a fixed foreground, so this stays
-    // correct if the brand accent value ever moves.
-    final activeFg = tint.computeLuminance() > 0.3 ? Colors.black : Colors.white;
-    return AppTappable(
-      onTap: onTap,
-      color: active ? tint : context.colors.surface,
-      border: Border.all(color: active ? tint : context.colors.borderMedium),
-      borderRadius: AppRack.insetShape,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
-      semanticLabel: 'Filtri${active ? ' ($activeCount attivi)' : ''}',
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(LucideIcons.filter, size: 16, color: active ? activeFg : context.colors.ink),
-          if (active) ...[
-            const SizedBox(width: 6),
-            Text(
-              '$activeCount',
-              style: AppTextStyles.labelMedium.copyWith(
-                color: activeFg,
-                fontWeight: FontWeight.w700,
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          for (final group in groups) ...[
+            SliverToBoxAdapter(
+              child: _framed(
+                child: ListGroupHeader(title: group.title!, count: group.count),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => KeyedSubtree(
+                    key: group.rows[i].rowKey,
+                    child: ListDocumentRow(data: group.rows[i]),
+                  ),
+                  childCount: group.rows.length,
+                ),
               ),
             ),
           ],
+          SliverToBoxAdapter(
+            child: _framed(child: ListSummaryFooter(data: summary)),
+          ),
+          SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
         ],
       ),
     );
   }
+
+  Widget _scrollable(BuildContext context, Widget child, Future<void> Function() onRefresh) {
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          Center(
+            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
+          ),
+          SizedBox(height: context.navClearance),
+        ],
+      ),
+    );
+  }
+
+  Widget _framed({required Widget child}) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState({
+    required String query,
+    required bool hasActiveFilter,
+    required bool hasSchedules,
+    required bool neverSynced,
+  }) {
+    if (hasActiveFilter) {
+      return EmptyState(
+        icon: LucideIcons.searchX,
+        title: 'Nessun risultato',
+        body: query.trim().isNotEmpty
+            ? 'Nessuna pianificazione corrisponde a "${query.trim()}".'
+            : 'Nessuna pianificazione corrisponde ai filtri selezionati.',
+      );
+    }
+    if (!hasSchedules && neverSynced) {
+      return const UnavailableState(
+        icon: LucideIcons.cloudOff,
+        titolo: 'Pianificazioni non ancora scaricate',
+        motivo:
+            'Questo telefono non ha ancora completato una sincronizzazione. '
+            'Le pianificazioni compariranno qui dopo la prossima: trascina in basso '
+            'per aggiornare.',
+      );
+    }
+    return const EmptyState(
+      icon: LucideIcons.calendarDays,
+      title: 'Nessuna pianificazione',
+      body: 'Crea una nuova pianificazione con Nuovo in alto.',
+    );
+  }
+}
+
+String _impegniLabel(int count) => '$count ${count == 1 ? 'impegno' : 'impegni'}';
+
+String _fmtTime(int minutes) {
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
 }
 
 /// The month grid plus its own prev/next/today navigation — a real calendar, replacing the flat
-/// title-search-only list this screen used to be limited to (the header comment used to claim
-/// "filterable by date range" when nothing on this screen was).
+/// title-search-only list this screen used to be limited to.
 class _CalendarSliver extends StatelessWidget {
   const _CalendarSliver({
     required this.month,
@@ -536,6 +836,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
   late int? _statusId = widget.initial.statusId;
   late String? _technicianId = widget.initial.technicianId;
   late String? _squadraId = widget.initial.squadraId;
+  late String? _ticketId = widget.initial.ticketId;
 
   static const _statusIds = [1, 2, 3, 4, 5, 6, 7];
 
@@ -563,6 +864,8 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
     final technicians = techniciansAsync.valueOrNull ?? [];
     final squadreAsync = ref.watch(adminSquadreProvider);
     final squadre = squadreAsync.valueOrNull ?? [];
+    final ticketsAsync = ref.watch(allTicketsProvider);
+    final tickets = ticketsAsync.valueOrNull ?? [];
     final dateFmt = DateFormat('d MMM y', 'it');
 
     return Padding(
@@ -655,6 +958,25 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                 onChanged: (v) => setState(() => _squadraId = v),
               ),
             ),
+            const SizedBox(height: 16),
+            AppFieldShell(
+              label: 'Ticket',
+              child: DropdownButtonFormField<String?>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _ticketId,
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Tutti')),
+                  ...tickets.map(
+                    (t) => DropdownMenuItem(
+                      value: t.id,
+                      child: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _ticketId = v),
+              ),
+            ),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -676,6 +998,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                         statusId: _statusId,
                         technicianId: _technicianId,
                         squadraId: _squadraId,
+                        ticketId: _ticketId,
                       ),
                     ),
                   ),
@@ -685,38 +1008,6 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// "dom 21 giu · 08:00 – 10:00" — the day the office planned plus the hours they set.
-///
-/// The same reading as the ticket's Pianificazioni row: the clock comes from
-/// `timeStartMinutes`/`timeEndMinutes`, never from `activityDate`. That is a midnight stamp, so
-/// reading its time through `toLocal()` printed the device's UTC offset — a constant "02:00" in
-/// Italy whatever hours were planned. An all-day schedule carries placeholder bounds, so it shows
-/// the day alone, the gate Calendario's views and the dashboard already apply.
-String _scheduleRowLabel(Schedule s) {
-  final day = DateFormat('EEE d MMM', 'it').format(s.activityDate.toLocal());
-  if (s.allDay) return day;
-  return '$day · ${formatMinutes(s.timeStartMinutes)} – ${formatMinutes(s.timeEndMinutes)}';
-}
-
-class _AdminScheduleRow extends StatelessWidget {
-  const _AdminScheduleRow({required this.schedule, required this.dateLabel, required this.isLast});
-
-  final Schedule schedule;
-  final String dateLabel;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListRow(
-      leading: const RowIconTile(icon: LucideIcons.calendarDays),
-      title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
-      subtitle: dateLabel,
-      showDivider: !isLast,
-      onTap: () => context.push('/altro/pianificazioni/${schedule.id}'),
     );
   }
 }

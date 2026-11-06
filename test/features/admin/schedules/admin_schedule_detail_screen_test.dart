@@ -1,30 +1,56 @@
 // dart format width=100
 // test/features/admin/schedules/admin_schedule_detail_screen_test.dart
 //
-// AdminScheduleDetailScreen used to render only title/date/time/notes — even though the DTO
-// (Schedule.userId/locationId/statusId/ticketId, already in app_database.dart) carried assignee,
-// sede, status and linked-ticket data all along. Confirms the detail body actually resolves and
-// renders those fields via the same lookups the rest of the app already uses
-// (colleagueNameProvider, allLocationsProvider, scheduleStatusName, allTicketsProvider).
+// The redesigned Pianificazione detail keeps the existing providers and edit route but renders
+// them through the wave-0 summary shell: hero + Modifica, then Sintesi (when/who/where),
+// Relazioni (cliente, ticket, contratto) and Attività (nota, stato).
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/core/time/business_time.dart';
+import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_detail_screen.dart';
 
+final _now = DateTime.utc(2026, 6, 21, 10);
+
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 Future<void> _seedSchedule(AppDatabase db) async {
   await db
+      .into(db.customers)
+      .insert(
+        CustomersCompanion.insert(
+          id: 'cust-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          companyName: 'Rossi Srl',
+        ),
+      );
+
+  await db
       .into(db.colleagues)
       .insert(ColleaguesCompanion.insert(id: 'user-1', displayName: 'Mario Rossi'));
+
+  await db
+      .into(db.contracts)
+      .insert(
+        ContractsCompanion.insert(
+          id: 'contract-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          name: 'Full service',
+          customerId: 'cust-1',
+          startDate: DateTime.utc(2026, 1, 1),
+        ),
+      );
 
   await db
       .into(db.locations)
@@ -50,6 +76,7 @@ Future<void> _seedSchedule(AppDatabase db) async {
           locationId: 'loc-1',
           statusId: 1,
           typeId: 1,
+          contractId: const Value('contract-1'),
         ),
       );
 
@@ -75,7 +102,10 @@ Future<void> _seedSchedule(AppDatabase db) async {
 
 Widget _buildView({required AppDatabase db, String scheduleId = 'sched-1'}) {
   return ProviderScope(
-    overrides: [appDatabaseProvider.overrideWithValue(db)],
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome', clock: () => _now)),
+    ],
     child: MaterialApp(home: AdminScheduleDetailScreen(scheduleId: scheduleId)),
   );
 }
@@ -84,48 +114,63 @@ void main() {
   setUpAll(() async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     await initializeDateFormatting('it', null);
+    ensureTimeZonesInitialized();
   });
 
   late AppDatabase db;
   setUp(() => db = _makeDb());
   tearDown(() async => db.close());
 
-  testWidgets('renders assignee, sede, status and linked ticket', (tester) async {
+  testWidgets('renders the summary hero and the three prototype sections', (tester) async {
     await _seedSchedule(db);
     await tester.pumpWidget(_buildView(db: db));
     await tester.pumpAndSettle();
 
+    // Hero: title, relative-day stamp and the primary action (no FAB).
+    expect(find.text('Manutenzione'), findsOneWidget);
+    final hero = find.byKey(const Key('detail-hero-card'));
+    expect(find.descendant(of: hero, matching: find.text('OGGI')), findsOneWidget);
+    expect(find.descendant(of: hero, matching: find.text('Modifica')), findsOneWidget);
+    expect(find.byType(AppFab), findsNothing);
+
+    // Sintesi: when / who / where.
+    expect(find.text('Sintesi'), findsOneWidget);
     expect(find.text('Mario Rossi'), findsOneWidget);
     expect(find.text('Sede Nord'), findsOneWidget);
-    expect(find.text('In corso'), findsOneWidget);
-    expect(find.text('Guasto caldaia'), findsOneWidget);
+    expect(find.textContaining('08:00 – 10:00'), findsOneWidget);
+
+    // Relazioni: cliente, ticket, contratto.
+    expect(find.text('Relazioni'), findsOneWidget);
+    expect(find.text('ROSSI SRL'), findsOneWidget);
+    expect(find.text('GUASTO CALDAIA'), findsOneWidget);
+    expect(find.text('FULL SERVICE'), findsOneWidget);
+
+    // Attività: note/stato.
+    expect(find.text('Attività'), findsOneWidget);
+    expect(find.text('IN CORSO'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
 
   testWidgets('a long Note wraps instead of truncating to one line', (tester) async {
-    // rhdy: Note (and Titolo, Sede, Ticket collegato) are free text. They went through the
-    // horizontal KeyVal row, which right-aligns the value, pins it to `maxLines: 1` and ellipsizes
-    // — a note the office had written over four lines showed only its first one.
+    // Note is free text. It used to go through the horizontal KeyVal row, which right-aligns the
+    // value, pins it to `maxLines: 1` and ellipsizes — a note written over four lines showed only
+    // its first one.
     const note =
         'Il tecnico deve accedere dal cancello laterale, chiedere del responsabile di '
         'stabilimento e compilare il modulo di ingresso. Portare i dispositivi di protezione.'
         ' Al termine lasciare copia del rapporto in portineria.';
     await _seedSchedule(db);
-    await (db.update(db.schedules)..where((s) => s.id.equals('sched-1'))).write(
-      SchedulesCompanion(description: Value(note)),
-    );
+    await (db.update(
+      db.schedules,
+    )..where((s) => s.id.equals('sched-1'))).write(SchedulesCompanion(description: Value(note)));
 
     await tester.pumpWidget(_buildView(db: db));
     await tester.pumpAndSettle();
 
     final noteText = find.text(note);
     expect(noteText, findsOneWidget);
-    // Wraps rather than clipping. The vertical variant sets no `maxLines` — and it must not set
-    // `overflow: ellipsis` either: RenderParagraph hands that flag to the paragraph as an ellipsis
-    // string even when maxLines is null, and the engine then truncates at the first line wider than
-    // the constraint, i.e. it drops everything after line one.
     final noteWidget = tester.widget<Text>(noteText);
     expect(noteWidget.maxLines, null);
     expect(noteWidget.overflow, isNot(TextOverflow.ellipsis));
@@ -133,14 +178,11 @@ void main() {
     // line is proof it wrapped — no dependence on the test font's metrics.
     expect(tester.getSize(noteText).height, greaterThan(30));
 
-    // The short facts keep the two-column shape — a value that always fits reads faster that way.
-    expect(tester.getSize(find.text('In corso')).height, lessThan(30));
-
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
 
-  testWidgets('falls back to em-dash when assignee/sede/ticket are unresolved', (tester) async {
+  testWidgets('falls back to em-dash when assignee/sede are unresolved', (tester) async {
     // Schedule referencing ids the local mirror has never synced.
     await db
         .into(db.schedules)
@@ -163,8 +205,10 @@ void main() {
     await tester.pumpWidget(_buildView(db: db, scheduleId: 'sched-2'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Pianificato'), findsOneWidget);
-    expect(find.text('—'), findsWidgets); // assignee, sede, and linked ticket all unresolved
+    expect(find.text('PIANIFICATO'), findsOneWidget);
+    expect(find.text('—'), findsNWidgets(2)); // assignee and sede
+    // Nothing to link to, so Relazioni is hidden rather than drawn empty.
+    expect(find.text('Relazioni'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -173,9 +217,8 @@ void main() {
   testWidgets('falls back to squadra member names when there is no direct assignee', (
     tester,
   ) async {
-    // A squadra-only schedule: the server sends the all-zeros GUID for "userId" (see
-    // SyncScheduleDto.From's doc comment) and carries the real assignees in ScheduleAssignees —
-    // isTeam=true, isDirect=false.
+    // A squadra-only schedule: the server sends the all-zeros GUID for "userId" and carries the
+    // real assignees in ScheduleAssignees — isTeam=true, isDirect=false.
     const zeroGuid = '00000000-0000-0000-0000-000000000000';
 
     await db
@@ -244,10 +287,8 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  // An approved absence is materialised server-side as an ordinary schedule, so this screen used
-  // to offer Modifica on it — and the backend answers that edit with `absence_schedule_read_only`.
-  // The FAB is gone for those rows and the screen states why, rather than letting an office user
-  // discover the refusal after filling the form.
+  // An approved absence is materialised server-side as an ordinary schedule, so this screen must
+  // not offer Modifica on it: the backend answers that edit with `absence_schedule_read_only`.
   testWidgets('an absence-owned row hides Modifica and says why', (tester) async {
     await _seedSchedule(db);
     await (db.update(db.schedules)..where((s) => s.id.equals('sched-1'))).write(
@@ -257,9 +298,25 @@ void main() {
     await tester.pumpWidget(_buildView(db: db));
     await tester.pumpAndSettle();
 
+    expect(find.text('Modifica'), findsNothing);
     expect(find.byType(AppFab), findsNothing);
     expect(find.textContaining('Assenza approvata'), findsOneWidget);
     expect(find.textContaining('non si può modificare da qui'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('lays out at 320px without overflow', (tester) async {
+    tester.view.physicalSize = const Size(320, 700) * 3;
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+
+    await _seedSchedule(db);
+    await tester.pumpWidget(_buildView(db: db));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -271,7 +328,14 @@ void main() {
     await tester.pumpWidget(_buildView(db: db));
     await tester.pumpAndSettle();
 
-    expect(find.byType(AppFab), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('detail-hero-card')),
+        matching: find.text('Modifica'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(AppFab), findsNothing);
     expect(find.textContaining('Assenza approvata'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
