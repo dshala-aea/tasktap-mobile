@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:tasktap_mobile/core/time/business_time.dart' show BusinessTime, formatWorkDate;
+import 'package:tasktap_mobile/core/time/business_time_providers.dart' show businessTimeProvider;
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
@@ -19,6 +21,7 @@ AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 Widget _buildScreen(AppDatabase db, {Entitlement? entitlement}) => ProviderScope(
   overrides: [
     appDatabaseProvider.overrideWithValue(db),
+    businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
     if (entitlement != null)
       cachedEntitlementProvider.overrideWith((ref) => Future.value(entitlement)),
   ],
@@ -117,6 +120,14 @@ Future<void> _seedTickets(AppDatabase db) async {
   await ticket('t4', 'loc-sesto', 1);
   await ticket('t5', 'loc-monza', 2);
 }
+
+Future<void> _deactivateCustomer(AppDatabase db, String id) => (db.update(
+  db.customers,
+)..where((c) => c.id.equals(id))).write(const CustomersCompanion(isActive: Value(false)));
+
+Future<void> _setTicketActivity(AppDatabase db, String id, DateTime at) => (db.update(
+  db.tickets,
+)..where((t) => t.id.equals(id))).write(TicketsCompanion(updatedAt: Value(at)));
 
 Future<void> _pump(WidgetTester tester, AppDatabase db, {Entitlement? entitlement}) async {
   await tester.pumpWidget(_buildScreen(db, entitlement: entitlement));
@@ -369,6 +380,127 @@ void main() {
 
     expect(find.text('Senza cliente'), findsOneWidget);
     expect(find.text('Sede Orfana'), findsOneWidget);
+
+    await _dispose(tester);
+  });
+
+  testWidgets('a sede whose customer is inactive keeps the customer name', (tester) async {
+    await _seedCustomers(db);
+    await _seedLocations(db);
+    await _deactivateCustomer(db, 'cust-rossi');
+    await _pump(tester, db);
+
+    expect(find.text('Rossi Srl'), findsOneWidget);
+    expect(find.text('Senza cliente'), findsNothing);
+    expect(find.text('Sede Milano'), findsOneWidget);
+    expect(find.text('Sede Monza'), findsOneWidget);
+
+    await _dispose(tester);
+  });
+
+  testWidgets('the row shows the latest ticket activity or no recent activity', (tester) async {
+    await _seedCustomers(db);
+    await _seedLocations(db);
+    await _seedTickets(db);
+    final activityAt = DateTime.utc(2026, 11, 12, 12);
+    await _setTicketActivity(db, 't1', activityAt);
+    await db
+        .into(db.locations)
+        .insert(
+          LocationsCompanion.insert(
+            id: 'loc-vuota',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2022, 1, 1),
+            customerId: 'cust-rossi',
+            name: 'Sede Vuota',
+            address: const Value('Via Nulla 2'),
+          ),
+        );
+    await _pump(tester, db);
+
+    final label = formatWorkDate(BusinessTime('Europe/Rome').businessDateOf(activityAt), 'dd/MM');
+    expect(find.text('Ultima attività $label'), findsOneWidget);
+    expect(find.text('Nessuna attività recente'), findsOneWidget);
+
+    await _dispose(tester);
+  });
+
+  testWidgets('a deactivated customer filter is dropped, not asserted or hidden', (tester) async {
+    await _seedCustomers(db);
+    await _seedLocations(db);
+    await _pump(tester, db);
+
+    await _openFilters(tester);
+    await tester.tap(find.byKey(const Key('sediFilterCliente')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Rossi Srl').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sediFilterApply')));
+    await tester.pumpAndSettle();
+    expect(find.text('Sede Sesto'), findsNothing);
+
+    await _deactivateCustomer(db, 'cust-rossi');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sede Sesto'), findsOneWidget);
+    expect(find.text('Rossi Srl'), findsOneWidget);
+    await _openFilters(tester);
+    expect(tester.takeException(), null);
+
+    await _dispose(tester);
+  });
+
+  testWidgets('a vanished city filter is dropped, not asserted or hidden', (tester) async {
+    await _seedCustomers(db);
+    await _seedLocations(db);
+    await _pump(tester, db);
+
+    await _openFilters(tester);
+    await tester.tap(find.byKey(const Key('sediFilterCitta')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Milano').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sediFilterApply')));
+    await tester.pumpAndSettle();
+    expect(find.text('Sede Milano'), findsOneWidget);
+    expect(find.text('Sede Monza'), findsNothing);
+
+    await (db.delete(db.locations)..where((l) => l.id.equals('loc-milano'))).go();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sede Monza'), findsOneWidget);
+    expect(find.text('Sede Sesto'), findsOneWidget);
+    await _openFilters(tester);
+    expect(tester.takeException(), null);
+
+    await _dispose(tester);
+  });
+
+  testWidgets('the Filtri sheet status chips filter the list', (tester) async {
+    await _seedCustomers(db);
+    await _seedLocations(db);
+    await _seedTickets(db);
+    await _pump(tester, db);
+
+    await _openFilters(tester);
+    await tester.tap(find.byKey(const Key('sediFilterStatus-conTicket')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sediFilterApply')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sede Milano'), findsOneWidget);
+    expect(find.text('Sede Sesto'), findsOneWidget);
+    expect(find.text('Sede Monza'), findsNothing);
+
+    await _openFilters(tester);
+    await tester.tap(find.byKey(const Key('sediFilterStatus-senzaTicket')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sediFilterApply')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sede Monza'), findsOneWidget);
+    expect(find.text('Sede Milano'), findsNothing);
+    expect(find.text('Sede Sesto'), findsNothing);
 
     await _dispose(tester);
   });
