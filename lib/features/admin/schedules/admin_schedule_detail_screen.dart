@@ -1,19 +1,26 @@
 // dart format width=100
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/router/app_router.dart' show AppRoutes;
+import '../../../core/theme/app_palette.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/time/business_time.dart' show formatWorkDate;
+import '../../../core/time/business_time_providers.dart' show businessTimeProvider;
+import '../../../core/widgets/detail/detail_facts_grid.dart';
+import '../../../core/widgets/detail/detail_hero.dart';
+import '../../../core/widgets/detail/detail_link_row.dart';
+import '../../../core/widgets/detail/detail_scaffold.dart';
+import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../features/calendario/calendario_providers.dart' show scheduleStatusName;
 import '../../../presentation/providers/schedule_providers.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Single schedule by id from Drift cache.
 final adminScheduleDetailProvider = StreamProvider.autoDispose.family<Schedule?, String>((ref, id) {
@@ -21,7 +28,17 @@ final adminScheduleDetailProvider = StreamProvider.autoDispose.family<Schedule?,
   return (db.select(db.schedules)..where((s) => s.id.equals(id))).watchSingleOrNull();
 });
 
-/// Admin schedule detail — read-only with edit FAB.
+/// The contract behind the linked ticket, from the same local mirror.
+///
+/// The contract list's own provider resolves through `referenceCacheProvider` and can issue a
+/// network refresh; a detail screen must not. This reads the already-synced table only.
+final _contractByIdProvider = StreamProvider.autoDispose.family<Contract?, String>((ref, id) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(db.contracts)..where((c) => c.id.equals(id))).watchSingleOrNull();
+});
+
+/// Admin schedule detail — the wave-0 summary shell: hero + `Modifica`, then Sintesi (the
+/// impegno), Relazioni (cliente, ticket, contratto) and Attività (nota, stato).
 class AdminScheduleDetailScreen extends ConsumerWidget {
   const AdminScheduleDetailScreen({super.key, required this.scheduleId});
 
@@ -30,65 +47,71 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheduleAsync = ref.watch(adminScheduleDetailProvider(scheduleId));
-    final schedule = scheduleAsync.valueOrNull;
-    // An approved absence arrives as an ordinary schedule row (that is how the server blocks the
-    // day), and the backend refuses every write to it (`absence_schedule_read_only`). Offering
-    // Modifica here invites an edit that can only fail; the absence it stands for is managed where
-    // it lives, from Ferie e Permessi. `valueOrNull` is null while loading (and on error, and for a
-    // row the mirror does not hold), so "no row yet" counts as locked: `?? false` used to arm the
-    // FAB for that first frame and flash it in before the row resolved.
-    final lockedByAbsence = schedule == null || schedule.isAssenza;
-    // A day owned by a multi-day plan is the same kind of mirror row: the sync materialises it as
-    // an ordinary schedule carrying `isBlockOccupied`, and the backend refuses every write to it
-    // (`block_occupancy_read_only`). The flag is missing on a device whose mirror synced before
-    // the server started sending it — Drift defaults it to `false`, so that device still offers
-    // Modifica and the server refuses the write; the form recognises that refusal instead (see
-    // `_lockFromServerCode` there). Unresolved rows are locked for the same reason as above.
-    final lockedByBlock = schedule == null || schedule.isBlockOccupied;
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      floatingActionButton: lockedByAbsence || lockedByBlock
-          ? null
-          : Padding(
-              padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-              child: AppFab(
-                icon: LucideIcons.pencil,
-                tooltip: 'Modifica',
-                onPressed: () async {
-                  await context.push<bool>('/altro/pianificazioni/$scheduleId/modifica');
-                },
-              ),
-            ),
-      body: SafeArea(
-        child: scheduleAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) =>
-              ErrorState(onRetry: () => ref.invalidate(adminScheduleDetailProvider(scheduleId))),
-          data: (schedule) {
-            if (schedule == null) {
-              // Missing on a synced device means the schedule is gone (deleted, or reassigned out
-              // of this user's visibility) — not that the mirror is still waiting to arrive.
-              return ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
-                  ? const UnavailableState(
-                      icon: LucideIcons.cloudOff,
-                      titolo: 'Pianificazione non disponibile',
-                      motivo:
-                          "L'elenco pianificazioni non è ancora sincronizzato sul "
-                          'dispositivo, quindi questa pianificazione non può essere '
-                          'letta dalla cache locale anche se esiste sul server.',
-                    )
-                  : const UnavailableState(
-                      icon: LucideIcons.calendarDays,
-                      titolo: 'Pianificazione non trovata',
-                      motivo: 'Questa pianificazione non è più disponibile: potrebbe essere '
-                          'stata eliminata.',
-                    );
-            }
-            return _ScheduleDetailBody(schedule: schedule, scheduleId: scheduleId);
-          },
-        ),
+    return scheduleAsync.when(
+      loading: () => const DetailScaffold.loading(screenTitle: 'Pianificazione'),
+      error: (e, _) => DetailScaffold.unavailable(
+        screenTitle: 'Pianificazione',
+        icon: LucideIcons.alertTriangle,
+        title: 'Pianificazione non disponibile',
+        reason: 'Non è stato possibile leggere la pianificazione salvata su questo telefono.',
+        onRetry: () => ref.invalidate(adminScheduleDetailProvider(scheduleId)),
       ),
+      data: (schedule) {
+        if (schedule == null) {
+          // Missing on a synced device means the schedule is gone (deleted, or reassigned out
+          // of this user's visibility) — not that the mirror is still waiting to arrive.
+          final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+          return DetailScaffold.unavailable(
+            screenTitle: 'Pianificazione',
+            icon: neverSynced ? LucideIcons.cloudOff : LucideIcons.calendarDays,
+            title: neverSynced ? 'Pianificazione non disponibile' : 'Pianificazione non trovata',
+            reason: neverSynced
+                ? "L'elenco pianificazioni non è ancora sincronizzato sul dispositivo, quindi "
+                      'questa pianificazione non può essere letta dalla cache locale anche se '
+                      'esiste sul server.'
+                : 'Questa pianificazione non è più disponibile: potrebbe essere stata eliminata.',
+          );
+        }
+        return _ScheduleDetailBody(schedule: schedule, scheduleId: scheduleId);
+      },
+    );
+  }
+}
+
+/// The right-hand side of a tappable relation row: the same mono meta the shared
+/// `DetailLinkRow` renders, plus the chevron that tells a person the row opens something.
+///
+/// `DetailLinkRow` replaces `meta` with `trailing`, so the meta has to be drawn here. The
+/// non-tappable Contratto row keeps the shell's own `meta`.
+class _RelationTrailing extends StatelessWidget {
+  const _RelationTrailing({required this.meta});
+
+  final String meta;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 180),
+          child: Text(
+            meta.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: AppTextStyles.docCode.copyWith(
+              fontSize: 7.5,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+              color: context.colors.inkMuted,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Icon(LucideIcons.chevronRight, size: 14, color: context.colors.inkMuted),
+      ],
     );
   }
 }
@@ -101,21 +124,34 @@ class _ScheduleDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dateLabel = DateFormat('EEEE d MMMM yyyy', 'it').format(schedule.activityDate.toLocal());
-    final timeLabel =
-        '${_fmtTime(schedule.timeStartMinutes)} — ${_fmtTime(schedule.timeEndMinutes)}';
+    final colors = context.colors;
+    final businessTime = ref.watch(businessTimeProvider);
+    final today = businessTime.businessToday();
+    final date = DateTime.utc(
+      schedule.activityDate.toUtc().year,
+      schedule.activityDate.toUtc().month,
+      schedule.activityDate.toUtc().day,
+    );
+    final tomorrow = today.add(const Duration(days: 1));
 
-    // The DTO already carries all of this (Schedule.userId/locationId/statusId/ticketId — see
-    // app_database.dart) — it was just never rendered here. Resolved through the same lookups the
-    // rest of the app already uses (colleagueNameProvider, allLocationsProvider,
-    // scheduleStatusName, allTicketsProvider), never re-derived.
+    final dateLabel = _capitalise(formatWorkDate(date, 'EEEE d MMMM y', locale: 'it'));
+    final timeLabel = schedule.allDay
+        ? 'Tutto il giorno'
+        : '${_fmtTime(schedule.timeStartMinutes)} – ${_fmtTime(schedule.timeEndMinutes)}';
+
+    // The stamp is the day the impegno falls on, like the prototype's `Oggi`; the real schedule
+    // status lives in Attività so the same fact is not printed twice.
+    final dayStamp = date == today
+        ? 'Oggi'
+        : date == tomorrow
+        ? 'Domani'
+        : _capitalise(formatWorkDate(date, 'd MMM', locale: 'it'));
+    final dayTone = date == today || date == tomorrow ? DetailStatusTone.info : null;
+
     final directAssigneeName = ref.watch(colleagueNameProvider(schedule.userId)).valueOrNull;
-    // A squadra-only schedule has no direct assignee — `schedule.userId` is the all-zeros GUID the
-    // server sends for "nobody directly assigned" (see `SyncScheduleDto.From`'s doc comment), which
-    // `colleagueNameProvider` never resolves. The squadra's own name/id is not synced to the device
-    // (only `GET /api/schedules/{id}`, online-only, resolves it — see
-    // `teamAssignedScheduleIdsProvider`'s doc comment), but its members are, via `ScheduleAssignees`
-    // — so this shows who they are instead of leaving the row blank.
+    // A squadra-only schedule has no direct assignee — `schedule.userId` is the all-zeros GUID
+    // the server sends for "nobody directly assigned". The squadra's own name is not synced, but
+    // its members are, via `ScheduleAssignees`, so show who they are instead of a blank.
     final assignees = ref.watch(scheduleAssigneesProvider(scheduleId)).valueOrNull ?? const [];
     final teamMemberIds = assignees.where((a) => a.isTeam).map((a) => a.userId).toList();
     final teamMemberNames = teamMemberIds
@@ -125,126 +161,170 @@ class _ScheduleDetailBody extends ConsumerWidget {
     final assigneeName =
         directAssigneeName ??
         (teamMemberNames.isEmpty ? null : 'Squadra: ${teamMemberNames.join(', ')}');
-    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
-    final sedeName = _findLocationName(locations, schedule.locationId);
-    final statusName = scheduleStatusName(schedule.statusId);
-    final tickets = ref.watch(allTicketsProvider).valueOrNull ?? const [];
-    final linkedTicketTitle = schedule.ticketId == null
-        ? null
-        : _findTicketTitle(tickets, schedule.ticketId!);
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
-            subtitle: dateLabel,
-            showBack: true,
-          ),
+    final location = ref.watch(locationByIdProvider(schedule.locationId)).valueOrNull;
+    final ticket = schedule.ticketId == null
+        ? null
+        : ref.watch(ticketByIdProvider(schedule.ticketId!)).valueOrNull;
+    final customerId = location?.customerId ?? ticket?.customerId;
+    final customer = customerId == null
+        ? null
+        : ref.watch(customerByIdProvider(customerId)).valueOrNull;
+    final contract = ticket?.contractId == null
+        ? null
+        : ref.watch(_contractByIdProvider(ticket!.contractId!)).valueOrNull;
+
+    final statusName = scheduleStatusName(schedule.statusId);
+    final locationName = location?.name;
+    final lockedByAbsence = schedule.isAssenza;
+    final lockedByBlock = schedule.isBlockOccupied;
+
+    final relations = <({String title, String meta, VoidCallback? onTap})>[
+      if (customer != null && customerId != null)
+        (
+          title: 'Cliente',
+          meta: customer.companyName,
+          onTap: () => context.push(AppRoutes.clientiDetail(customerId)),
         ),
-        // The FAB is gone for these rows, so the screen has to say why — an office user who came
-        // here to move a job must not read the absence as "this one just cannot be edited".
-        if (schedule.isAssenza)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.base,
-                AppSpacing.pagePadding,
-                0,
+      if (ticket != null)
+        (
+          title: 'Ticket',
+          meta: ticket.title,
+          onTap: () => context.push(AppRoutes.ticketDetailPath(ticket.id)),
+        )
+      else if (schedule.ticketId != null)
+        (
+          title: 'Ticket',
+          meta: 'Collegato',
+          onTap: () => context.push(AppRoutes.ticketDetailPath(schedule.ticketId!)),
+        ),
+      if (contract != null) (title: 'Contratto', meta: contract.name, onTap: null),
+    ];
+
+    final hasNote = schedule.description.trim().isNotEmpty;
+
+    return DetailScaffold(
+      screenTitle: 'Pianificazione',
+      hero: DetailHeroData(
+        variant: DetailHeroVariant.summary,
+        kind: 'Summary · impegno',
+        kicker: 'Summary',
+        kickerContext: 'impegno',
+        title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
+        status: DetailStatus(label: dayStamp, tone: dayTone),
+        primaryAction: lockedByAbsence || lockedByBlock
+            ? null
+            : DetailAction(
+                label: 'Modifica',
+                onPressed: () async {
+                  await context.push<bool>('/altro/pianificazioni/$scheduleId/modifica');
+                },
               ),
-              child: InlineAlert(
-                icon: LucideIcons.calendarX,
-                color: context.colors.amber,
-                message:
-                    'Assenza approvata: questa voce è creata dalla richiesta di ferie, permesso '
-                    'o malattia e non si può modificare da qui. Per cambiarla, annulla la '
-                    'richiesta dalle assenze.',
-              ),
-            ),
-          ),
-        // Same reason, same treatment: the day is one materialised row of a multi-day plan, and
-        // the plan — not the single day — is what the office edits.
-        if (schedule.isBlockOccupied)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                AppSpacing.base,
-                AppSpacing.pagePadding,
-                0,
-              ),
-              child: InlineAlert(
-                icon: LucideIcons.calendarDays,
-                color: context.colors.amber,
-                message:
-                    'Piano multi-giorno: questa giornata è occupata da un intervento pianificato '
-                    'su più giorni e non si può modificare da qui. Per modificare il piano, usa il '
-                    "portale web dell'ufficio.",
-              ),
-            ),
-          ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: AppCard(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+      ),
+      expandedExtra: (lockedByAbsence || lockedByBlock)
+          ? Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.sm),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Titolo, Sede, Ticket collegato and Note are free text of unknown length, so
-                  // they stack label-over-value and wrap: the horizontal row right-aligns the value
-                  // on a single line and ellipsizes it, which hid the rest of a note the office had
-                  // written over four lines. The short facts (date, hours, assignee, status) stay
-                  // horizontal — a two-column pair reads faster for a value that always fits.
-                  KeyVal(
-                    label: 'Titolo',
-                    value: schedule.title.isNotEmpty ? schedule.title : '—',
-                    vertical: true,
-                  ),
-                  KeyVal(label: 'Data', value: dateLabel),
-                  KeyVal(label: 'Orario', value: timeLabel),
-                  KeyVal(label: 'Assegnato a', value: assigneeName ?? '—'),
-                  KeyVal(label: 'Sede', value: sedeName ?? '—', vertical: true),
-                  KeyVal(label: 'Stato', value: statusName),
-                  KeyVal(
-                    label: 'Ticket collegato',
-                    value: linkedTicketTitle ?? '—',
-                    vertical: true,
-                    showDivider: schedule.description.isNotEmpty,
-                  ),
-                  if (schedule.description.isNotEmpty)
-                    KeyVal(
-                      label: 'Note',
-                      value: schedule.description,
-                      vertical: true,
-                      showDivider: false,
+                  if (lockedByAbsence)
+                    InlineAlert(
+                      icon: LucideIcons.calendarX,
+                      color: colors.amber,
+                      message:
+                          'Assenza approvata: questa voce è creata dalla richiesta di ferie, '
+                          'permesso o malattia e non si può modificare da qui. Per cambiarla, '
+                          'annulla la richiesta dalle assenze.',
+                    ),
+                  if (lockedByAbsence && lockedByBlock) const SizedBox(height: AppSpacing.sm),
+                  if (lockedByBlock)
+                    InlineAlert(
+                      icon: LucideIcons.calendarDays,
+                      color: colors.amber,
+                      message:
+                          'Piano multi-giorno: questa giornata è occupata da un intervento '
+                          'pianificato su più giorni e non si può modificare da qui. Per '
+                          "modificare il piano, usa il portale web dell'ufficio.",
                     ),
                 ],
               ),
-            ),
+            )
+          : null,
+      sections: [
+        DetailSectionData(
+          title: 'Sintesi',
+          child: DetailFactsGrid(
+            facts: [
+              DetailFact(label: 'Data', value: dateLabel),
+              DetailFact(label: 'Orario', value: timeLabel),
+              DetailFact(label: 'Assegnato a', value: assigneeName ?? '—'),
+              DetailFact(label: 'Sede', value: locationName ?? '—'),
+            ],
           ),
         ),
-
-        SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
+        DetailSectionData(
+          title: 'Relazioni',
+          isEmpty: relations.isEmpty,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < relations.length; i++)
+                DetailLinkRow(
+                  title: relations[i].title,
+                  meta: relations[i].onTap == null ? relations[i].meta : null,
+                  trailing: relations[i].onTap == null
+                      ? null
+                      : _RelationTrailing(meta: relations[i].meta),
+                  onTap: relations[i].onTap,
+                  showDivider: i < relations.length - 1,
+                ),
+            ],
+          ),
+        ),
+        DetailSectionData(
+          title: 'Attività',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DetailLinkRow(title: 'Stato', meta: statusName, showDivider: hasNote),
+              if (hasNote)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'NOTA',
+                        style: AppTextStyles.docCode.copyWith(
+                          fontSize: 8,
+                          letterSpacing: 0.64,
+                          color: colors.inkMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        schedule.description,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          fontSize: 11.5,
+                          height: 1.4,
+                          color: colors.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
       ],
+      onRefresh: () => refreshWithFeedback(context, ref),
     );
   }
 
-  String? _findLocationName(List<Location> locations, String locationId) {
-    for (final l in locations) {
-      if (l.id == locationId) return l.name;
-    }
-    return null;
-  }
+  static String _capitalise(String value) =>
+      value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';
 
-  String? _findTicketTitle(List<Ticket> tickets, String ticketId) {
-    for (final t in tickets) {
-      if (t.id == ticketId) return t.title;
-    }
-    return null;
-  }
-
-  String _fmtTime(int minutes) {
+  static String _fmtTime(int minutes) {
     final h = minutes ~/ 60;
     final m = minutes % 60;
     return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';

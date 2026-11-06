@@ -28,8 +28,11 @@ import 'package:tasktap_mobile/features/calendario/widgets/schedule_info_sheet.d
 
 class MockDio extends Mock implements Dio {}
 
-Response<T> _ok<T>(T data, String path) =>
-    Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
+Response<T> _ok<T>(T data, String path) => Response<T>(
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
@@ -42,33 +45,37 @@ Future<void> _seedSchedule(
   bool blockOccupied = false,
   bool assenza = false,
 }) async {
-  await db.into(db.locations).insert(
-    LocationsCompanion.insert(
-      id: 'loc-1',
-      tenantId: 'tenant-1',
-      createdAt: DateTime.utc(2026, 1, 1),
-      customerId: 'cust-1',
-      name: 'Sede Nord',
-    ),
-  );
+  await db
+      .into(db.locations)
+      .insert(
+        LocationsCompanion.insert(
+          id: 'loc-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          customerId: 'cust-1',
+          name: 'Sede Nord',
+        ),
+      );
 
-  await db.into(db.schedules).insert(
-    SchedulesCompanion.insert(
-      id: id,
-      tenantId: 'tenant-1',
-      createdAt: DateTime.utc(2026, 1, 1),
-      activityDate: DateTime.utc(2026, 6, 21),
-      timeStartMinutes: 480,
-      timeEndMinutes: 600,
-      userId: 'tech-1',
-      statusId: 2,
-      locationId: 'loc-1',
-      title: 'Manutenzione',
-      description: '',
-      isAssenza: Value(assenza),
-      isBlockOccupied: Value(blockOccupied),
-    ),
-  );
+  await db
+      .into(db.schedules)
+      .insert(
+        SchedulesCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          activityDate: DateTime.utc(2026, 6, 21),
+          timeStartMinutes: 480,
+          timeEndMinutes: 600,
+          userId: 'tech-1',
+          statusId: 2,
+          locationId: 'loc-1',
+          title: 'Manutenzione',
+          description: '',
+          isAssenza: Value(assenza),
+          isBlockOccupied: Value(blockOccupied),
+        ),
+      );
 }
 
 Widget _buildDetail({required AppDatabase db, String scheduleId = 'sched-1'}) {
@@ -81,7 +88,9 @@ Widget _buildDetail({required AppDatabase db, String scheduleId = 'sched-1'}) {
 Widget _buildSheet({required AppDatabase db, required Schedule schedule}) {
   return ProviderScope(
     overrides: [appDatabaseProvider.overrideWithValue(db)],
-    child: MaterialApp(home: Scaffold(body: ScheduleInfoSheet(schedule: schedule))),
+    child: MaterialApp(
+      home: Scaffold(body: ScheduleInfoSheet(schedule: schedule)),
+    ),
   );
 }
 
@@ -229,9 +238,16 @@ void main() {
     expect(find.byType(AppFab), findsNothing);
     await tester.pumpAndSettle();
 
-    expect(find.byType(AppFab), findsOneWidget);
-    // `AppFab` carries its label as a `Semantics` label, not a `Tooltip` widget.
-    expect(tester.widget<AppFab>(find.byType(AppFab)).tooltip, 'Modifica');
+    // The redesign moved Modifica into the summary hero; there is no FAB on a detail screen
+    // whose hero already carries the action.
+    expect(find.byType(AppFab), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('detail-hero-card')),
+        matching: find.text('Modifica'),
+      ),
+      findsOneWidget,
+    );
     expect(find.textContaining('multi-giorno'), findsNothing);
 
     await teardown(tester);
@@ -295,7 +311,9 @@ void main() {
     await teardown(tester);
   });
 
-  testWidgets('a form opened for an absence-owned id refuses with the absence reason', (tester) async {
+  testWidgets('a form opened for an absence-owned id refuses with the absence reason', (
+    tester,
+  ) async {
     await _seedSchedule(db, id: 'sched-absence', assenza: true);
     stubFormReads('sched-absence');
 
