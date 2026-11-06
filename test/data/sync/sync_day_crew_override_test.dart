@@ -39,8 +39,10 @@ class _Row {
 /// Fake server with a clock. Two caller kinds, as in the real sync:
 /// - technician: sees the rows whose effective crew contains them; every sync returns all of
 ///   those rows (no cutoff), `scope.schedules` = their ids;
-/// - office (full scope): `scope.schedules` = every row id, but a delta (`since` set) returns only
-///   rows with updatedAt > since.
+/// - office (full scope): the real server applies WhereAssignedTo to the scope for full-scope
+///   callers too, so they see only the rows they are assigned to; full scope only adds the delta
+///   cutoff, so a delta (`since` set) returns rows with updatedAt > since. (The fake's office
+///   caller is not a technician filter: every seeded row is treated as assigned to it.)
 class _Server {
   DateTime _clock = DateTime.utc(2026, 11, 5, 8);
   final rows = <String, _Row>{};
@@ -284,6 +286,8 @@ void main() {
       server.seed(_day, [_a, _b, _c]);
       final a = make(technician: _a);
       await a.sync();
+      expect(await a.scheduleIds(), [_day], reason: 'precondition: the row was ingested');
+      expect(await a.crew(_day), [_a, _b, _c]);
 
       server.setCrew(_day, [_b, _c]); // A removed
       server.setCrew(_day, [_a, _b, _c]); // restored
@@ -302,6 +306,8 @@ void main() {
       final newTech = make(technician: _d);
       await oldTech.sync();
       await newTech.sync();
+      expect(await oldTech.scheduleIds(), [_day], reason: 'precondition: the row was ingested');
+      expect(await oldTech.crew(_day), [_a, _b, _c]);
 
       server.setCrew(_day, [_b, _c]);
       server.setCrew(_day, [_b, _c, _d]);
