@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:tasktap_mobile/core/time/business_time.dart';
+import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -405,6 +406,63 @@ void main() {
     await _openElenco(tester);
 
     expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the clear-filters action is a 44px target', (tester) async {
+    await _seedSchedules(db);
+    await tester.pumpWidget(_buildView(db: db, initialSquadraId: 'sq-1'));
+    await tester.pumpAndSettle();
+
+    final target = find.byKey(const Key('clear-schedule-filters'));
+    expect(target, findsOneWidget);
+    expect(tester.getSize(target).height, greaterThanOrEqualTo(44));
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the current week stays under Questa settimana, even Monday/Tuesday', (tester) async {
+    await _seedSchedules(db);
+    // Monday of this week (today is Wednesday 17 June 2026) used to fall into `Passato`.
+    await db
+        .into(db.schedules)
+        .insert(
+          SchedulesCompanion.insert(
+            id: 'sched-monday',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            activityDate: DateTime.utc(2026, 6, 15),
+            timeStartMinutes: 540,
+            timeEndMinutes: 600,
+            userId: 'user-2',
+            statusId: 1,
+            locationId: 'loc-1',
+            title: 'Lunedì corrente',
+            description: '',
+          ),
+        );
+
+    await tester.pumpWidget(_buildView(db: db));
+    await tester.pumpAndSettle();
+    await _openElenco(tester);
+
+    expect(find.text('Lunedì corrente'), findsOneWidget);
+    expect(find.text('Questa settimana'), findsOneWidget);
+    // No previous-week rows were seeded, so a Passato group here would mean Monday was misfiled.
+    expect(find.text('Passato'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('does not mount its own offline banner (HomeShell owns it)', (tester) async {
+    await tester.pumpWidget(_buildView(db: db));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OfflineSyncBanner), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

@@ -79,6 +79,43 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
   }
 }
 
+/// The right-hand side of a tappable relation row: the same mono meta the shared
+/// `DetailLinkRow` renders, plus the chevron that tells a person the row opens something.
+///
+/// `DetailLinkRow` replaces `meta` with `trailing`, so the meta has to be drawn here. The
+/// non-tappable Contratto row keeps the shell's own `meta`.
+class _RelationTrailing extends StatelessWidget {
+  const _RelationTrailing({required this.meta});
+
+  final String meta;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 180),
+          child: Text(
+            meta.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: AppTextStyles.docCode.copyWith(
+              fontSize: 7.5,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+              color: context.colors.inkMuted,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Icon(LucideIcons.chevronRight, size: 14, color: context.colors.inkMuted),
+      ],
+    );
+  }
+}
+
 class _ScheduleDetailBody extends ConsumerWidget {
   const _ScheduleDetailBody({required this.schedule, required this.scheduleId});
 
@@ -234,7 +271,10 @@ class _ScheduleDetailBody extends ConsumerWidget {
               for (var i = 0; i < relations.length; i++)
                 DetailLinkRow(
                   title: relations[i].title,
-                  meta: relations[i].meta,
+                  meta: relations[i].onTap == null ? relations[i].meta : null,
+                  trailing: relations[i].onTap == null
+                      ? null
+                      : _RelationTrailing(meta: relations[i].meta),
                   onTap: relations[i].onTap,
                   showDivider: i < relations.length - 1,
                 ),

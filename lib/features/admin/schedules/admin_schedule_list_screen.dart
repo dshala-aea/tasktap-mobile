@@ -501,7 +501,6 @@ class _AdminScheduleListBody extends ConsumerWidget {
 
     return Column(
       children: [
-        const OfflineSyncBanner(),
         ScreenHeader(
           title: 'Pianificazioni',
           subtitle: 'Gli impegni nel tempo, non i cantieri.',
@@ -548,16 +547,23 @@ class _AdminScheduleListBody extends ConsumerWidget {
               alignment: Alignment.centerLeft,
               child: AppTappable(
                 onTap: onClearFilters,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(LucideIcons.x, size: 12, color: context.colors.inkMuted),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Rimuovi filtri (${filters.activeCount})',
-                      style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+                child: ConstrainedBox(
+                  key: const Key('clear-schedule-filters'),
+                  constraints: const BoxConstraints(minHeight: 44),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(LucideIcons.x, size: 12, color: context.colors.inkMuted),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Rimuovi filtri (${filters.activeCount})',
+                          style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -572,7 +578,9 @@ class _AdminScheduleListBody extends ConsumerWidget {
     final weekEnd = weekStart.add(const Duration(days: 6));
     return (schedule) {
       final date = _civilDate(schedule.activityDate);
-      if (date.isBefore(today)) return _DateBucket.passato;
+      // `Settimana` is the whole business week (Mon–Sun), so Monday/Tuesday rows stay in
+      // `Questa settimana` even when today is later in the week. `Passato` is previous weeks.
+      if (date.isBefore(weekStart)) return _DateBucket.passato;
       if (date == today) return _DateBucket.oggi;
       if (!date.isAfter(weekEnd)) return _DateBucket.settimana;
       return _DateBucket.futuro;

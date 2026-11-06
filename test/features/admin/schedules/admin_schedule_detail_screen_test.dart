@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
@@ -148,6 +149,21 @@ void main() {
     // Attività: note/stato.
     expect(find.text('Attività'), findsOneWidget);
     expect(find.text('IN CORSO'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('tappable relation rows carry a chevron; the plain contract row does not', (
+    tester,
+  ) async {
+    await _seedSchedule(db);
+    await tester.pumpWidget(_buildView(db: db));
+    await tester.pumpAndSettle();
+
+    // Cliente and Ticket open a screen; Contratto is informational today.
+    expect(find.byIcon(LucideIcons.chevronRight), findsNWidgets(2));
+    expect(find.text('FULL SERVICE'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
