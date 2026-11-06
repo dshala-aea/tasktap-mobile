@@ -2,27 +2,32 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/theme/app_palette.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/error_message.dart' show isTransportOrServerFault;
+import '../../../core/widgets/detail/detail_facts_grid.dart';
+import '../../../core/widgets/detail/detail_hero.dart';
+import '../../../core/widgets/detail/detail_link_row.dart';
+import '../../../core/widgets/detail/detail_scaffold.dart';
+import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
-import '../../../data/clienti/cliente_overview_api_client.dart';
 import '../../../data/clienti/customer_contact_api_client.dart';
-import '../../../data/local/app_database.dart' show Customer, CustomerContactRow;
+import '../../../data/local/app_database.dart' show Customer, CustomerContactRow, Location, Ticket;
 import '../../../data/reference/reference_cache_repository.dart';
 import '../../../data/sync/connectivity_provider.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../clienti/clienti_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../admin_api_client.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
-/// Admin customer detail — shows all fields + edit FAB.
+/// Admin customer detail — the wave-0 summary shell: hero + `Modifica`, then the two things a
+/// person opening a cliente needs in order (Relazioni, Sintesi, Attività, Documenti).
 class AdminCustomerDetailScreen extends ConsumerWidget {
   const AdminCustomerDetailScreen({super.key, required this.customerId});
 
@@ -32,38 +37,30 @@ class AdminCustomerDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final customerAsync = ref.watch(customerDetailProvider(customerId));
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-        child: AppFab(
-          icon: LucideIcons.pencil,
-          tooltip: 'Modifica',
-          onPressed: () async {
-            await context.push<bool>('/altro/clienti/$customerId/modifica');
-          },
-        ),
+    return customerAsync.when(
+      loading: () => const DetailScaffold.loading(screenTitle: 'Cliente'),
+      error: (e, _) => DetailScaffold.unavailable(
+        screenTitle: 'Cliente',
+        icon: LucideIcons.alertTriangle,
+        title: 'Cliente non disponibile',
+        reason: 'Non è stato possibile leggere il cliente salvato su questo telefono.',
+        onRetry: () => ref.invalidate(customerDetailProvider(customerId)),
       ),
-      body: SafeArea(
-        child: customerAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) =>
-              ErrorState(onRetry: () => ref.invalidate(customerDetailProvider(customerId))),
-          data: (customer) {
-            if (customer == null) {
-              return const UnavailableState(
-                icon: LucideIcons.users,
-                titolo: 'Cliente non disponibile',
-                motivo:
-                    "L'elenco clienti non è ancora sincronizzato sul "
-                    'dispositivo, quindi questo cliente non può essere '
-                    'letto dalla cache locale anche se esiste sul server.',
-              );
-            }
-            return _CustomerDetailBody(customer: customer, customerId: customerId);
-          },
-        ),
-      ),
+      data: (customer) {
+        if (customer == null) {
+          final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+          return DetailScaffold.unavailable(
+            screenTitle: 'Cliente',
+            icon: neverSynced ? LucideIcons.cloudOff : LucideIcons.users,
+            title: neverSynced ? 'Cliente non disponibile' : 'Cliente non trovato',
+            reason: neverSynced
+                ? "L'elenco clienti non è ancora sincronizzato sul dispositivo, quindi questo "
+                      'cliente non può essere letto dalla cache locale anche se esiste sul server.'
+                : 'Questo cliente non è più disponibile: potrebbe essere stato eliminato.',
+          );
+        }
+        return _CustomerDetailBody(customer: customer, customerId: customerId);
+      },
     );
   }
 }
@@ -94,9 +91,22 @@ Future<void> _deleteCustomer(BuildContext context, WidgetRef ref, String custome
   }
 }
 
+/// True when an async list should keep its section on screen: still loading, failed, or holding
+/// at least one row. Only "loaded and empty" hides a section, per the prototype rule.
+bool _hasSectionData<T>(AsyncValue<List<T>> value) =>
+    value.isLoading || value.hasError || (value.valueOrNull?.isNotEmpty ?? false);
+
+bool _present(String? value) => value != null && value.trim().isNotEmpty;
+
+String? _joinMeta(List<String> parts) => parts.isEmpty ? null : parts.join(' · ');
+
+String _countLabel(int count, String singular, String plural) =>
+    '$count ${count == 1 ? singular : plural}';
+
 class _CustomerDetailBody extends ConsumerWidget {
   const _CustomerDetailBody({required this.customer, required this.customerId});
-  final dynamic customer;
+
+  final Customer customer;
   final String customerId;
 
   /// Pull-to-refresh: sync first, then re-request the sections that are fetched live.
@@ -116,366 +126,421 @@ class _CustomerDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: RefreshIndicator(
-          onRefresh: () => _refresh(context, ref),
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: ScreenHeader(
-                  title: 'Cliente',
-                  subtitle: customer.companyName,
-                  showBack: true,
-                  actions: [
-                    HeaderIconBtn(
-                      icon: LucideIcons.trash2,
-                      label: 'Elimina cliente',
-                      glass: true,
-                      onTap: () => _deleteCustomer(context, ref, customerId),
-                    ),
-                  ],
-                ),
-              ),
-              // ── Avatar hero ──────────────────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                    child: AppAvatar(name: customer.companyName, size: 64),
-                  ),
-                ),
-              ),
-              // ── Contatti card ──────────────────────────────────────────────────
-              //
-              // Contact/site fields first, fiscal fields demoted to their own labelled section below
-              // (near Storico, matches the Vetro mockup's explicit call: "Contact + site first — what
-              // a technician needs — fiscal data demoted to its own labeled section rather than mixed
-              // in"). P.IVA used to sit second, right after the company name.
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: AppCard(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SectionTitle(title: 'Contatti'),
-                        const SizedBox(height: 4),
-                        KeyVal(label: 'Ragione sociale', value: customer.companyName),
-                        if (customer.contactPerson != null && customer.contactPerson!.isNotEmpty)
-                          KeyVal(label: 'Referente', value: customer.contactPerson!),
-                        if (customer.phone != null && customer.phone!.isNotEmpty)
-                          KeyVal(label: 'Telefono', value: customer.phone!),
-                        // Distinct from the landline above — a technician rings the mobile.
-                        if (customer.cellulare != null && customer.cellulare!.isNotEmpty)
-                          KeyVal(label: 'Cellulare', value: customer.cellulare!),
-                        if (customer.email != null && customer.email!.isNotEmpty)
-                          KeyVal(label: 'Email', value: customer.email!),
-                        if (customer.address != null && customer.address!.isNotEmpty)
-                          KeyVal(label: 'Indirizzo', value: customer.address!),
-                        if (customer.city != null && customer.city!.isNotEmpty)
-                          KeyVal(label: 'Città', value: customer.city!),
-                        if (customer.postalCode != null && customer.postalCode!.isNotEmpty)
-                          KeyVal(label: 'CAP', value: customer.postalCode!),
-                        KeyVal(
-                          label: 'Paese',
-                          value: customer.country != null && customer.country!.isNotEmpty
-                              ? customer.country!
-                              : '—',
-                          showDivider: false,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              // ── Panoramica (sedi/contratti/interventi) ────────────────────────
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: _OverviewCard(customerId: customerId),
-                ),
-              ),
-              // ── Sedi (Gap 3) ─────────────────────────────────────────────────
-              SliverToBoxAdapter(child: _SediSection(customerId: customerId)),
-              // ── Referenti (labeled CustomerContact list) ────────────────────
-              SliverToBoxAdapter(child: _ContactsSection(customerId: customerId)),
-              // ── Contratti (Gap 7, read-only + create) ───────────────────────
-              SliverToBoxAdapter(child: _ContrattiSection(customerId: customerId)),
-              // ── Prodotti assistenza (Gap 8, read-only + create) ─────────────
-              SliverToBoxAdapter(child: _ProdottiSection(customerId: customerId)),
-              // ── Note ─────────────────────────────────────────────────────────
-              if (customer.notes != null && customer.notes!.isNotEmpty) ...[
-                const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                    child: AppCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SectionTitle(title: 'Note'),
-                          const SizedBox(height: 4),
-                          Text(customer.notes!, style: AppTextStyles.bodyMedium),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-              // ── Status ───────────────────────────────────────────────────────
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: AppCard(
-                    child: Row(
-                      children: [
-                        Text(
-                          'Stato',
-                          style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkMuted),
-                        ),
-                        const Spacer(),
-                        StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo'),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              // ── Dati fiscali ─────────────────────────────────────────────────
-              //
-              // Demoted to its own labelled, last-in-scroll section — see the Contatti card's own
-              // comment. Every field here is read from the local mirror, so a technician standing
-              // in front of the customer can read the CF or the SDI code with no signal; schema 48
-              // added the last four, which used to be network-only (the backend entity already
-              // carried them, the mirror just never stored them).
-              if (_hasAnyFiscalData(customer)) ...[
-                const SliverToBoxAdapter(child: SizedBox(height: 16)),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                    child: AppCard(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SectionTitle(title: 'Dati fiscali'),
-                          const SizedBox(height: 4),
-                          ..._fiscalRows(customer),
-                          // `showDivider` is decided inside `_fiscalRows`, which knows which row is
-                          // the last one present, so the card never ends on a rule with nothing
-                          // under it.
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-              // ── Storico interventi ─────────────────────────────────────────────
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: _TicketHistoryCard(customerId: customerId),
-                ),
-              ),
-              SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Whether any fiscal field is present. The card used to render on P.IVA alone, which is why a
-/// customer holding only a Codice Fiscale showed no fiscal section at all.
-bool _hasAnyFiscalData(Customer c) =>
-    _present(c.taxId) ||
-    _present(c.fiscalCode) ||
-    _present(c.sdiCode) ||
-    _present(c.pec) ||
-    _present(c.province);
-
-bool _present(String? value) => value != null && value.isNotEmpty;
-
-/// The label/value rows of the fiscal card, in the order a commercialista reads them.
-///
-/// `showDivider` is set on every row but the last one *present*: the row that closes the card is
-/// decided here, where the subset is already known, because the caller only spreads the list.
-List<Widget> _fiscalRows(Customer c) {
-  final rows = <(String, String)>[
-    if (_present(c.taxId)) ('P.IVA', c.taxId!),
-    if (_present(c.fiscalCode)) ('Codice fiscale', c.fiscalCode!),
-    if (_present(c.sdiCode)) ('Codice SDI', c.sdiCode!),
-    if (_present(c.pec)) ('PEC', c.pec!),
-    if (_present(c.province)) ('Provincia', c.province!),
-  ];
-  return [
-    for (var i = 0; i < rows.length; i++)
-      KeyVal(label: rows[i].$1, value: rows[i].$2, showDivider: i < rows.length - 1),
-  ];
-}
-
-/// The aggregated overview (sedi/contratti/interventi counts) from
-/// `GET /api/app/clienti/{id}/overview` — data the API client + provider already fetched, just
-/// never rendered anywhere (see `clienteOverviewProvider` in clienti_providers.dart).
-class _OverviewCard extends ConsumerWidget {
-  const _OverviewCard({required this.customerId});
-  final String customerId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
     final overviewAsync = ref.watch(clienteOverviewProvider(customerId));
+    final locationsAsync = ref.watch(locationsForCustomerProvider(customerId));
+    final contactsAsync = ref.watch(customerContactsProvider(customerId));
+    final contractsAsync = ref.watch(adminCustomerContractsProvider(customerId));
+    final prodottiAsync = ref.watch(adminCustomerProdottiProvider(customerId));
+    final ticketsAsync = ref.watch(ticketsForCustomerProvider(customerId));
+    final online = ref.watch(isOnlineProvider);
 
-    return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
-      child: overviewAsync.when(
-        loading: () => const Padding(
-          padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        ),
-        error: (e, _) => Text(
-          e is ClienteOverviewOfflineException
-              ? 'Panoramica non disponibile offline'
-              : 'Panoramica non disponibile',
-          style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
-        ),
-        data: (overview) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SectionTitle(title: 'Panoramica'),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _OverviewStat(label: 'Sedi attive', value: '${overview.sediAttive}'),
-                ),
-                Expanded(
-                  child: _OverviewStat(label: 'Contratti', value: '${overview.contratti}'),
-                ),
-                Expanded(
-                  child: _OverviewStat(label: 'Interventi', value: '${overview.interventiTotali}'),
-                ),
-                Expanded(
-                  child: _OverviewStat(label: 'Aperti', value: '${overview.interventiAperti}'),
+    final overview = overviewAsync.valueOrNull;
+    final locations = locationsAsync.valueOrNull;
+    final contacts = contactsAsync.valueOrNull;
+    final contracts = contractsAsync.valueOrNull;
+    final sediCount = overview?.sediAttive ?? locations?.length;
+    final contrattiCount = overview?.contratti ?? contracts?.length;
+
+    final sintesiFacts = _sintesiFacts(customer);
+    final hasNotes = _present(customer.notes);
+    final relazioniEmpty =
+        !_hasSectionData(locationsAsync) &&
+        !_hasSectionData(contactsAsync) &&
+        !_hasSectionData(prodottiAsync);
+    final attivitaEmpty = !_hasSectionData(ticketsAsync);
+    final documentiEmpty = !_hasSectionData(contractsAsync);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Below 360 the 9px mono section meta cannot share the row with a 17px section title: the
+        // trailing text becomes the only thing on screen and pushes the title out. Drop the meta
+        // there and let each Relazioni group header carry its own count instead.
+        final narrowHeader = constraints.maxWidth < 360;
+
+        return DetailScaffold(
+          screenTitle: 'Cliente',
+          headerActions: [
+            HeaderIconBtn(
+              icon: LucideIcons.trash2,
+              label: 'Elimina cliente',
+              glass: true,
+              onTap: () => _deleteCustomer(context, ref, customerId),
+            ),
+            PopupMenuButton<_CustomerAction>(
+              tooltip: 'Aggiungi',
+              icon: const Icon(LucideIcons.moreHorizontal),
+              onSelected: (action) => _handleAction(context, ref, action, online: online),
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: _CustomerAction.nuovaSede, child: Text('Nuova sede')),
+                if (online)
+                  const PopupMenuItem(
+                    value: _CustomerAction.nuovoReferente,
+                    child: Text('Aggiungi referente'),
+                  ),
+                const PopupMenuItem(value: _CustomerAction.nuovoAsset, child: Text('Nuovo asset')),
+                const PopupMenuItem(
+                  value: _CustomerAction.nuovoContratto,
+                  child: Text('Nuovo contratto'),
                 ),
               ],
             ),
           ],
-        ),
+          hero: DetailHeroData(
+            variant: DetailHeroVariant.summary,
+            kind: 'Summary · cliente',
+            kicker: 'Summary',
+            kickerContext: 'cliente',
+            title: customer.companyName.trim().isEmpty ? 'Cliente' : customer.companyName,
+            subtitle: _heroFacts(customer, sediCount: sediCount, contrattiCount: contrattiCount),
+            status: DetailStatus(label: customer.isActive ? 'Attivo' : 'Inattivo'),
+            primaryAction: DetailAction(
+              label: 'Modifica',
+              onPressed: () async {
+                await context.push<bool>('/altro/clienti/$customerId/modifica');
+              },
+            ),
+          ),
+          sections: [
+            DetailSectionData(
+              title: 'Relazioni',
+              isEmpty: relazioniEmpty,
+              trailing: narrowHeader
+                  ? null
+                  : _relationMeta(
+                      sedi: sediCount,
+                      contratti: contrattiCount,
+                      referenti: contacts?.length,
+                    ),
+              child: _relationsContent(
+                context,
+                ref,
+                locationsAsync: locationsAsync,
+                contactsAsync: contactsAsync,
+                prodottiAsync: prodottiAsync,
+                online: online,
+              ),
+            ),
+            DetailSectionData(
+              title: 'Sintesi',
+              isEmpty: sintesiFacts.isEmpty && !hasNotes,
+              trailing: narrowHeader ? null : const DetailSectionMeta('Anagrafica e dati fiscali'),
+              child: _sintesiContent(customer, facts: sintesiFacts, hasNotes: hasNotes),
+            ),
+            DetailSectionData(
+              title: 'Attività',
+              isEmpty: attivitaEmpty,
+              trailing: narrowHeader ? null : const DetailSectionMeta('Ultimi interventi'),
+              child: _attivitaContent(context, ref, ticketsAsync),
+            ),
+            DetailSectionData(
+              title: 'Documenti',
+              isEmpty: documentiEmpty,
+              trailing: narrowHeader ? null : const DetailSectionMeta('Contratti'),
+              child: _documentiContent(context, ref, contractsAsync),
+            ),
+          ],
+          onRefresh: () => _refresh(context, ref),
+        );
+      },
+    );
+  }
+
+  // ── Header actions ──────────────────────────────────────────────────────────
+
+  void _handleAction(
+    BuildContext context,
+    WidgetRef ref,
+    _CustomerAction action, {
+    required bool online,
+  }) {
+    switch (action) {
+      case _CustomerAction.nuovaSede:
+        context.push('/altro/sedi/nuova', extra: customerId);
+      case _CustomerAction.nuovoReferente:
+        if (online) {
+          _openContactSheet(context, ref, customerId: customerId, contact: null);
+        }
+      case _CustomerAction.nuovoAsset:
+        context.push('/altro/prodotti/nuovo');
+      case _CustomerAction.nuovoContratto:
+        context.push('/altro/contratti/nuovo');
+    }
+  }
+
+  // ── Relazioni ───────────────────────────────────────────────────────────────
+
+  Widget? _relationMeta({int? sedi, int? contratti, int? referenti}) {
+    final parts = <String>[
+      if (sedi != null) _countLabel(sedi, 'sede', 'sedi'),
+      if (contratti != null) _countLabel(contratti, 'contratto', 'contratti'),
+      if (referenti != null) _countLabel(referenti, 'referente', 'referenti'),
+    ];
+    return parts.isEmpty ? null : DetailSectionMeta(parts.join(' · '));
+  }
+
+  Widget _relationsContent(
+    BuildContext context,
+    WidgetRef ref, {
+    required AsyncValue<List<Location>> locationsAsync,
+    required AsyncValue<List<CustomerContactRow>> contactsAsync,
+    required AsyncValue<List<Map<String, dynamic>>> prodottiAsync,
+    required bool online,
+  }) {
+    final blocks = <Widget>[];
+
+    void addGroup(String label, int? count, Widget content, {bool visible = true}) {
+      if (!visible) return;
+      blocks.add(_RelationGroupHeader(label: count == null ? label : '$label · $count'));
+      blocks.add(content);
+    }
+
+    addGroup(
+      'Sedi',
+      locationsAsync.valueOrNull?.length,
+      _locationsContent(context, ref, locationsAsync),
+      visible: _hasSectionData(locationsAsync),
+    );
+    addGroup(
+      'Referenti',
+      contactsAsync.valueOrNull?.length,
+      _contactsContent(context, ref, contactsAsync, online: online),
+      visible: _hasSectionData(contactsAsync),
+    );
+    addGroup(
+      'Asset',
+      prodottiAsync.valueOrNull?.length,
+      _prodottiContent(context, ref, prodottiAsync),
+      visible: _hasSectionData(prodottiAsync),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < blocks.length; i++) ...[
+          if (i > 0) const SizedBox(height: AppSpacing.md),
+          blocks[i],
+        ],
+      ],
+    );
+  }
+
+  Widget _locationsContent(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Location>> locationsAsync,
+  ) {
+    return locationsAsync.when(
+      loading: () => const _SectionLoading(),
+      error: (e, _) =>
+          AppSectionError(onRetry: () => ref.invalidate(locationsForCustomerProvider(customerId))),
+      data: (locations) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < locations.length; i++)
+            DetailLinkRow(
+              key: ValueKey('cliente-sede-${locations[i].id}'),
+              title: locations[i].name,
+              showDivider: i < locations.length - 1,
+              trailing: _RowActions(
+                meta: locations[i].city,
+                editTooltip: 'Modifica sede',
+                deleteTooltip: 'Elimina sede',
+                onEdit: () => context.push('/altro/sedi/${locations[i].id}/modifica'),
+                onDelete: () =>
+                    _deleteLocation(context, ref, id: locations[i].id, name: locations[i].name),
+              ),
+              onTap: () => context.push('/altro/sedi/${locations[i].id}'),
+            ),
+        ],
       ),
     );
   }
-}
 
-class _OverviewStat extends StatelessWidget {
-  const _OverviewStat({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value, style: AppTextStyles.headlineMedium.copyWith(color: context.colors.ink)),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: AppTextStyles.caption.copyWith(color: context.colors.inkMuted),
-        ),
-      ],
-    );
-  }
-}
-
-/// The customer's ticket history from the local Drift cache — `ticketsForCustomerProvider`
-/// existed with no widget consuming it.
-// ══════════════════════════════════════════════════════════════════════════════
-// Sedi (Gap 3) — locations are synced to Drift (unlike cantiere contacts/assignments), so the
-// list itself is offline-capable via `locationsForCustomerProvider`. Create/edit/delete all go
-// through the global Sedi CRUD (`admin_location_form_screen.dart` / `admin_location_detail_
-// screen.dart`, both already built) rather than duplicating that form inline — "nuova" is pushed
-// pre-scoped to this customer via `extra`, edit pushes straight to the edit form, delete is
-// inline (mirrors `_deleteCustomer`'s confirm-then-call, no separate screen needed for that).
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _SediSection extends ConsumerWidget {
-  const _SediSection({required this.customerId});
-  final String customerId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final locationsAsync = ref.watch(locationsForCustomerProvider(customerId));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionTitle(
-          title: 'Sedi',
-          action: IconButton(
-            icon: const Icon(LucideIcons.plus),
-            tooltip: 'Nuova sede',
-            onPressed: () => context.push('/altro/sedi/nuova', extra: customerId),
-          ),
-        ),
-        locationsAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          error: (e, _) => AppSectionError(
-            onRetry: () => ref.invalidate(locationsForCustomerProvider(customerId)),
-          ),
-          data: (locations) {
-            if (locations.isEmpty) {
-              return const EmptyState(
-                icon: LucideIcons.mapPin,
-                title: 'Nessuna sede',
-                body: 'Aggiungi una sede per questo cliente con il pulsante +.',
-              );
-            }
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              child: Column(
-                children: locations.asMap().entries.map((entry) {
-                  final loc = entry.value;
-                  return ListRow(
-                    leading: const RowIconTile(icon: LucideIcons.mapPin),
-                    title: loc.name,
-                    subtitle: loc.city != null && loc.city!.isNotEmpty ? loc.city : null,
-                    meta: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(LucideIcons.pencil, size: 18),
-                          tooltip: 'Modifica sede',
-                          onPressed: () => context.push('/altro/sedi/${loc.id}/modifica'),
-                        ),
-                        IconButton(
-                          icon: const Icon(LucideIcons.trash2, size: 18),
-                          tooltip: 'Elimina sede',
-                          onPressed: () =>
-                              _deleteLocation(context, ref, id: loc.id, name: loc.name),
-                        ),
-                      ],
-                    ),
-                    onTap: () => context.push('/altro/sedi/${loc.id}'),
-                    showDivider: entry.key < locations.length - 1,
-                  );
-                }).toList(),
+  Widget _contactsContent(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<CustomerContactRow>> contactsAsync, {
+    required bool online,
+  }) {
+    return contactsAsync.when(
+      loading: () => const _SectionLoading(),
+      // A Drift read has nothing to fail with short of a corrupt database, so this is a plain
+      // section error rather than the offline/none split the network read used to need.
+      error: (e, _) =>
+          AppSectionError(onRetry: () => ref.invalidate(customerContactsProvider(customerId))),
+      data: (contacts) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < contacts.length; i++)
+            DetailLinkRow(
+              key: ValueKey('cliente-referente-${contacts[i].id}'),
+              title: contacts[i].name.isNotEmpty ? contacts[i].name : 'Referente',
+              showDivider: i < contacts.length - 1,
+              trailing: _RowActions(
+                meta: _joinMeta([
+                  if (_present(contacts[i].role)) contacts[i].role!,
+                  if (_present(contacts[i].phone)) contacts[i].phone!,
+                ]),
+                editTooltip: 'Modifica referente',
+                deleteTooltip: 'Elimina referente',
+                // Edit and delete are POST/PUT/DELETE with no queue behind them, so offline the
+                // affordance is hidden rather than left to fail. The rows themselves stay.
+                onEdit: online
+                    ? () => _openContactSheet(
+                        context,
+                        ref,
+                        customerId: customerId,
+                        contact: contacts[i],
+                      )
+                    : null,
+                onDelete: online
+                    ? () => _deleteContact(
+                        context,
+                        ref,
+                        customerId: customerId,
+                        contactId: contacts[i].id,
+                        name: contacts[i].name,
+                      )
+                    : null,
               ),
-            );
-          },
-        ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _prodottiContent(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Map<String, dynamic>>> prodottiAsync,
+  ) {
+    return prodottiAsync.when(
+      loading: () => const _SectionLoading(),
+      error: (e, _) => e is TicketDetailOfflineException
+          ? const _SectionNote(
+              'Asset non disponibili offline: apri questa scheda con una connessione per '
+              'scaricarli.',
+            )
+          : AppSectionError(
+              onRetry: () => ref.invalidate(adminCustomerProdottiProvider(customerId)),
+            ),
+      data: (prodotti) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < prodotti.length; i++)
+            DetailLinkRow(
+              key: ValueKey('cliente-asset-${prodotti[i]['id']}'),
+              title: prodotti[i]['name'] as String? ?? 'Asset',
+              meta: _present(prodotti[i]['serialNumber'] as String?)
+                  ? prodotti[i]['serialNumber'] as String?
+                  : (prodotti[i]['categoria'] as String?),
+              showDivider: i < prodotti.length - 1,
+              onTap: () => context.push('/altro/prodotti/${prodotti[i]['id']}', extra: prodotti[i]),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Sintesi ─────────────────────────────────────────────────────────────────
+
+  List<DetailFact> _sintesiFacts(Customer c) {
+    // Città lives in the hero facts line on purpose: the prototype puts it there and the rule is
+    // "no fact repeated between hero and Sintesi". Every other anagrafica/fiscal field is here.
+    return [
+      if (_present(c.address)) DetailFact(label: 'Indirizzo', value: c.address!),
+      if (_present(c.postalCode)) DetailFact(label: 'CAP', value: c.postalCode!),
+      if (_present(c.province)) DetailFact(label: 'Provincia', value: c.province!),
+      if (_present(c.country)) DetailFact(label: 'Paese', value: c.country!),
+      if (_present(c.phone)) DetailFact(label: 'Telefono', value: c.phone!),
+      if (_present(c.cellulare)) DetailFact(label: 'Cellulare', value: c.cellulare!),
+      if (_present(c.email)) DetailFact(label: 'Email', value: c.email!),
+      if (_present(c.contactPerson)) DetailFact(label: 'Referente', value: c.contactPerson!),
+      if (_present(c.taxId)) DetailFact(label: 'P.IVA', value: c.taxId!),
+      if (_present(c.fiscalCode)) DetailFact(label: 'Codice fiscale', value: c.fiscalCode!),
+      if (_present(c.sdiCode)) DetailFact(label: 'Codice SDI', value: c.sdiCode!),
+      if (_present(c.pec)) DetailFact(label: 'PEC', value: c.pec!),
+    ];
+  }
+
+  Widget _sintesiContent(Customer c, {required List<DetailFact> facts, required bool hasNotes}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (facts.isNotEmpty) DetailFactsGrid(facts: facts),
+        if (facts.isNotEmpty && hasNotes) const SizedBox(height: AppSpacing.md),
+        if (hasNotes) _NoteBlock(note: c.notes!),
       ],
     );
   }
+
+  // ── Attività ────────────────────────────────────────────────────────────────
+
+  Widget _attivitaContent(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Ticket>> ticketsAsync,
+  ) {
+    return ticketsAsync.when(
+      loading: () => const _SectionLoading(),
+      error: (e, _) => const _SectionNote('Storico interventi non disponibile.'),
+      data: (tickets) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < tickets.length; i++)
+            DetailLinkRow(
+              key: ValueKey('cliente-intervento-${tickets[i].id}'),
+              title: tickets[i].title,
+              meta: tickets[i].numero != null ? '#${tickets[i].numero}' : null,
+              showDivider: i < tickets.length - 1,
+              onTap: () => context.push('/ticket/${tickets[i].id}'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Documenti ───────────────────────────────────────────────────────────────
+
+  Widget _documentiContent(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Map<String, dynamic>>> contractsAsync,
+  ) {
+    return contractsAsync.when(
+      loading: () => const _SectionLoading(),
+      error: (e, _) => e is TicketDetailOfflineException
+          ? const _SectionNote(
+              'Contratti non disponibili offline: apri questa scheda con una connessione per '
+              'scaricarli.',
+            )
+          : AppSectionError(
+              onRetry: () => ref.invalidate(adminCustomerContractsProvider(customerId)),
+            ),
+      data: (contracts) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < contracts.length; i++)
+            DetailLinkRow(
+              key: ValueKey('cliente-contratto-${contracts[i]['id']}'),
+              title: contracts[i]['name'] as String? ?? 'Contratto',
+              showDivider: i < contracts.length - 1,
+              trailing: StatusStamp(
+                stato: (contracts[i]['isActive'] as bool? ?? true) ? 'Attivo' : 'Inattivo',
+                size: StampSize.small,
+              ),
+              semanticsLabel:
+                  '${contracts[i]['name'] as String? ?? 'Contratto'}. '
+                  '${(contracts[i]['isActive'] as bool? ?? true) ? 'Attivo' : 'Inattivo'}',
+              onTap: () =>
+                  context.push('/altro/contratti/${contracts[i]['id']}', extra: contracts[i]),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Contact sheet + writes ──────────────────────────────────────────────────
 
   Future<void> _deleteLocation(
     BuildContext context,
@@ -501,401 +566,6 @@ class _SediSection extends ConsumerWidget {
         showAppToast(context, message: 'Impossibile eliminare. Riprova.', tone: ToastTone.error);
       }
     }
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Contratti (Gap 7) — server-first via `AdminApiClient.fetchContracts(customerId: ...)`, with the
-// synced `contracts` mirror as the offline answer (the same rows the Contratti list uses).
-// Read-only list is the priority per the audit; "+" reuses the existing global create form
-// (`admin_contract_form_screen.dart`) rather than teaching it a pre-selected customer — cheap to
-// link, not cheap to also thread a new constructor param through a form that already resolves its
-// customer from a dropdown.
-// ══════════════════════════════════════════════════════════════════════════════
-
-/// Contracts for [customerId] — `GET /api/contracts?customerId=`, mirror on the way back.
-///
-/// Inactive contracts are included, because the server returns them too (they carry an "Inattivo"
-/// pill). The mirror has no price column, so a mirrored row's subtitle stays empty rather than
-/// printing a made-up €0,00.
-final adminCustomerContractsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
-      Future<List<Map<String, dynamic>>> fromMirror() async {
-        final rows = await ref
-            .watch(referenceCacheProvider)
-            .contractsForCustomer(customerId, activeOnly: false);
-        if (rows.isEmpty && await ref.watch(appDatabaseProvider).getLastSync() == null) {
-          throw const TicketDetailOfflineException();
-        }
-        return [
-          for (final c in rows)
-            {
-              'id': c.id,
-              'name': c.name,
-              'customerId': c.customerId,
-              'locationId': c.locationId,
-              'isActive': c.isActive,
-              'numero': c.numero,
-              'codice': c.codice,
-              'externalId': c.externalId,
-            },
-        ];
-      }
-
-      if (ref.watch(isOnlineProvider)) {
-        try {
-          return await ref.watch(adminApiClientProvider).fetchContracts(customerId: customerId);
-        } catch (e) {
-          if (!isTransportOrServerFault(e)) rethrow;
-        }
-      }
-      return fromMirror();
-    });
-
-class _ContrattiSection extends ConsumerWidget {
-  const _ContrattiSection({required this.customerId});
-  final String customerId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final contractsAsync = ref.watch(adminCustomerContractsProvider(customerId));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionTitle(
-          title: 'Contratti',
-          action: IconButton(
-            icon: const Icon(LucideIcons.plus),
-            tooltip: 'Nuovo contratto',
-            onPressed: () => context.push('/altro/contratti/nuovo'),
-          ),
-        ),
-        contractsAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          error: (e, _) => e is TicketDetailOfflineException
-              ? const UnavailableState(
-                  icon: LucideIcons.fileSignature,
-                  titolo: 'Contratti non disponibili offline',
-                  motivo:
-                      'Questo dispositivo non ha ancora scaricato i contratti. Apri questa '
-                      'scheda con una connessione attiva per averli anche offline.',
-                )
-              : AppSectionError(
-                  onRetry: () => ref.invalidate(adminCustomerContractsProvider(customerId)),
-                ),
-          data: (contracts) {
-            if (contracts.isEmpty) {
-              return const EmptyState(
-                icon: LucideIcons.fileSignature,
-                title: 'Nessun contratto',
-                body: 'Non risultano contratti per questo cliente.',
-              );
-            }
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              child: Column(
-                children: contracts.asMap().entries.map((entry) {
-                  final c = entry.value;
-                  final name = c['name'] as String? ?? '';
-                  final isActive = c['isActive'] as bool? ?? true;
-                  final price = c['price'] as num?;
-                  return ListRow(
-                    leading: const RowIconTile(icon: LucideIcons.fileSignature),
-                    title: name,
-                    subtitle: price != null ? '€${price.toStringAsFixed(2)}' : null,
-                    meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true),
-                    onTap: () => context.push('/altro/contratti/${c['id']}', extra: c),
-                    showDivider: entry.key < contracts.length - 1,
-                  );
-                }).toList(),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Prodotti assistenza (Gap 8) — same treatment as Contratti: server-first, customer-filtered, with
-// the synced `prodotti_assistenza` mirror behind it; read-only priority with a cheap "+" to the
-// existing global form.
-// ══════════════════════════════════════════════════════════════════════════════
-
-/// Prodotti assistenza for [customerId] — `GET /api/prodottoassistenza?customerId=`, mirror on
-/// the way back. Inactive assets included, same reasoning as
-/// [adminCustomerContractsProvider]; `customerName` is omitted because the section already knows
-/// whose assets these are.
-final adminCustomerProdottiProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
-      Future<List<Map<String, dynamic>>> fromMirror() async {
-        final rows = await ref
-            .watch(referenceCacheProvider)
-            .prodottiForCustomer(customerId, activeOnly: false);
-        if (rows.isEmpty && await ref.watch(appDatabaseProvider).getLastSync() == null) {
-          throw const TicketDetailOfflineException();
-        }
-        return [
-          for (final p in rows)
-            {
-              'id': p.id,
-              'name': p.name,
-              'codice': p.codice,
-              'customerId': p.customerId,
-              'locationId': p.locationId,
-              'categoria': p.categoria,
-              'marchio': p.marchio,
-              'serialNumber': p.serialNumber,
-              'externalId': p.externalId,
-              'isActive': p.isActive,
-            },
-        ];
-      }
-
-      if (ref.watch(isOnlineProvider)) {
-        try {
-          return await ref.watch(adminApiClientProvider).fetchProdottiAssistenza(
-            customerId: customerId,
-          );
-        } catch (e) {
-          if (!isTransportOrServerFault(e)) rethrow;
-        }
-      }
-      return fromMirror();
-    });
-
-class _ProdottiSection extends ConsumerWidget {
-  const _ProdottiSection({required this.customerId});
-  final String customerId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final prodottiAsync = ref.watch(adminCustomerProdottiProvider(customerId));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionTitle(
-          title: 'Asset',
-          action: IconButton(
-            icon: const Icon(LucideIcons.plus),
-            tooltip: 'Nuovo asset',
-            onPressed: () => context.push('/altro/prodotti/nuovo'),
-          ),
-        ),
-        prodottiAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          error: (e, _) => e is TicketDetailOfflineException
-              ? const UnavailableState(
-                  icon: LucideIcons.wrench,
-                  titolo: 'Asset non disponibili offline',
-                  motivo:
-                      'Questo dispositivo non ha ancora scaricato gli asset. Apri questa scheda '
-                      'con una connessione attiva per averli anche offline.',
-                )
-              : AppSectionError(
-                  onRetry: () => ref.invalidate(adminCustomerProdottiProvider(customerId)),
-                ),
-          data: (prodotti) {
-            if (prodotti.isEmpty) {
-              return const EmptyState(
-                icon: LucideIcons.wrench,
-                title: 'Nessun asset',
-                body: 'Non risultano asset per questo cliente.',
-              );
-            }
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              child: Column(
-                children: prodotti.asMap().entries.map((entry) {
-                  final p = entry.value;
-                  final name = p['name'] as String? ?? '';
-                  final serialNumber = p['serialNumber'] as String?;
-                  final isActive = p['isActive'] as bool? ?? true;
-                  return ListRow(
-                    leading: const RowIconTile(icon: LucideIcons.wrench),
-                    title: name,
-                    subtitle: serialNumber != null && serialNumber.isNotEmpty ? serialNumber : null,
-                    meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true),
-                    onTap: () => context.push('/altro/prodotti/${p['id']}', extra: p),
-                    showDivider: entry.key < prodotti.length - 1,
-                  );
-                }).toList(),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _TicketHistoryCard extends ConsumerWidget {
-  const _TicketHistoryCard({required this.customerId});
-  final String customerId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ticketsAsync = ref.watch(ticketsForCustomerProvider(customerId));
-
-    return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
-      child: ticketsAsync.when(
-        loading: () => const Padding(
-          padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        ),
-        error: (e, _) => Text(
-          'Storico interventi non disponibile',
-          style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
-        ),
-        data: (tickets) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SectionTitle(title: 'Storico interventi', trailing: '${tickets.length}'),
-            const SizedBox(height: 4),
-            if (tickets.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                child: Text(
-                  'Nessun intervento registrato per questo cliente.',
-                  style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
-                ),
-              )
-            else
-              for (var i = 0; i < tickets.length; i++)
-                ListRow(
-                  title: tickets[i].title,
-                  subtitle: tickets[i].numero != null ? '#${tickets[i].numero}' : '—',
-                  showDivider: i < tickets.length - 1,
-                  onTap: () => context.push('/ticket/${tickets[i].id}'),
-                ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Referenti (CustomerContact — a customer can now have several labeled contacts) — distinct from
-// the single flat `contactPerson` string on the customer record itself
-// (admin_customer_form_screen.dart's own `_contactPersonCtrl`, deliberately left untouched: this
-// is a new, separate concept added alongside it, not a replacement). Read from the Drift mirror via
-// `customerContactsProvider`; writes still go to `CustomerContactApiClient` because the office owns
-// these rows, and a successful write is followed by a sync so the mirror catches up. Add/edit/delete
-// all happen inline through a bottom sheet, mirroring the cantiere's own contacts section
-// (`_ContactsSection`/`_ContactFormSheet` in admin_cantiere_detail_screen.dart) — the closest
-// existing pattern in this app for a labeled sub-entity list with the same
-// name/role/phone/email/notes shape.
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _ContactsSection extends ConsumerWidget {
-  const _ContactsSection({required this.customerId});
-
-  final String customerId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final contactsAsync = ref.watch(customerContactsProvider(customerId));
-    // Adding a referente is a POST with no queue behind it, so the "+" only exists where it can
-    // work. Same rule the rest of the app follows for unqueued writes: hide the affordance rather
-    // than let the tap fail.
-    final online = ref.watch(isOnlineProvider);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionTitle(
-          title: 'Referenti',
-          action: online
-              ? IconButton(
-                  icon: const Icon(LucideIcons.plus),
-                  tooltip: 'Aggiungi referente',
-                  onPressed: () =>
-                      _openContactSheet(context, ref, customerId: customerId, contact: null),
-                )
-              : null,
-        ),
-        contactsAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          // A Drift read has nothing to fail with short of a corrupt database, so this is a plain
-          // section error rather than the offline/none split the network read used to need.
-          error: (e, _) => AppSectionError(
-            onRetry: () => ref.invalidate(customerContactsProvider(customerId)),
-          ),
-          data: (contacts) {
-            if (contacts.isEmpty) {
-              return const EmptyState(
-                icon: LucideIcons.users,
-                title: 'Nessun referente',
-                body: 'Aggiungi un referente per questo cliente con il pulsante +.',
-              );
-            }
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              child: Column(
-                children: contacts.asMap().entries.map((entry) {
-                  final c = entry.value;
-                  final subtitleParts = [
-                    if (c.role != null && c.role!.isNotEmpty) c.role!,
-                    if (c.phone != null && c.phone!.isNotEmpty) c.phone!,
-                  ];
-                  return ListRow(
-                    leading: const RowIconTile(icon: LucideIcons.user),
-                    title: c.name.isNotEmpty ? c.name : 'Referente',
-                    subtitle: subtitleParts.isNotEmpty ? subtitleParts.join(' · ') : null,
-                    // Edit and delete are POST/PUT/DELETE with no queue behind them, so they follow
-                    // the same rule as the "+": offline the affordance is hidden rather than left
-                    // to fail. The rows themselves stay — reading them is the point of the mirror.
-                    meta: !online
-                        ? null
-                        : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(LucideIcons.pencil, size: 18),
-                                tooltip: 'Modifica referente',
-                                onPressed: () => _openContactSheet(
-                                  context,
-                                  ref,
-                                  customerId: customerId,
-                                  contact: c,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(LucideIcons.trash2, size: 18),
-                                tooltip: 'Elimina referente',
-                                onPressed: () => _deleteContact(
-                                  context,
-                                  ref,
-                                  customerId: customerId,
-                                  contactId: c.id,
-                                  name: c.name,
-                                ),
-                              ),
-                            ],
-                          ),
-                    showDivider: entry.key < contacts.length - 1,
-                  );
-                }).toList(),
-              ),
-            );
-          },
-        ),
-      ],
-    );
   }
 
   Future<void> _deleteContact(
@@ -950,9 +620,296 @@ class _ContactsSection extends ConsumerWidget {
   /// puts the change on screen — the sheet has already closed and toasted by then, and
   /// `performSync` never throws (it parks the outcome in `SyncState`), so a refresh that fails
   /// leaves the previous list rather than contradicting the success the user was shown.
-  Future<void> _pullAfterWrite(WidgetRef ref) =>
-      ref.read(syncProvider.notifier).performSync();
+  Future<void> _pullAfterWrite(WidgetRef ref) => ref.read(syncProvider.notifier).performSync();
 }
+
+/// The hero's muted facts line: city first, then the two counts the prototype puts in the hero —
+/// never the same facts again in Sintesi.
+String? _heroFacts(Customer customer, {int? sediCount, int? contrattiCount}) {
+  final parts = <String>[
+    if (_present(customer.city)) customer.city!.trim(),
+    if (sediCount != null) _countLabel(sediCount, 'sede', 'sedi'),
+    if (contrattiCount != null) _countLabel(contrattiCount, 'contratto', 'contratti'),
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
+}
+
+/// A mono group label inside Relazioni — `SEDI`, `REFERENTI`, `ASSET`.
+class _RelationGroupHeader extends StatelessWidget {
+  const _RelationGroupHeader({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label.toUpperCase(),
+      style: AppTextStyles.docCode.copyWith(
+        fontSize: 9,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.54,
+        color: context.colors.inkMuted,
+      ),
+    );
+  }
+}
+
+enum _CustomerAction { nuovaSede, nuovoReferente, nuovoAsset, nuovoContratto }
+
+/// The trailing side of a relation row: an optional mono meta line plus the entity's own actions.
+///
+/// `DetailLinkRow` replaces its own meta with `trailing`, so the row has to draw the meta here.
+/// Icons keep a 44px target without changing the drawn size.
+class _RowActions extends StatelessWidget {
+  const _RowActions({this.meta, this.editTooltip, this.deleteTooltip, this.onEdit, this.onDelete});
+
+  final String? meta;
+  final String? editTooltip;
+  final String? deleteTooltip;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasMeta = _present(meta);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasMeta)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 140),
+            child: Text(
+              meta!.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: AppTextStyles.docCode.copyWith(
+                fontSize: 7.5,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.3,
+                color: context.colors.inkMuted,
+              ),
+            ),
+          ),
+        if (onEdit != null)
+          _ActionIcon(
+            icon: LucideIcons.pencil,
+            tooltip: editTooltip ?? 'Modifica',
+            onPressed: onEdit!,
+          ),
+        if (onDelete != null)
+          _ActionIcon(
+            icon: LucideIcons.trash2,
+            tooltip: deleteTooltip ?? 'Elimina',
+            onPressed: onDelete!,
+          ),
+      ],
+    );
+  }
+}
+
+class _ActionIcon extends StatelessWidget {
+  const _ActionIcon({required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(icon, size: 18),
+      tooltip: tooltip,
+      onPressed: onPressed,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+/// Static, non-spinning placeholder for a section that is still resolving, so a slow mirror does
+/// not make the page jump or spin.
+class _SectionLoading extends StatelessWidget {
+  const _SectionLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    final rule = context.colors.borderLight;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < 2; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: i == 0 ? 0.55 : 0.35,
+              child: Container(
+                height: 10,
+                decoration: BoxDecoration(color: rule, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A muted one-line state inside a section (offline or unavailable), styled like the shell's meta.
+class _SectionNote extends StatelessWidget {
+  const _SectionNote(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        message,
+        style: AppTextStyles.bodySmall.copyWith(
+          fontSize: 11,
+          height: 1.4,
+          color: context.colors.inkMuted,
+        ),
+      ),
+    );
+  }
+}
+
+class _NoteBlock extends StatelessWidget {
+  const _NoteBlock({required this.note});
+
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'NOTE',
+          style: AppTextStyles.docCode.copyWith(
+            fontSize: 8,
+            letterSpacing: 0.64,
+            color: context.colors.inkMuted,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          note,
+          style: AppTextStyles.bodySmall.copyWith(
+            fontSize: 11.5,
+            height: 1.4,
+            color: context.colors.ink,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Contratti (Gap 7) — server-first via `AdminApiClient.fetchContracts(customerId: ...)`, with the
+// synced `contracts` mirror as the offline answer (the same rows the Contratti list uses).
+// Read-only list is the priority per the audit; "+" reuses the existing global create form.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Contracts for [customerId] — `GET /api/contracts?customerId=`, mirror on the way back.
+///
+/// Inactive contracts are included, because the server returns them too (they carry an "Inattivo"
+/// stamp). The mirror has no price column, so a mirrored row's subtitle stays empty rather than
+/// printing a made-up €0,00.
+final adminCustomerContractsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
+      Future<List<Map<String, dynamic>>> fromMirror() async {
+        final rows = await ref
+            .watch(referenceCacheProvider)
+            .contractsForCustomer(customerId, activeOnly: false);
+        if (rows.isEmpty && await ref.watch(appDatabaseProvider).getLastSync() == null) {
+          throw const TicketDetailOfflineException();
+        }
+        return [
+          for (final c in rows)
+            {
+              'id': c.id,
+              'name': c.name,
+              'customerId': c.customerId,
+              'locationId': c.locationId,
+              'isActive': c.isActive,
+              'numero': c.numero,
+              'codice': c.codice,
+              'externalId': c.externalId,
+            },
+        ];
+      }
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref.watch(adminApiClientProvider).fetchContracts(customerId: customerId);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
+    });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Prodotti assistenza (Gap 8) — same treatment as Contratti: server-first,
+// customer-filtered, with the synced `prodotti_assistenza` mirror behind it.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Prodotti assistenza for [customerId] — `GET /api/prodottoassistenza?customerId=`, mirror on
+/// the way back. Inactive assets included, same reasoning as
+/// [adminCustomerContractsProvider]; `customerName` is omitted because the section already knows
+/// whose assets these are.
+final adminCustomerProdottiProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
+      Future<List<Map<String, dynamic>>> fromMirror() async {
+        final rows = await ref
+            .watch(referenceCacheProvider)
+            .prodottiForCustomer(customerId, activeOnly: false);
+        if (rows.isEmpty && await ref.watch(appDatabaseProvider).getLastSync() == null) {
+          throw const TicketDetailOfflineException();
+        }
+        return [
+          for (final p in rows)
+            {
+              'id': p.id,
+              'name': p.name,
+              'codice': p.codice,
+              'customerId': p.customerId,
+              'locationId': p.locationId,
+              'categoria': p.categoria,
+              'marchio': p.marchio,
+              'serialNumber': p.serialNumber,
+              'externalId': p.externalId,
+              'isActive': p.isActive,
+            },
+        ];
+      }
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref
+              .watch(adminApiClientProvider)
+              .fetchProdottiAssistenza(customerId: customerId);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
+    });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Referenti (CustomerContact — a customer can now have several labeled contacts) — distinct from
+// the single flat `contactPerson` string on the customer record itself. Read from the Drift mirror
+// via `customerContactsProvider`; writes still go to `CustomerContactApiClient` because the
+// office owns these rows, and a successful write is followed by a sync so the mirror catches up.
+// Add/edit/delete all happen inline through a bottom sheet, mirroring the cantiere's own contacts
+// section.
+// ══════════════════════════════════════════════════════════════════════════════
 
 /// Bottom sheet to add or edit a customer contact — mirrors `UpsertCustomerContactRequest` (name
 /// required, role/phone/email/notes optional), same shape and treatment as the cantiere's own
