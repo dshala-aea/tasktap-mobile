@@ -39,6 +39,23 @@ Future<void> _seed(AppDatabase db) async {
         ),
       );
   await db
+      .into(db.reportAllegati)
+      .insert(
+        ReportAllegatiCompanion.insert(
+          id: 'photo-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 11, 3, 9),
+          fileName: 'foto_lavello.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 2048,
+          storagePath: '',
+          url: '/api/reports/r1/attachments/photo-1/content',
+          entityType: 1,
+          entityId: 'r1',
+          uploadedByUserId: 'u-1',
+        ),
+      );
+  await db
       .into(db.tickets)
       .insert(
         TicketsCompanion.insert(

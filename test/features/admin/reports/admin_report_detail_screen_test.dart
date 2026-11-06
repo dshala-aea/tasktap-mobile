@@ -7,11 +7,16 @@
 // report's pre-transition stato until a manual pull-to-refresh.
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/admin/reports/admin_report_detail_screen.dart';
 import 'package:tasktap_mobile/features/admin/reports/admin_report_list_screen.dart';
@@ -180,5 +185,158 @@ void main() {
     expect(find.byType(AdminReportDetailScreen), findsOneWidget);
     expect(find.text('Scarica XML fattura'), findsOneWidget);
     expect(find.text('Segna come fatturato'), findsNothing);
+  });
+
+  testWidgets('offline detail facts come from the mirror row, including photos', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'cust-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            companyName: 'Rossi Srl',
+          ),
+        );
+    await db
+        .into(db.locations)
+        .insert(
+          LocationsCompanion.insert(
+            id: 'loc-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            customerId: 'cust-1',
+            name: 'Sede Milano',
+          ),
+        );
+    await db
+        .into(db.tickets)
+        .insert(
+          TicketsCompanion.insert(
+            id: 't1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 11, 1),
+            title: 'Perdita acqua sotto il lavello',
+            customerId: 'cust-1',
+            locationId: 'loc-1',
+            statusId: 1,
+            typeId: 1,
+          ),
+        );
+    await db
+        .into(db.colleagues)
+        .insert(ColleaguesCompanion.insert(id: 'u1', displayName: 'Daniel Shala'));
+    await db
+        .into(db.draftReports)
+        .insert(
+          DraftReportsCompanion.insert(
+            id: 'r1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 11, 3, 8),
+            title: 'Rapportino 2026-0412',
+            insertedUserId: 'u1',
+            locationId: 'loc-1',
+            customerId: const Value('cust-1'),
+            ticketId: const Value('t1'),
+            stato: const Value('Inviato'),
+            startedAt: Value(DateTime.utc(2026, 11, 3, 8)),
+            endedAt: Value(DateTime.utc(2026, 11, 4, 14)),
+            diagnosi: const Value('Guarnizione usurata'),
+            soluzione: const Value('Sostituita la guarnizione'),
+            technicianNotes: const Value('Accesso dal cortile interno.'),
+          ),
+        );
+    await db
+        .into(db.reportAllegati)
+        .insert(
+          ReportAllegatiCompanion.insert(
+            id: 'photo-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 11, 3, 9),
+            fileName: 'foto_lavello.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 2048,
+            storagePath: '',
+            url: '/api/reports/r1/attachments/photo-1/content',
+            entityType: 1,
+            entityId: 'r1',
+            uploadedByUserId: 'u1',
+          ),
+        );
+    await db.setLastSync(DateTime.utc(2026, 11, 5));
+
+    final overrides = [
+      appDatabaseProvider.overrideWithValue(db),
+      isOnlineProvider.overrideWithValue(false),
+    ];
+    final container = ProviderContainer(overrides: overrides);
+    addTearDown(container.dispose);
+    final rows = await container.read(adminReportsProvider(const StatoFilter('Inviato')).future);
+    final row = rows.rows.single;
+    expect(rows.fromMirror, isTrue);
+    expect(row['insertedUserId'], 'u1');
+    expect(row['diagnosi'], 'Guarnizione usurata');
+    expect(row['soluzione'], 'Sostituita la guarnizione');
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: overrides,
+        child: MaterialApp(home: AdminReportDetailScreen(report: row)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rossi Srl · Novembre · 30 ore'), findsOneWidget);
+    expect(find.text('Sede Milano'), findsOneWidget);
+    expect(find.text('Perdita acqua sotto il lavello'), findsOneWidget);
+    expect(find.text('Daniel Shala'), findsOneWidget);
+    expect(find.text('Guarnizione usurata'), findsOneWidget);
+    expect(find.text('Sostituita la guarnizione'), findsOneWidget);
+    expect(find.text('Accesso dal cortile interno.'), findsOneWidget);
+    expect(find.text('foto_lavello.jpg'), findsOneWidget);
+
+    // The list passes the raw `/api/Reports` row as `extra`; a representative server-shaped map
+    // must render the same hero facts as the mirror row above.
+    final serverRow = <String, dynamic>{
+      'id': 'r1',
+      'title': 'Rapportino 2026-0412',
+      'numero': '2026-0412',
+      'stato': 'Inviato',
+      'customerId': 'cust-1',
+      'locationId': 'loc-1',
+      'ticketId': 't1',
+      'insertedUserId': 'u1',
+      'createdAt': '2026-11-03T08:00:00Z',
+      'startedAt': '2026-11-03T08:00:00Z',
+      'endedAt': '2026-11-04T14:00:00Z',
+      'inviatoAt': '2026-11-04T15:00:00Z',
+      'customerSignatureAllegatoId': 'a1',
+      'technicianSignatureAllegatoId': 'a2',
+      'diagnosi': 'Guarnizione usurata',
+      'soluzione': 'Sostituita la guarnizione',
+      'technicianNotes': 'Accesso dal cortile interno.',
+    };
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: overrides,
+        child: MaterialApp(home: AdminReportDetailScreen(report: serverRow)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rapportino 2026-0412'), findsOneWidget);
+    expect(find.text('Rossi Srl · Novembre · 30 ore'), findsOneWidget);
+    expect(find.text('Sede Milano'), findsOneWidget);
+    expect(find.text('Perdita acqua sotto il lavello'), findsOneWidget);
+    expect(find.text('Daniel Shala'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
   });
 }

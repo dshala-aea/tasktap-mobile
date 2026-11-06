@@ -652,6 +652,39 @@ void main() {
       ).captured.single as Map;
       expect(captured['cantiereId'], 'cant-1');
     });
+
+    test('fetchReports forwards every supported list facet', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/reports',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'items': <Map<String, dynamic>>[]}, '/api/reports'));
+
+      await client.fetchReports(
+        stato: 'Inviato',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        ticketId: 'tick-1',
+        dateFrom: DateTime.utc(2026, 11, 1),
+        dateTo: DateTime.utc(2026, 11, 30, 23, 59, 59),
+      );
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/reports',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.single as Map;
+      expect(captured['stato'], 'Inviato');
+      expect(captured['cantiereId'], 'cant-1');
+      expect(captured['customerId'], 'cust-1');
+      expect(captured['locationId'], 'loc-1');
+      expect(captured['ticketId'], 'tick-1');
+      expect(captured['dateFrom'], '2026-11-01T00:00:00.000Z');
+      expect(captured['dateTo'], '2026-11-30T23:59:59.000Z');
+    });
   });
 
   // Cantieri module #8, Gap 5: Cantiere.CommessaId existed on the backend entity but neither

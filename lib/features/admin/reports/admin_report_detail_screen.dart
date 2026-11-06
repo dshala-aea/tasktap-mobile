@@ -19,11 +19,15 @@ import '../../../core/widgets/detail/detail_hero.dart';
 import '../../../core/widgets/detail/detail_scaffold.dart';
 import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/api/dio_client.dart';
+import '../../../data/attachments/attachment_content_cache.dart';
+import '../../../data/local/app_database.dart';
 import '../../../data/reports/report_pdf_cache.dart';
 import '../../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../../presentation/providers/schedule_providers.dart'
     show colleagueNameProvider, customerByIdProvider, locationByIdProvider, ticketByIdProvider;
 import '../../cantiere/cantiere_providers.dart' show cantiereByIdProvider;
+import '../../rapportino/rapportino_list_providers.dart' show rapportinoAllegatiProvider;
 import '../admin_api_client.dart';
 import 'admin_report_list_screen.dart' show adminReportsProvider;
 
@@ -67,9 +71,22 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
 
     final title = (report['title'] as String?)?.trim();
     final numero = (report['numero'] as String?)?.trim();
+    final hasNumero = numero != null && numero.isNotEmpty;
     final entityTitle = (title != null && title.isNotEmpty)
-        ? title
-        : (numero != null && numero.isNotEmpty ? 'Rapportino $numero' : 'Rapportino');
+        ? (hasNumero && !title.contains(numero) ? '$title · $numero' : title)
+        : (hasNumero ? 'Rapportino $numero' : 'Rapportino');
+
+    // Local only: a report's photos/signature images, when this device holds them. No network read
+    // at open — a report synced without its allegati simply has no photo rows.
+    final reportId = report['id'] as String?;
+    final List<ReportAllegatiData> allegati = reportId == null
+        ? const []
+        : ref.watch(rapportinoAllegatiProvider(reportId)).valueOrNull ?? const [];
+    final signatureIds = {
+      report['customerSignatureAllegatoId'],
+      report['technicianSignatureAllegatoId'],
+    }..removeWhere((id) => id == null);
+    final photos = allegati.where((a) => !signatureIds.contains(a.id)).toList();
 
     final customerId = report['customerId'] as String?;
     final locationId = report['locationId'] as String?;
@@ -116,6 +133,7 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
       (name: 'Firma cliente', value: customerSignatureLabel),
       (name: 'Firma tecnico', value: hasTechnicianSignature ? 'Firmato' : 'Mancante'),
     ];
+    final documentCount = 1 + signatures.length + photos.length;
 
     final facts = <DetailFact>[
       if (location != null && location.trim().isNotEmpty)
@@ -156,6 +174,7 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
       hero: DetailHeroData(
         variant: DetailHeroVariant.summary,
         kind: 'Summary · documento',
+        kicker: 'Summary · documento',
         title: entityTitle,
         status: DetailStatus(label: stato),
         subtitle: heroFacts.isEmpty ? null : heroFacts,
@@ -169,7 +188,9 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
       sections: [
         DetailSectionData(
           title: 'Documenti',
-          trailing: DetailSectionMeta('${signatures.length + 1} documenti'),
+          trailing: DetailSectionMeta(
+            documentCount == 1 ? '1 documento' : '$documentCount documenti',
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -184,14 +205,20 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
                   name: signatures[i].name,
                   icon: const Icon(LucideIcons.pencil, size: 14),
                   size: signatures[i].value,
-                  isLast: i == signatures.length - 1,
+                  isLast: 1 + i == documentCount - 1,
+                ),
+              for (var i = 0; i < photos.length; i++)
+                _PhotoRow(
+                  photo: photos[i],
+                  isLast: 1 + signatures.length + i == documentCount - 1,
+                  onOpen: () => _openPhoto(photos[i]),
                 ),
             ],
           ),
         ),
         DetailSectionData(
           title: 'Sintesi',
-          trailing: DetailSectionMeta('${facts.length} campi'),
+          trailing: DetailSectionMeta(facts.length == 1 ? '1 campo' : '${facts.length} campi'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -281,6 +308,27 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
     }
   }
 
+  Future<void> _openPhoto(ReportAllegatiData photo) async {
+    final hasLocal = photo.storagePath.isNotEmpty && File(photo.storagePath).existsSync();
+    await openAttachment(
+      context,
+      dio: ref.read(dioProvider),
+      fileName: photo.fileName,
+      contentType: photo.contentType,
+      url: photo.url,
+      localPath: hasLocal ? photo.storagePath : null,
+      cache: ref.read(attachmentContentCacheProvider),
+      contentRef: photo.url.isEmpty
+          ? null
+          : (
+              allegatoId: photo.id,
+              contentHash: photo.contentHash,
+              sizeBytes: photo.sizeBytes,
+              url: photo.url,
+            ),
+    );
+  }
+
   Future<void> _handleAction(String action) async {
     final api = ref.read(adminApiClientProvider);
     final reportId = _report['id'] as String;
@@ -363,7 +411,7 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
   }
 
   static String _eventTime(DateTime value) =>
-      DateFormat('dd/MM HH:mm', 'it').format(value.toLocal());
+      DateFormat('dd/MM/yyyy HH:mm', 'it').format(value.toLocal());
 
   static String? _periodLabel(Map<String, dynamic> report) {
     final date = _parseDate(report['startedAt']) ?? _parseDate(report['createdAt']);
@@ -416,6 +464,33 @@ class _TextBlock extends StatelessWidget {
       ],
     );
   }
+}
+
+class _PhotoRow extends StatelessWidget {
+  const _PhotoRow({required this.photo, required this.isLast, required this.onOpen});
+
+  final ReportAllegatiData photo;
+  final bool isLast;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return DetailAttachmentRow(
+      name: photo.fileName,
+      icon: const Icon(LucideIcons.camera, size: 14),
+      size: _formatBytes(photo.sizeBytes),
+      isLast: isLast,
+      onTap: onOpen,
+    );
+  }
+}
+
+String _formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  final kib = bytes / 1024;
+  if (kib < 1024) return '${kib.toStringAsFixed(kib < 10 ? 1 : 0)} KB';
+  final mib = kib / 1024;
+  return '${mib.toStringAsFixed(mib < 10 ? 1 : 0)} MB';
 }
 
 class _StateTransitionButtons extends StatelessWidget {

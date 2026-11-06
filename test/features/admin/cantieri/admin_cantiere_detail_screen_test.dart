@@ -72,6 +72,11 @@ class _FakeAdminApiClient extends AdminApiClient {
   Future<List<Map<String, dynamic>>> fetchReports({
     String? stato,
     String? cantiereId,
+    String? customerId,
+    String? locationId,
+    String? ticketId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
     int page = 1,
     int pageSize = 50,
   }) async => _reports;

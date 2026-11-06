@@ -39,16 +39,33 @@ class _FakeAdminApiClient extends AdminApiClient {
 
   int fetchCount = 0;
   String? lastStato;
+  String? lastCustomerId;
+  String? lastLocationId;
+  String? lastTicketId;
+  String? lastCantiereId;
+  DateTime? lastDateFrom;
+  DateTime? lastDateTo;
 
   @override
   Future<List<Map<String, dynamic>>> fetchReports({
     String? stato,
     String? cantiereId,
+    String? customerId,
+    String? locationId,
+    String? ticketId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
     int page = 1,
     int pageSize = 50,
   }) async {
     fetchCount++;
     lastStato = stato;
+    lastCustomerId = customerId;
+    lastLocationId = locationId;
+    lastTicketId = ticketId;
+    lastCantiereId = cantiereId;
+    lastDateFrom = dateFrom;
+    lastDateTo = dateTo;
     if (error != null) throw error!;
     return reports;
   }
@@ -324,6 +341,100 @@ void main() {
       await tester.enterText(find.byType(TextField), 'Rossi');
       await tester.pumpAndSettle();
       expect(find.text('Rapportino 2026-0412'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('duplicate customer ids do not break the Cliente dropdown', (tester) async {
+      final db = _makeDb();
+      await _seedCustomer(db, id: 'cust-1', name: 'Rossi Srl');
+      await _seedCustomer(db, id: 'cust-2', name: 'Bianchi Srl');
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+      final api = _FakeAdminApiClient(
+        reports: [
+          {'id': 'r1', 'title': 'Rapportino uno', 'stato': 'Inviato', 'customerId': 'cust-1'},
+          {'id': 'r2', 'title': 'Rapportino due', 'stato': 'Inviato', 'customerId': 'cust-1'},
+          {'id': 'r3', 'title': 'Rapportino tre', 'stato': 'Inviato', 'customerId': 'cust-2'},
+        ],
+      );
+
+      await tester.pumpWidget(_buildScreen(db: db, api: api, isOnline: true));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('report-filter-cliente')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rossi Srl').last);
+      await tester.pumpAndSettle();
+      final apply = find.byKey(const Key('report-filter-apply'));
+      await tester.ensureVisible(apply);
+      await tester.pumpAndSettle();
+      await tester.tap(apply);
+      await tester.pumpAndSettle();
+
+      expect(api.lastCustomerId, 'cust-1');
+      expect(find.text('Rapportino uno'), findsOneWidget);
+      expect(find.text('Rapportino due'), findsOneWidget);
+      expect(find.text('Rapportino tre'), findsNothing);
+
+      // Reopening the sheet with the filter applied must not trip Flutter's dropdown value
+      // assertion (the duplicate-customer regression).
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('report-filter-cliente')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Sede facet reaches the server with the visitor id', (tester) async {
+      final db = _makeDb();
+      await _seedCustomer(db, id: 'cust-1', name: 'Rossi Srl');
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              customerId: 'cust-1',
+              name: 'Sede Milano',
+            ),
+          );
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+      final api = _FakeAdminApiClient(
+        reports: [
+          {
+            'id': 'r1',
+            'title': 'Rapportino Milano',
+            'stato': 'Inviato',
+            'customerId': 'cust-1',
+            'locationId': 'loc-1',
+          },
+        ],
+      );
+
+      await tester.pumpWidget(_buildScreen(db: db, api: api, isOnline: true));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('report-filter-sede')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sede Milano').last);
+      await tester.pumpAndSettle();
+      final apply = find.byKey(const Key('report-filter-apply'));
+      await tester.ensureVisible(apply);
+      await tester.pumpAndSettle();
+      await tester.tap(apply);
+      await tester.pumpAndSettle();
+
+      expect(api.lastLocationId, 'loc-1');
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

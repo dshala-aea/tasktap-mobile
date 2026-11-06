@@ -11,7 +11,6 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart' show appDatabaseProvider;
-import '../../../presentation/providers/schedule_providers.dart' show allCustomersProvider;
 import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -197,10 +196,17 @@ class _AdminReportListBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final statoFilter = StatoFilter(filter.status.statusMatch);
+    final statoFilter = StatoFilter(
+      filter.status.statusMatch,
+      customerId: filter.customerId,
+      locationId: filter.locationId,
+      ticketId: filter.ticketId,
+      cantiereId: filter.cantiereId,
+      dateFrom: filter.periodFrom,
+      dateTo: filter.periodTo,
+    );
     final reportsAsync = ref.watch(adminReportsProvider(statoFilter));
-    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const [];
-    final customerNames = {for (final c in customers) c.id: c.companyName};
+    final customerNames = ref.watch(_allCustomerNamesProvider).valueOrNull ?? const {};
 
     final data = reportsAsync.valueOrNull;
     final rawRows = data?.rows ?? const <Map<String, dynamic>>[];
@@ -353,6 +359,8 @@ class _AdminReportListBody extends ConsumerWidget {
           filters: [
             for (final f in _ReportFilter.values)
               if (f != _ReportFilter.bozza) ListFilterChipData(label: f.label, id: f.id),
+            if (filter.status == _ReportFilter.bozza)
+              ListFilterChipData(label: _ReportFilter.bozza.label, id: _ReportFilter.bozza.id),
           ],
           activeId: filter.status.id,
           onSelected: (chip) {
@@ -434,9 +442,10 @@ class _AdminReportListBody extends ConsumerWidget {
     final stato = report['stato'] as String? ?? 'Bozza';
     final title = (report['title'] as String?)?.trim();
     final numero = report['numero'] as String?;
+    final hasNumero = numero != null && numero.isNotEmpty;
     final displayTitle = (title != null && title.isNotEmpty)
-        ? title
-        : (numero != null && numero.isNotEmpty ? 'Rapportino $numero' : 'Rapportino');
+        ? (hasNumero && !title.contains(numero) ? '$title · $numero' : title)
+        : (hasNumero ? 'Rapportino $numero' : 'Rapportino');
 
     final customer = customerNames[report['customerId']];
     final meta = [
@@ -528,14 +537,12 @@ class _ReportFilterSheetState extends ConsumerState<_ReportFilterSheet> {
   @override
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('dd/MM/yyyy');
-    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const [];
-    final customerNames = {for (final c in customers) c.id: c.companyName};
+    final customerNames = ref.watch(_allCustomerNamesProvider).valueOrNull ?? const {};
 
-    final customerIds = <String>[];
-    for (final r in widget.reports) {
-      final id = r['customerId'] as String?;
-      if (id != null) customerIds.add(id);
-    }
+    final customerIds = <String>{
+      for (final r in widget.reports)
+        if (r['customerId'] is String) r['customerId'] as String,
+    }.toList();
     customerIds.sort(
       (a, b) =>
           (customerNames[a] ?? a).toLowerCase().compareTo((customerNames[b] ?? b).toLowerCase()),
@@ -768,6 +775,13 @@ class _ReportFilterSheetState extends ConsumerState<_ReportFilterSheet> {
   }
 }
 
+/// Every customer's display name, active or not — a report can belong to a customer that has
+/// since been deactivated, and its row/meta/search must still name it.
+final _allCustomerNamesProvider = StreamProvider.autoDispose<Map<String, String>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return db.select(db.customers).watch().map((rows) => {for (final c in rows) c.id: c.companyName});
+});
+
 /// Comma-joined ids of one report-row key, used as a stable provider family key.
 String _idsKey(List<Map<String, dynamic>> reports, String field) {
   final ids = {
@@ -823,6 +837,7 @@ class _FilterChoice extends StatelessWidget {
       button: true,
       selected: active,
       label: label,
+      excludeSemantics: true,
       child: InkWell(
         onTap: onTap,
         borderRadius: AppRack.freeShape,
@@ -935,8 +950,23 @@ final adminReportsProvider = FutureProvider.autoDispose.family<ReportListRows, S
     if (stato != null) {
       query.where((r) => r.stato.equals(stato));
     }
+    if (filter.customerId != null) {
+      query.where((r) => r.customerId.equals(filter.customerId!));
+    }
+    if (filter.locationId != null) {
+      query.where((r) => r.locationId.equals(filter.locationId!));
+    }
+    if (filter.ticketId != null) {
+      query.where((r) => r.ticketId.equals(filter.ticketId!));
+    }
+    if (filter.cantiereId != null) {
+      query.where((r) => r.cantiereId.equals(filter.cantiereId!));
+    }
     query.orderBy([(r) => OrderingTerm.desc(r.createdAt)]);
-    final rows = await query.get();
+    final rows = (await query.get()).where((r) {
+      final date = r.startedAt ?? r.createdAt;
+      return _reportInPeriod(date, filter.dateFrom, filter.dateTo);
+    }).toList();
     if (rows.isEmpty && await db.getLastSync() == null) {
       throw const TicketDetailOfflineException();
     }
@@ -951,6 +981,9 @@ final adminReportsProvider = FutureProvider.autoDispose.family<ReportListRows, S
           'customerId': r.customerId,
           'locationId': r.locationId,
           'stato': r.stato,
+          'insertedUserId': r.insertedUserId,
+          'diagnosi': r.diagnosi,
+          'soluzione': r.soluzione,
           // Re-stamped to UTC: the row formats these into local time, and Drift hands a
           // DateTimeColumn back as a LOCAL-kind instant.
           'createdAt': _isoDate(r.createdAt),
@@ -972,7 +1005,26 @@ final adminReportsProvider = FutureProvider.autoDispose.family<ReportListRows, S
   if (ref.watch(isOnlineProvider)) {
     try {
       return ReportListRows(
-        await ref.watch(adminApiClientProvider).fetchReports(stato: filter.value),
+        await ref
+            .watch(adminApiClientProvider)
+            .fetchReports(
+              stato: filter.value,
+              customerId: filter.customerId,
+              locationId: filter.locationId,
+              ticketId: filter.ticketId,
+              cantiereId: filter.cantiereId,
+              dateFrom: filter.dateFrom,
+              dateTo: filter.dateTo == null
+                  ? null
+                  : DateTime.utc(
+                      filter.dateTo!.year,
+                      filter.dateTo!.month,
+                      filter.dateTo!.day,
+                      23,
+                      59,
+                      59,
+                    ),
+            ),
         fromMirror: false,
       );
     } catch (e) {
@@ -989,12 +1041,51 @@ final adminReportsProvider = FutureProvider.autoDispose.family<ReportListRows, S
 /// each rebuild is a new provider instance, which re-runs it, which rebuilds — an endless
 /// reload that never settles (`pumpAndSettle` times out, and on a device the list just spins).
 class StatoFilter {
-  const StatoFilter(this.value);
+  const StatoFilter(
+    this.value, {
+    this.customerId,
+    this.locationId,
+    this.ticketId,
+    this.cantiereId,
+    this.dateFrom,
+    this.dateTo,
+  });
+
   final String? value;
+  final String? customerId;
+  final String? locationId;
+  final String? ticketId;
+  final String? cantiereId;
+  final DateTime? dateFrom;
+  final DateTime? dateTo;
 
   @override
-  bool operator ==(Object other) => other is StatoFilter && other.value == value;
+  bool operator ==(Object other) =>
+      other is StatoFilter &&
+      other.value == value &&
+      other.customerId == customerId &&
+      other.locationId == locationId &&
+      other.ticketId == ticketId &&
+      other.cantiereId == cantiereId &&
+      other.dateFrom == dateFrom &&
+      other.dateTo == dateTo;
 
   @override
-  int get hashCode => value.hashCode;
+  int get hashCode =>
+      Object.hash(value, customerId, locationId, ticketId, cantiereId, dateFrom, dateTo);
+}
+
+/// Whether [date] falls inside the sheet's inclusive civil-date period. Both sides are normalized
+/// to the device's local civil date so a UTC-midnight range from the picker cannot shift a row out
+/// of its own day (CI runs Rome, Los Angeles and Auckland).
+bool _reportInPeriod(DateTime date, DateTime? from, DateTime? to) {
+  final local = date.toLocal();
+  final day = DateTime(local.year, local.month, local.day);
+  if (from != null && day.isBefore(DateTime(from.year, from.month, from.day))) {
+    return false;
+  }
+  if (to != null && day.isAfter(DateTime(to.year, to.month, to.day))) {
+    return false;
+  }
+  return true;
 }

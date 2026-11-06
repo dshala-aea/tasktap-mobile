@@ -1392,6 +1392,13 @@ class AdminApiClient {
     // Rapportini documenting work on a cantiere (Gap 6) — `GET /api/reports?cantiereId=`, same
     // filter web's RapportiniSection uses (frontend/src/features/cantieri/api.ts).
     String? cantiereId,
+    // The rest of the server's own list filters (`GET /api/Reports`, see the OpenAPI snapshot):
+    // the admin list's Filtri sheet passes its facets here instead of only filtering the page.
+    String? customerId,
+    String? locationId,
+    String? ticketId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
     int page = 1,
     int pageSize = 50,
   }) async {
@@ -1402,6 +1409,11 @@ class AdminApiClient {
       queryParameters: {
         'stato': ?stato,
         'cantiereId': ?cantiereId,
+        'customerId': ?customerId,
+        'locationId': ?locationId,
+        'ticketId': ?ticketId,
+        'dateFrom': ?dateFrom?.toUtc().toIso8601String(),
+        'dateTo': ?dateTo?.toUtc().toIso8601String(),
         'page': page,
         'pageSize': pageSize,
       },
