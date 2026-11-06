@@ -263,7 +263,8 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
           if (_filters.locationId != null && row['locationId'] != _filters.locationId) {
             return false;
           }
-          if (_filters.categoria != null && row['categoria'] != _filters.categoria) {
+          if (_filters.categoria != null &&
+              (row['categoria'] as String?)?.trim() != _filters.categoria) {
             return false;
           }
           if (_filters.onlyMaintenanceDue && !_isMaintenanceDue(row, businessToday)) {
@@ -457,7 +458,13 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
 
   Future<void> _refresh() async {
     ref.invalidate(adminProdottiAssistenzaProvider);
-    await ref.read(adminProdottiAssistenzaProvider.future);
+    try {
+      await ref.read(adminProdottiAssistenzaProvider.future);
+    } catch (_) {
+      // The provider's error is already rendered by the unavailable/error branch. A refresh
+      // future that completes with an error would be reported by RefreshIndicator as an
+      // uncaught exception (and Sentry noise), so the spinner stops here instead.
+    }
   }
 
   ListRowData _rowFor(BuildContext context, Map<String, dynamic> row, DateTime today) {

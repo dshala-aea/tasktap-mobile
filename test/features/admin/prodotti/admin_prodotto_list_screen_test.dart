@@ -267,6 +267,24 @@ void main() {
       },
     );
 
+    testWidgets('pulling to refresh the unavailable state surfaces no uncaught error', (
+      tester,
+    ) async {
+      final db = _makeDb();
+
+      await tester.pumpWidget(_buildScreen(db: db, api: _FakeAdminApiClient(), isOnline: false));
+      await tester.pumpAndSettle();
+      expect(find.text('Asset non disponibili offline'), findsOneWidget);
+
+      await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isA<Null>());
+      expect(find.text('Asset non disponibili offline'), findsOneWidget);
+
+      await _disposeScreen(tester);
+    });
+
     testWidgets('a synced-but-empty mirror is a genuine empty list', (tester) async {
       final db = _makeDb();
       await db.setLastSync(DateTime.utc(2026, 10, 1));
@@ -582,6 +600,34 @@ void main() {
       await _disposeScreen(tester);
     });
 
+    testWidgets('the category facet trims stray spaces on both sides', (tester) async {
+      final db = _makeDb();
+      final api = _FakeAdminApiClient(
+        prodotti: [
+          _serverRow(id: 'p1', name: 'Caldaia Vaillant', categoria: ' Caldaie '),
+          _serverRow(id: 'p2', name: 'Pompa', categoria: 'Idraulica'),
+        ],
+      );
+
+      await tester.pumpWidget(_buildScreen(db: db, api: api, isOnline: true));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tutte le categorie'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Caldaie').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Applica'));
+      await tester.tap(find.text('Applica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Caldaia Vaillant'), findsOneWidget);
+      expect(find.text('Pompa'), findsNothing);
+
+      await _disposeScreen(tester);
+    });
+
     testWidgets('a facet the new search result dropped is cleared instead of crashing', (
       tester,
     ) async {
@@ -620,7 +666,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Tutti i clienti'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Rossi Srl').last);
+      await tester.tap(find.text('Rossi Srl').hitTestable());
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Applica'));
       await tester.tap(find.text('Applica'));
