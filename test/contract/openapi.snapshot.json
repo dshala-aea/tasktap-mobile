@@ -15351,6 +15351,104 @@
         }
       }
     },
+    "/api/schedules/blocks/{id}/days/{date}/crew": {
+      "put": {
+        "tags": [
+          "ScheduleBlocks"
+        ],
+        "summary": "Replaces one occupied day\u0027s crew override: who from the block\u0027s own crew is absent that day,\nwho joins it, and optionally a different lead for the day. The request replaces the day\u0027s\noverride wholesale, so repeating it is idempotent.",
+        "description": "    Rejected requests carry a problem\u002Bjson code. 404 day_not_occupied \u2014 the date is\nnot an occupied day of the block, or is not a yyyy-mm-dd date at all. 409\nday_in_past \u2014 a day that has already gone is not edited. 409 day_override_invalid \u2014\nthe stored overrides could not be applied. 400 with one of\noverride_remove_not_in_crew, override_add_already_in_crew,\noverride_squadra_member_unsupported, day_crew_empty, lead_required,\noverride_empty, override_unknown_user or override_reason_too_long.\n    A crew conflict for an operator the request puts on the day answers 409 with\n{success, message, conflicts} unless force is set. That body is deliberately not\ndeclared with ProducesResponseType, for the same reason the update action does not\ndeclare its 409.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The block id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The local date, \u0060yyyy-mm-dd\u0060.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The override to store.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDayCrewRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDayCrewRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDayCrewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "The override was stored. The response has no body \u2014 a client re-reads the block."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ScheduleBlocks"
+        ],
+        "summary": "Clears one day\u0027s crew override, so the day follows the block\u0027s crew again, after the same\nper-day conflict check a restore runs.",
+        "description": "Clearing a day that has no override is an idempotent no-op. The error codes are those of the\nPUT: \u0060404 day_not_occupied\u0060 (including a malformed date) and \u0060409 day_in_past\u0060. A\ncrew conflict answers \u0060409\u0060 with \u0060{success, message, conflicts}\u0060 unless\nforce is set; that body is not declared with \u0060ProducesResponseType\u0060.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The block id.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "date",
+            "in": "path",
+            "description": "The local date, \u0060yyyy-mm-dd\u0060.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "description": "When true, a detected crew conflict does not block the clear. It bypasses nothing else.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The override was cleared. The response has no body."
+          }
+        }
+      }
+    },
     "/api/Schedules": {
       "get": {
         "tags": [
@@ -27976,6 +28074,13 @@
             ],
             "description": "Postal/ZIP code."
           },
+          "province": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Province code (sigla), e.g. \u0022RM\u0022."
+          },
           "country": {
             "type": [
               "null",
@@ -28637,20 +28742,22 @@
             "type": "boolean"
           },
           "title": {
-            "maxLength": 200,
+            "maxLength": 500,
             "minLength": 0,
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The title of a standalone activity. Omit it when an intervento is linked: the server takes\nthat ticket\u0027s own title instead."
           },
           "description": {
-            "maxLength": 2000,
+            "maxLength": 4000,
             "minLength": 0,
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The note on a standalone activity."
           },
           "leadUserId": {
             "type": [
@@ -29080,7 +29187,7 @@
           },
           "isPartTime": {
             "type": "boolean",
-            "description": "Is part-time."
+            "description": "Ignored: part-time is derived from WeeklyHours (PartTimePolicy), so a flag here cannot\nclaim a reduction the hours do not contain. Accepted so older clients keep working."
           },
           "weeklyHours": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
@@ -29088,7 +29195,7 @@
               "number",
               "string"
             ],
-            "description": "Weekly working hours.",
+            "description": "Weekly working hours. The authority for the part-time fraction and flag, and for every\novertime/absence threshold.",
             "format": "double"
           },
           "calendarColor": {
@@ -31124,6 +31231,13 @@
             ],
             "description": "Postal/ZIP code."
           },
+          "province": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Province code (sigla), e.g. \u0022RM\u0022, \u0022MI\u0022. Same shape as string? Customer.Provincia."
+          },
           "country": {
             "type": [
               "null",
@@ -31865,6 +31979,13 @@
               "$ref": "#/components/schemas/MobileSessionDto"
             },
             "description": "One or more client-timestamped sessions to upsert."
+          },
+          "breaks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MobileSessionDto"
+            },
+            "description": "Closed breaks (pausa \u2192 ripresa) of the ATTENDANCE day, each keyed by the pausa event\u0027s id.\nOptional: an older client never sends it. Each entry must have an end \u2014 an open break is\nnever sent, because the one-open-row-per-user index would make the next ordinary interval\ncollide with it. Attendance only: ticket and cantiere batches have their own endpoints and\nno notion of a pause."
           }
         },
         "description": "Request body for Task\u0026lt;IReadOnlyList\u0026lt;MobileSessionResult\u0026gt;\u0026gt; IWorkLogMobileSyncService.UpsertMobileSessionsAsync(MobileSessionsRequest request, Guid tenantId, Guid userId, CancellationToken ct = default(CancellationToken))\n(offline-first mobile batch session sync). Moved from \u0060WorkLogController\u0060 so the\nmobile-session upsert lives entirely in the WorkLogs module (ADR-005)."
@@ -36115,6 +36236,68 @@
         },
         "description": "One crew entry on a block. Exactly one of UserId / SquadraId\nis set, mirroring ScheduleBlockAssignment."
       },
+      "ScheduleBlockDayOverrideDto": {
+        "required": [
+          "date",
+          "removedUserIds",
+          "addedUserIds",
+          "leadUserId",
+          "reason",
+          "inert",
+          "updatedAt",
+          "updatedByUserId"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "removedUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "addedUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "leadUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inert": {
+            "type": "boolean",
+            "description": "True when the override changes nothing about the block\u0027s current crew (nobody removed who is on\nit, nobody added who is not, and no lead other than the block\u0027s): the editor can show it as\n\u0022no effect\u0022 rather than as a live exception."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "One day\u0027s crew override as the editor reads it (day-crew-overrides design \u00A79). Stored overrides\nare all returned, including ones on an excluded day or outside the range, which stay stored\nuntil the day is occupied again."
+      },
       "ScheduleBlockDto": {
         "required": [
           "id",
@@ -36129,7 +36312,8 @@
           "locationId",
           "assignments",
           "excludedDates",
-          "occupiedDates"
+          "occupiedDates",
+          "dayOverrides"
         ],
         "type": "object",
         "properties": {
@@ -36204,6 +36388,12 @@
             "items": {
               "type": "string",
               "format": "date"
+            }
+          },
+          "dayOverrides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleBlockDayOverrideDto"
             }
           }
         },
@@ -36431,6 +36621,28 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "ticketStatusName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ticketStatusColor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "removedUserIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         },
         "description": "One schedule item on the planning calendar."
@@ -37112,6 +37324,55 @@
           }
         },
         "description": "Body of PUT maintenance-template: the template to inspect this asset against (required, non-empty)."
+      },
+      "SetDayCrewRequest": {
+        "type": "object",
+        "properties": {
+          "removeUserIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Direct technicians of the block who are absent that day."
+          },
+          "addUserIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Operators who join the crew that day."
+          },
+          "leadUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The day\u0027s lead when it differs from the block lead.",
+            "format": "uuid"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Free text, for example \u0022malattia\u0022. The cap equals the column width."
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Proceed past conflicts for the operators the request puts on the day."
+          }
+        },
+        "description": "The day-crew body. Absent lists are empty lists, and an absent \u0060leadUserId\u0060 means the day\nkeeps the block lead. A request that removes nobody, adds nobody and names no lead is rejected\nas \u0060override_empty\u0060 \u2014 clearing an override is the DELETE."
       },
       "SetGrantsRequest": {
         "required": [
@@ -42920,6 +43181,13 @@
             ],
             "description": "Postal/ZIP code."
           },
+          "province": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Province code (sigla), e.g. \u0022RM\u0022."
+          },
           "country": {
             "type": [
               "null",
@@ -43135,23 +43403,6 @@
               "string"
             ],
             "description": "Calendar color."
-          },
-          "isPartTime": {
-            "type": [
-              "null",
-              "boolean"
-            ],
-            "description": "Is part-time."
-          },
-          "weeklyHours": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
-            "type": [
-              "null",
-              "number",
-              "string"
-            ],
-            "description": "Weekly working hours.",
-            "format": "double"
           },
           "analyticsDigestOptOut": {
             "type": [
@@ -43696,12 +43947,16 @@
             ]
           },
           "title": {
+            "maxLength": 500,
+            "minLength": 0,
             "type": [
               "null",
               "string"
             ]
           },
           "description": {
+            "maxLength": 4000,
+            "minLength": 0,
             "type": [
               "null",
               "string"
@@ -44372,7 +44627,7 @@
               "null",
               "boolean"
             ],
-            "description": "Is part-time."
+            "description": "Ignored: part-time is derived from WeeklyHours (a 20h contract is a 0.5 part-timer), so a\nflag sent here cannot claim a reduction the hours do not contain. Read the derived value\nback from GET /api/users/{id}."
           },
           "weeklyHours": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
@@ -44381,8 +44636,19 @@
               "number",
               "string"
             ],
-            "description": "Weekly working hours.",
+            "description": "Weekly working hours. The authority for the part-time fraction and flag, and for every\novertime/absence threshold. Setting 20 makes this user a 0.5 part-timer; 40 restores\nfull-time.",
             "format": "double"
+          },
+          "partTimeTipo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Part-time shape: 0 = Nessuno (full-time), 1 = Orizzontale (reduced daily hours),\n2 = Verticale (full days off on specific weekdays). Null/absent leaves it unchanged.",
+                "$ref": "#/components/schemas/PartTimeTipoEnum"
+              }
+            ]
           },
           "clockInMethodOverride": {
             "type": [
@@ -44861,7 +45127,7 @@
           },
           "isPartTime": {
             "type": "boolean",
-            "description": "Whether the user works part-time."
+            "description": "Whether the user works part-time. Derived from WeeklyHours by the server on every write\npath; never set independently \u2014 a flag that disagrees with the hours leaves payroll on\nfull-time thresholds while the profile claims part-time."
           },
           "analyticsDigestOptOut": {
             "type": "boolean",
@@ -44967,7 +45233,7 @@
               "number",
               "string"
             ],
-            "description": "Part-time fraction applied to WeeklyHours for overtime/absence calculation.\n1.0 = full-time, 0.5 = 50%, etc.",
+            "description": "Fraction of a full-time week this user\u0027s WeeklyHours represents (1.0 = full-time,\n0.5 = half). Written by the server from the hours, never an independently edited number.",
             "format": "double"
           },
           "seatType": {
