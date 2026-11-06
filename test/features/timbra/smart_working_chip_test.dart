@@ -179,7 +179,7 @@ void main() {
       expect(find.text('La tua azienda richiede la timbratura con QR.'), findsOneWidget);
       // The scan control is a key on the docked deck, so it carries the deck's uppercase label
       // (the wording is unchanged — only its case follows the surface's key style).
-      expect(find.text('SCANSIONA QR'), findsOneWidget);
+      expect(find.text('TIMBRA CON QR'), findsOneWidget);
       expect(find.text('Smart working'), findsNothing);
 
       await _teardownTimer(tester);
@@ -225,53 +225,30 @@ void main() {
   });
 
   group('an open shift is never left unendable', () {
-    testWidgets(
-      'qrOnly_approvalRevokedMidShift_keepsTheEndAndPauseControlsAndOffersTheQr',
-      (tester) async {
-        // The flag is per-day and re-read on every resume, so it can flip under a technician's
-        // hands: the office revokes the approval, or a night shift crosses the business-day
-        // rollover. The punch button is the same control that ends the shift, so the rule may only
-        // ever remove a way to START work — never a way to finish it.
-        final liveFlag = StateProvider<bool?>((ref) => null);
-        await tester.pumpWidget(
-          _buildApp(db, clockInMethod: 'QrOnly', liveFlag: liveFlag),
-        );
-        await tester.pump(const Duration(milliseconds: 100));
+    testWidgets('qrOnly_approvalRevokedMidShift_swapsTheKeysForTheSingleQrButton', (tester) async {
+      // Owner ruling: an effective-QrOnly user has no punch keys at all, open shift or not.
+      final liveFlag = StateProvider<bool?>((ref) => null);
+      await tester.pumpWidget(_buildApp(db, clockInMethod: 'QrOnly', liveFlag: liveFlag));
+      await tester.pump(const Duration(milliseconds: 100));
 
-        // Unknown keeps the button, which is how the shift gets started here.
-        await tester.tap(find.text('INIZIA TURNO'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 400));
-        expect(find.text('FINE TURNO'), findsOneWidget);
-        expect(find.text('PAUSA'), findsOneWidget);
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('FINE TURNO'), findsOneWidget);
 
-        // The approval is withdrawn while the shift runs.
-        final container = ProviderScope.containerOf(tester.element(find.byType(TimbraScreen)));
-        container.read(liveFlag.notifier).state = false;
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 200));
+      final container = ProviderScope.containerOf(tester.element(find.byType(TimbraScreen)));
+      container.read(liveFlag.notifier).state = false;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
 
-        expect(
-          find.text('FINE TURNO'),
-          findsOneWidget,
-          reason: 'an open shift must still be endable',
-        );
-        expect(find.text('PAUSA'), findsOneWidget, reason: 'and still breakable');
-        expect(
-          find.text('La tua azienda richiede la timbratura con QR.'),
-          findsNothing,
-          reason: 'the start-only notice must not replace a finish control',
-        );
-        expect(find.text('Smart working'), findsNothing);
+      expect(find.text('FINE TURNO'), findsNothing);
+      expect(find.text('PAUSA'), findsNothing);
+      expect(find.text('INIZIA TURNO'), findsNothing);
+      expect(find.text('TIMBRA CON QR'), findsOneWidget);
+      expect(find.textContaining('chiudi la giornata con il QR'), findsNothing);
 
-        // The one refusal the button cannot resolve — the row day's approval was cancelled — has to
-        // stay reachable, or this shift can only be closed from the tracker row on Home.
-        expect(find.text('SCANSIONA QR'), findsOneWidget);
-        expect(find.textContaining('chiudi la giornata con il QR'), findsOneWidget);
-
-        await _teardownTimer(tester);
-      },
-    );
+      await _teardownTimer(tester);
+    });
 
     testWidgets('qrOnly_openShiftOnAnApprovedDay_offersNoScanAction', (tester) async {
       // Nothing to fall back to: the day is approved, so the button is legal on its own.
@@ -284,7 +261,7 @@ void main() {
 
       expect(find.text('FINE TURNO'), findsOneWidget);
       expect(find.text('PAUSA'), findsOneWidget);
-      expect(find.text('SCANSIONA QR'), findsNothing);
+      expect(find.text('TIMBRA CON QR'), findsNothing);
 
       await _teardownTimer(tester);
     });
@@ -301,18 +278,12 @@ void main() {
 
       expect(find.text('FINE TURNO'), findsOneWidget);
       expect(find.text('PAUSA'), findsOneWidget);
-      expect(find.text('SCANSIONA QR'), findsNothing);
+      expect(find.text('TIMBRA CON QR'), findsNothing);
 
       await _teardownTimer(tester);
     });
 
-    testWidgets('qrOnly_shiftOpenedBeforeMidnight_keepsTheFinishControlAndEndsIt', (tester) async {
-      // The business-day rollover is what the day-scoped `timbraStateProvider` cannot cross: a
-      // shift punched at 22:00 is in yesterday's window, so at 00:01 it reads as "no shift". The
-      // flag must not turn that into "no way to finish" — the server's own gate accepts a
-      // ButtonOnly end-of-shift punch when the ROW's WorkDate was approved, which is exactly the
-      // night shift this covers. Two days back is used, not "yesterday", so this test cannot rot
-      // at the Rome midnight it is about.
+    testWidgets('qrOnly_openShiftWithFlagFalse_showsOnlyTheQrButton', (tester) async {
       await WorkSessionRepository(db).addEvent(
         id: 'night-opener',
         eventTime: DateTime.now().toUtc().subtract(const Duration(days: 2)),
@@ -322,34 +293,20 @@ void main() {
       await tester.pumpWidget(_buildApp(db, clockInMethod: 'QrOnly', smartWorking: false));
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('INIZIA TURNO'), findsNothing, reason: 'a shift IS open, yesterday or not');
-      expect(
-        find.text('FINE TURNO'),
-        findsOneWidget,
-        reason: 'an open shift keeps the control that finishes it, past midnight too',
-      );
-      expect(
-        find.text('La tua azienda richiede la timbratura con QR.'),
-        findsNothing,
-        reason: 'the start-only notice must not replace a finish control',
-      );
-      // And the scanner stays reachable beside it — the one refusal the two-day rule cannot
-      // resolve is a cancelled approval on the row's own day.
-      expect(find.text('SCANSIONA QR'), findsOneWidget);
+      for (final key in ['INIZIA TURNO', 'FINE TURNO', 'PAUSA', 'RIPRENDI']) {
+        expect(find.text(key), findsNothing, reason: '$key must not be offered to a QR-only user');
+      }
+      expect(find.text('TIMBRA CON QR'), findsOneWidget);
 
-      await tester.tap(find.text('FINE TURNO'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      await _teardownTimer(tester);
+    });
 
-      // The tap ended the shift instead of attempting a ClockIn and 409ing against the open row.
-      final rows = await (db.select(db.workSessions)
-            ..orderBy([(s) => OrderingTerm.asc(s.eventTime), (s) => OrderingTerm.asc(s.id)]))
-          .get();
-      expect(rows.map((r) => r.eventType), ['ingresso', 'fine']);
-      // With nothing open any more the flag is back to removing only a way to START — the tenant's
-      // own rule, not a finish control stuck on screen.
-      expect(find.text('La tua azienda richiede la timbratura con QR.'), findsOneWidget);
-      expect(find.text('FINE TURNO'), findsNothing);
+    testWidgets('buttonOnly_withNoShift_keepsTheStartAndHasNoQrEntry', (tester) async {
+      await tester.pumpWidget(_buildApp(db, clockInMethod: 'ButtonOnly', smartWorking: false));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('INIZIA TURNO'), findsOneWidget);
+      expect(find.text('TIMBRA CON QR'), findsNothing);
 
       await _teardownTimer(tester);
     });
@@ -385,37 +342,6 @@ void main() {
         find.ancestor(of: find.text('INIZIA TURNO'), matching: find.byType(SingleChildScrollView)),
         findsNothing,
         reason: 'the chip still fits inside _kFixedLayoutMinHeight on a tall phone',
-      );
-      expect(tester.takeException(), isNull);
-
-      await _teardownTimer(tester);
-    });
-
-    testWidgets('an open shift plus the qr fallback still fit the fixed layout on a tall phone', (
-      tester,
-    ) async {
-      // The tallest arrangement this task can draw: punch + pause + the scanner fallback, which
-      // the budget comment in timbra_screen.dart counts at ≈252dp of controls. Same 390×844 as the
-      // test above, so the fixed branch is the branch under test rather than the scrolling one.
-      await tester.binding.setSurfaceSize(const Size(390, 844));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
-      await WorkSessionRepository(db).addEvent(
-        id: 'seed-ingresso',
-        eventTime: DateTime.now().toUtc(),
-        eventType: 'ingresso',
-      );
-
-      await tester.pumpWidget(_buildApp(db, clockInMethod: 'QrOnly', smartWorking: false));
-      await tester.pump(const Duration(milliseconds: 50));
-
-      expect(find.text('FINE TURNO'), findsOneWidget);
-      expect(find.text('PAUSA'), findsOneWidget);
-      expect(find.text('SCANSIONA QR'), findsOneWidget);
-      expect(
-        find.ancestor(of: find.text('FINE TURNO'), matching: find.byType(SingleChildScrollView)),
-        findsNothing,
-        reason: 'the fallback still fits inside _kFixedLayoutMinHeight on a tall phone',
       );
       expect(tester.takeException(), isNull);
 

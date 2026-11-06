@@ -30,6 +30,7 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
   bool _isSaving = false;
+  bool _submitAttempted = false;
 
   @override
   void dispose() {
@@ -105,8 +106,21 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
   static bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
+  static const _noteRequiredMessage = 'Il motivo è obbligatorio per «Altri congedi/permessi»';
+  static const _partialTimeMessage =
+      'Per un permesso a ore indica un solo giorno e l\u2019ora di inizio e di fine';
+
   Future<void> _save() async {
-    if (!_canSubmit) return;
+    if (!_canSubmit) {
+      // Never a silently dead button: say what is missing, inline and in a toast.
+      setState(() => _submitAttempted = true);
+      showAppToast(
+        context,
+        message: !_partialTimeValid ? _partialTimeMessage : _noteRequiredMessage,
+        tone: ToastTone.error,
+      );
+      return;
+    }
     if (!ensureOnlineOrWarn(context, ref)) return;
 
     setState(() => _isSaving = true);
@@ -204,6 +218,10 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
           ],
           const SizedBox(height: 16),
 
+          if (_submitAttempted && !_partialTimeValid) ...[
+            InlineAlert(message: _partialTimeMessage, icon: Icons.error_outline),
+            const SizedBox(height: 16),
+          ],
           AppTextField(
             label: _reasonRequired ? 'Motivo (obbligatorio)' : 'Motivo (facoltativo)',
             controller: _reasonCtrl,
@@ -212,11 +230,21 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
             // technician types.
             onChanged: (_) => setState(() {}),
           ),
+          if (_reasonRequired && _reasonCtrl.text.trim().isEmpty) ...[
+            const SizedBox(height: 6),
+            if (_submitAttempted)
+              InlineAlert(message: _noteRequiredMessage, icon: Icons.error_outline)
+            else
+              Text(
+                _noteRequiredMessage,
+                style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
+              ),
+          ],
           const SizedBox(height: 32),
 
           AppButton(
             label: 'Invia richiesta',
-            onPressed: _isSaving || !_canSubmit ? null : _save,
+            onPressed: _isSaving ? null : _save,
             isLoading: _isSaving,
           ),
         ],

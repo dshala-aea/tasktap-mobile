@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
@@ -146,5 +147,78 @@ void main() {
 
     expect(fake.lastCreate!['type'], kAltriCongediPermessiType);
     expect(fake.lastCreate!['reason'], 'Assistenza a un familiare');
+  });
+
+  Future<void> pickType(WidgetTester tester, String label) async {
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(label).last);
+    await tester.pumpAndSettle();
+  }
+
+  const noteHint = 'Il motivo è obbligatorio per «Altri congedi/permessi»';
+  const partialHint =
+      'Per un permesso a ore indica un solo giorno e l\u2019ora di inizio e di fine';
+
+  testWidgets('Altri congedi: the button stays tappable, says why, and sends nothing', (
+    tester,
+  ) async {
+    final fake = _FakeAbsenceRequestApiClient();
+    await tester.pumpWidget(_buildScreen(fake));
+    await tester.pumpAndSettle();
+    await pickType(tester, 'Altri congedi/permessi');
+
+    // Proactive: the requirement is stated before the technician taps anything.
+    expect(find.text(noteHint), findsOneWidget);
+
+    await tester.tap(find.text('Invia richiesta'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(fake.lastCreate, isNull, reason: 'no blind request');
+    // Inline error plus the toast: the message now appears at least twice.
+    expect(find.text(noteHint), findsAtLeastNWidgets(2));
+
+    await tester.enterText(find.byType(TextField).last, 'Visita medica');
+    await tester.pumpAndSettle();
+    expect(find.byType(InlineAlert), findsNothing, reason: 'typing a note clears the error');
+    await tester.tap(find.text('Invia richiesta'));
+    await tester.pumpAndSettle();
+    expect(fake.lastCreate!['reason'], 'Visita medica');
+  });
+
+  testWidgets('an incomplete hourly permesso says what is missing instead of going dead', (
+    tester,
+  ) async {
+    final fake = _FakeAbsenceRequestApiClient();
+    await tester.pumpWidget(_buildScreen(fake));
+    await tester.pumpAndSettle();
+    await pickType(tester, 'ROL');
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Invia richiesta'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Invia richiesta'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(fake.lastCreate, isNull);
+    expect(find.text(partialHint), findsAtLeastNWidgets(1));
+  });
+
+  testWidgets('a normal permesso with no note submits', (tester) async {
+    final fake = _FakeAbsenceRequestApiClient();
+    await tester.pumpWidget(_buildScreen(fake));
+    await tester.pumpAndSettle();
+    await pickType(tester, 'Permesso retribuito');
+
+    expect(find.text(noteHint), findsNothing);
+    await tester.tap(find.text('Invia richiesta'));
+    await tester.pumpAndSettle();
+    expect(fake.lastCreate!['reason'], isNull);
   });
 }
