@@ -2,19 +2,24 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/theme/app_palette.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
+import '../../../core/time/business_time_providers.dart';
 import '../../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../../core/widgets/widgets.dart';
+import '../../../data/local/app_database.dart';
 import '../../../data/reference/reference_cache_repository.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart' show appDatabaseProvider;
+import '../../../presentation/providers/schedule_providers.dart' show allLocationsProvider;
 import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../admin_api_client.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// The list's search text. Its own provider (not a family argument on the list provider) so the
 /// form screen can keep invalidating [adminProdottiAssistenzaProvider] without knowing the query.
@@ -34,11 +39,12 @@ class ProdottoListRows {
 /// Prodotti assistenza — server-first, mirror when it cannot be reached.
 ///
 /// Online the search term is sent as `q` and the server searches every row. Offline the mirror is
-/// searched here with the same three fields the server matches on (name, codice, categoria), so a
-/// technician who types a serial-adjacent code on site still gets an answer instead of a spinner.
+/// searched here with the fields a technician has on the row: name, codice, categoria, seriale and
+/// customer name — so typing a serial number on site still gets an answer instead of a spinner.
 ///
-/// The mirror has no `prezzoVendita` (it is not in the sync payload), so mirrored rows show no
-/// price — absent, not zero.
+/// The mirror carries fewer fields than `GET /api/prodottoassistenza`: the sync DTO has no
+/// `warrantyExpiryDate`, `prossimaManutenzione` or `ultimaManutenzione`. Those read as absent on
+/// mirrored rows (no line, no warranty group) instead of being invented from another column.
 final adminProdottiAssistenzaProvider = FutureProvider.autoDispose<ProdottoListRows>((ref) async {
   final q = ref.watch(adminProdottiQueryProvider);
 
@@ -51,20 +57,18 @@ final adminProdottiAssistenzaProvider = FutureProvider.autoDispose<ProdottoListR
     // The row shows the customer's *name*; the mirror carries only the id. Read every customer
     // (inactive ones included — an asset can belong to a customer the office has since archived,
     // and '—' there would claim the asset belongs to nobody).
-    final customers = {
-      for (final c in await db.select(db.customers).get()) c.id: c.companyName,
-    };
+    final customers = {for (final c in await db.select(db.customers).get()) c.id: c.companyName};
     final needle = q.toLowerCase();
     final matches = needle.isEmpty
         ? rows
-        : rows
-              .where(
-                (p) =>
-                    p.name.toLowerCase().contains(needle) ||
-                    (p.codice ?? '').toLowerCase().contains(needle) ||
-                    (p.categoria ?? '').toLowerCase().contains(needle),
-              )
-              .toList();
+        : rows.where((p) {
+            final customerName = customers[p.customerId] ?? '';
+            return p.name.toLowerCase().contains(needle) ||
+                (p.codice ?? '').toLowerCase().contains(needle) ||
+                (p.categoria ?? '').toLowerCase().contains(needle) ||
+                (p.serialNumber ?? '').toLowerCase().contains(needle) ||
+                customerName.toLowerCase().contains(needle);
+          }).toList();
     return ProdottoListRows([
       for (final p in matches)
         {
@@ -72,6 +76,7 @@ final adminProdottiAssistenzaProvider = FutureProvider.autoDispose<ProdottoListR
           'name': p.name,
           'customerId': p.customerId,
           'customerName': customers[p.customerId] ?? '—',
+          'locationId': p.locationId,
           'isActive': p.isActive,
           'codice': p.codice,
           'categoria': p.categoria,
@@ -95,59 +100,105 @@ final adminProdottiAssistenzaProvider = FutureProvider.autoDispose<ProdottoListR
   return fromMirror();
 });
 
+/// Quick-filter presets from the prototype's chip row.
+///
+/// The three asset states are mutually exclusive and are the same predicate the groups and the
+/// `Filtri` sheet use. `Tutti` is the list's existing default (every asset was always visible).
+enum _ProdottoFilter { tutti, inGaranzia, scaduta, inattivi }
+
+extension _ProdottoFilterX on _ProdottoFilter {
+  String get label => switch (this) {
+    _ProdottoFilter.tutti => 'Tutti',
+    _ProdottoFilter.inGaranzia => 'In garanzia',
+    _ProdottoFilter.scaduta => 'Garanzia scaduta',
+    _ProdottoFilter.inattivi => 'Inattivi',
+  };
+}
+
+/// One asset's warranty state, derived from the row's own `warrantyExpiryDate`.
+///
+/// The single source shared by the chips, the groups, the summary and the row stamp. A civil date
+/// is valid through its own day; it is only expired from the following day (the same convention
+/// the ticket list uses for a due date). A row without the field is *not* claimed to be under
+/// warranty: the local mirror does not carry it.
+enum _WarrantyState { inGaranzia, scaduta, nonRegistrata }
+
+bool _isActiveProdotto(Map<String, dynamic> row) => row['isActive'] as bool? ?? true;
+
+_WarrantyState _warrantyStateOf(Map<String, dynamic> row, DateTime today) {
+  final expiry = parseDateOnly(row['warrantyExpiryDate']);
+  if (expiry == null) return _WarrantyState.nonRegistrata;
+  return expiry.isBefore(today) ? _WarrantyState.scaduta : _WarrantyState.inGaranzia;
+}
+
+DateTime? _nextMaintenanceOf(Map<String, dynamic> row) =>
+    parseDateOnly(row['prossimaManutenzione']);
+
+DateTime? _lastMaintenanceOf(Map<String, dynamic> row) => parseDateOnly(row['ultimaManutenzione']);
+
+/// The only maintenance predicate on this screen: the next maintenance is due today or overdue.
+///
+/// There is no local lead-time window (the app has no such rule; the server's reminder is not
+/// mirrored), so no future threshold is invented. Mirrored rows have no date and never match.
+bool _isMaintenanceDue(Map<String, dynamic> row, DateTime today) {
+  final next = _nextMaintenanceOf(row);
+  return next != null && !next.isAfter(today);
+}
+
+/// The groups shown in the prototype's order. `Senza garanzia registrata` hosts active assets the
+/// mirror cannot classify (or a server row without an expiry date) — dropping them would hide real
+/// assets; claiming a warranty would invent one.
+const _groupOrder = ['In garanzia', 'Garanzia scaduta', 'Senza garanzia registrata', 'Inattivi'];
+
+/// Every facet the `Filtri` sheet owns. Quick chips only change [status].
+class _ProdottoFilters {
+  const _ProdottoFilters({
+    this.status = _ProdottoFilter.tutti,
+    this.customerId,
+    this.locationId,
+    this.categoria,
+    this.onlyMaintenanceDue = false,
+  });
+
+  final _ProdottoFilter status;
+  final String? customerId;
+  final String? locationId;
+  final String? categoria;
+  final bool onlyMaintenanceDue;
+
+  bool get isActive =>
+      status != _ProdottoFilter.tutti ||
+      customerId != null ||
+      locationId != null ||
+      categoria != null ||
+      onlyMaintenanceDue;
+
+  _ProdottoFilters withStatus(_ProdottoFilter next) => _ProdottoFilters(
+    status: next,
+    customerId: customerId,
+    locationId: locationId,
+    categoria: categoria,
+    onlyMaintenanceDue: onlyMaintenanceDue,
+  );
+}
+
 /// Admin prodotto assistenza list — server-first, mirror when it cannot be reached.
-class AdminProdottoListScreen extends ConsumerWidget {
+class AdminProdottoListScreen extends ConsumerStatefulWidget {
   const AdminProdottoListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final prodottiAsync = ref.watch(adminProdottiAssistenzaProvider);
-
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: prodottiAsync.when(
-          // A new search term reloads the provider; keep the previous list (and the search field's
-          // focus and text, which live in the body) on screen instead of swapping in a spinner.
-          skipLoadingOnReload: true,
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => e is TicketDetailOfflineException
-              ? const UnavailableState(
-                  icon: LucideIcons.wrench,
-                  titolo: 'Asset non disponibili offline',
-                  motivo:
-                      'Questo dispositivo non ha ancora scaricato gli asset. Apri questa lista '
-                      'con una connessione attiva per averli anche offline.',
-                )
-              : ErrorState(onRetry: () => ref.invalidate(adminProdottiAssistenzaProvider)),
-          data: (data) => _ProdottoListBody(rows: data),
-        ),
-      ),
-      floatingActionButton: Padding(
-        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
-        // this same change.
-        padding: EdgeInsets.only(bottom: context.navClearance),
-        child: AppFab(
-          tooltip: 'Nuovo asset',
-          onPressed: () => context.push('/altro/prodotti/nuovo'),
-        ),
-      ),
-    );
-  }
+  ConsumerState<AdminProdottoListScreen> createState() => _AdminProdottoListScreenState();
 }
 
-class _ProdottoListBody extends ConsumerStatefulWidget {
-  const _ProdottoListBody({required this.rows});
-
-  final ProdottoListRows rows;
-
-  @override
-  ConsumerState<_ProdottoListBody> createState() => _ProdottoListBodyState();
-}
-
-class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
+class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScreen> {
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
+  _ProdottoFilters _filters = const _ProdottoFilters();
+
+  /// The last list that arrived. A new search term reloads the provider; keeping the last rows
+  /// here means the field's text, its focus and the list stay on screen instead of a skeleton
+  /// flashing on every keystroke (the old `skipLoadingOnReload` behaviour).
+  ProdottoListRows? _lastData;
 
   @override
   void dispose() {
@@ -163,134 +214,544 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
     });
   }
 
+  Future<void> _openFilters({
+    required List<Map<String, dynamic>> rows,
+    required bool maintenanceAvailable,
+  }) async {
+    final result = await showModalBottomSheet<_ProdottoFilters>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _ProdottoFilterSheet(
+        initial: _filters,
+        rows: rows,
+        maintenanceAvailable: maintenanceAvailable,
+      ),
+    );
+    if (result != null && mounted) setState(() => _filters = result);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filtered = widget.rows.rows;
-    final searching = ref.watch(adminProdottiQueryProvider).isNotEmpty;
+    final prodottiAsync = ref.watch(adminProdottiAssistenzaProvider);
+    final fresh = prodottiAsync.valueOrNull;
+    if (fresh != null) _lastData = fresh;
+    final data = fresh ?? _lastData;
+    final allRows = data?.rows ?? const <Map<String, dynamic>>[];
+    final fromMirror = data?.fromMirror ?? false;
+    final search = ref.watch(adminProdottiQueryProvider);
+    final businessToday = ref.watch(businessTimeProvider).businessToday();
 
-    return RefreshIndicator(
-      onRefresh: () => ref.refresh(adminProdottiAssistenzaProvider.future),
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: ScreenHeader(
-              title: 'Asset',
-              subtitle: '${filtered.length} totali',
-              showBack: true,
-            ),
+    bool matchesStatus(Map<String, dynamic> row) => switch (_filters.status) {
+      _ProdottoFilter.tutti => true,
+      _ProdottoFilter.inGaranzia =>
+        _isActiveProdotto(row) && _warrantyStateOf(row, businessToday) == _WarrantyState.inGaranzia,
+      _ProdottoFilter.scaduta =>
+        _isActiveProdotto(row) && _warrantyStateOf(row, businessToday) == _WarrantyState.scaduta,
+      _ProdottoFilter.inattivi => !_isActiveProdotto(row),
+    };
+
+    final filtered =
+        allRows.where((row) {
+          if (!matchesStatus(row)) return false;
+          if (_filters.customerId != null && row['customerId'] != _filters.customerId) {
+            return false;
+          }
+          if (_filters.locationId != null && row['locationId'] != _filters.locationId) {
+            return false;
+          }
+          if (_filters.categoria != null &&
+              (row['categoria'] as String?)?.trim() != _filters.categoria) {
+            return false;
+          }
+          if (_filters.onlyMaintenanceDue && !_isMaintenanceDue(row, businessToday)) {
+            return false;
+          }
+          return true;
+        }).toList()..sort((a, b) {
+          final an = (a['name'] as String? ?? '').toLowerCase();
+          final bn = (b['name'] as String? ?? '').toLowerCase();
+          return an.compareTo(bn);
+        });
+
+    final buckets = <String, List<Map<String, dynamic>>>{
+      for (final name in _groupOrder) name: <Map<String, dynamic>>[],
+    };
+    for (final row in filtered) {
+      final key = !_isActiveProdotto(row)
+          ? 'Inattivi'
+          : switch (_warrantyStateOf(row, businessToday)) {
+              _WarrantyState.inGaranzia => 'In garanzia',
+              _WarrantyState.scaduta => 'Garanzia scaduta',
+              _WarrantyState.nonRegistrata => 'Senza garanzia registrata',
+            };
+      buckets[key]!.add(row);
+    }
+
+    final groups = [
+      for (final name in _groupOrder)
+        if (buckets[name]!.isNotEmpty)
+          ListGroupData(
+            title: name,
+            count: buckets[name]!.length,
+            rows: [for (final row in buckets[name]!) _rowFor(context, row, businessToday)],
           ),
-          SliverToBoxAdapter(
-            child: AppSearchBar(
+    ];
+
+    final inactiveCount = filtered.where((row) => !_isActiveProdotto(row)).length;
+    final dueCount = filtered.where((row) => _isMaintenanceDue(row, businessToday)).length;
+    final hasActiveFilter = _filters.isActive || search.isNotEmpty;
+
+    Widget empty = hasActiveFilter
+        ? const EmptyState(
+            icon: LucideIcons.searchX,
+            title: 'Nessun risultato',
+            body: 'Nessun prodotto corrisponde a ricerca e filtri selezionati.',
+          )
+        : const EmptyState(
+            icon: LucideIcons.wrench,
+            title: 'Nessun prodotto',
+            body: 'Non ci sono prodotti in assistenza da mostrare.',
+          );
+
+    final isLoading = data == null && prodottiAsync.isLoading;
+    final isUnavailable = prodottiAsync.hasError;
+
+    final unavailable = prodottiAsync.error is TicketDetailOfflineException
+        ? const UnavailableState(
+            icon: LucideIcons.wrench,
+            titolo: 'Asset non disponibili offline',
+            motivo:
+                'Questo dispositivo non ha ancora scaricato gli asset. Apri questa lista '
+                'con una connessione attiva per averli anche offline.',
+          )
+        : ErrorState(onRetry: () => ref.invalidate(adminProdottiAssistenzaProvider));
+
+    Widget framed(Widget child) => Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: child,
+        ),
+      ),
+    );
+
+    Widget scrollable(Widget child) => RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          Center(
+            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
+          ),
+          SizedBox(height: context.navClearance),
+        ],
+      ),
+    );
+
+    final Widget content;
+    if (isLoading) {
+      content = scrollable(const ListLoadingSkeleton());
+    } else if (isUnavailable) {
+      content = scrollable(unavailable);
+    } else if (groups.isEmpty) {
+      content = RefreshIndicator(
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(height: MediaQuery.sizeOf(context).height * 0.08),
+            framed(empty),
+            SizedBox(height: context.navClearance),
+          ],
+        ),
+      );
+    } else {
+      final summary = filtered.isEmpty
+          ? null
+          : ListSummaryData(
+              left: '${filtered.length} ${filtered.length == 1 ? 'prodotto' : 'prodotti'}',
+              // The maintenance date is absent from the local mirror, so offline the right half
+              // reports a count the rows can actually support (inactive assets) instead of a
+              // misleading "0 in scadenza".
+              right: fromMirror
+                  ? '$inactiveCount ${inactiveCount == 1 ? 'inattivo' : 'inattivi'}'
+                  : '$dueCount in scadenza',
+            );
+      content = RefreshIndicator(
+        onRefresh: _refresh,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            if (fromMirror) const SliverToBoxAdapter(child: MirrorNotice(what: 'asset')),
+            for (final group in groups) ...[
+              SliverToBoxAdapter(
+                child: framed(ListGroupHeader(title: group.title!, count: group.count)),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, i) {
+                    final row = group.rows[i];
+                    return KeyedSubtree(
+                      key: row.rowKey,
+                      child: ListDocumentRow(data: row),
+                    );
+                  }, childCount: group.rows.length),
+                ),
+              ),
+            ],
+            if (summary != null)
+              SliverToBoxAdapter(child: framed(ListSummaryFooter(data: summary))),
+            SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: context.colors.bg2,
+      body: SafeArea(
+        child: Column(
+          children: [
+            ScreenHeader(
+              title: 'Prodotti in assistenza',
+              subtitle: 'Gli asset del cliente e la loro prossima manutenzione.',
+              subtitleMaxLines: 2,
+              showBack: true,
+              actions: [
+                ListHeaderAction(
+                  label: 'Nuovo',
+                  onPressed: () => context.push('/altro/prodotti/nuovo'),
+                ),
+              ],
+            ),
+            AppSearchBar(
               controller: _searchCtrl,
-              hint: 'Cerca per nome o codice…',
+              hint: 'Cerca prodotto, seriale, cliente…',
               onChanged: _onQueryChanged,
             ),
-          ),
-          if (widget.rows.fromMirror && filtered.isNotEmpty)
-            const SliverToBoxAdapter(child: MirrorNotice(what: 'asset')),
-          if (filtered.isEmpty)
-            SliverToBoxAdapter(
-              child: EmptyState(
-                icon: LucideIcons.wrench,
-                title: 'Nessun asset',
-                body: searching
-                    ? 'Nessun asset corrisponde alla ricerca.'
-                    : 'Crea un nuovo asset con il pulsante +.',
-              ),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate((context, i) {
-                final prodotto = filtered[i];
-                final name = prodotto['name'] as String? ?? '';
-                // The server resolves the name on the row; the customer list is not fetched here
-                // (a technician does not hold customer.read, and walking it only to map ids is the
-                // anti-pattern the list endpoints exist to avoid).
-                final customerName = prodotto['customerName'] as String? ?? '—';
-                final isActive = prodotto['isActive'] as bool? ?? true;
-                final codice = prodotto['codice'] as String?;
-                final categoria = prodotto['categoria'] as String?;
-                final prezzoVendita = prodotto['prezzoVendita'];
-                return _ProdottoRow(
-                  name: name,
-                  customerName: customerName,
-                  codice: codice,
-                  categoria: categoria,
-                  prezzoVendita: prezzoVendita is num ? prezzoVendita : null,
-                  isActive: isActive,
-                  isLast: i == filtered.length - 1,
-                  onTap: () => context.push('/altro/prodotti/${prodotto['id']}', extra: prodotto),
-                );
-              }, childCount: filtered.length),
+            ListFilterRow(
+              filters: const [
+                ListFilterChipData(label: 'Tutti', id: 'tutti'),
+                ListFilterChipData(label: 'In garanzia', id: 'inGaranzia'),
+                ListFilterChipData(label: 'Garanzia scaduta', id: 'scaduta'),
+                ListFilterChipData(label: 'Inattivi', id: 'inattivi'),
+              ],
+              activeId: _filters.status.name,
+              onSelected: (chip) {
+                final next = _ProdottoFilter.values.firstWhere((f) => f.name == chip.id);
+                setState(() => _filters = _filters.withStatus(next));
+              },
+              onOpenFilters: () => _openFilters(rows: allRows, maintenanceAvailable: !fromMirror),
             ),
-          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
-        ],
+            Expanded(child: content),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refresh() async {
+    ref.invalidate(adminProdottiAssistenzaProvider);
+    try {
+      await ref.read(adminProdottiAssistenzaProvider.future);
+    } catch (_) {
+      // The provider's error is already rendered by the unavailable/error branch. A refresh
+      // future that completes with an error would be reported by RefreshIndicator as an
+      // uncaught exception (and Sentry noise), so the spinner stops here instead.
+    }
+  }
+
+  ListRowData _rowFor(BuildContext context, Map<String, dynamic> row, DateTime today) {
+    final name = row['name'] as String? ?? '';
+    final customerName = row['customerName'] as String? ?? '';
+    final serial = row['serialNumber'] as String? ?? '';
+    final meta = [customerName, serial].where((part) => part.trim().isNotEmpty).join(' · ');
+
+    final next = _nextMaintenanceOf(row);
+    final last = _lastMaintenanceOf(row);
+    String? secondary;
+    if (next != null) {
+      secondary = 'Prossima manutenzione ${formatWorkDate(next, 'dd/MM/yyyy', locale: 'it')}';
+    } else if (last != null) {
+      secondary = 'Ultima manutenzione ${formatWorkDate(last, 'dd/MM/yyyy', locale: 'it')}';
+    }
+
+    final (status, tone) = !_isActiveProdotto(row)
+        ? ('Inattivo', ListStatusTone.bad)
+        : switch (_warrantyStateOf(row, today)) {
+            _WarrantyState.inGaranzia => ('In garanzia', ListStatusTone.good),
+            // The prototype stamps an expired warranty amber, while the shared vocabulary maps
+            // `Scaduta` to red. The prototype wins for this one label.
+            _WarrantyState.scaduta => ('Scaduta', ListStatusTone.warn),
+            _WarrantyState.nonRegistrata => ('Attivo', ListStatusTone.good),
+          };
+
+    return ListRowData(
+      title: name.isEmpty ? 'Senza nome' : name,
+      meta: meta.isEmpty ? null : meta,
+      secondary: secondary,
+      status: status,
+      statusTone: tone,
+      rowKey: ValueKey('prodotto-row-${row['id']}'),
+      onTap: () => context.push('/altro/prodotti/${row['id']}', extra: row),
+    );
+  }
+}
+
+// ── Filter sheet ────────────────────────────────────────────────────────────
+
+class _ProdottoFilterSheet extends ConsumerStatefulWidget {
+  const _ProdottoFilterSheet({
+    required this.initial,
+    required this.rows,
+    required this.maintenanceAvailable,
+  });
+
+  final _ProdottoFilters initial;
+  final List<Map<String, dynamic>> rows;
+
+  /// False when the rows came from the mirror: the sync DTO has no maintenance date, so the
+  /// toggle would be a control that can only ever filter to nothing.
+  final bool maintenanceAvailable;
+
+  @override
+  ConsumerState<_ProdottoFilterSheet> createState() => _ProdottoFilterSheetState();
+}
+
+class _ProdottoFilterSheetState extends ConsumerState<_ProdottoFilterSheet> {
+  late _ProdottoFilter _status = widget.initial.status;
+  late String? _customerId = widget.initial.customerId;
+  late String? _locationId = widget.initial.locationId;
+  late String? _categoria = widget.initial.categoria;
+  // A filter carried over from an online session cannot be honoured against mirrored rows: it is
+  // cleared when the sheet is applied rather than left active behind a disabled switch.
+  late bool _onlyMaintenanceDue = widget.initial.onlyMaintenanceDue && widget.maintenanceAvailable;
+
+  static const _statusOptions = [
+    _ProdottoFilter.inGaranzia,
+    _ProdottoFilter.scaduta,
+    _ProdottoFilter.inattivi,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const <Location>[];
+    final locationsById = {for (final l in locations) l.id: l};
+    final customers = _customerOptions(widget.rows);
+    // A facet chosen before the search term changed can point at a value the current rows no
+    // longer contain. The dropdown would assert on a value missing from its items, so the sheet
+    // clears it: a stale filter is dropped rather than left behind an invisible option.
+    final customerId = customers.any((c) => c.id == _customerId) ? _customerId : null;
+    final visibleLocations = _locationOptions(widget.rows, locationsById, customerId: customerId);
+    final locationId = visibleLocations.any((l) => l.id == _locationId) ? _locationId : null;
+    final categorie = _categoriaOptions(widget.rows);
+    final categoria = categorie.contains(_categoria) ? _categoria : null;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            AppSpacing.pagePadding,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.md),
+              child: Center(child: SheetHandle()),
+            ),
+            Text('Filtri', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'Restringi per stato, contesto e periodo. Nessun identificativo interno.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const AppFieldLabel(label: 'Stato', enabled: true),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final option in _statusOptions)
+                  AppChip(
+                    label: option.label,
+                    active: _status == option,
+                    onTap: () => setState(() => _status = option),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            AppFieldShell(
+              label: 'Cliente',
+              child: DropdownButtonFormField<String?>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: customerId,
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Tutti i clienti')),
+                  ...customers.map(
+                    (c) => DropdownMenuItem(
+                      value: c.id,
+                      child: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() {
+                  _customerId = v;
+                  if (v != null &&
+                      _locationId != null &&
+                      !widget.rows.any(
+                        (r) => r['locationId'] == _locationId && r['customerId'] == v,
+                      )) {
+                    _locationId = null;
+                  }
+                }),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppFieldShell(
+              label: 'Sede',
+              child: DropdownButtonFormField<String?>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: locationId,
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Tutte le sedi')),
+                  ...visibleLocations.map(
+                    (l) => DropdownMenuItem(
+                      value: l.id,
+                      child: Text(l.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _locationId = v),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppFieldShell(
+              label: 'Categoria',
+              child: DropdownButtonFormField<String?>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: categoria,
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Tutte le categorie')),
+                  ...categorie.map(
+                    (c) => DropdownMenuItem(
+                      value: c,
+                      child: Text(c, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _categoria = v),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Manutenzione in scadenza'),
+              subtitle: widget.maintenanceAvailable
+                  ? null
+                  : const Text('Non disponibile sui dati salvati sul dispositivo'),
+              value: _onlyMaintenanceDue,
+              onChanged: widget.maintenanceAvailable
+                  ? (v) => setState(() => _onlyMaintenanceDue = v)
+                  : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton.ghost(
+                    label: 'Azzera',
+                    onPressed: () => Navigator.pop(context, const _ProdottoFilters()),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppButton(
+                    label: 'Applica',
+                    onPressed: () => Navigator.pop(
+                      context,
+                      _ProdottoFilters(
+                        status: _status,
+                        customerId: customerId,
+                        locationId: locationId,
+                        categoria: categoria,
+                        onlyMaintenanceDue: _onlyMaintenanceDue,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ProdottoRow extends StatelessWidget {
-  const _ProdottoRow({
-    required this.name,
-    required this.customerName,
-    required this.codice,
-    required this.categoria,
-    required this.prezzoVendita,
-    required this.isActive,
-    required this.isLast,
-    required this.onTap,
-  });
-
-  final String name;
-  final String customerName;
-  final String? codice;
-  final String? categoria;
-  final num? prezzoVendita;
-  final bool isActive;
-  final bool isLast;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    // Gap 4 of the feature audit: the row used to show only name + customer, with no way to tell
-    // products apart by any commercial attribute on device — mirrors the materiale row's own
-    // "codice · categoria" subtitle + price meta shape (admin_materiale_list_screen.dart).
-    final subtitleParts = [
-      customerName,
-      if (categoria != null && categoria!.isNotEmpty) categoria!,
-    ];
-    final priceLabel = prezzoVendita != null ? '€${prezzoVendita!.toStringAsFixed(2)}' : null;
-
-    return ListRow(
-      leading: const RowIconTile(icon: LucideIcons.wrench),
-      title: codice != null && codice!.isNotEmpty ? '$codice · $name' : name,
-      subtitle: subtitleParts.join(' · '),
-      meta: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (priceLabel != null)
-            Text(
-              priceLabel,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: context.colors.ink,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          // Only when inactive: an active product is the ordinary state of every row on this
-          // list, and printing "Attivo" on all of them would be the pill making the same noise
-          // the accent strap grammar refuses to make — it should mark the row that differs, not
-          // every row.
-          if (!isActive)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: StatusPill(stato: 'Inattivo', small: true),
-            ),
-        ],
-      ),
-      showDivider: !isLast,
-      onTap: onTap,
-    );
+/// Customer options restricted to customers that actually appear on a row, so an unloaded customer
+/// never produces a facet that filters to nothing.
+List<({String id, String name})> _customerOptions(List<Map<String, dynamic>> rows) {
+  final byId = <String, String>{};
+  for (final row in rows) {
+    final id = row['customerId'] as String?;
+    final name = (row['customerName'] as String?)?.trim();
+    if (id == null || id.isEmpty || name == null || name.isEmpty) continue;
+    byId[id] = name;
   }
+  final options = [for (final e in byId.entries) (id: e.key, name: e.value)];
+  options.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return options;
+}
+
+/// Sede options restricted to locations linked to a row (and to [customerId], when given). The
+/// name is resolved from the local locations mirror; an id with no mirror row is skipped rather
+/// than printed as an internal identifier.
+List<({String id, String name})> _locationOptions(
+  List<Map<String, dynamic>> rows,
+  Map<String, Location> locationsById, {
+  String? customerId,
+}) {
+  final byId = <String, String>{};
+  for (final row in rows) {
+    if (customerId != null && row['customerId'] != customerId) continue;
+    final id = row['locationId'] as String?;
+    if (id == null || id.isEmpty) continue;
+    final location = locationsById[id];
+    if (location == null) continue;
+    final name = [
+      location.name,
+      location.city,
+    ].where((part) => part != null && part.trim().isNotEmpty).cast<String>().join(' · ');
+    if (name.isEmpty) continue;
+    byId[id] = name;
+  }
+  final options = [for (final e in byId.entries) (id: e.key, name: e.value)];
+  options.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return options;
+}
+
+List<String> _categoriaOptions(List<Map<String, dynamic>> rows) {
+  final values = {
+    for (final row in rows)
+      if ((row['categoria'] as String?)?.trim().isNotEmpty ?? false)
+        (row['categoria'] as String).trim(),
+  }.toList();
+  values.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  return values;
 }
