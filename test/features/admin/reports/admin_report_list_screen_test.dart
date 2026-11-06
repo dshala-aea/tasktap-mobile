@@ -88,6 +88,9 @@ Future<void> _seedReport(
   required String title,
   String stato = 'Bozza',
   DateTime? createdAt,
+  String? customerId,
+  DateTime? startedAt,
+  DateTime? endedAt,
 }) => db
     .into(db.draftReports)
     .insert(
@@ -99,6 +102,20 @@ Future<void> _seedReport(
         insertedUserId: 'user-1',
         locationId: 'loc-1',
         stato: Value(stato),
+        customerId: Value(customerId),
+        startedAt: Value(startedAt),
+        endedAt: Value(endedAt),
+      ),
+    );
+
+Future<void> _seedCustomer(AppDatabase db, {required String id, required String name}) => db
+    .into(db.customers)
+    .insert(
+      CustomersCompanion.insert(
+        id: id,
+        tenantId: 'tenant-1',
+        createdAt: DateTime.utc(2026, 1, 1),
+        companyName: name,
       ),
     );
 
@@ -108,12 +125,10 @@ void main() {
   group('offline (mirror)', () {
     testWidgets('shows the mirrored rapportini and says the list may be partial', (tester) async {
       final db = _makeDb();
-      await _seedReport(db, id: 'r1', title: 'Manutenzione caldaia');
+      await _seedReport(db, id: 'r1', title: 'Manutenzione caldaia', stato: 'Inviato');
       await db.setLastSync(DateTime.utc(2026, 10, 1));
 
-      await tester.pumpWidget(
-        _buildScreen(db: db, api: _FakeAdminApiClient(), isOnline: false),
-      );
+      await tester.pumpWidget(_buildScreen(db: db, api: _FakeAdminApiClient(), isOnline: false));
       await tester.pumpAndSettle();
 
       expect(find.text('Manutenzione caldaia'), findsOneWidget);
@@ -131,9 +146,7 @@ void main() {
       (tester) async {
         final db = _makeDb();
 
-        await tester.pumpWidget(
-          _buildScreen(db: db, api: _FakeAdminApiClient(), isOnline: false),
-        );
+        await tester.pumpWidget(_buildScreen(db: db, api: _FakeAdminApiClient(), isOnline: false));
         await tester.pumpAndSettle();
 
         expect(find.text('Rapporti di intervento non disponibili offline'), findsOneWidget);
@@ -184,9 +197,9 @@ void main() {
       expect(find.text('Rapportino Nuovo'), findsOneWidget);
       expect(find.text('Rapportino Vecchio'), findsNothing);
       expect(find.textContaining('potrebbero mancare'), findsNothing);
-      // The default chip is "Tutti", which sends no stato — the server filter must not be
-      // replaced by the mirror's client-side one.
-      expect(api.lastStato, isNull);
+      // The list opens on the prototype's first chip, "Inviati"; the server still receives
+      // the stato it asks for.
+      expect(api.lastStato, 'Inviato');
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -194,7 +207,7 @@ void main() {
 
     testWidgets('a request that never arrived falls back to the mirror', (tester) async {
       final db = _makeDb();
-      await _seedReport(db, id: 'r1', title: 'Manutenzione caldaia');
+      await _seedReport(db, id: 'r1', title: 'Manutenzione caldaia', stato: 'Inviato');
       await db.setLastSync(DateTime.utc(2026, 10, 1));
 
       final api = _FakeAdminApiClient(
@@ -209,6 +222,108 @@ void main() {
 
       expect(find.text('Manutenzione caldaia'), findsOneWidget);
       expect(find.textContaining('potrebbero mancare'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the quick chips are Inviati/Controllati/Fatturati/Tutti with no Nuovo', (
+      tester,
+    ) async {
+      final db = _makeDb();
+      await _seedReport(db, id: 'r1', title: 'Rapportino inviato', stato: 'Inviato');
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+      await tester.pumpWidget(_buildScreen(db: db, api: _FakeAdminApiClient(), isOnline: false));
+      await tester.pumpAndSettle();
+
+      expect(find.text('INVIATI'), findsOneWidget);
+      expect(find.text('CONTROLLATI'), findsOneWidget);
+      expect(find.text('FATTURATI'), findsOneWidget);
+      expect(find.text('TUTTI'), findsOneWidget);
+      expect(find.text('BOZZA'), findsNothing);
+      expect(find.text('NUOVO'), findsNothing);
+      expect(find.text('FILTRI'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Bozza stays reachable through the Filtri sheet', (tester) async {
+      final db = _makeDb();
+      await _seedReport(db, id: 'r1', title: 'Rapportino inviato', stato: 'Inviato');
+      await _seedReport(db, id: 'r2', title: 'Rapportino in bozza', stato: 'Bozza');
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+      await tester.pumpWidget(_buildScreen(db: db, api: _FakeAdminApiClient(), isOnline: false));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rapportino in bozza'), findsNothing);
+
+      await tester.tap(find.text('FILTRI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('report-filter-status-bozza')));
+      await tester.tap(find.byKey(const Key('report-filter-apply')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rapportino in bozza'), findsOneWidget);
+      expect(find.text('Rapportino inviato'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('groups and summary derive from the filtered rows', (tester) async {
+      final db = _makeDb();
+      await _seedReport(db, id: 'r1', title: 'Inviato uno', stato: 'Inviato');
+      await _seedReport(db, id: 'r2', title: 'Inviato due', stato: 'Inviato');
+      await _seedReport(db, id: 'r3', title: 'Controllato uno', stato: 'Controllato');
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+      await tester.pumpWidget(_buildScreen(db: db, api: _FakeAdminApiClient(), isOnline: false));
+      await tester.pumpAndSettle();
+
+      // Inviati is the default chip, so only that group is on screen.
+      expect(find.text('Inviati'), findsOneWidget);
+      expect(find.text('Controllati'), findsNothing);
+
+      await tester.tap(find.text('TUTTI'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inviati'), findsOneWidget);
+      expect(find.text('Controllati'), findsOneWidget);
+      expect(find.text('3 REPORT'), findsOneWidget);
+      expect(find.text('2 DA CONTROLLARE'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('rows carry cliente · periodo · ore and search matches the customer', (
+      tester,
+    ) async {
+      final db = _makeDb();
+      await _seedCustomer(db, id: 'cust-1', name: 'Rossi Srl');
+      await _seedReport(
+        db,
+        id: 'r1',
+        title: 'Rapportino 2026-0412',
+        stato: 'Inviato',
+        customerId: 'cust-1',
+        startedAt: DateTime.utc(2026, 11, 1, 8),
+        endedAt: DateTime.utc(2026, 11, 2, 14),
+      );
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+
+      await tester.pumpWidget(_buildScreen(db: db, api: _FakeAdminApiClient(), isOnline: false));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rossi Srl · Novembre · 30h'), findsOneWidget);
+      expect(find.text('In attesa di controllo'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'Rossi');
+      await tester.pumpAndSettle();
+      expect(find.text('Rapportino 2026-0412'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

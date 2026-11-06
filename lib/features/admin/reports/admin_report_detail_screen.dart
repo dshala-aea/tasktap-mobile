@@ -2,25 +2,37 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/theme/app_palette.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/detail/detail_activity_timeline.dart';
+import '../../../core/widgets/detail/detail_attachment_row.dart';
+import '../../../core/widgets/detail/detail_facts_grid.dart';
+import '../../../core/widgets/detail/detail_hero.dart';
+import '../../../core/widgets/detail/detail_scaffold.dart';
+import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/reports/report_pdf_cache.dart';
+import '../../../data/sync/connectivity_provider.dart' show isOnlineProvider;
+import '../../../presentation/providers/schedule_providers.dart'
+    show colleagueNameProvider, customerByIdProvider, locationByIdProvider, ticketByIdProvider;
+import '../../cantiere/cantiere_providers.dart' show cantiereByIdProvider;
 import '../admin_api_client.dart';
 import 'admin_report_list_screen.dart' show adminReportsProvider;
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Admin report detail — read-only with state transition actions.
 ///
-/// Stateful (not just `ConsumerWidget`) because the "Fattura" action must stay on this screen
-/// showing the report's new Fatturato status and an XML download action, rather than popping
-/// back to the list the moment it succeeds — `_report` is the mutable local copy that lets the
-/// transition update what's on screen without a full re-fetch.
+/// Rebuilt on the wave-0 detail shell: SummaryHero with `Apri PDF` as its primary action, then
+/// Documenti → Sintesi → Attività. Stateful (not just `ConsumerWidget`) because the transition
+/// must keep the screen showing the report's new status (`_report` is the mutable local copy) and
+/// because the Fattura action must leave its XML download reachable here.
 class AdminReportDetailScreen extends ConsumerStatefulWidget {
   const AdminReportDetailScreen({super.key, required this.report});
 
@@ -43,163 +55,230 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
   @override
   Widget build(BuildContext context) {
     final report = _report;
-    final title = report['title'] as String? ?? '—';
     final stato = report['stato'] as String? ?? 'Bozza';
-    final createdAt = report['createdAt'] as String?;
-    final details = report['details'] as String? ?? '';
-    final technicianNotes = report['technicianNotes'] as String? ?? '';
-    final inviatoAt = report['inviatoAt'] as String?;
-    final controllatoAt = report['controllatoAt'] as String?;
-    final fatturatoAt = report['fatturatoAt'] as String?;
+    final createdAt = _parseDate(report['createdAt']);
+    final inviatoAt = _parseDate(report['inviatoAt']);
+    final controllatoAt = _parseDate(report['controllatoAt']);
+    final fatturatoAt = _parseDate(report['fatturatoAt']);
+    final details = (report['details'] as String?)?.trim() ?? '';
+    final diagnosi = (report['diagnosi'] as String?)?.trim() ?? '';
+    final soluzione = (report['soluzione'] as String?)?.trim() ?? '';
+    final technicianNotes = (report['technicianNotes'] as String?)?.trim() ?? '';
 
-    final dateLabel = createdAt != null
-        ? DateFormat('dd/MM/yyyy HH:mm', 'it').format(DateTime.parse(createdAt).toLocal())
-        : '—';
+    final title = (report['title'] as String?)?.trim();
+    final numero = (report['numero'] as String?)?.trim();
+    final entityTitle = (title != null && title.isNotEmpty)
+        ? title
+        : (numero != null && numero.isNotEmpty ? 'Rapportino $numero' : 'Rapportino');
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      appBar: ScreenHeaderBar(title: title, showBack: true),
-      body: CustomScrollView(
-        slivers: [
-          // ── Status header ───────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                0,
-                AppSpacing.pagePadding,
-                AppSpacing.base,
-              ),
-              child: Row(
-                children: [
-                  StatusPill(stato: stato),
-                  const Spacer(),
-                  Text(
-                    dateLabel,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: context.colors.inkMuted),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // ── Info card ───────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                0,
-                AppSpacing.pagePadding,
-                AppSpacing.base,
-              ),
-              child: AppCard(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                child: Column(
-                  children: [
-                    KeyVal(label: 'Stato', value: stato),
-                    KeyVal(label: 'Data creazione', value: dateLabel),
-                    if (inviatoAt != null)
-                      KeyVal(
-                        label: 'Inviato il',
-                        value: DateFormat(
-                          'dd/MM/yyyy HH:mm',
-                          'it',
-                        ).format(DateTime.parse(inviatoAt).toLocal()),
-                      ),
-                    if (controllatoAt != null)
-                      KeyVal(
-                        label: 'Controllato il',
-                        value: DateFormat(
-                          'dd/MM/yyyy HH:mm',
-                          'it',
-                        ).format(DateTime.parse(controllatoAt).toLocal()),
-                      ),
-                    if (fatturatoAt != null)
-                      KeyVal(
-                        label: 'Fatturato il',
-                        value: DateFormat(
-                          'dd/MM/yyyy HH:mm',
-                          'it',
-                        ).format(DateTime.parse(fatturatoAt).toLocal()),
-                        showDivider: false,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // ── Details ─────────────────────────────────────────────────
-          if (details.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.pagePadding,
-                  0,
-                  AppSpacing.pagePadding,
-                  AppSpacing.base,
-                ),
-                child: AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SectionTitle(title: 'Dettagli'),
-                      const SizedBox(height: 4),
-                      Text(details, style: Theme.of(context).textTheme.bodyMedium),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          // ── Technician notes ────────────────────────────────────────
-          if (technicianNotes.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.pagePadding,
-                  0,
-                  AppSpacing.pagePadding,
-                  AppSpacing.base,
-                ),
-                child: AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SectionTitle(title: 'Note tecnico'),
-                      const SizedBox(height: 4),
-                      Text(technicianNotes, style: Theme.of(context).textTheme.bodyMedium),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          // ── State transition buttons ────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
-              child: Column(
-                children: [
-                  _StateTransitionButtons(stato: stato, busy: _busy, onTransition: _handleAction),
-                  // Fatturato reports keep an XML re-download available, not just the moment
-                  // right after the transition — an office user coming back to this screen
-                  // later still needs a copy of the invoice.
-                  if (stato == 'Fatturato') ...[
-                    const SizedBox(height: AppSpacing.sm),
-                    AppButton(
-                      label: _busy ? 'Download in corso...' : 'Scarica XML fattura',
-                      icon: _busy ? null : const Icon(LucideIcons.download, size: 18),
-                      isLoading: _busy,
-                      onPressed: _busy ? null : _downloadFatturaXml,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
-        ],
+    final customerId = report['customerId'] as String?;
+    final locationId = report['locationId'] as String?;
+    final ticketId = report['ticketId'] as String?;
+    final cantiereId = report['cantiereId'] as String?;
+    final insertedUserId = report['insertedUserId'] as String?;
+
+    final customer = customerId == null
+        ? null
+        : ref.watch(customerByIdProvider(customerId)).valueOrNull?.companyName;
+    final location = locationId == null
+        ? null
+        : ref.watch(locationByIdProvider(locationId)).valueOrNull?.name;
+    final ticket = ticketId == null
+        ? null
+        : ref.watch(ticketByIdProvider(ticketId)).valueOrNull?.title;
+    final cantiere = cantiereId == null
+        ? null
+        : ref.watch(cantiereByIdProvider(cantiereId)).valueOrNull?.name;
+    final technician = insertedUserId == null
+        ? null
+        : ref.watch(colleagueNameProvider(insertedUserId)).valueOrNull;
+
+    final period = _periodLabel(report);
+    final ore = _hoursLabel(report);
+    final dateLabel = createdAt == null
+        ? '—'
+        : DateFormat('dd/MM/yyyy HH:mm', 'it').format(createdAt.toLocal());
+
+    final heroFacts = [
+      if (customer != null && customer.trim().isNotEmpty) customer,
+      ?period,
+      ?ore,
+    ].join(' · ');
+
+    final hasCustomerSignature = report['customerSignatureAllegatoId'] != null;
+    final hasTechnicianSignature = report['technicianSignatureAllegatoId'] != null;
+    final customerAbsenceReason = report['customerSignatureAbsenceReason'];
+    final customerSignatureLabel = hasCustomerSignature
+        ? 'Firmato'
+        : (customerAbsenceReason != null ? 'Senza firma' : 'Mancante');
+
+    final signatures = <({String name, String value})>[
+      (name: 'Firma cliente', value: customerSignatureLabel),
+      (name: 'Firma tecnico', value: hasTechnicianSignature ? 'Firmato' : 'Mancante'),
+    ];
+
+    final facts = <DetailFact>[
+      if (location != null && location.trim().isNotEmpty)
+        DetailFact(label: 'Sede', value: location),
+      if (ticket != null && ticket.trim().isNotEmpty) DetailFact(label: 'Ticket', value: ticket),
+      if (cantiere != null && cantiere.trim().isNotEmpty)
+        DetailFact(label: 'Cantiere', value: cantiere),
+      if (technician != null && technician.trim().isNotEmpty)
+        DetailFact(label: 'Tecnico', value: technician),
+      DetailFact(label: 'Creato il', value: dateLabel),
+    ];
+
+    final timeline = <DetailActivityEvent>[
+      if (inviatoAt != null)
+        DetailActivityEvent(
+          time: _eventTime(inviatoAt),
+          title: 'Inviato',
+          tone: DetailEventTone.good,
+        ),
+      if (controllatoAt != null)
+        DetailActivityEvent(
+          time: _eventTime(controllatoAt),
+          title: 'Controllato',
+          tone: DetailEventTone.warn,
+        ),
+      if (fatturatoAt != null)
+        DetailActivityEvent(
+          time: _eventTime(fatturatoAt),
+          title: 'Fatturato',
+          tone: DetailEventTone.good,
+        ),
+    ];
+
+    final canTransition = stato == 'Inviato' || stato == 'Controllato';
+    final canDownloadXml = stato == 'Fatturato';
+    return DetailScaffold(
+      screenTitle: 'Report admin',
+      hero: DetailHeroData(
+        variant: DetailHeroVariant.summary,
+        kind: 'Summary · documento',
+        title: entityTitle,
+        status: DetailStatus(label: stato),
+        subtitle: heroFacts.isEmpty ? null : heroFacts,
+        primaryAction: DetailAction(
+          label: 'Apri PDF',
+          icon: const Icon(LucideIcons.fileText, size: 14),
+          enabled: !_busy,
+          onPressed: _openPdf,
+        ),
       ),
+      sections: [
+        DetailSectionData(
+          title: 'Documenti',
+          trailing: DetailSectionMeta('${signatures.length + 1} documenti'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DetailAttachmentRow(
+                name: 'PDF rapporto',
+                icon: const Icon(LucideIcons.fileText, size: 14),
+                size: 'PDF',
+                onTap: _busy ? null : _openPdf,
+              ),
+              for (var i = 0; i < signatures.length; i++)
+                DetailAttachmentRow(
+                  name: signatures[i].name,
+                  icon: const Icon(LucideIcons.pencil, size: 14),
+                  size: signatures[i].value,
+                  isLast: i == signatures.length - 1,
+                ),
+            ],
+          ),
+        ),
+        DetailSectionData(
+          title: 'Sintesi',
+          trailing: DetailSectionMeta('${facts.length} campi'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DetailFactsGrid(facts: facts),
+              if (details.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.base),
+                _TextBlock(label: 'Descrizione', text: details),
+              ],
+              if (diagnosi.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.base),
+                _TextBlock(label: 'Diagnosi', text: diagnosi),
+              ],
+              if (soluzione.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.base),
+                _TextBlock(label: 'Soluzione', text: soluzione),
+              ],
+              if (technicianNotes.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.base),
+                _TextBlock(label: 'Note tecnico', text: technicianNotes),
+              ],
+            ],
+          ),
+        ),
+        DetailSectionData(
+          title: 'Attività',
+          trailing: timeline.isEmpty ? null : DetailSectionMeta('storico'),
+          isEmpty: timeline.isEmpty && !canTransition && !canDownloadXml,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (timeline.isNotEmpty) DetailActivityTimeline(events: timeline),
+              if (canTransition) ...[
+                if (timeline.isNotEmpty) const SizedBox(height: AppSpacing.base),
+                _StateTransitionButtons(stato: stato, busy: _busy, onTransition: _handleAction),
+              ],
+              // Fatturato reports keep an XML re-download available, not just the moment
+              // right after the transition — an office user coming back to this screen
+              // later still needs a copy of the invoice.
+              if (canDownloadXml) ...[
+                if (timeline.isNotEmpty) const SizedBox(height: AppSpacing.base),
+                DetailHeroButton(
+                  label: _busy ? 'Download in corso...' : 'Scarica XML fattura',
+                  icon: _busy ? null : const Icon(LucideIcons.download, size: 14),
+                  variant: DetailHeroButtonVariant.secondary,
+                  onPressed: _busy ? null : _downloadFatturaXml,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
+  }
+
+  Future<void> _openPdf() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final file = await ref
+          .read(reportPdfCacheProvider)
+          .resolve(_report['id'] as String, online: ref.read(isOnlineProvider));
+      final result = await OpenFilex.open(file.path);
+      if (result.type != ResultType.done && mounted) {
+        showAppToast(
+          context,
+          message: 'Impossibile aprire il PDF: ${result.message}',
+          tone: ToastTone.error,
+        );
+      }
+    } on ReportPdfUnavailable catch (e) {
+      if (!mounted) return;
+      showAppToast(
+        context,
+        message: switch (e.reason) {
+          ReportPdfFailure.notDownloaded =>
+            'PDF non ancora scaricato su questo telefono — serve la connessione la prima volta.',
+          ReportPdfFailure.downloadFailed => 'Impossibile scaricare il PDF. Riprova più tardi.',
+        },
+        tone: e.reason == ReportPdfFailure.notDownloaded ? ToastTone.warning : ToastTone.error,
+      );
+    } catch (_) {
+      if (mounted) {
+        showAppToast(context, message: 'Impossibile scaricare il PDF.', tone: ToastTone.error);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _handleAction(String action) async {
@@ -212,7 +291,13 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
         case 'controlla':
           await api.controllaReport(reportId);
           if (mounted) {
-            setState(() => _report = {..._report, 'stato': 'Controllato'});
+            setState(
+              () => _report = {
+                ..._report,
+                'stato': 'Controllato',
+                'controllatoAt': DateTime.now().toUtc().toIso8601String(),
+              },
+            );
           }
           break;
         case 'fattura':
@@ -269,6 +354,68 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  static DateTime? _parseDate(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
+  static String _eventTime(DateTime value) =>
+      DateFormat('dd/MM HH:mm', 'it').format(value.toLocal());
+
+  static String? _periodLabel(Map<String, dynamic> report) {
+    final date = _parseDate(report['startedAt']) ?? _parseDate(report['createdAt']);
+    if (date == null) return null;
+    final month = DateFormat('MMMM', 'it').format(date.toLocal());
+    return month.isEmpty ? null : '${month[0].toUpperCase()}${month.substring(1)}';
+  }
+
+  static String? _hoursLabel(Map<String, dynamic> report) {
+    final start = _parseDate(report['startedAt']);
+    final end = _parseDate(report['endedAt']);
+    if (start == null || end == null || end.isBefore(start)) return null;
+    final minutes = end.difference(start).inMinutes;
+    if (minutes <= 0) return null;
+    final hours = minutes ~/ 60;
+    final rest = minutes % 60;
+    if (rest == 0) return '$hours ${hours == 1 ? 'ora' : 'ore'}';
+    return '${hours}h ${rest}m';
+  }
+}
+
+class _TextBlock extends StatelessWidget {
+  const _TextBlock({required this.label, required this.text});
+
+  final String label;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: AppTextStyles.docCode.copyWith(
+            fontSize: 8,
+            letterSpacing: 0.64,
+            color: context.colors.inkMuted,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          text,
+          style: AppTextStyles.bodySmall.copyWith(
+            fontSize: 11.5,
+            height: 1.45,
+            color: context.colors.ink,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _StateTransitionButtons extends StatelessWidget {
@@ -285,16 +432,16 @@ class _StateTransitionButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (stato == 'Inviato') {
-      return AppButton(
+      return DetailHeroButton(
         label: 'Segna come controllato',
-        icon: const Icon(LucideIcons.checkCircle, size: 18),
+        icon: const Icon(LucideIcons.checkCircle, size: 14),
         onPressed: busy ? null : () => onTransition('controlla'),
       );
     }
     if (stato == 'Controllato') {
-      return AppButton(
+      return DetailHeroButton(
         label: 'Segna come fatturato',
-        icon: const Icon(LucideIcons.receipt, size: 18),
+        icon: const Icon(LucideIcons.receipt, size: 14),
         onPressed: busy ? null : () => onTransition('fattura'),
       );
     }

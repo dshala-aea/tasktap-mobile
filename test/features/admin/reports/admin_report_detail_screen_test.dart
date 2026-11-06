@@ -30,6 +30,57 @@ class _FakeAdminApiClient extends AdminApiClient {
 }
 
 void main() {
+  setUpAll(() async => initializeDateFormatting('it'));
+
+  testWidgets('renders the shell: Documenti → Sintesi → Attività, Apri PDF, no FAB', (
+    tester,
+  ) async {
+    final api = _FakeAdminApiClient();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          adminApiClientProvider.overrideWithValue(api),
+          adminReportsProvider.overrideWith(
+            (ref, filter) async => const ReportListRows([], fromMirror: false),
+          ),
+        ],
+        child: MaterialApp(
+          home: Navigator(
+            onGenerateRoute: (settings) => MaterialPageRoute(
+              builder: (_) => AdminReportDetailScreen(
+                report: const {
+                  'id': 'r1',
+                  'title': 'Rapportino 2026-0412',
+                  'stato': 'Inviato',
+                  'createdAt': '2026-10-01T08:00:00Z',
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Apri PDF'), findsWidgets);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Documenti'), findsOneWidget);
+    expect(find.text('Sintesi'), findsOneWidget);
+    expect(find.text('Attività'), findsOneWidget);
+    expect(find.text('PDF rapporto'), findsOneWidget);
+    expect(find.text('Firma cliente'), findsOneWidget);
+    expect(find.text('Firma tecnico'), findsOneWidget);
+    // The state transition is kept, now inside Attività.
+    expect(find.text('Segna come controllato'), findsOneWidget);
+
+    final documenti = tester.getTopLeft(find.text('Documenti')).dy;
+    final sintesi = tester.getTopLeft(find.text('Sintesi')).dy;
+    final attivita = tester.getTopLeft(find.text('Attività')).dy;
+    expect(documenti, lessThan(sintesi));
+    expect(sintesi, lessThan(attivita));
+  });
+
   testWidgets('a state transition invalidates adminReportsProvider, not just the pop', (
     tester,
   ) async {
@@ -80,53 +131,54 @@ void main() {
     final fetchesBeforeTransition = fetchCalls;
     expect(fetchesBeforeTransition, 1);
 
-    await tester.tap(find.text('Segna come controllato'));
+    final controlla = find.text('Segna come controllato');
+    await tester.ensureVisible(controlla);
+    await tester.tap(controlla);
     await tester.pumpAndSettle();
 
     expect(api.controllaCalls, 1);
     expect(fetchCalls, greaterThan(fetchesBeforeTransition));
   });
 
-  testWidgets(
-    'the Fattura action stays on this screen showing Fatturato + an XML download action, '
-    'instead of popping back to the list',
-    (tester) async {
-      await initializeDateFormatting('it', null);
-      final api = _FakeAdminApiClient();
+  testWidgets('the Fattura action stays on this screen showing Fatturato + an XML download action, '
+      'instead of popping back to the list', (tester) async {
+    await initializeDateFormatting('it', null);
+    final api = _FakeAdminApiClient();
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            adminApiClientProvider.overrideWithValue(api),
-            adminReportsProvider.overrideWith(
-              (ref, filter) async => const ReportListRows([], fromMirror: false),
-            ),
-          ],
-          child: MaterialApp(
-            home: Navigator(
-              onGenerateRoute: (settings) => MaterialPageRoute(
-                builder: (_) => AdminReportDetailScreen(
-                  report: const {'id': 'r1', 'title': 'Rapportino 1', 'stato': 'Controllato'},
-                ),
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          adminApiClientProvider.overrideWithValue(api),
+          adminReportsProvider.overrideWith(
+            (ref, filter) async => const ReportListRows([], fromMirror: false),
+          ),
+        ],
+        child: MaterialApp(
+          home: Navigator(
+            onGenerateRoute: (settings) => MaterialPageRoute(
+              builder: (_) => AdminReportDetailScreen(
+                report: const {'id': 'r1', 'title': 'Rapportino 1', 'stato': 'Controllato'},
               ),
             ),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      expect(find.text('Segna come fatturato'), findsOneWidget);
+    expect(find.text('Segna come fatturato'), findsOneWidget);
 
-      await tester.tap(find.text('Segna come fatturato'));
-      await tester.pumpAndSettle();
+    final fattura = find.text('Segna come fatturato');
+    await tester.ensureVisible(fattura);
+    await tester.tap(fattura);
+    await tester.pumpAndSettle();
 
-      // Transition fired, but the screen is still here — this used to pop back to the list on
-      // its own, which is the reported bug (the office user's next step is usually downloading
-      // the XML, not going back to find the row again).
-      expect(api.fatturaCalls, 1);
-      expect(find.byType(AdminReportDetailScreen), findsOneWidget);
-      expect(find.text('Scarica XML fattura'), findsOneWidget);
-      expect(find.text('Segna come fatturato'), findsNothing);
-    },
-  );
+    // Transition fired, but the screen is still here — this used to pop back to the list on
+    // its own, which is the reported bug (the office user's next step is usually downloading
+    // the XML, not going back to find the row again).
+    expect(api.fatturaCalls, 1);
+    expect(find.byType(AdminReportDetailScreen), findsOneWidget);
+    expect(find.text('Scarica XML fattura'), findsOneWidget);
+    expect(find.text('Segna come fatturato'), findsNothing);
+  });
 }
