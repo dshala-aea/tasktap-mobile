@@ -261,7 +261,7 @@ void main() {
 
       expect(find.text('FINE TURNO'), findsOneWidget);
       expect(find.text('PAUSA'), findsOneWidget);
-      expect(find.text('SCANSIONA QR'), findsNothing);
+      expect(find.text('TIMBRA CON QR'), findsNothing);
 
       await _teardownTimer(tester);
     });
@@ -278,7 +278,7 @@ void main() {
 
       expect(find.text('FINE TURNO'), findsOneWidget);
       expect(find.text('PAUSA'), findsOneWidget);
-      expect(find.text('SCANSIONA QR'), findsNothing);
+      expect(find.text('TIMBRA CON QR'), findsNothing);
 
       await _teardownTimer(tester);
     });
@@ -297,7 +297,7 @@ void main() {
         expect(find.text(key), findsNothing, reason: '$key must not be offered to a QR-only user');
       }
       expect(find.text('TIMBRA CON QR'), findsOneWidget);
-      expect(find.text('SCANSIONA QR'), findsNothing);
+      expect(find.text('TIMBRA CON QR'), findsNothing);
 
       await _teardownTimer(tester);
     });
