@@ -310,6 +310,17 @@ class TimbraSyncService {
     } catch (e) {
       if (!_isTransient(e) && e is DioException && e.response != null) {
         await _handleRefusedBatch(day, e);
+      } else if (e is! DioException) {
+        // Not a transport or HTTP failure at all: the request may well have been committed and the
+        // failure is in reading the answer or in our own code (the 2026-11-06 TimeSpan parse bug
+        // looked exactly like "offline" and left no trace). Never silent.
+        unawaited(
+          CrashReporter.instance.captureException(
+            e,
+            hint: 'timbra sync: non-HTTP failure pushing a day '
+                '(events=${day.where((s) => s.isPendingSync).length})',
+          ),
+        );
       } else {
         // Transient (offline, timeout, 5xx, 401): no backoff on purpose — a reconnect or the next
         // trigger should try again immediately. A breadcrumb makes the repeated attempt visible
@@ -479,8 +490,24 @@ class TimbraSyncService {
             await _apiClient.endBreak(occurredAtUtc: e.eventTime);
         }
       } catch (err) {
-        if (_isTransient(err)) break;
+        if (_isTransient(err)) {
+          CrashReporter.instance.addBreadcrumb(
+            'timbra remote command transient: ${e.eventType} '
+            'status=${err is DioException ? (err.response?.statusCode ?? err.type.name) : err.runtimeType}',
+            category: 'sync',
+          );
+          break;
+        }
         // Permanent refusal: retire the command, converge through the reconciler.
+        final code = err is DioException && err.response?.data is Map
+            ? (err.response!.data as Map)['code']
+            : null;
+        final summary =
+            'timbra remote command refused, retired: ${e.eventType} '
+            'status=${err is DioException ? (err.response?.statusCode ?? err.type.name) : err.runtimeType} '
+            'code=${code ?? '-'}';
+        CrashReporter.instance.addBreadcrumb(summary, category: 'sync');
+        unawaited(CrashReporter.instance.captureMessage(summary));
       }
       sentOrChecked = true;
       await _repo.markSynced([e.id]);

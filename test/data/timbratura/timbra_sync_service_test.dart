@@ -111,8 +111,8 @@ class _FakeApiClient extends WorklogApiClient {
           (s) => UpsertSessionResponse(
             clientId: s.clientId,
             workLogId: 'wl-${s.clientId}',
-            startTime: s.startTime,
-            endTime: s.endTime,
+            startTime: Duration.zero,
+            endTime: s.endTime == null ? null : Duration.zero,
             isActive: s.endTime == null,
             clockDisagreementSeconds: clockDisagreementSeconds,
           ),
