@@ -1,15 +1,17 @@
 // dart format width=100
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/theme/app_palette.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/users/user_directory.dart';
 import '../admin_api_client.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Fetches squadre from backend API.
 final adminSquadreProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
@@ -17,72 +19,81 @@ final adminSquadreProvider = FutureProvider.autoDispose<List<Map<String, dynamic
   return api.fetchSquadre();
 });
 
-/// Per-squadra member counts and last-access displays are derived from the shared
-/// [allUsersProvider] (active users) — one bulk fetch rather than one per squadra or per member.
-/// See [AdminApiClient.fetchAllUsersWithSquadraInfo]'s doc comment for why.
+/// Per-squadra member counts come from the shared [allUsersProvider] (active users) — one bulk
+/// fetch rather than one per squadra or per member. See
+/// [AdminApiClient.fetchAllUsersWithSquadraInfo]'s doc comment for why.
+
+/// The status presets from the prototype's Squadre chip row.
+enum _SquadraStatusFilter { attive, tutte, inattive }
+
+extension on _SquadraStatusFilter {
+  String get id => name;
+
+  String get label => switch (this) {
+    _SquadraStatusFilter.attive => 'Attive',
+    _SquadraStatusFilter.tutte => 'Tutte',
+    _SquadraStatusFilter.inattive => 'Inattive',
+  };
+
+  bool matches(bool isActive) => switch (this) {
+    _SquadraStatusFilter.attive => isActive,
+    _SquadraStatusFilter.tutte => true,
+    _SquadraStatusFilter.inattive => !isActive,
+  };
+}
+
+/// The quick chip plus every facet reachable from the `Filtri` sheet.
+///
+/// Cantiere and `Solo con cantieri` are deliberately absent: neither `/api/squadre` nor the
+/// `/api/users` projection carries a cantiere association, and inventing one would need a new
+/// network read (see the report's DROPPED FACTS / PROPOSALS).
+class _SquadraFilters {
+  const _SquadraFilters({this.status = _SquadraStatusFilter.tutte, this.lead});
+
+  final _SquadraStatusFilter status;
+
+  /// Matched against the server-derived `capSquadraNome`.
+  final String? lead;
+
+  bool get hasFacets => lead != null;
+
+  /// Drops a lead whose squadra was deactivated or renamed while the sheet was open, so the list
+  /// does not silently filter on a value the sheet can no longer show.
+  _SquadraFilters reconciled({required bool Function(String lead) hasLead}) {
+    final selected = lead;
+    return _SquadraFilters(
+      status: status,
+      lead: selected != null && hasLead(selected) ? selected : null,
+    );
+  }
+
+  _SquadraFilters copyWith({_SquadraStatusFilter? status, String? lead, bool clearLead = false}) {
+    return _SquadraFilters(
+      status: status ?? this.status,
+      lead: clearLead ? null : (lead ?? this.lead),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _SquadraFilters && other.status == status && other.lead == lead;
+
+  @override
+  int get hashCode => Object.hash(status, lead);
+}
 
 /// Admin squadra list — online-only (squadre are not in the sync payload).
-class AdminSquadraListScreen extends ConsumerWidget {
+class AdminSquadraListScreen extends ConsumerStatefulWidget {
   const AdminSquadraListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final squadreAsync = ref.watch(adminSquadreProvider);
-
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: squadreAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          // Offline is not a failure: nothing was attempted, and retrying cannot help until the
-          // radio is back. The red "Impossibile caricare i dati" card would read as "your squadre
-          // may be gone", which is the one thing this screen cannot know.
-          error: (e, _) => !ref.watch(isOnlineProvider)
-              ? UnavailableState(
-                  icon: LucideIcons.wifiOff,
-                  titolo: 'Squadre non disponibili offline',
-                  motivo:
-                      'Le squadre si leggono con la connessione: non vengono scaricate sul '
-                      'dispositivo.',
-                  action: AppButton(
-                    label: 'Riprova',
-                    size: AppButtonSize.sm,
-                    fullWidth: false,
-                    onPressed: () => ref.invalidate(adminSquadreProvider),
-                  ),
-                )
-              : ErrorState(onRetry: () => ref.invalidate(adminSquadreProvider)),
-          data: (squadre) => _SquadraListBody(squadre: squadre),
-        ),
-      ),
-      floatingActionButton: CapabilityGate(
-        capability: 'team.squadra.write',
-        child: Padding(
-          // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment
-          // on this same change.
-          padding: EdgeInsets.only(bottom: context.navClearance),
-          child: AppFab(
-            tooltip: 'Nuova squadra',
-            onPressed: () => context.push('/altro/squadre/nuovo'),
-          ),
-        ),
-      ),
-    );
-  }
+  ConsumerState<AdminSquadraListScreen> createState() => _AdminSquadraListScreenState();
 }
 
-class _SquadraListBody extends ConsumerStatefulWidget {
-  const _SquadraListBody({required this.squadre});
-
-  final List<Map<String, dynamic>> squadre;
-
-  @override
-  ConsumerState<_SquadraListBody> createState() => _SquadraListBodyState();
-}
-
-class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
+class _AdminSquadraListScreenState extends ConsumerState<AdminSquadraListScreen> {
   String _query = '';
   final _searchCtrl = TextEditingController();
+  _SquadraFilters _filters = const _SquadraFilters();
 
   @override
   void dispose() {
@@ -90,139 +101,527 @@ class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
     super.dispose();
   }
 
+  void _selectStatus(ListFilterChipData chip) {
+    final status = _SquadraStatusFilter.values.firstWhere(
+      (f) => f.id == chip.id,
+      orElse: () => _SquadraStatusFilter.tutte,
+    );
+    setState(() => _filters = _filters.copyWith(status: status));
+  }
+
+  Future<void> _openFilterSheet({required List<String> leads}) async {
+    final reconciled = _filters.reconciled(hasLead: leads.contains);
+    if (reconciled != _filters && mounted) setState(() => _filters = reconciled);
+
+    final result = await showModalBottomSheet<_SquadraFilters>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRack.cellRadius)),
+      ),
+      builder: (_) => _SquadraFilterSheet(initial: reconciled, leads: leads),
+    );
+    if (result != null && mounted) setState(() => _filters = result);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filtered = widget.squadre.where((s) {
-      if (_query.isEmpty) return true;
-      final nome = (s['nome'] as String? ?? '').toLowerCase();
-      return nome.contains(_query.toLowerCase());
-    }).toList();
-
-    // One bulk fetch for the whole list, not one per row — see allUsersProvider's doc comment.
-    // `squadraId` is the derived field UsersController.PopulateSquadreAsync projects onto every
-    // user response.
+    final squadreAsync = ref.watch(adminSquadreProvider);
     final users = ref.watch(allUsersProvider(true)).valueOrNull ?? const [];
+
+    // One bulk fetch for the whole list, not one per row. `squadraId` is the derived field
+    // UsersController.PopulateSquadreAsync projects onto every user response.
     final memberCounts = <String, int>{};
+    final memberNames = <String, List<String>>{};
     for (final u in users) {
       final squadraId = u['squadraId'] as String?;
-      if (squadraId != null) {
-        memberCounts[squadraId] = (memberCounts[squadraId] ?? 0) + 1;
-      }
+      if (squadraId == null) continue;
+      memberCounts[squadraId] = (memberCounts[squadraId] ?? 0) + 1;
+      memberNames.putIfAbsent(squadraId, () => []).add(userDisplayName(u));
+    }
+
+    final squadre = squadreAsync.valueOrNull ?? const <Map<String, dynamic>>[];
+    final leads = <String>{
+      for (final s in squadre)
+        if (_text(s['capSquadraNome']) != null) _text(s['capSquadraNome'])!,
+    }.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    final activeFilters = _filters.reconciled(hasLead: leads.contains);
+
+    return Scaffold(
+      backgroundColor: context.colors.bg2,
+      body: SafeArea(
+        child: Column(
+          children: [
+            ScreenHeader(
+              title: 'Squadre',
+              subtitle: 'Chi lavora insieme e su quali cantieri.',
+              subtitleMaxLines: 2,
+              showBack: true,
+              actions: [
+                CapabilityGate(
+                  capability: 'team.squadra.write',
+                  child: ListHeaderAction(
+                    label: 'Nuovo',
+                    onPressed: () => context.push('/altro/squadre/nuovo'),
+                  ),
+                ),
+              ],
+            ),
+            AppSearchBar(
+              controller: _searchCtrl,
+              hint: 'Cerca squadra, lead o membro…',
+              onChanged: (q) => setState(() => _query = q),
+            ),
+            ListFilterRow(
+              filters: const [
+                ListFilterChipData(label: 'Attive', id: 'attive'),
+                ListFilterChipData(label: 'Tutte', id: 'tutte'),
+                ListFilterChipData(label: 'Inattive', id: 'inattive'),
+              ],
+              activeId: activeFilters.status.id,
+              onSelected: _selectStatus,
+              onOpenFilters: () => _openFilterSheet(leads: leads),
+            ),
+            Expanded(
+              child: squadreAsync.when(
+                loading: () => _scrollable(
+                  context,
+                  const ListLoadingSkeleton(),
+                  () => ref.refresh(adminSquadreProvider.future),
+                ),
+                // Offline is not a failure: nothing was attempted, and retrying cannot help until
+                // the radio is back. The red "Impossibile caricare i dati" card would read as
+                // "your squadre may be gone", which is the one thing this screen cannot know.
+                error: (e, _) => !ref.watch(isOnlineProvider)
+                    ? _scrollable(
+                        context,
+                        UnavailableState(
+                          icon: LucideIcons.wifiOff,
+                          titolo: 'Squadre non disponibili offline',
+                          motivo:
+                              'Le squadre si leggono con la connessione: non vengono scaricate '
+                              'sul dispositivo.',
+                          action: AppButton(
+                            label: 'Riprova',
+                            size: AppButtonSize.sm,
+                            fullWidth: false,
+                            onPressed: () => ref.invalidate(adminSquadreProvider),
+                          ),
+                        ),
+                        () => ref.refresh(adminSquadreProvider.future),
+                      )
+                    : _scrollable(
+                        context,
+                        ErrorState(onRetry: () => ref.invalidate(adminSquadreProvider)),
+                        () => ref.refresh(adminSquadreProvider.future),
+                      ),
+                data: (rows) => _content(
+                  context,
+                  rows: rows,
+                  memberCounts: memberCounts,
+                  memberNames: memberNames,
+                  filters: activeFilters,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _content(
+    BuildContext context, {
+    required List<Map<String, dynamic>> rows,
+    required Map<String, int> memberCounts,
+    required Map<String, List<String>> memberNames,
+    required _SquadraFilters filters,
+  }) {
+    final q = _query.trim().toLowerCase();
+    final filtered = rows.where((s) {
+      final id = s['id'] as String? ?? '';
+      final isActive = s['isActive'] as bool? ?? true;
+      if (!filters.status.matches(isActive)) return false;
+      final lead = _text(s['capSquadraNome']);
+      if (filters.lead != null && lead != filters.lead) return false;
+      if (q.isEmpty) return true;
+      final nome = _text(s['nome'])?.toLowerCase() ?? '';
+      final specializzazione = _text(s['specializzazione'])?.toLowerCase() ?? '';
+      return nome.contains(q) ||
+          (lead?.toLowerCase().contains(q) ?? false) ||
+          specializzazione.contains(q) ||
+          (memberNames[id]?.any((name) => name.toLowerCase().contains(q)) ?? false);
+    }).toList();
+
+    final groups = <ListGroupData>[
+      for (final (title, isActive) in const [('Attive', true), ('Inattive', false)])
+        if (filtered.any((s) => (s['isActive'] as bool? ?? true) == isActive))
+          ListGroupData(
+            title: title,
+            count: filtered.where((s) => (s['isActive'] as bool? ?? true) == isActive).length,
+            rows: [
+              for (final s in filtered.where((s) => (s['isActive'] as bool? ?? true) == isActive))
+                _rowData(context, s, memberCounts[s['id'] as String? ?? ''] ?? 0),
+            ],
+          ),
+    ];
+
+    final activeCount = rows.where((s) => s['isActive'] as bool? ?? true).length;
+    final hasActiveFilter =
+        q.isNotEmpty || filters.hasFacets || filters.status != _SquadraStatusFilter.tutte;
+
+    Future<void> onRefresh() => ref.refresh(adminSquadreProvider.future);
+
+    if (groups.isEmpty) {
+      return _scrollable(
+        context,
+        _emptyState(context, hasRows: rows.isNotEmpty, hasActiveFilter: hasActiveFilter),
+        onRefresh,
+      );
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.refresh(adminSquadreProvider.future),
+      onRefresh: onRefresh,
       child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          SliverToBoxAdapter(
-            child: ScreenHeader(
-              title: 'Squadre',
-              subtitle: '${filtered.length} totali',
-              showBack: true,
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: AppSearchBar(
-              controller: _searchCtrl,
-              hint: 'Cerca per nome…',
-              onChanged: (q) => setState(() => _query = q),
-            ),
-          ),
-          if (filtered.isEmpty)
+          for (final group in groups) ...[
             SliverToBoxAdapter(
-              child: EmptyState(
-                icon: LucideIcons.users,
-                title: 'Nessuna squadra',
-                body: 'Crea una nuova squadra con il pulsante +.',
+              child: _framed(
+                child: ListGroupHeader(title: group.title!, count: group.count),
               ),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate((context, i) {
-                final squadra = filtered[i];
-                final nome = squadra['nome'] as String? ?? '';
-                final spec = squadra['specializzazione'] as String? ?? '';
-                final colore = squadra['coloreCalendario'] as String?;
-                // Backend derives this on every /api/squadre response (PopulateCapiSquadraAsync
-                // in SquadreController) — it was never read on mobile.
-                final capoNome = squadra['capSquadraNome'] as String?;
-                final memberCount = memberCounts[squadra['id'] as String? ?? ''] ?? 0;
-                return _SquadraRow(
-                  nome: nome,
-                  specializzazione: spec,
-                  capoNome: capoNome,
-                  memberCount: memberCount,
-                  colore: colore,
-                  isLast: i == filtered.length - 1,
-                  onTap: () => context.push('/altro/squadre/${squadra['id']}', extra: squadra),
-                );
-              }, childCount: filtered.length),
             ),
-          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => KeyedSubtree(
+                    key: group.rows[i].rowKey,
+                    child: ListDocumentRow(data: group.rows[i]),
+                  ),
+                  childCount: group.rows.length,
+                ),
+              ),
+            ),
+          ],
+          SliverToBoxAdapter(
+            child: _framed(
+              child: ListSummaryFooter(
+                data: ListSummaryData(
+                  left: _squadreLabel(rows.length),
+                  right: '$activeCount attive',
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
         ],
+      ),
+    );
+  }
+
+  Widget _scrollable(BuildContext context, Widget child, Future<void> Function() onRefresh) {
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          Center(
+            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
+          ),
+          SizedBox(height: context.navClearance),
+        ],
+      ),
+    );
+  }
+
+  Widget _framed({required Widget child}) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState(BuildContext context, {required bool hasRows, required bool hasActiveFilter}) {
+    if (hasActiveFilter) {
+      return EmptyState(
+        icon: LucideIcons.searchX,
+        title: 'Nessun risultato',
+        body: _query.trim().isNotEmpty
+            ? 'Nessuna squadra corrisponde a "${_query.trim()}".'
+            : 'Nessuna squadra corrisponde ai filtri selezionati.',
+      );
+    }
+    if (!hasRows) {
+      return const EmptyState(
+        icon: LucideIcons.users,
+        title: 'Nessuna squadra',
+        body: 'Crea una nuova squadra con il pulsante Nuovo.',
+      );
+    }
+    return const EmptyState(
+      icon: LucideIcons.searchX,
+      title: 'Nessun risultato',
+      body: 'Nessuna squadra da mostrare.',
+    );
+  }
+
+  static ListRowData _rowData(BuildContext context, Map<String, dynamic> squadra, int memberCount) {
+    final id = squadra['id'] as String? ?? '';
+    final lead = _text(squadra['capSquadraNome']);
+    final specializzazione = _text(squadra['specializzazione']);
+    final isActive = squadra['isActive'] as bool? ?? true;
+
+    return ListRowData(
+      title: _text(squadra['nome']) ?? 'Squadra senza nome',
+      meta: [if (lead != null) 'Lead $lead', _membriLabel(memberCount)].join(' · '),
+      // The prototype's third line is the active-cantiere count; the API does not carry one, so
+      // the squadra's own specializzazione keeps the line useful instead of inventing a number.
+      secondary: specializzazione,
+      status: isActive ? 'Attiva' : 'Inattiva',
+      statusTone: isActive ? ListStatusTone.good : ListStatusTone.bad,
+      onTap: () => context.push('/altro/squadre/$id', extra: squadra),
+      rowKey: ValueKey('squadra-row-$id'),
+    );
+  }
+
+  static String _membriLabel(int count) => count == 1 ? '1 membro' : '$count membri';
+
+  static String _squadreLabel(int count) => count == 1 ? '1 squadra' : '$count squadre';
+
+  static String? _text(Object? value) {
+    final text = value is String ? value.trim() : null;
+    return text == null || text.isEmpty ? null : text;
+  }
+}
+
+class _SquadraFilterSheet extends StatefulWidget {
+  const _SquadraFilterSheet({required this.initial, required this.leads});
+
+  final _SquadraFilters initial;
+  final List<String> leads;
+
+  @override
+  State<_SquadraFilterSheet> createState() => _SquadraFilterSheetState();
+}
+
+class _SquadraFilterSheetState extends State<_SquadraFilterSheet> {
+  late _SquadraFilters _draft = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            AppSpacing.pagePadding,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.md),
+              child: SheetHandle(),
+            ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Filtri',
+                    style: AppTextStyles.headlineLarge.copyWith(color: colors.ink),
+                  ),
+                ),
+                Text(
+                  'SQUADRE',
+                  style: AppTextStyles.docCode.copyWith(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                    color: colors.accentInk,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Restringi per stato e lead.',
+              style: AppTextStyles.caption.copyWith(color: colors.inkMuted),
+            ),
+            const SizedBox(height: 16),
+            _SquadraSheetField(
+              label: 'Stato',
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final status in _SquadraStatusFilter.values)
+                    _SquadraFilterChoice(
+                      key: ValueKey('squadreFilterStatus-${status.id}'),
+                      label: status.label,
+                      active: _draft.status == status,
+                      onTap: () => setState(() => _draft = _draft.copyWith(status: status)),
+                    ),
+                ],
+              ),
+            ),
+            if (widget.leads.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _SquadraSheetField(
+                label: 'Lead',
+                child: DropdownButtonFormField<String?>(
+                  key: const Key('squadreFilterLead'),
+                  initialValue: widget.leads.contains(_draft.lead) ? _draft.lead : null,
+                  isExpanded: true,
+                  decoration: _sheetFieldDecoration(context),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Tutti')),
+                    for (final lead in widget.leads)
+                      DropdownMenuItem(value: lead, child: Text(lead)),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _draft = v == null
+                        ? _draft.copyWith(clearLead: true)
+                        : _draft.copyWith(lead: v);
+                  }),
+                ),
+              ),
+            ],
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton.ghost(
+                    key: const Key('squadreFilterReset'),
+                    label: 'Azzera',
+                    onPressed: () => Navigator.pop(context, const _SquadraFilters()),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppButton(
+                    key: const Key('squadreFilterApply'),
+                    label: 'Applica filtri',
+                    onPressed: () => Navigator.pop(context, _draft),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _SquadraRow extends StatelessWidget {
-  const _SquadraRow({
-    required this.nome,
-    required this.specializzazione,
-    this.capoNome,
-    required this.memberCount,
-    required this.colore,
-    required this.isLast,
-    required this.onTap,
-  });
+/// The prototype's mono micro-label above a sheet field (`.filter-label`).
+class _SquadraSheetField extends StatelessWidget {
+  const _SquadraSheetField({required this.label, required this.child});
 
-  final String nome;
-  final String specializzazione;
-  final String? capoNome;
-
-  /// Derived client-side from `allUsersProvider` — the backend has no `membriCount`
-  /// field on the squadra list response (Gap 7 of the feature audit; web's own `nMembri` column
-  /// renders 0 for the same reason, per its `api.ts` header comment).
-  final int memberCount;
-  final String? colore;
-  final bool isLast;
-  final VoidCallback onTap;
-
-  String get _membriLabel => memberCount == 1 ? '1 membro' : '$memberCount membri';
-
-  String get _subtitle {
-    final hasCapo = capoNome != null && capoNome!.isNotEmpty;
-    if (specializzazione.isNotEmpty && hasCapo) {
-      return '$specializzazione · Capo: $capoNome · $_membriLabel';
-    }
-    if (hasCapo) return 'Capo: $capoNome · $_membriLabel';
-    if (specializzazione.isNotEmpty) return '$specializzazione · $_membriLabel';
-    return _membriLabel;
-  }
-
-  Color _parseColor(BuildContext context, String? hex) {
-    if (hex == null || hex.isEmpty) return context.colors.inkMuted;
-    final clean = hex.replaceFirst('#', '');
-    if (clean.length != 6) return context.colors.inkMuted;
-    return Color(int.parse('FF$clean', radix: 16));
-  }
+  final String label;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return ListRow(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: _parseColor(context, colore).withValues(alpha: 0.15),
-          borderRadius: AppRack.insetShape,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: AppTextStyles.docCode.copyWith(
+            fontSize: 7.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.6,
+            color: context.colors.inkMuted,
+          ),
         ),
-        child: Icon(LucideIcons.users, size: 20, color: _parseColor(context, colore)),
+        const SizedBox(height: 5),
+        child,
+      ],
+    );
+  }
+}
+
+InputDecoration _sheetFieldDecoration(BuildContext context) => InputDecoration(
+  isDense: true,
+  filled: true,
+  fillColor: context.colors.bg2,
+  contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+  border: OutlineInputBorder(
+    borderRadius: AppRack.freeShape,
+    borderSide: BorderSide(color: context.colors.borderLight),
+  ),
+  enabledBorder: OutlineInputBorder(
+    borderRadius: AppRack.freeShape,
+    borderSide: BorderSide(color: context.colors.borderLight),
+  ),
+  focusedBorder: OutlineInputBorder(
+    borderRadius: AppRack.freeShape,
+    borderSide: BorderSide(color: context.colors.ink),
+  ),
+);
+
+class _SquadraFilterChoice extends StatelessWidget {
+  const _SquadraFilterChoice({
+    super.key,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Semantics(
+      button: true,
+      selected: active,
+      label: label,
+      excludeSemantics: true,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+        child: Center(
+          widthFactor: 1,
+          heightFactor: 1,
+          child: AppTappable(
+            onTap: onTap,
+            borderRadius: AppRack.freeShape,
+            color: active ? colors.ink : colors.surface,
+            border: Border.all(color: active ? colors.ink : colors.borderLight),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Text(
+              label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.docCode.copyWith(
+                fontSize: 8,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.32,
+                color: active ? colors.surface : colors.inkMuted,
+              ),
+            ),
+          ),
+        ),
       ),
-      title: nome,
-      subtitle: _subtitle,
-      showDivider: !isLast,
-      onTap: onTap,
     );
   }
 }
