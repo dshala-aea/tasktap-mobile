@@ -72,8 +72,12 @@ class UpsertSessionResponse {
 
   final String clientId;
   final String workLogId;
-  final DateTime startTime;
-  final DateTime? endTime;
+
+  /// Time of day of the stored row (Rome wall clock) — a .NET `TimeSpan` on the wire ("09:11:00"),
+  /// NOT an instant. Parsing it with `DateTime.parse` threw after the server had committed and left
+  /// every batch pending for ever (field bug 2026-11-06). Nothing reads these two fields today.
+  final Duration startTime;
+  final Duration? endTime;
   final String? tipoOra;
   final bool isActive;
 
@@ -86,8 +90,10 @@ class UpsertSessionResponse {
   factory UpsertSessionResponse.fromJson(Map<String, dynamic> json) => UpsertSessionResponse(
     clientId: json['clientId'] as String,
     workLogId: json['workLogId'] as String,
-    startTime: DateTime.parse(json['startTime'] as String),
-    endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
+    // Tolerant on purpose: the response only confirms what the server stored. A time this phone
+    // cannot read must never turn an accepted batch into a failed one.
+    startTime: parseTimeSpan(json['startTime']) ?? Duration.zero,
+    endTime: parseTimeSpan(json['endTime']),
     tipoOra: json['tipoOra'] as String?,
     isActive: json['isActive'] as bool? ?? false,
     clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)?.toInt(),
