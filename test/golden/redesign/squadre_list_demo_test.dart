@@ -37,7 +37,7 @@ List<Map<String, dynamic>> _squadre() => [
   {
     'id': 'sq-nord',
     'nome': 'Squadra Nord',
-    'specializzazione': '',
+    'specializzazione': 'Elettrico',
     'capSquadraNome': 'Daniel',
     'isActive': true,
   },

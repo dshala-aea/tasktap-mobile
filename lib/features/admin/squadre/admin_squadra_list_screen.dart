@@ -128,7 +128,11 @@ class _AdminSquadraListScreenState extends ConsumerState<AdminSquadraListScreen>
   @override
   Widget build(BuildContext context) {
     final squadreAsync = ref.watch(adminSquadreProvider);
-    final users = ref.watch(allUsersProvider(true)).valueOrNull ?? const [];
+    // Only ask for the member projection once the squadre are actually here: a failed or still
+    // loading list cannot use it, and firing it alongside every error would be a wasted read.
+    final users = squadreAsync.hasValue
+        ? ref.watch(allUsersProvider(true)).valueOrNull ?? const []
+        : const <Map<String, dynamic>>[];
 
     // One bulk fetch for the whole list, not one per row. `squadraId` is the derived field
     // UsersController.PopulateSquadreAsync projects onto every user response.
@@ -141,99 +145,84 @@ class _AdminSquadraListScreenState extends ConsumerState<AdminSquadraListScreen>
       memberNames.putIfAbsent(squadraId, () => []).add(userDisplayName(u));
     }
 
-    final squadre = squadreAsync.valueOrNull ?? const <Map<String, dynamic>>[];
+    final rows = squadreAsync.valueOrNull ?? const <Map<String, dynamic>>[];
     final leads = <String>{
-      for (final s in squadre)
+      for (final s in rows)
         if (_text(s['capSquadraNome']) != null) _text(s['capSquadraNome'])!,
     }.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
-    final activeFilters = _filters.reconciled(hasLead: leads.contains);
+    final filters = _filters.reconciled(hasLead: leads.contains);
+    final hasActiveFilter =
+        _query.trim().isNotEmpty ||
+        filters.hasFacets ||
+        filters.status != _SquadraStatusFilter.tutte;
+    final isLoading = squadreAsync.isLoading && !squadreAsync.hasValue && !squadreAsync.hasError;
+    final state = squadreAsync.hasError
+        ? ListShellState.unavailable
+        : isLoading
+        ? ListShellState.loading
+        : ListShellState.content;
+    final activeCount = rows.where((s) => s['isActive'] as bool? ?? true).length;
+    final groups = state == ListShellState.content
+        ? _groups(
+            rows: rows,
+            memberCounts: memberCounts,
+            memberNames: memberNames,
+            filters: filters,
+          )
+        : const <ListGroupData>[];
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: Column(
-          children: [
-            ScreenHeader(
-              title: 'Squadre',
-              subtitle: 'Chi lavora insieme e su quali cantieri.',
-              subtitleMaxLines: 2,
-              showBack: true,
-              actions: [
-                CapabilityGate(
-                  capability: 'team.squadra.write',
-                  child: ListHeaderAction(
-                    label: 'Nuovo',
-                    onPressed: () => context.push('/altro/squadre/nuovo'),
-                  ),
-                ),
-              ],
-            ),
-            AppSearchBar(
-              controller: _searchCtrl,
-              hint: 'Cerca squadra, lead o membro…',
-              onChanged: (q) => setState(() => _query = q),
-            ),
-            ListFilterRow(
-              filters: const [
-                ListFilterChipData(label: 'Attive', id: 'attive'),
-                ListFilterChipData(label: 'Tutte', id: 'tutte'),
-                ListFilterChipData(label: 'Inattive', id: 'inattive'),
-              ],
-              activeId: activeFilters.status.id,
-              onSelected: _selectStatus,
-              onOpenFilters: () => _openFilterSheet(leads: leads),
-            ),
-            Expanded(
-              child: squadreAsync.when(
-                loading: () => _scrollable(
-                  context,
-                  const ListLoadingSkeleton(),
-                  () => ref.refresh(adminSquadreProvider.future),
-                ),
-                // Offline is not a failure: nothing was attempted, and retrying cannot help until
-                // the radio is back. The red "Impossibile caricare i dati" card would read as
-                // "your squadre may be gone", which is the one thing this screen cannot know.
-                error: (e, _) => !ref.watch(isOnlineProvider)
-                    ? _scrollable(
-                        context,
-                        UnavailableState(
-                          icon: LucideIcons.wifiOff,
-                          titolo: 'Squadre non disponibili offline',
-                          motivo:
-                              'Le squadre si leggono con la connessione: non vengono scaricate '
-                              'sul dispositivo.',
-                          action: AppButton(
-                            label: 'Riprova',
-                            size: AppButtonSize.sm,
-                            fullWidth: false,
-                            onPressed: () => ref.invalidate(adminSquadreProvider),
-                          ),
-                        ),
-                        () => ref.refresh(adminSquadreProvider.future),
-                      )
-                    : _scrollable(
-                        context,
-                        ErrorState(onRetry: () => ref.invalidate(adminSquadreProvider)),
-                        () => ref.refresh(adminSquadreProvider.future),
-                      ),
-                data: (rows) => _content(
-                  context,
-                  rows: rows,
-                  memberCounts: memberCounts,
-                  memberNames: memberNames,
-                  filters: activeFilters,
-                ),
-              ),
-            ),
-          ],
+    return ListShell(
+      title: 'Squadre',
+      subtitle: 'Chi lavora insieme e su quali cantieri.',
+      showBack: true,
+      searchHint: 'Cerca squadra, lead o membro…',
+      searchController: _searchCtrl,
+      onSearchChanged: (q) => setState(() => _query = q),
+      filters: const [
+        ListFilterChipData(label: 'Attive', id: 'attive'),
+        ListFilterChipData(label: 'Tutte', id: 'tutte'),
+        ListFilterChipData(label: 'Inattive', id: 'inattive'),
+      ],
+      activeFilterId: filters.status.id,
+      onFilterSelected: _selectStatus,
+      onOpenFilters: () => _openFilterSheet(leads: leads),
+      action: CapabilityGate(
+        capability: 'team.squadra.write',
+        child: ListHeaderAction(
+          label: 'Nuovo',
+          onPressed: () => context.push('/altro/squadre/nuovo'),
         ),
       ),
+      groups: groups,
+      summary: groups.isEmpty
+          ? null
+          : ListSummaryData(left: _squadreLabel(rows.length), right: '$activeCount attive'),
+      state: state,
+      empty: _emptyState(hasActiveFilter: hasActiveFilter),
+      // Offline is not a failure: nothing was attempted, and retrying cannot help until the radio
+      // is back. The red "Impossibile caricare i dati" card would read as "your squadre may be
+      // gone", which is the one thing this screen cannot know.
+      unavailable: !ref.watch(isOnlineProvider)
+          ? UnavailableState(
+              icon: LucideIcons.wifiOff,
+              titolo: 'Squadre non disponibili offline',
+              motivo:
+                  'Le squadre si leggono con la connessione: non vengono scaricate '
+                  'sul dispositivo.',
+              action: AppButton(
+                label: 'Riprova',
+                size: AppButtonSize.sm,
+                fullWidth: false,
+                onPressed: () => ref.invalidate(adminSquadreProvider),
+              ),
+            )
+          : ErrorState(onRetry: () => ref.invalidate(adminSquadreProvider)),
+      onRefresh: () => ref.refresh(adminSquadreProvider.future),
     );
   }
 
-  Widget _content(
-    BuildContext context, {
+  List<ListGroupData> _groups({
     required List<Map<String, dynamic>> rows,
     required Map<String, int> memberCounts,
     required Map<String, List<String>> memberNames,
@@ -255,7 +244,7 @@ class _AdminSquadraListScreenState extends ConsumerState<AdminSquadraListScreen>
           (memberNames[id]?.any((name) => name.toLowerCase().contains(q)) ?? false);
     }).toList();
 
-    final groups = <ListGroupData>[
+    return <ListGroupData>[
       for (final (title, isActive) in const [('Attive', true), ('Inattive', false)])
         if (filtered.any((s) => (s['isActive'] as bool? ?? true) == isActive))
           ListGroupData(
@@ -267,89 +256,9 @@ class _AdminSquadraListScreenState extends ConsumerState<AdminSquadraListScreen>
             ],
           ),
     ];
-
-    final activeCount = rows.where((s) => s['isActive'] as bool? ?? true).length;
-    final hasActiveFilter =
-        q.isNotEmpty || filters.hasFacets || filters.status != _SquadraStatusFilter.tutte;
-
-    Future<void> onRefresh() => ref.refresh(adminSquadreProvider.future);
-
-    if (groups.isEmpty) {
-      return _scrollable(
-        context,
-        _emptyState(context, hasRows: rows.isNotEmpty, hasActiveFilter: hasActiveFilter),
-        onRefresh,
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          for (final group in groups) ...[
-            SliverToBoxAdapter(
-              child: _framed(
-                child: ListGroupHeader(title: group.title!, count: group.count),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => KeyedSubtree(
-                    key: group.rows[i].rowKey,
-                    child: ListDocumentRow(data: group.rows[i]),
-                  ),
-                  childCount: group.rows.length,
-                ),
-              ),
-            ),
-          ],
-          SliverToBoxAdapter(
-            child: _framed(
-              child: ListSummaryFooter(
-                data: ListSummaryData(
-                  left: _squadreLabel(rows.length),
-                  right: '$activeCount attive',
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-        ],
-      ),
-    );
   }
 
-  Widget _scrollable(BuildContext context, Widget child, Future<void> Function() onRefresh) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Center(
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-  }
-
-  Widget _framed({required Widget child}) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
-        ),
-      ),
-    );
-  }
-
-  Widget _emptyState(BuildContext context, {required bool hasRows, required bool hasActiveFilter}) {
+  Widget _emptyState({required bool hasActiveFilter}) {
     if (hasActiveFilter) {
       return EmptyState(
         icon: LucideIcons.searchX,
@@ -359,17 +268,10 @@ class _AdminSquadraListScreenState extends ConsumerState<AdminSquadraListScreen>
             : 'Nessuna squadra corrisponde ai filtri selezionati.',
       );
     }
-    if (!hasRows) {
-      return const EmptyState(
-        icon: LucideIcons.users,
-        title: 'Nessuna squadra',
-        body: 'Crea una nuova squadra con il pulsante Nuovo.',
-      );
-    }
     return const EmptyState(
-      icon: LucideIcons.searchX,
-      title: 'Nessun risultato',
-      body: 'Nessuna squadra da mostrare.',
+      icon: LucideIcons.users,
+      title: 'Nessuna squadra',
+      body: 'Crea una nuova squadra con il pulsante Nuovo.',
     );
   }
 
@@ -484,21 +386,25 @@ class _SquadraFilterSheetState extends State<_SquadraFilterSheet> {
               const SizedBox(height: 16),
               _SquadraSheetField(
                 label: 'Lead',
-                child: DropdownButtonFormField<String?>(
-                  key: const Key('squadreFilterLead'),
-                  initialValue: widget.leads.contains(_draft.lead) ? _draft.lead : null,
-                  isExpanded: true,
-                  decoration: _sheetFieldDecoration(context),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Tutti')),
-                    for (final lead in widget.leads)
-                      DropdownMenuItem(value: lead, child: Text(lead)),
-                  ],
-                  onChanged: (v) => setState(() {
-                    _draft = v == null
-                        ? _draft.copyWith(clearLead: true)
-                        : _draft.copyWith(lead: v);
-                  }),
+                child: Semantics(
+                  label: 'Lead',
+                  container: true,
+                  child: DropdownButtonFormField<String?>(
+                    key: const Key('squadreFilterLead'),
+                    initialValue: widget.leads.contains(_draft.lead) ? _draft.lead : null,
+                    isExpanded: true,
+                    decoration: _sheetFieldDecoration(context),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Tutti')),
+                      for (final lead in widget.leads)
+                        DropdownMenuItem(value: lead, child: Text(lead)),
+                    ],
+                    onChanged: (v) => setState(() {
+                      _draft = v == null
+                          ? _draft.copyWith(clearLead: true)
+                          : _draft.copyWith(lead: v);
+                    }),
+                  ),
                 ),
               ),
             ],
@@ -592,34 +498,40 @@ class _SquadraFilterChoice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final chip = DecoratedBox(
+      decoration: BoxDecoration(
+        color: active ? colors.ink : colors.surface,
+        borderRadius: AppRack.freeShape,
+        border: Border.all(color: active ? colors.ink : colors.borderLight),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Text(
+          label.toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyles.docCode.copyWith(
+            fontSize: 8,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.32,
+            color: active ? colors.surface : colors.inkMuted,
+          ),
+        ),
+      ),
+    );
+
     return Semantics(
       button: true,
       selected: active,
       label: label,
+      onTap: onTap,
       excludeSemantics: true,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-        child: Center(
-          widthFactor: 1,
-          heightFactor: 1,
-          child: AppTappable(
-            onTap: onTap,
-            borderRadius: AppRack.freeShape,
-            color: active ? colors.ink : colors.surface,
-            border: Border.all(color: active ? colors.ink : colors.borderLight),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Text(
-              label.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.docCode.copyWith(
-                fontSize: 8,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.32,
-                color: active ? colors.surface : colors.inkMuted,
-              ),
-            ),
-          ),
+      child: AppTappable(
+        onTap: onTap,
+        borderRadius: AppRack.freeShape,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+          child: Center(widthFactor: 1, heightFactor: 1, child: chip),
         ),
       ),
     );

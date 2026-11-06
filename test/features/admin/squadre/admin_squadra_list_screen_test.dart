@@ -5,6 +5,8 @@
 // member counts and member-name search, the real Filtri sheet, and the `team.squadra.write` gate
 // on `Nuovo` (moved from the FAB into the header).
 
+import 'dart:ui' show SemanticsAction;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,32 +41,34 @@ class _FakeAdminApiClient extends AdminApiClient {
 class _FailingAdminApiClient extends AdminApiClient {
   _FailingAdminApiClient() : super(Dio());
 
+  int usersCallCount = 0;
+
   @override
   Future<List<Map<String, dynamic>>> fetchSquadre() async =>
       throw DioException(requestOptions: RequestOptions(path: '/api/squadre'));
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchAllUsersWithSquadraInfo({bool activeOnly = true}) async {
+    usersCallCount++;
+    return const [];
+  }
 }
 
-Widget _buildView(
-  AdminApiClient api, {
-  bool? online,
-  Set<String> capabilities = const {},
-  bool entitlementLoaded = true,
-}) {
+Widget _buildView(AdminApiClient api, {bool? online, Set<String> capabilities = const {}}) {
   return ProviderScope(
     overrides: [
       adminApiClientProvider.overrideWithValue(api),
       if (online != null) isOnlineProvider.overrideWithValue(online),
-      if (entitlementLoaded)
-        cachedEntitlementProvider.overrideWith(
-          (ref) => Future.value(
-            Entitlement(
-              features: const {},
-              capabilities: capabilities,
-              seatType: 'office',
-              fetchedAt: DateTime.utc(2026, 9, 23),
-            ),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(
+          Entitlement(
+            features: const {},
+            capabilities: capabilities,
+            seatType: 'office',
+            fetchedAt: DateTime.utc(2026, 9, 23),
           ),
         ),
+      ),
     ],
     child: const MaterialApp(home: AdminSquadraListScreen()),
   );
@@ -331,6 +335,33 @@ void main() {
     expect(find.text('Squadra Nord'), findsOneWidget);
     expect(find.text('Squadra Sud'), findsNothing);
     expect(find.text('Squadra Est'), findsNothing);
+
+    await _dispose(tester);
+  });
+
+  testWidgets('sheet status chips are 44px targets with a semantic tap action', (tester) async {
+    await _pump(tester, _fakeApi());
+    await _openFilters(tester);
+
+    final chipFinder = find.byKey(const ValueKey('squadreFilterStatus-inattive'));
+    final size = tester.getSize(chipFinder);
+    expect(size.height, greaterThanOrEqualTo(44));
+    expect(size.width, greaterThanOrEqualTo(44));
+
+    final semantics = tester.getSemantics(chipFinder).getSemanticsData();
+    expect(semantics.hasAction(SemanticsAction.tap), isTrue);
+    expect(semantics.flagsCollection.isButton, isTrue);
+
+    await _dispose(tester);
+  });
+
+  testWidgets('the bulk users fetch is not made while the squadre list cannot load', (
+    tester,
+  ) async {
+    final api = _FailingAdminApiClient();
+    await _pump(tester, api, online: true);
+
+    expect(api.usersCallCount, 0);
 
     await _dispose(tester);
   });
