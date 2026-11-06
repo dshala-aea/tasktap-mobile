@@ -9,6 +9,7 @@ import '../../../core/theme/app_rack.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
 import '../../../data/local/app_database.dart' show Colleague;
 import '../../../data/magazzino/magazzino_api_client.dart';
 import '../../../presentation/providers/schedule_providers.dart' show allColleaguesProvider;
@@ -41,14 +42,21 @@ extension on _MagazzinoStatusFilter {
     _MagazzinoStatusFilter.secondari => 'Secondari',
   };
 
-  /// The `tipo` value this preset stands for, or null for "both".
+  /// The `tipo` label the sheet's `Tipo` field shows for this preset, or null for "both".
+  ///
+  /// `MagazzinoDto` documents only `Sede` and `Furgone`; any other value is treated as a Sede
+  /// (principale), so grouping and filtering share the same `isFurgone` predicate.
   String? get tipo => switch (this) {
     _MagazzinoStatusFilter.tutti => null,
     _MagazzinoStatusFilter.principali => 'Sede',
     _MagazzinoStatusFilter.secondari => 'Furgone',
   };
 
-  bool matches(MagazzinoDto magazzino) => tipo == null || magazzino.tipo == tipo;
+  bool matches(MagazzinoDto magazzino) => switch (this) {
+    _MagazzinoStatusFilter.tutti => true,
+    _MagazzinoStatusFilter.principali => !magazzino.isFurgone,
+    _MagazzinoStatusFilter.secondari => magazzino.isFurgone,
+  };
 }
 
 /// The applied quick preset. Search text lives on the screen state beside it.
@@ -104,8 +112,9 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
     try {
       await ref.read(magazziniProvider.future);
     } catch (_) {
-      // The provider error is already rendered by the unavailable/error branch; letting it escape
-      // here would surface as an uncaught RefreshIndicator failure (and Sentry noise).
+      // A failed refresh after the first load keeps the rows the technician can already read.
+      // `build` surfaces that as a stale-data banner; letting the error escape would instead be an
+      // uncaught RefreshIndicator failure (and Sentry noise).
     }
   }
 
@@ -153,10 +162,20 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
 
     final activeCount = filtered.where((m) => m.isActive).length;
     final hasActiveFilter = search.isNotEmpty || _filters.isActive;
+    final canCreate =
+        ref
+            .watch(cachedEntitlementProvider)
+            .value
+            ?.capabilities
+            .contains('magazzino.warehouse.write') ??
+        false;
 
     final isLoading =
         magazziniAsync.isLoading && !magazziniAsync.hasValue && !magazziniAsync.hasError;
     final isUnavailable = magazziniAsync.hasError && !magazziniAsync.hasValue;
+    // A refresh that failed after the first successful read keeps the previous rows; without this
+    // line they would look current. The first-load failure still takes the `ErrorState` branch.
+    final isStale = magazziniAsync.hasError && magazziniAsync.hasValue;
 
     Widget unavailable() => magazziniAsync.error is MagazziniOfflineException
         ? const UnavailableState(
@@ -179,10 +198,12 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
               : 'Nessun magazzino corrisponde ai filtri selezionati.',
         );
       }
-      return const EmptyState(
+      return EmptyState(
         icon: LucideIcons.warehouse,
         title: 'Nessun magazzino',
-        body: 'Non è ancora stato creato nessun magazzino. Usa Nuovo per crearne uno.',
+        body: canCreate
+            ? 'Non è ancora stato creato nessun magazzino. Usa Nuovo per crearne uno.'
+            : 'Non è ancora stato creato nessun magazzino.',
       );
     }
 
@@ -285,6 +306,17 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
               onSelected: _selectStatus,
               onOpenFilters: _openFilters,
             ),
+            if (isStale)
+              framed(
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.sm),
+                  child: InlineAlert(
+                    message:
+                        'Impossibile aggiornare. I dati mostrati potrebbero non essere aggiornati.',
+                    icon: LucideIcons.alertCircle,
+                  ),
+                ),
+              ),
             Expanded(child: content),
           ],
         ),
@@ -406,7 +438,7 @@ class _MagazzinoFilterSheetState extends State<_MagazzinoFilterSheet> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Restringi per stato, contesto e periodo. Nessun identificativo interno.',
+              'Restringi per stato e tipo. Nessun identificativo interno.',
               style: AppTextStyles.caption.copyWith(color: colors.inkMuted),
             ),
             const SizedBox(height: 16),
@@ -509,27 +541,35 @@ class _MagazzinoFilterChoice extends StatelessWidget {
       button: true,
       selected: active,
       label: label,
+      onTap: onTap,
       excludeSemantics: true,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-        child: Center(
-          widthFactor: 1,
-          heightFactor: 1,
-          child: AppTappable(
-            onTap: onTap,
-            borderRadius: AppRack.freeShape,
-            color: active ? colors.ink : colors.surface,
-            border: Border.all(color: active ? colors.ink : colors.borderLight),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Text(
-              label.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.docCode.copyWith(
-                fontSize: 8,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.32,
-                color: active ? colors.surface : colors.inkMuted,
+      child: AppTappable(
+        onTap: onTap,
+        borderRadius: AppRack.freeShape,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: active ? colors.ink : colors.surface,
+                borderRadius: AppRack.freeShape,
+                border: Border.all(color: active ? colors.ink : colors.borderLight),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.docCode.copyWith(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.32,
+                    color: active ? colors.surface : colors.inkMuted,
+                  ),
+                ),
               ),
             ),
           ),

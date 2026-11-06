@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,6 +35,20 @@ class _FailingMagazzinoApiClient extends MagazzinoApiClient {
   @override
   Future<List<MagazzinoDto>> getMagazzini({bool? isActive, String? tipo}) async =>
       throw Exception('boom');
+}
+
+class _FlakyMagazzinoApiClient extends MagazzinoApiClient {
+  _FlakyMagazzinoApiClient(this.magazzini) : super(Dio());
+
+  final List<MagazzinoDto> magazzini;
+  bool _failNext = false;
+
+  @override
+  Future<List<MagazzinoDto>> getMagazzini({bool? isActive, String? tipo}) async {
+    if (_failNext) throw Exception('boom');
+    _failNext = true;
+    return magazzini;
+  }
 }
 
 MagazzinoDto _sede(String id, String nome, {String? indirizzo, bool isActive = true}) =>
@@ -194,6 +209,43 @@ void main() {
     await _dispose(tester);
   });
 
+  testWidgets('the sheet status chips are 44px targets with a semantic tap action', (tester) async {
+    final semanticsHandle = tester.ensureSemantics();
+    await _seedColleagues(db);
+    await _pump(tester, db);
+    await _openFilters(tester);
+
+    final chip = find.byKey(const ValueKey('magazziniFilterStatus-secondari'));
+    expect(tester.getSize(chip).height, greaterThanOrEqualTo(44));
+    expect(tester.getSize(chip).width, greaterThanOrEqualTo(44));
+
+    final data = tester.getSemantics(chip).getSemanticsData();
+    expect(data.flagsCollection.isButton, isTrue);
+    expect(data.hasAction(SemanticsAction.tap), isTrue);
+
+    semanticsHandle.dispose();
+    await _dispose(tester);
+  });
+
+  testWidgets('an unknown tipo groups and filters as Principali', (tester) async {
+    await _pump(
+      tester,
+      db,
+      api: _FakeMagazzinoApiClient([
+        const MagazzinoDto(id: 'm4', nome: 'Magazzino Deposito', tipo: 'Deposito', isActive: true),
+      ]),
+    );
+
+    expect(find.text('Principali'), findsOneWidget);
+    expect(find.text('PRINCIPALE'), findsOneWidget);
+
+    await tester.tap(find.text('PRINCIPALI'));
+    await tester.pumpAndSettle();
+    expect(find.text('Magazzino Deposito'), findsOneWidget);
+
+    await _dispose(tester);
+  });
+
   testWidgets('the Tipo field is the same facet as the status chips', (tester) async {
     await _seedColleagues(db);
     await _pump(tester, db);
@@ -246,11 +298,42 @@ void main() {
     await _dispose(tester);
   });
 
-  testWidgets('a genuinely empty catalogue shows the create hint', (tester) async {
+  testWidgets('a failed refresh keeps the rows and shows a stale-data banner', (tester) async {
+    await _pump(tester, db, api: _FlakyMagazzinoApiClient(_prototypeRows()));
+    expect(find.text('Magazzino Milano'), findsOneWidget);
+
+    await tester.fling(find.byType(CustomScrollView), const Offset(0, 300), 1000);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(InlineAlert), findsOneWidget);
+    expect(find.textContaining('Impossibile aggiornare'), findsOneWidget);
+    expect(find.text('Magazzino Milano'), findsOneWidget);
+    expect(find.byType(ErrorState), findsNothing);
+
+    await _dispose(tester);
+  });
+
+  testWidgets('a genuinely empty catalogue never promises Nuovo without write access', (
+    tester,
+  ) async {
     await _pump(tester, db, api: _FakeMagazzinoApiClient(const []));
 
     expect(find.byType(EmptyState), findsOneWidget);
     expect(find.text('Nessun magazzino'), findsOneWidget);
+    expect(find.text('Non è ancora stato creato nessun magazzino.'), findsOneWidget);
+    expect(find.textContaining('Usa Nuovo'), findsNothing);
+
+    await _dispose(tester);
+  });
+
+  testWidgets('an empty catalogue with write access points at Nuovo', (tester) async {
+    await _pump(
+      tester,
+      db,
+      api: _FakeMagazzinoApiClient(const []),
+      entitlement: _entitlement({'magazzino.warehouse.write'}),
+    );
+
     expect(find.textContaining('Usa Nuovo'), findsOneWidget);
 
     await _dispose(tester);
