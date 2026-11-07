@@ -151,6 +151,22 @@ Future<void> _seed(AppDatabase db) async {
           categoria: const Value('Caldaie'),
         ),
       );
+  // Inactive rows stay in the list; this one verifies the restored `Inattivo` stamp.
+  await db
+      .into(db.prodottiAssistenza)
+      .insert(
+        ProdottiAssistenzaCompanion.insert(
+          id: 'prod-2',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2023, 6, 1),
+          name: 'Filtro dismesso',
+          customerId: 'cust-rossi',
+          locationId: 'loc-milano',
+          serialNumber: const Value('SN-10'),
+          categoria: const Value('Filtri'),
+          isActive: const Value(false),
+        ),
+      );
 }
 
 List<Override> _overrides(AppDatabase db) => [

@@ -103,6 +103,13 @@ String? _joinMeta(List<String> parts) => parts.isEmpty ? null : parts.join(' · 
 String _countLabel(int count, String singular, String plural) =>
     '$count ${count == 1 ? singular : plural}';
 
+/// The server-supplied contract price, formatted as the old row did. Null when absent (the Drift
+/// mirror has no price column, so an offline row stays empty rather than printing €0,00).
+String? _contractPrice(Map<String, dynamic> contract) {
+  final price = contract['price'] as num?;
+  return price == null ? null : '€${price.toStringAsFixed(2)}';
+}
+
 class _CustomerDetailBody extends ConsumerWidget {
   const _CustomerDetailBody({required this.customer, required this.customerId});
 
@@ -141,6 +148,7 @@ class _CustomerDetailBody extends ConsumerWidget {
     final sediCount = overview?.sediAttive ?? locations?.length;
     final contrattiCount = overview?.contratti ?? contracts?.length;
 
+    final companyName = customer.companyName.trim();
     final sintesiFacts = _sintesiFacts(customer);
     final hasNotes = _present(customer.notes);
     final relazioniEmpty =
@@ -153,8 +161,8 @@ class _CustomerDetailBody extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Below 360 the 9px mono section meta cannot share the row with a 17px section title: the
-        // trailing text becomes the only thing on screen and pushes the title out. Drop the meta
-        // there and let each Relazioni group header carry its own count instead.
+        // trailing text becomes the only thing on screen and pushes the title out. Every section
+        // meta is dropped there; only Relazioni preserves its counts, in its group headers.
         final narrowHeader = constraints.maxWidth < 360;
 
         return DetailScaffold(
@@ -190,7 +198,7 @@ class _CustomerDetailBody extends ConsumerWidget {
             kind: 'Summary · cliente',
             kicker: 'Summary',
             kickerContext: 'cliente',
-            title: customer.companyName.trim().isEmpty ? 'Cliente' : customer.companyName,
+            title: companyName.isEmpty ? 'Cliente' : companyName,
             subtitle: _heroFacts(customer, sediCount: sediCount, contrattiCount: contrattiCount),
             status: DetailStatus(label: customer.isActive ? 'Attivo' : 'Inattivo'),
             primaryAction: DetailAction(
@@ -431,10 +439,13 @@ class _CustomerDetailBody extends ConsumerWidget {
             DetailLinkRow(
               key: ValueKey('cliente-asset-${prodotti[i]['id']}'),
               title: prodotti[i]['name'] as String? ?? 'Asset',
-              meta: _present(prodotti[i]['serialNumber'] as String?)
-                  ? prodotti[i]['serialNumber'] as String?
-                  : (prodotti[i]['categoria'] as String?),
               showDivider: i < prodotti.length - 1,
+              trailing: _MetaWithStatus(
+                meta: _present(prodotti[i]['serialNumber'] as String?)
+                    ? prodotti[i]['serialNumber'] as String?
+                    : (prodotti[i]['categoria'] as String?),
+                isActive: prodotti[i]['isActive'] as bool? ?? true,
+              ),
               onTap: () => context.push('/altro/prodotti/${prodotti[i]['id']}', extra: prodotti[i]),
             ),
         ],
@@ -525,12 +536,14 @@ class _CustomerDetailBody extends ConsumerWidget {
               key: ValueKey('cliente-contratto-${contracts[i]['id']}'),
               title: contracts[i]['name'] as String? ?? 'Contratto',
               showDivider: i < contracts.length - 1,
-              trailing: StatusStamp(
-                stato: (contracts[i]['isActive'] as bool? ?? true) ? 'Attivo' : 'Inattivo',
-                size: StampSize.small,
+              trailing: _MetaWithStatus(
+                meta: _contractPrice(contracts[i]),
+                isActive: contracts[i]['isActive'] as bool? ?? true,
+                alwaysShowStatus: true,
               ),
               semanticsLabel:
-                  '${contracts[i]['name'] as String? ?? 'Contratto'}. '
+                  '${contracts[i]['name'] as String? ?? 'Contratto'}'
+                  '${_contractPrice(contracts[i]) == null ? '' : '. ${_contractPrice(contracts[i])}'}. '
                   '${(contracts[i]['isActive'] as bool? ?? true) ? 'Attivo' : 'Inattivo'}',
               onTap: () =>
                   context.push('/altro/contratti/${contracts[i]['id']}', extra: contracts[i]),
@@ -703,6 +716,49 @@ class _RowActions extends StatelessWidget {
             tooltip: deleteTooltip ?? 'Elimina',
             onPressed: onDelete!,
           ),
+      ],
+    );
+  }
+}
+
+/// The trailing side of an asset/contract row: an optional mono meta value (serial, category or
+/// price) followed by the inactive/active stamp. `DetailLinkRow` accepts either a meta or a
+/// trailing widget, never both, so the row composes them here.
+class _MetaWithStatus extends StatelessWidget {
+  const _MetaWithStatus({this.meta, required this.isActive, this.alwaysShowStatus = false});
+
+  final String? meta;
+  final bool isActive;
+
+  /// Contracts keep their old always-visible Attivo/Inattivo pill; assets only mark inactive rows.
+  final bool alwaysShowStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasMeta = _present(meta);
+    final showStatus = alwaysShowStatus || !isActive;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (hasMeta)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(
+              meta!.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: AppTextStyles.docCode.copyWith(
+                fontSize: 7.5,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.3,
+                color: context.colors.inkMuted,
+              ),
+            ),
+          ),
+        if (hasMeta && showStatus) const SizedBox(width: 6),
+        if (showStatus) StatusStamp(stato: isActive ? 'Attivo' : 'Inattivo', size: StampSize.small),
       ],
     );
   }

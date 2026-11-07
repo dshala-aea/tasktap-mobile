@@ -287,6 +287,42 @@ void main() {
         customerId: 'cust-1',
         title: 'Intervento con un titolo lungo',
       );
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/contracts',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
+            {
+              'id': 'contr-1',
+              'name': 'Manutenzione annuale con un nome lungo',
+              'customerId': 'cust-1',
+              'isActive': true,
+              'price': 1200.0,
+            },
+          ],
+        }, '/api/contracts'),
+      );
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
+            {
+              'id': 'prod-1',
+              'name': 'Filtro dismesso con un nome lungo',
+              'customerId': 'cust-1',
+              'isActive': false,
+              'serialNumber': 'SN-123456789',
+            },
+          ],
+        }, '/api/prodottoassistenza'),
+      );
 
       await tester.binding.setSurfaceSize(const Size(320, 2600));
       await tester.pumpWidget(buildScreen('cust-1'));
@@ -396,6 +432,7 @@ void main() {
               'name': 'Manutenzione annuale',
               'customerId': 'cust-1',
               'isActive': true,
+              'price': 120.0,
             },
           ],
         }, '/api/contracts'),
@@ -405,6 +442,14 @@ void main() {
 
       expect(find.text('Documenti'), findsOneWidget);
       expect(find.text('Manutenzione annuale'), findsOneWidget);
+      expect(find.text('€120.00'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('cliente-contratto-contr-1')),
+          matching: find.text('ATTIVO'),
+        ),
+        findsOneWidget,
+      );
 
       final captured =
           verify(
@@ -556,15 +601,24 @@ void main() {
               'isActive': true,
               'serialNumber': 'SN-42',
             },
+            {
+              'id': 'prod-2',
+              'name': 'Filtro dismesso',
+              'customerId': 'cust-1',
+              'isActive': false,
+              'serialNumber': 'SN-10',
+            },
           ],
         }, '/api/prodottoassistenza'),
       );
 
       await pumpScreen(tester);
 
-      expect(find.text('ASSET · 1'), findsOneWidget);
+      expect(find.text('ASSET · 2'), findsOneWidget);
       expect(find.text('Caldaia condominio'), findsOneWidget);
       expect(find.text('SN-42'), findsOneWidget);
+      expect(find.text('Filtro dismesso'), findsOneWidget);
+      expect(find.text('INATTIVO'), findsOneWidget);
 
       final captured =
           verify(
