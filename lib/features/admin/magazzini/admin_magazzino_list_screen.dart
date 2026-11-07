@@ -207,120 +207,63 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
       );
     }
 
-    Widget framed(Widget child) => Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
+    final state = isUnavailable
+        ? ListShellState.unavailable
+        : isLoading
+        ? ListShellState.loading
+        : ListShellState.content;
+
+    return ListShell(
+      title: 'Magazzini',
+      subtitle: 'Dove sono le cose e cosa manca in ogni luogo.',
+      showBack: true,
+      action: CapabilityGate(
+        capability: 'magazzino.warehouse.write',
+        child: ListHeaderAction(
+          label: 'Nuovo',
+          onPressed: () => context.push('/altro/magazzino/magazzini/nuovo'),
         ),
       ),
-    );
-
-    Widget scrollable(Widget child) => RefreshIndicator(
-      onRefresh: _refresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Center(
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-
-    final Widget content;
-    if (isLoading) {
-      content = scrollable(const ListLoadingSkeleton());
-    } else if (isUnavailable) {
-      content = scrollable(unavailable());
-    } else if (groups.isEmpty) {
-      content = scrollable(empty());
-    } else {
-      final summary = ListSummaryData(
-        left: _magazziniLabel(filtered.length),
-        right: '$activeCount ${activeCount == 1 ? 'attivo' : 'attivi'}',
-      );
-      content = RefreshIndicator(
-        onRefresh: _refresh,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            for (final group in groups) ...[
-              SliverToBoxAdapter(
-                child: framed(ListGroupHeader(title: group.title!, count: group.count)),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) => KeyedSubtree(
-                      key: group.rows[i].rowKey,
-                      child: ListDocumentRow(data: group.rows[i]),
+      banner: const OfflineSyncBanner(),
+      searchController: _searchCtrl,
+      searchHint: 'Cerca magazzino, tipo o indirizzo…',
+      onSearchChanged: (q) => setState(() => _query = q),
+      filters: [
+        for (final status in _MagazzinoStatusFilter.values)
+          ListFilterChipData(label: status.label, id: status.id),
+      ],
+      activeFilterId: _filters.status.id,
+      onFilterSelected: _selectStatus,
+      onOpenFilters: _openFilters,
+      bodyHeader: isStale
+          ? Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.sm),
+                    child: const InlineAlert(
+                      message:
+                          'Impossibile aggiornare. I dati mostrati potrebbero non essere aggiornati.',
+                      icon: LucideIcons.alertCircle,
                     ),
-                    childCount: group.rows.length,
                   ),
                 ),
               ),
-            ],
-            SliverToBoxAdapter(child: framed(ListSummaryFooter(data: summary))),
-            SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-          ],
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const OfflineSyncBanner(),
-            ScreenHeader(
-              title: 'Magazzini',
-              subtitle: 'Dove sono le cose e cosa manca in ogni luogo.',
-              subtitleMaxLines: 2,
-              showBack: true,
-              actions: [
-                CapabilityGate(
-                  capability: 'magazzino.warehouse.write',
-                  child: ListHeaderAction(
-                    label: 'Nuovo',
-                    onPressed: () => context.push('/altro/magazzino/magazzini/nuovo'),
-                  ),
-                ),
-              ],
+            )
+          : null,
+      groups: groups,
+      summary: groups.isEmpty
+          ? null
+          : ListSummaryData(
+              left: _magazziniLabel(filtered.length),
+              right: '$activeCount ${activeCount == 1 ? 'attivo' : 'attivi'}',
             ),
-            AppSearchBar(
-              controller: _searchCtrl,
-              hint: 'Cerca magazzino, tipo o indirizzo…',
-              onChanged: (q) => setState(() => _query = q),
-            ),
-            ListFilterRow(
-              filters: [
-                for (final status in _MagazzinoStatusFilter.values)
-                  ListFilterChipData(label: status.label, id: status.id),
-              ],
-              activeId: _filters.status.id,
-              onSelected: _selectStatus,
-              onOpenFilters: _openFilters,
-            ),
-            if (isStale)
-              framed(
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.sm),
-                  child: InlineAlert(
-                    message:
-                        'Impossibile aggiornare. I dati mostrati potrebbero non essere aggiornati.',
-                    icon: LucideIcons.alertCircle,
-                  ),
-                ),
-              ),
-            Expanded(child: content),
-          ],
-        ),
-      ),
+      state: state,
+      empty: empty(),
+      unavailable: unavailable(),
+      onRefresh: _refresh,
     );
   }
 

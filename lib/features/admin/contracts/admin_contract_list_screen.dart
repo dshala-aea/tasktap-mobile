@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_palette.dart';
-import '../../../core/theme/app_rack.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../../core/time/business_time_providers.dart';
@@ -276,70 +274,66 @@ class _AdminContractListScreenState extends ConsumerState<AdminContractListScree
   Widget build(BuildContext context) {
     final contractsAsync = ref.watch(adminContractsProvider);
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const OfflineSyncBanner(),
-            ScreenHeader(
-              title: 'Contratti',
-              subtitle: 'Cosa scade, cosa si rinnova, cosa è coperto.',
-              subtitleMaxLines: 2,
-              showBack: true,
-              actions: [
-                CapabilityGate(
-                  capability: 'contratti.contract.write',
-                  child: ListHeaderAction(
-                    label: 'Nuovo',
-                    onPressed: () => context.push('/altro/contratti/nuovo'),
-                  ),
-                ),
-              ],
-            ),
-            AppSearchBar(
-              controller: _searchCtrl,
-              hint: 'Cerca contratto, cliente o codice…',
-              onChanged: (q) => setState(() => _query = q),
-            ),
-            ListFilterRow(
-              filters: const [
-                ListFilterChipData(label: 'Attivi', id: 'attivi'),
-                ListFilterChipData(label: 'In scadenza', id: 'inScadenza'),
-                ListFilterChipData(label: 'Scaduti', id: 'scaduti'),
-                ListFilterChipData(label: 'Tutti', id: 'tutti'),
-              ],
-              activeId: _filters.status.id,
-              onSelected: (chip) {
-                final next = _ContractStatusFilter.values.firstWhere((s) => s.id == chip.id);
-                setState(() => _filters = _filters.withStatus(next));
-              },
-              onOpenFilters: _openFilters,
-            ),
-            Expanded(
-              child: contractsAsync.when(
-                loading: () => _scrollable(
-                  const ListLoadingSkeleton(),
-                  () async => ref.refresh(adminContractsProvider.future),
-                ),
-                error: (e, _) => _scrollable(
-                  e is TicketDetailOfflineException
-                      ? const UnavailableState(
-                          icon: LucideIcons.fileSignature,
-                          titolo: 'Contratti non disponibili offline',
-                          motivo:
-                              'Questo dispositivo non ha ancora scaricato i contratti. Apri questa '
-                              'lista con una connessione attiva per averli anche offline.',
-                        )
-                      : ErrorState(onRetry: () => ref.invalidate(adminContractsProvider)),
-                  () async => ref.refresh(adminContractsProvider.future),
-                ),
-                data: (data) => _content(data),
-              ),
-            ),
-          ],
+    return contractsAsync.when(
+      loading: () => _shell(state: ListShellState.loading),
+      error: (e, _) => _shell(
+        state: ListShellState.unavailable,
+        unavailable: e is TicketDetailOfflineException
+            ? const UnavailableState(
+                icon: LucideIcons.fileSignature,
+                titolo: 'Contratti non disponibili offline',
+                motivo:
+                    'Questo dispositivo non ha ancora scaricato i contratti. Apri questa '
+                    'lista con una connessione attiva per averli anche offline.',
+              )
+            : ErrorState(onRetry: () => ref.invalidate(adminContractsProvider)),
+      ),
+      data: (data) => _content(data),
+    );
+  }
+
+  Widget _shell({
+    required ListShellState state,
+    List<ListGroupData> groups = const [],
+    ListSummaryData? summary,
+    Widget? empty,
+    Widget? unavailable,
+    Widget? bodyHeader,
+  }) {
+    return ListShell(
+      title: 'Contratti',
+      subtitle: 'Cosa scade, cosa si rinnova, cosa è coperto.',
+      showBack: true,
+      action: CapabilityGate(
+        capability: 'contratti.contract.write',
+        child: ListHeaderAction(
+          label: 'Nuovo',
+          onPressed: () => context.push('/altro/contratti/nuovo'),
         ),
       ),
+      banner: const OfflineSyncBanner(),
+      searchController: _searchCtrl,
+      searchHint: 'Cerca contratto, cliente o codice…',
+      onSearchChanged: (q) => setState(() => _query = q),
+      filters: const [
+        ListFilterChipData(label: 'Attivi', id: 'attivi'),
+        ListFilterChipData(label: 'In scadenza', id: 'inScadenza'),
+        ListFilterChipData(label: 'Scaduti', id: 'scaduti'),
+        ListFilterChipData(label: 'Tutti', id: 'tutti'),
+      ],
+      activeFilterId: _filters.status.id,
+      onFilterSelected: (chip) {
+        final next = _ContractStatusFilter.values.firstWhere((s) => s.id == chip.id);
+        setState(() => _filters = _filters.withStatus(next));
+      },
+      onOpenFilters: _openFilters,
+      groups: groups,
+      summary: summary,
+      state: state,
+      empty: empty,
+      unavailable: unavailable,
+      bodyHeader: bodyHeader,
+      onRefresh: () => ref.refresh(adminContractsProvider.future),
     );
   }
 
@@ -374,13 +368,13 @@ class _AdminContractListScreenState extends ConsumerState<AdminContractListScree
     }).toList();
 
     final groups = <ListGroupData>[
-      for (final state in _ContractState.values)
-        if (filtered.any((e) => e.state == state))
+      for (final contractState in _ContractState.values)
+        if (filtered.any((e) => e.state == contractState))
           ListGroupData(
-            title: state.groupTitle,
-            count: filtered.where((e) => e.state == state).length,
+            title: contractState.groupTitle,
+            count: filtered.where((e) => e.state == contractState).length,
             rows: [
-              for (final entry in filtered.where((e) => e.state == state))
+              for (final entry in filtered.where((e) => e.state == contractState))
                 _rowData(context, entry, customerNames[entry.item.customerId], today),
             ],
           ),
@@ -388,79 +382,26 @@ class _AdminContractListScreenState extends ConsumerState<AdminContractListScree
 
     final inScadenzaCount = filtered.where((e) => e.state == _ContractState.inScadenza).length;
 
-    Future<void> onRefresh() => ref.refresh(adminContractsProvider.future);
+    // A mirrored list is scoped, so the notice stays even when the filters empty it.
+    final mirrorNotice = data.fromMirror && data.rows.isNotEmpty
+        ? const MirrorNotice(what: 'contratti')
+        : null;
 
     if (groups.isEmpty) {
-      return _scrollable(_emptyState(data.rows.isNotEmpty), onRefresh, notice: data);
+      return _shell(
+        state: ListShellState.content,
+        bodyHeader: mirrorNotice,
+        empty: _emptyState(data.rows.isNotEmpty),
+      );
     }
 
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          if (data.fromMirror && data.rows.isNotEmpty)
-            const SliverToBoxAdapter(child: MirrorNotice(what: 'contratti')),
-          for (final group in groups) ...[
-            SliverToBoxAdapter(
-              child: _framed(
-                child: ListGroupHeader(title: group.title!, count: group.count),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => KeyedSubtree(
-                    key: group.rows[i].rowKey,
-                    child: ListDocumentRow(data: group.rows[i]),
-                  ),
-                  childCount: group.rows.length,
-                ),
-              ),
-            ),
-          ],
-          SliverToBoxAdapter(
-            child: _framed(
-              child: ListSummaryFooter(
-                data: ListSummaryData(
-                  left: _contractCountLabel(filtered.length),
-                  right: '$inScadenzaCount in scadenza',
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-        ],
-      ),
-    );
-  }
-
-  Widget _scrollable(Widget child, Future<void> Function() onRefresh, {ContractListRows? notice}) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          if (notice != null && notice.fromMirror && notice.rows.isNotEmpty)
-            const MirrorNotice(what: 'contratti'),
-          Center(
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-  }
-
-  Widget _framed({required Widget child}) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
-        ),
+    return _shell(
+      state: ListShellState.content,
+      groups: groups,
+      bodyHeader: mirrorNotice,
+      summary: ListSummaryData(
+        left: _contractCountLabel(filtered.length),
+        right: '$inScadenzaCount in scadenza',
       ),
     );
   }

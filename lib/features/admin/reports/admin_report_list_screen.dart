@@ -161,18 +161,13 @@ class _AdminReportListScreenState extends State<AdminReportListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: _AdminReportListBody(
-          filter: _filters,
-          query: _query,
-          searchCtrl: _searchCtrl,
-          onFiltersChanged: (f) => setState(() => _filters = f),
-          onQueryChanged: (q) => setState(() => _query = q),
-          onOpenFilters: _openFilters,
-        ),
-      ),
+    return _AdminReportListBody(
+      filter: _filters,
+      query: _query,
+      searchCtrl: _searchCtrl,
+      onFiltersChanged: (f) => setState(() => _filters = f),
+      onQueryChanged: (q) => setState(() => _query = q),
+      onOpenFilters: _openFilters,
     );
   }
 }
@@ -263,147 +258,61 @@ class _AdminReportListBody extends ConsumerWidget {
                 : 'Nessun report corrisponde ai filtri selezionati.',
           );
 
-    Future<void> onRefresh() => ref.refresh(adminReportsProvider(statoFilter).future);
+    final state = reportsAsync.hasError
+        ? ListShellState.unavailable
+        : isLoading
+        ? ListShellState.loading
+        : ListShellState.content;
 
-    final Widget content;
-    if (reportsAsync.hasError) {
-      content = _scrollable(
-        context,
-        onRefresh: onRefresh,
-        reportsAsync.error is TicketDetailOfflineException
-            ? const UnavailableState(
-                icon: LucideIcons.fileText,
-                titolo: 'Rapporti di intervento non disponibili offline',
-                motivo:
-                    'Questo dispositivo non ha ancora scaricato i rapporti di intervento. Apri '
-                    'questa lista con una connessione attiva per averli anche offline.',
-              )
-            : UnavailableState(
-                icon: LucideIcons.alertTriangle,
-                titolo: 'Impossibile caricare i report',
-                motivo: 'Non è stato possibile leggere i rapporti di intervento.',
-                action: AppButton(
-                  label: 'Riprova',
-                  onPressed: () => ref.invalidate(adminReportsProvider(statoFilter)),
-                ),
-              ),
-      );
-    } else if (isLoading) {
-      content = _scrollable(context, const ListLoadingSkeleton(), onRefresh: onRefresh);
-    } else if (groups.isEmpty) {
-      content = _scrollable(
-        context,
-        onRefresh: onRefresh,
-        empty,
-        showMirror: fromMirror && rawRows.isNotEmpty,
-      );
-    } else {
-      content = RefreshIndicator(
-        onRefresh: onRefresh,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            if (fromMirror)
-              const SliverToBoxAdapter(child: MirrorNotice(what: 'rapporti di intervento')),
-            for (final group in groups) ...[
-              SliverToBoxAdapter(
-                child: _framed(
-                  child: ListGroupHeader(title: group.title!, count: group.count),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) => KeyedSubtree(
-                      key: group.rows[i].rowKey,
-                      child: ListDocumentRow(data: group.rows[i]),
-                    ),
-                    childCount: group.rows.length,
-                  ),
-                ),
-              ),
-            ],
-            if (filtered.isNotEmpty)
-              SliverToBoxAdapter(
-                child: _framed(
-                  child: ListSummaryFooter(
-                    data: ListSummaryData(
-                      left: '${filtered.length} report',
-                      right: '$toControl da controllare',
-                    ),
-                  ),
-                ),
-              ),
-            SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-          ],
-        ),
-      );
-    }
+    final unavailable = reportsAsync.error is TicketDetailOfflineException
+        ? const UnavailableState(
+            icon: LucideIcons.fileText,
+            titolo: 'Rapporti di intervento non disponibili offline',
+            motivo:
+                'Questo dispositivo non ha ancora scaricato i rapporti di intervento. Apri '
+                'questa lista con una connessione attiva per averli anche offline.',
+          )
+        : UnavailableState(
+            icon: LucideIcons.alertTriangle,
+            titolo: 'Impossibile caricare i report',
+            motivo: 'Non è stato possibile leggere i rapporti di intervento.',
+            action: AppButton(
+              label: 'Riprova',
+              onPressed: () => ref.invalidate(adminReportsProvider(statoFilter)),
+            ),
+          );
 
-    return Column(
-      children: [
-        const OfflineSyncBanner(),
-        ScreenHeader(
-          title: 'Report admin',
-          subtitle: 'Il documento ufficio e il suo stato nel flusso.',
-          subtitleMaxLines: 2,
-          showBack: true,
-        ),
-        AppSearchBar(
-          controller: searchCtrl,
-          hint: 'Cerca report, cliente o periodo…',
-          onChanged: onQueryChanged,
-        ),
-        ListFilterRow(
-          filters: [
-            for (final f in _ReportFilter.values)
-              if (f != _ReportFilter.bozza) ListFilterChipData(label: f.label, id: f.id),
-            if (filter.status == _ReportFilter.bozza)
-              ListFilterChipData(label: _ReportFilter.bozza.label, id: _ReportFilter.bozza.id),
-          ],
-          activeId: filter.status.id,
-          onSelected: (chip) {
-            final next = _ReportFilter.values.firstWhere((f) => f.id == chip.id);
-            onFiltersChanged(filter.copyWith(status: next));
-          },
-          onOpenFilters: () => onOpenFilters(rawRows),
-        ),
-        Expanded(child: content),
+    return ListShell(
+      title: 'Report admin',
+      subtitle: 'Il documento ufficio e il suo stato nel flusso.',
+      showBack: true,
+      banner: const OfflineSyncBanner(),
+      searchController: searchCtrl,
+      searchHint: 'Cerca report, cliente o periodo…',
+      onSearchChanged: onQueryChanged,
+      filters: [
+        for (final f in _ReportFilter.values)
+          if (f != _ReportFilter.bozza) ListFilterChipData(label: f.label, id: f.id),
+        if (filter.status == _ReportFilter.bozza)
+          ListFilterChipData(label: _ReportFilter.bozza.label, id: _ReportFilter.bozza.id),
       ],
-    );
-  }
-
-  Widget _scrollable(
-    BuildContext context,
-    Widget child, {
-    required Future<void> Function() onRefresh,
-    bool showMirror = false,
-  }) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          if (showMirror) const MirrorNotice(what: 'rapporti di intervento'),
-          Center(
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-  }
-
-  Widget _framed({required Widget child}) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
-        ),
-      ),
+      activeFilterId: filter.status.id,
+      onFilterSelected: (chip) {
+        final next = _ReportFilter.values.firstWhere((f) => f.id == chip.id);
+        onFiltersChanged(filter.copyWith(status: next));
+      },
+      onOpenFilters: () => onOpenFilters(rawRows),
+      groups: groups,
+      summary: filtered.isEmpty
+          ? null
+          : ListSummaryData(left: '${filtered.length} report', right: '$toControl da controllare'),
+      state: state,
+      empty: empty,
+      unavailable: unavailable,
+      bodyHeader: state == ListShellState.content && fromMirror && rawRows.isNotEmpty
+          ? const MirrorNotice(what: 'rapporti di intervento')
+          : null,
+      onRefresh: () => ref.refresh(adminReportsProvider(statoFilter).future),
     );
   }
 

@@ -212,18 +212,13 @@ class _AdminLocationListScreenState extends State<AdminLocationListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: _AdminLocationListBody(
-          filters: _filters,
-          query: _query,
-          searchCtrl: _searchCtrl,
-          onQueryChanged: (q) => setState(() => _query = q),
-          onSelectStatus: _selectStatus,
-          onOpenFilters: _openFilterSheet,
-        ),
-      ),
+    return _AdminLocationListBody(
+      filters: _filters,
+      query: _query,
+      searchCtrl: _searchCtrl,
+      onQueryChanged: (q) => setState(() => _query = q),
+      onSelectStatus: _selectStatus,
+      onOpenFilters: _openFilterSheet,
     );
   }
 }
@@ -324,169 +319,54 @@ class _AdminLocationListBody extends ConsumerWidget {
         ? _ListBodyState.loading
         : _ListBodyState.content;
 
-    return Column(
-      children: [
-        const OfflineSyncBanner(),
-        ScreenHeader(
-          title: 'Sedi',
-          subtitle: 'Dove andare, per quale cliente, con cosa è aperto.',
-          subtitleMaxLines: 2,
-          showBack: true,
-          actions: [
-            CapabilityGate(
-              capability: 'clienti.location.write',
-              child: ListHeaderAction(
-                label: 'Nuovo',
-                onPressed: () => context.push('/altro/sedi/nuova'),
-              ),
-            ),
-          ],
-        ),
-        AppSearchBar(
-          controller: searchCtrl,
-          hint: 'Cerca sede, cliente, indirizzo o città…',
-          onChanged: onQueryChanged,
-        ),
-        ListFilterRow(
-          filters: [
-            for (final status in _SedeStatusFilter.values)
-              ListFilterChipData(label: status.label, id: status.id),
-          ],
-          activeId: activeFilters.status.id,
-          onSelected: onSelectStatus,
-          onOpenFilters: () {
-            onOpenFilters(clients: clients, cities: cities);
-          },
-        ),
-        Expanded(
-          child: _body(
-            context: context,
-            ref: ref,
-            state: state,
-            groups: groups,
-            filteredCount: filtered.length,
-            withTickets: withTickets,
-            neverSynced: neverSynced,
-            hasLocations: allLocations.isNotEmpty,
-            hasActiveFilter: hasActiveFilter,
-            query: query,
-          ),
-        ),
+    final shellState = switch (state) {
+      _ListBodyState.loading => ListShellState.loading,
+      _ListBodyState.unavailable => ListShellState.unavailable,
+      _ListBodyState.content => ListShellState.content,
+    };
+
+    return ListShell(
+      title: 'Sedi',
+      subtitle: 'Dove andare, per quale cliente, con cosa è aperto.',
+      showBack: true,
+      action: CapabilityGate(
+        capability: 'clienti.location.write',
+        child: ListHeaderAction(label: 'Nuovo', onPressed: () => context.push('/altro/sedi/nuova')),
+      ),
+      banner: const OfflineSyncBanner(),
+      searchController: searchCtrl,
+      searchHint: 'Cerca sede, cliente, indirizzo o città…',
+      onSearchChanged: onQueryChanged,
+      filters: [
+        for (final status in _SedeStatusFilter.values)
+          ListFilterChipData(label: status.label, id: status.id),
       ],
-    );
-  }
-
-  Widget _body({
-    required BuildContext context,
-    required WidgetRef ref,
-    required _ListBodyState state,
-    required List<ListGroupData> groups,
-    required int filteredCount,
-    required int withTickets,
-    required bool neverSynced,
-    required bool hasLocations,
-    required bool hasActiveFilter,
-    required String query,
-  }) {
-    Future<void> onRefresh() => refreshWithFeedback(context, ref);
-
-    if (state == _ListBodyState.loading) {
-      return _scrollable(context, const ListLoadingSkeleton(), onRefresh);
-    }
-
-    if (state == _ListBodyState.unavailable) {
-      return _scrollable(
-        context,
-        UnavailableState(
-          icon: LucideIcons.alertTriangle,
-          titolo: 'Sedi non disponibili',
-          motivo: 'Non è stato possibile leggere le sedi salvate su questo telefono.',
-          action: AppButton(
-            label: 'Riprova',
-            onPressed: () => ref.invalidate(adminLocationsProvider),
-          ),
-        ),
-        onRefresh,
-      );
-    }
-
-    if (groups.isEmpty) {
-      return _scrollable(
-        context,
-        _emptyState(
-          query: query,
-          hasLocations: hasLocations,
-          hasActiveFilter: hasActiveFilter,
-          neverSynced: neverSynced,
-        ),
-        onRefresh,
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          for (final group in groups) ...[
-            SliverToBoxAdapter(
-              child: _framed(
-                child: ListGroupHeader(title: group.title!, count: group.count),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => KeyedSubtree(
-                    key: group.rows[i].rowKey,
-                    child: ListDocumentRow(data: group.rows[i]),
-                  ),
-                  childCount: group.rows.length,
-                ),
-              ),
-            ),
-          ],
-          SliverToBoxAdapter(
-            child: _framed(
-              child: ListSummaryFooter(
-                data: ListSummaryData(
-                  left: _sediLabel(filteredCount),
-                  right: '$withTickets con ticket',
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-        ],
+      activeFilterId: activeFilters.status.id,
+      onFilterSelected: onSelectStatus,
+      onOpenFilters: () {
+        onOpenFilters(clients: clients, cities: cities);
+      },
+      groups: groups,
+      summary: groups.isEmpty
+          ? null
+          : ListSummaryData(left: _sediLabel(filtered.length), right: '$withTickets con ticket'),
+      state: shellState,
+      empty: _emptyState(
+        query: query,
+        hasLocations: allLocations.isNotEmpty,
+        hasActiveFilter: hasActiveFilter,
+        neverSynced: neverSynced,
       ),
-    );
-  }
-
-  Widget _scrollable(BuildContext context, Widget child, Future<void> Function() onRefresh) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Center(
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-  }
-
-  Widget _framed({required Widget child}) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
+      unavailable: UnavailableState(
+        icon: LucideIcons.alertTriangle,
+        titolo: 'Sedi non disponibili',
+        motivo: 'Non è stato possibile leggere le sedi salvate su questo telefono.',
+        action: AppButton(
+          label: 'Riprova',
+          onPressed: () => ref.invalidate(adminLocationsProvider),
         ),
       ),
+      onRefresh: () => refreshWithFeedback(context, ref),
     );
   }
 
