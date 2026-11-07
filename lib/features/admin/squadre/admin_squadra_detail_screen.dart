@@ -1,17 +1,23 @@
 // dart format width=100
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/theme/app_palette.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/detail/detail_hero.dart';
+import '../../../core/widgets/detail/detail_link_row.dart';
+import '../../../core/widgets/detail/detail_scaffold.dart';
+import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
-import '../../../presentation/providers/schedule_providers.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
+import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/users/user_directory.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Fetches squadra detail with membri from backend API.
 final adminSquadraDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>?, String>(
@@ -21,7 +27,13 @@ final adminSquadraDetailProvider = FutureProvider.autoDispose.family<Map<String,
   },
 );
 
-/// Admin squadra detail — shows membri, allows add/remove.
+/// Admin squadra detail — the wave-0 summary shell.
+///
+/// Hero + `Modifica`, then Relazioni (membri) → Sintesi (descrizione, note). The prototype's
+/// Attività section is the squadra's active cantieri, and nothing on the device (or in
+/// `/api/squadre`) carries a squadra → cantiere relation, so that section is hidden rather than
+/// inventing a count. Empty sections are hidden by the shell, and the hero owns `Modifica`, so
+/// there is no FAB.
 class AdminSquadraDetailScreen extends ConsumerWidget {
   const AdminSquadraDetailScreen({super.key, required this.squadra});
 
@@ -29,211 +41,204 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detailAsync = ref.watch(adminSquadraDetailProvider(squadra['id'] as String));
+    final id = _clean(squadra['id']);
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-        child: AppFab(
-          icon: LucideIcons.userPlus,
-          tooltip: 'Aggiungi membro',
-          onPressed: () => _showAddMemberSheet(context, ref),
-        ),
-      ),
-      body: SafeArea(
-        child: detailAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ErrorState(
-            onRetry: () => ref.invalidate(adminSquadraDetailProvider(squadra['id'] as String)),
-          ),
-          data: (detail) {
-            // GET /api/squadre/{id} wraps the squadra's own fields under a "squadra" key
-            // (backend record SquadraDetailResponse(Squadra Squadra, List<SquadraMembro> Membri) —
-            // see SquadraDetailResponse.cs), with "membri" as the sibling key holding the member
-            // list. Reading squadra fields off the un-unwrapped envelope left nome/descrizione/
-            // specializzazione/note (and capSquadraNome, added below) blank on every real fetch;
-            // only "membri" happened to work because it is genuinely top-level.
-            //
-            // The `?? squadra` fallback is the flat row the list screen already has in hand
-            // (`extra: squadra` in admin_squadra_list_screen.dart) — no such wrapper there.
-            final data = (detail?['squadra'] as Map<String, dynamic>?) ?? squadra;
-            final membri = (detail?['membri'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-            return _SquadraDetailBody(squadra: data, membri: membri);
-          },
-        ),
-      ),
-    );
-  }
+    if (id == null) {
+      // The route carries the squadra as `extra`; a deep link without it has no id to fetch.
+      return const DetailScaffold.unavailable(
+        screenTitle: 'Squadra',
+        icon: LucideIcons.users,
+        title: 'Squadra non disponibile',
+        reason: "Apri la squadra dall'elenco per vederne i dettagli.",
+      );
+    }
 
-  void _showAddMemberSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    final detailAsync = ref.watch(adminSquadraDetailProvider(id));
+    final online = ref.watch(isOnlineProvider);
+
+    return detailAsync.when(
+      loading: () => const DetailScaffold.loading(screenTitle: 'Squadra'),
+      error: (e, _) => DetailScaffold.unavailable(
+        screenTitle: 'Squadra',
+        icon: online ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
+        title: online ? 'Squadra non disponibile' : 'Squadre non disponibili offline',
+        reason: online
+            ? 'Non è stato possibile caricare i dati della squadra. Riprova.'
+            : 'Le squadre si leggono con la connessione: non vengono scaricate sul dispositivo.',
+        onRetry: () => ref.invalidate(adminSquadraDetailProvider(id)),
       ),
-      builder: (_) => _AddMemberSheet(
-        squadraId: squadra['id'] as String,
-        api: ref.read(adminApiClientProvider),
-      ),
+      data: (detail) {
+        // GET /api/squadre/{id} wraps the squadra's own fields under a "squadra" key
+        // (backend record SquadraDetailResponse(Squadra Squadra, List<SquadraMembro> Membri) —
+        // see SquadraDetailResponse.cs), with "membri" as the sibling key holding the member
+        // list. The `?? squadra` fallback is the flat row the list screen already has in hand
+        // (`extra: squadra` in admin_squadra_list_screen.dart) — no such wrapper there.
+        final data = (detail?['squadra'] as Map<String, dynamic>?) ?? squadra;
+        final membri = (detail?['membri'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+        return _SquadraDetailBody(squadra: data, membri: membri, squadraId: id);
+      },
     );
   }
 }
 
 class _SquadraDetailBody extends ConsumerWidget {
-  const _SquadraDetailBody({required this.squadra, required this.membri});
+  const _SquadraDetailBody({required this.squadra, required this.membri, required this.squadraId});
 
   final Map<String, dynamic> squadra;
   final List<Map<String, dynamic>> membri;
+  final String squadraId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final nome = squadra['nome'] as String? ?? '';
-    final descrizione = squadra['descrizione'] as String? ?? '';
-    final spec = squadra['specializzazione'] as String? ?? '';
-    final note = squadra['note'] as String? ?? '';
-    // Derived on every /api/squadre/{id} response (PopulateCapiSquadraAsync in
-    // SquadreController) — never read on mobile before.
-    final capoNome = squadra['capSquadraNome'] as String?;
+    final nome = _clean(squadra['nome']) ?? 'Squadra';
+    final descrizione = _clean(squadra['descrizione']);
+    final specializzazione = _clean(squadra['specializzazione']);
+    final note = _clean(squadra['note']);
+    final isActive = squadra['isActive'] as bool? ?? true;
+    final canWrite = _canWrite(ref);
 
-    // Gap 6 of the feature audit: `lastAccessAt` is a real column on `User`, returned on every
-    // `/api/users` response, but was surfaced nowhere on mobile. `allUsersProvider` is the same
-    // bulk fetch the list screen uses for member counts (Gap 7) — reused here rather than a live
-    // per-member `/api/users/{id}` call, so this row list still costs one network request for the
-    // whole screen, not one per member.
-    final usersById = {
-      for (final u in ref.watch(allUsersProvider(true)).valueOrNull ?? const [])
+    // One bulk fetch shared by the whole screen (the same one the list screen uses), never a
+    // per-member `/api/users/{id}` call. `squadraId` is the derived field
+    // UsersController.PopulateSquadreAsync projects onto every user response.
+    final usersAsync = ref.watch(allUsersProvider(true));
+    final usersById = <String, Map<String, dynamic>>{
+      for (final u in usersAsync.valueOrNull ?? const <Map<String, dynamic>>[])
         u['id'] as String: u,
     };
+    // The local colleagues mirror is only the fallback for a user the bulk fetch has already
+    // answered for; reading it while that fetch is still in flight would open the database for a
+    // name the bulk response is about to provide anyway.
+    final allowLocalNameFallback = usersAsync.hasValue || usersAsync.hasError;
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: nome,
-            subtitle: spec.isNotEmpty ? spec : '',
-            showBack: true,
-            // The FAB on this screen is "Aggiungi membro" — a different action on different data
-            // (membership, not the squadra's own fields) — so unlike the other admin detail
-            // screens, this header action is not a duplicate of the FAB and stays.
-            actions: [
-              // Gap 9 of the feature audit — no link existed from a squadra to its own schedule.
-              // AdminScheduleListScreen already supports a squadra filter (its filter sheet), this
-              // just pre-applies it via `initialSquadraId` instead of making the admin open the
-              // filter sheet and pick this same squadra by name right after tapping in from here.
-              HeaderIconBtn(
-                icon: LucideIcons.calendarDays,
-                label: 'Pianificazioni squadra',
-                glass: true,
-                onTap: () => context.push('/altro/pianificazioni', extra: squadra['id'] as String?),
-              ),
-              HeaderIconBtn(
-                icon: LucideIcons.pencil,
-                label: 'Modifica squadra',
-                glass: true,
-                // Awaited so a saved edit is reflected the moment the admin pops back here —
-                // without this, the fire-and-forget push left the header/detail card showing
-                // pre-edit values until the admin left and re-entered the screen.
-                onTap: () async {
-                  await context.push('/altro/squadre/${squadra['id']}/modifica', extra: squadra);
-                  if (context.mounted) {
-                    ref.invalidate(adminSquadraDetailProvider(squadra['id'] as String));
-                  }
+    final members = _sortedMembers(membri);
+    final leadName =
+        _clean(squadra['capSquadraNome']) ??
+        _leadNameFromMembers(members, usersById, ref, allowLocalNameFallback);
+
+    // The prototype's hero line is `lead · N membri · N cantieri`. No cantiere association exists,
+    // so the squadra's own specializzazione keeps the third slot instead of inventing a number.
+    final heroFacts = [
+      if (leadName != null) 'Lead $leadName',
+      _membriLabel(members.length),
+      ?specializzazione,
+    ].join(' · ');
+
+    // No hero fact is repeated here: lead, member count and specializzazione stay above the fold,
+    // and Sintesi carries only the free text the prototype names.
+    final hasSintesi = descrizione != null || note != null;
+
+    return DetailScaffold(
+      screenTitle: 'Squadra',
+      headerActions: [
+        // Keep the existing pre-filtered pianificazioni link: the list screen opens this same
+        // route with the squadra id as `extra`.
+        HeaderIconBtn(
+          icon: LucideIcons.calendarDays,
+          label: 'Pianificazioni squadra',
+          glass: true,
+          onTap: () => context.push('/altro/pianificazioni', extra: squadraId),
+        ),
+        CapabilityGate(
+          capability: 'team.squadra.write',
+          child: HeaderIconBtn(
+            icon: LucideIcons.userPlus,
+            label: 'Aggiungi membro',
+            glass: true,
+            onTap: () => _showAddMemberSheet(context, ref),
+          ),
+        ),
+      ],
+      hero: DetailHeroData(
+        variant: DetailHeroVariant.summary,
+        kind: 'Summary · squadra',
+        kicker: 'Summary · squadra',
+        title: nome,
+        status: isActive
+            ? const DetailStatus(label: 'Attiva', tone: DetailStatusTone.good)
+            : const DetailStatus(label: 'Inattiva', tone: DetailStatusTone.bad),
+        subtitle: heroFacts.isEmpty ? null : heroFacts,
+        primaryAction: canWrite
+            ? DetailAction(
+                label: 'Modifica',
+                onPressed: () async {
+                  // Awaited so a saved edit is reflected the moment the admin pops back here —
+                  // without this, the fire-and-forget push left the hero showing pre-edit values
+                  // until the admin left and re-entered the screen.
+                  await context.push<bool>('/altro/squadre/$squadraId/modifica', extra: squadra);
+                  ref.invalidate(adminSquadraDetailProvider(squadraId));
                 },
-              ),
+              )
+            : null,
+      ),
+      sections: [
+        DetailSectionData(
+          title: 'Relazioni',
+          trailing: DetailSectionMeta(_membriLabel(members.length)),
+          isEmpty: members.isEmpty,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < members.length; i++)
+                _MemberRow(
+                  membro: members[i],
+                  user: usersById[members[i]['userId'] as String? ?? ''],
+                  allowLocalNameFallback: allowLocalNameFallback,
+                  canRemove: canWrite,
+                  showDivider: i < members.length - 1,
+                  onRemove: () => _removeMember(context, members[i]),
+                ),
             ],
           ),
         ),
-        if (descrizione.isNotEmpty ||
-            spec.isNotEmpty ||
-            note.isNotEmpty ||
-            (capoNome?.isNotEmpty ?? false))
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
-              child: AppCard(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                child: Column(
-                  children: [
-                    if (descrizione.isNotEmpty) KeyVal(label: 'Descrizione', value: descrizione),
-                    KeyVal(
-                      label: 'Specializzazione',
-                      value: spec.isNotEmpty ? spec : '—',
-                      showDivider: true,
-                    ),
-                    KeyVal(
-                      label: 'Capo squadra',
-                      value: capoNome?.isNotEmpty == true ? capoNome! : '—',
-                      showDivider: note.isNotEmpty,
-                    ),
-                    if (note.isNotEmpty) KeyVal(label: 'Note', value: note, showDivider: false),
-                  ],
-                ),
-              ),
-            ),
+        DetailSectionData(
+          title: 'Sintesi',
+          isEmpty: !hasSintesi,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (descrizione != null) _TextBlock(label: 'Descrizione', value: descrizione),
+              if (descrizione != null && note != null) const SizedBox(height: AppSpacing.base),
+              if (note != null) _TextBlock(label: 'Note', value: note),
+            ],
           ),
-        // ── Membri section ─────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: SectionTitle(title: 'Membri', trailing: '${membri.length}'),
         ),
-        if (membri.isEmpty)
-          SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.users,
-              title: 'Nessun membro',
-              body: 'Aggiungi un tecnico con il pulsante +.',
-            ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate((context, i) {
-                final membro = membri[i];
-                final userId = membro['userId'] as String? ?? '';
-                // Backend `SquadraRuoloEnum` has no JsonStringEnumConverter — the wire value is a
-                // bare int (Membro=0, Capo=1), never a string. See SquadraRuolo in
-                // admin_api_client.dart.
-                final ruolo = SquadraRuolo.label(membro['ruolo']);
-                // A crew member was listed by `userId.substring(0, 8)` — a person, named at their
-                // own colleagues with eight characters of a GUID. `/api/squadre/{id}` returns raw
-                // SquadraMember rows and carries no name, so the name comes from the colleagues
-                // mirror the app already syncs for the rapportino staff picker.
-                //
-                // That substring was also a crash: `userId` defaults to '' when the key is missing,
-                // and `''.substring(0, 8)` throws RangeError, taking the whole list with it.
-                final nome = userId.isEmpty
-                    ? null
-                    : ref.watch(colleagueNameProvider(userId)).valueOrNull;
-                // Only claim "Mai" (never) when the bulk fetch actually resolved this user and
-                // found no access timestamp — a userId absent from the fetch (page-size cap,
-                // deactivated, or not yet loaded) is unknown, not "never accessed", so the row
-                // falls back to just the role in that case rather than asserting something false.
-                final user = usersById[userId];
-                final subtitle = user == null
-                    ? ruolo
-                    : '$ruolo · Ultimo accesso: ${_formatLastAccess(user['lastAccessAt'] as String?)}';
-                return ListRow(
-                  leading: AppAvatar(name: nome ?? '?', size: 36),
-                  title: nome ?? 'Membro non sincronizzato',
-                  subtitle: subtitle,
-                  meta: IconButton(
-                    icon: const Icon(LucideIcons.userMinus, size: 18),
-                    tooltip: 'Rimuovi dalla squadra',
-                    onPressed: () => _removeMember(context, userId),
-                  ),
-                  showDivider: i < membri.length - 1,
-                );
-              }, childCount: membri.length),
-            ),
-          ),
-        SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
       ],
     );
   }
 
-  Future<void> _removeMember(BuildContext context, String userId) async {
+  bool _canWrite(WidgetRef ref) {
+    final entitlement = ref.watch(cachedEntitlementProvider).value;
+    return entitlement?.capabilities.contains('team.squadra.write') ?? false;
+  }
+
+  /// The lead's display name, when `capSquadraNome` is absent but the membership list still names
+  /// a `Capo` row. The server derives the former; this is only the fallback.
+  String? _leadNameFromMembers(
+    List<Map<String, dynamic>> members,
+    Map<String, Map<String, dynamic>> usersById,
+    WidgetRef ref,
+    bool allowLocalNameFallback,
+  ) {
+    for (final member in members) {
+      if (member['ruolo'] != SquadraRuolo.capo) continue;
+      final userId = member['userId'] as String? ?? '';
+      if (userId.isEmpty) continue;
+      return _memberName(userId, usersById[userId], ref, allowLocalNameFallback);
+    }
+    return null;
+  }
+
+  /// Lead first, then the rest in server order — the prototype reads "membri, lead".
+  List<Map<String, dynamic>> _sortedMembers(List<Map<String, dynamic>> members) {
+    final lead = members.where((m) => m['ruolo'] == SquadraRuolo.capo);
+    final rest = members.where((m) => m['ruolo'] != SquadraRuolo.capo);
+    return [...lead, ...rest];
+  }
+
+  Future<void> _removeMember(BuildContext context, Map<String, dynamic> membro) async {
+    final userId = membro['userId'] as String? ?? '';
+    if (userId.isEmpty) return;
+
     final confirmed = await confirmDeleteDialog(
       context,
       title: 'Rimuovi membro',
@@ -244,10 +249,10 @@ class _SquadraDetailBody extends ConsumerWidget {
       try {
         final container = ProviderScope.containerOf(context);
         final api = container.read(adminApiClientProvider);
-        await api.removeSquadraMember(squadra['id'] as String, userId);
+        await api.removeSquadraMember(squadraId, userId);
         // Without this, the member list keeps showing the just-removed row until the admin
         // leaves and re-enters this screen — nothing else refetches adminSquadraDetailProvider.
-        container.invalidate(adminSquadraDetailProvider(squadra['id'] as String));
+        container.invalidate(adminSquadraDetailProvider(squadraId));
         if (context.mounted) {
           showAppToast(context, message: 'Membro rimosso', tone: ToastTone.success);
         }
@@ -258,7 +263,162 @@ class _SquadraDetailBody extends ConsumerWidget {
       }
     }
   }
+
+  void _showAddMemberSheet(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _AddMemberSheet(squadraId: squadraId, api: ref.read(adminApiClientProvider)),
+    );
+  }
 }
+
+/// One member row: name on the left, role/last access plus the remove control on the right.
+class _MemberRow extends ConsumerWidget {
+  const _MemberRow({
+    required this.membro,
+    required this.user,
+    required this.allowLocalNameFallback,
+    required this.canRemove,
+    required this.showDivider,
+    required this.onRemove,
+  });
+
+  final Map<String, dynamic> membro;
+  final Map<String, dynamic>? user;
+  final bool allowLocalNameFallback;
+  final bool canRemove;
+  final bool showDivider;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userId = membro['userId'] as String? ?? '';
+    final name = userId.isEmpty
+        ? 'Membro non sincronizzato'
+        : _memberName(userId, user, ref, allowLocalNameFallback);
+    final ruolo = _ruoloLabel(membro['ruolo']);
+    // Only claim "Mai" (never) when the bulk fetch actually resolved this user and found no
+    // access timestamp — a userId absent from the fetch (page-size cap, deactivated, or not yet
+    // loaded) is unknown, not "never accessed", so the row falls back to just the role.
+    final meta = user == null
+        ? ruolo
+        : '$ruolo · Ultimo accesso: ${_formatLastAccess(user!['lastAccessAt'] as String?)}';
+
+    return DetailLinkRow(
+      title: name,
+      showDivider: showDivider,
+      trailing: _MemberTrailing(meta: meta, canRemove: canRemove, onRemove: onRemove),
+    );
+  }
+}
+
+class _MemberTrailing extends StatelessWidget {
+  const _MemberTrailing({required this.meta, required this.canRemove, required this.onRemove});
+
+  final String meta;
+  final bool canRemove;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 170),
+          child: Text(
+            meta.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: AppTextStyles.docCode.copyWith(
+              fontSize: 7.5,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+              color: context.colors.inkMuted,
+            ),
+          ),
+        ),
+        if (canRemove) ...[
+          const SizedBox(width: 2),
+          IconButton(
+            icon: const Icon(LucideIcons.userMinus, size: 18),
+            tooltip: 'Rimuovi dalla squadra',
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            visualDensity: VisualDensity.compact,
+            onPressed: onRemove,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Long free text under a section: a mono label above wrapped prose.
+class _TextBlock extends StatelessWidget {
+  const _TextBlock({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: AppTextStyles.docCode.copyWith(
+            fontSize: 8,
+            letterSpacing: 0.64,
+            color: colors.inkMuted,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: AppTextStyles.bodySmall.copyWith(fontSize: 11.5, height: 1.4, color: colors.ink),
+        ),
+      ],
+    );
+  }
+}
+
+/// Resolves a member's display name from the one bulk users fetch, falling back to the synced
+/// colleagues mirror only when that fetch has no name for them (or does not know the id at all).
+String _memberName(
+  String userId,
+  Map<String, dynamic>? user,
+  WidgetRef ref,
+  bool allowLocalNameFallback,
+) {
+  final bulkName = _userName(user);
+  if (bulkName != null) return bulkName;
+  if (!allowLocalNameFallback) return 'Membro non sincronizzato';
+  final colleague = ref.watch(colleagueNameProvider(userId)).valueOrNull;
+  return _clean(colleague) ?? 'Membro non sincronizzato';
+}
+
+String? _userName(Map<String, dynamic>? user) {
+  if (user == null) return null;
+  final display = _clean(user['displayName']);
+  if (display != null) return display;
+  final full = _clean(user['fullName']);
+  if (full != null) return full;
+  final first = _clean(user['firstName']);
+  final last = _clean(user['lastName']);
+  final composed = [first, last].whereType<String>().join(' ').trim();
+  return composed.isEmpty ? null : composed;
+}
+
+String _ruoloLabel(Object? ruolo) => ruolo == SquadraRuolo.capo ? 'Capo squadra' : 'Membro';
+
+String _membriLabel(int count) => count == 1 ? '1 membro' : '$count membri';
 
 /// Formats a `User.lastAccessAt` ISO timestamp (or its absence) for the member row — "Mai" for a
 /// user who has never accessed the app (the field is `null`), otherwise the same absolute
@@ -267,6 +427,12 @@ class _SquadraDetailBody extends ConsumerWidget {
 String _formatLastAccess(String? iso) {
   if (iso == null) return 'Mai';
   return DateFormat('dd/MM/yyyy HH:mm', 'it').format(DateTime.parse(iso).toLocal());
+}
+
+String? _clean(Object? value) {
+  if (value is! String) return null;
+  final text = value.trim();
+  return text.isEmpty ? null : text;
 }
 
 /// Bottom sheet to add a member to a squadra.
