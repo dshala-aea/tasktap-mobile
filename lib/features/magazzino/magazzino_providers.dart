@@ -39,6 +39,7 @@ final giacenzeProvider = FutureProvider.autoDispose
       final client = ref.watch(magazzinoApiClientProvider);
       return client.getGiacenze(
         q: query.q,
+        magazzinoId: query.magazzinoId,
         sottoScorta: query.soloSottoScorta ? true : null,
         pageSize: query.pageSize,
       );
@@ -51,11 +52,17 @@ final giacenzeProvider = FutureProvider.autoDispose
 class GiacenzeQuery {
   const GiacenzeQuery({
     this.q,
+    this.magazzinoId,
     this.soloSottoScorta = false,
     this.pageSize = 50,
   });
 
   final String? q;
+
+  /// Scope the page to one warehouse. The detail screen uses this to answer "what is short here"
+  /// without pulling every warehouse's lines; the giacenze list leaves it null.
+  final String? magazzinoId;
+
   final bool soloSottoScorta;
   final int pageSize;
 
@@ -63,11 +70,12 @@ class GiacenzeQuery {
   bool operator ==(Object other) =>
       other is GiacenzeQuery &&
       other.q == q &&
+      other.magazzinoId == magazzinoId &&
       other.soloSottoScorta == soloSottoScorta &&
       other.pageSize == pageSize;
 
   @override
-  int get hashCode => Object.hash(q, soloSottoScorta, pageSize);
+  int get hashCode => Object.hash(q, magazzinoId, soloSottoScorta, pageSize);
 }
 
 /// Recent stock movements, most recent first. Same online-only reasoning — and the same
@@ -79,6 +87,17 @@ final movimentiProvider = FutureProvider.autoDispose<PagedResult<MovimentoDto>>(
     return client.getMovimenti(pageSize: 30);
   },
 );
+
+/// Recent movements for one warehouse, most recent first.
+///
+/// Same online-only/reconnect contract as [movimentiProvider]; the family key is the warehouse id
+/// so the magazzino detail can ask "what moved here" on demand without reading every warehouse.
+final movimentiMagazzinoProvider = FutureProvider.autoDispose
+    .family<PagedResult<MovimentoDto>, String>((ref, magazzinoId) async {
+      if (!ref.watch(isOnlineProvider)) throw const MagazzinoOfflineException();
+      final client = ref.watch(magazzinoApiClientProvider);
+      return client.getMovimenti(magazzinoId: magazzinoId, pageSize: 30);
+    });
 
 /// The current technician's assigned van warehouse, from
 /// `GET /api/magazzino/furgone/{userId}` — the default source for rapportino material lines
