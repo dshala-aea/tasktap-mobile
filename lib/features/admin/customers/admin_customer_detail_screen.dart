@@ -176,7 +176,27 @@ class _CustomerDetailBody extends ConsumerWidget {
             ),
             PopupMenuButton<_CustomerAction>(
               tooltip: 'Aggiungi',
-              icon: const Icon(LucideIcons.moreHorizontal),
+              // Same 44px target / 38px glass disc as HeaderIconBtn beside it, so the overflow
+              // menu reads as one more header action rather than a bare Material icon.
+              child: SizedBox(
+                key: const Key('customer-overflow-menu'),
+                width: 44,
+                height: 44,
+                child: Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(19),
+                      border: Border.all(color: context.colors.borderLight),
+                    ),
+                    child: SizedBox(
+                      width: 38,
+                      height: 38,
+                      child: Icon(LucideIcons.moreHorizontal, size: 17, color: context.colors.ink),
+                    ),
+                  ),
+                ),
+              ),
               onSelected: (action) => _handleAction(context, ref, action, online: online),
               itemBuilder: (context) => [
                 const PopupMenuItem(value: _CustomerAction.nuovaSede, child: Text('Nuova sede')),
