@@ -3,10 +3,11 @@
 //
 // The redesigned Materiale detail on the wave-0 summary shell: SummaryHero + Modifica, then
 // Movimenti → Sintesi → Documenti. The local mirror has no stock columns, so Movimenti links to
-// the existing Giacenze e movimenti screen on demand instead of inventing a quantity; Documenti
-// shows the mirrored photo as an on-demand attachment row.
+// the existing stock screen on demand instead of inventing a quantity; the sync payload never
+// carries the photo URL, so Documenti resolves the live photo only when the row is tapped.
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
@@ -16,6 +17,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
@@ -32,6 +35,19 @@ Response<T> _ok<T>(T data, String path) => Response<T>(
   statusCode: 200,
   requestOptions: RequestOptions(path: path),
 );
+
+/// The attachment viewer writes its fetched bytes under `getTemporaryDirectory()`, which has no
+/// platform implementation in a widget test. Point it at a scratch directory so the viewer can
+/// complete instead of spinning forever.
+class _FakePathProviderPlatform extends PathProviderPlatform with MockPlatformInterfaceMixin {
+  late final Directory _dir = Directory.systemTemp.createTempSync('materiale_detail_test_');
+
+  @override
+  Future<String?> getTemporaryPath() async => _dir.path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => _dir.path;
+}
 
 class _NoopSync extends SyncNotifier {
   _NoopSync(AppDatabase db) : super(SyncService(db: db, dio: Dio()), db);
@@ -52,7 +68,6 @@ Future<void> _seedMateriale(
   double? purchasePrice = 2.10,
   double? salePrice = 4.20,
   String? description = 'Sifone in ottone.',
-  String? imageUrl = 'https://example.test/foto.jpg',
   bool active = true,
 }) {
   return db
@@ -70,7 +85,6 @@ Future<void> _seedMateriale(
           purchasePrice: Value(purchasePrice),
           salePrice: Value(salePrice),
           description: Value(description),
-          imageUrl: Value(imageUrl),
           isActive: Value(active),
         ),
       );
@@ -131,6 +145,8 @@ Future<void> _unmount(WidgetTester tester) async {
 
 void main() {
   setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    PathProviderPlatform.instance = _FakePathProviderPlatform();
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     registerFallbackValue(RequestOptions(path: '/'));
   });
@@ -160,11 +176,11 @@ void main() {
 
     // Sections: Movimenti first, then Sintesi, then Documenti.
     expect(find.text('Movimenti'), findsOneWidget);
-    expect(find.text('Apri giacenze e movimenti'), findsOneWidget);
+    expect(find.text('Apri magazzino'), findsOneWidget);
     expect(find.text('CARICHI, SCARICHI, RETTIFICHE'), findsOneWidget);
     expect(find.text('Sintesi'), findsOneWidget);
     expect(find.text('Documenti'), findsOneWidget);
-    expect(find.text('1 FOTO'), findsOneWidget);
+    expect(find.text('FOTO'), findsOneWidget);
 
     final movimentiY = tester.getTopLeft(find.text('Movimenti')).dy;
     final sintesiY = tester.getTopLeft(find.text('Sintesi')).dy;
@@ -182,9 +198,8 @@ void main() {
     expect(find.text('DESCRIZIONE'), findsOneWidget);
     expect(find.text('Sifone in ottone.'), findsOneWidget);
 
-    // Documenti: the mirrored photo as an on-demand row, not an eager image.
-    expect(find.text('Foto materiale'), findsOneWidget);
-    expect(find.text('FOTO'), findsOneWidget);
+    // Documenti: an on-demand row, because the sync payload never carries the photo URL.
+    expect(find.text('Apri foto materiale'), findsOneWidget);
 
     await _unmount(tester);
   });
@@ -205,12 +220,77 @@ void main() {
     await _unmount(tester);
   });
 
-  testWidgets('hides Documenti when the mirror carries no photo', (tester) async {
-    await _seedMateriale(db, imageUrl: null);
-    await _pump(tester, db, dio);
+  testWidgets('the Documenti row resolves the live photo on tap and opens the viewer', (
+    tester,
+  ) async {
+    await _seedMateriale(db);
+    when(() => dio.get<Map<String, dynamic>>('/api/materiali/m1')).thenAnswer(
+      (_) async => _ok<Map<String, dynamic>>({
+        'id': 'm1',
+        'imageContentUrl': '/api/materiali/m1/image',
+      }, '/api/materiali/m1'),
+    );
+    when(
+      () => dio.get<List<int>>('/api/materiali/m1/image', options: any(named: 'options')),
+    ).thenAnswer((_) async => _ok<List<int>>([1, 2, 3], '/api/materiali/m1/image'));
 
-    expect(find.text('Documenti'), findsNothing);
-    expect(find.text('FOTO'), findsNothing);
+    await _pump(tester, db, dio);
+    // No live read just by opening the screen.
+    verifyNever(() => dio.get<Map<String, dynamic>>('/api/materiali/m1'));
+
+    // The row sits below the 800×600 test viewport; scroll it into reach before tapping.
+    await tester.ensureVisible(find.text('Apri foto materiale'));
+    await tester.pumpAndSettle();
+
+    // The viewer writes real bytes to disk, so the tap and its settle happen inside runAsync.
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Apri foto materiale'));
+      await tester.pump();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await tester.pump();
+    });
+    await tester.pumpAndSettle();
+
+    verify(() => dio.get<Map<String, dynamic>>('/api/materiali/m1')).called(1);
+    expect(find.byType(InteractiveViewer), findsOneWidget);
+    expect(find.text('foto-materiale.jpg'), findsOneWidget);
+
+    await _unmount(tester);
+  });
+
+  testWidgets('the Documenti row says when the material has no photo', (tester) async {
+    await _seedMateriale(db);
+    when(
+      () => dio.get<Map<String, dynamic>>('/api/materiali/m1'),
+    ).thenAnswer((_) async => _ok<Map<String, dynamic>>({'id': 'm1'}, '/api/materiali/m1'));
+
+    await _pump(tester, db, dio);
+    await tester.ensureVisible(find.text('Apri foto materiale'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Apri foto materiale'));
+    await tester.pumpAndSettle();
+
+    verify(() => dio.get<Map<String, dynamic>>('/api/materiali/m1')).called(1);
+    expect(find.text('Nessuna foto per questo materiale.'), findsOneWidget);
+
+    await _unmount(tester);
+  });
+
+  testWidgets('a failed photo resolution says it is unavailable', (tester) async {
+    await _seedMateriale(db);
+    when(
+      () => dio.get<Map<String, dynamic>>('/api/materiali/m1'),
+    ).thenThrow(DioException(requestOptions: RequestOptions(path: '/api/materiali/m1')));
+
+    await _pump(tester, db, dio);
+    await tester.ensureVisible(find.text('Apri foto materiale'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Apri foto materiale'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Foto non disponibile offline: riprova quando sei online.'), findsOneWidget);
 
     await _unmount(tester);
   });
@@ -295,7 +375,7 @@ void main() {
     await _seedMateriale(db);
     await _pump(tester, db, dio);
 
-    await tester.tap(find.text('Apri giacenze e movimenti'));
+    await tester.tap(find.text('Apri magazzino'));
     await tester.pumpAndSettle();
 
     expect(find.text('giacenze-screen'), findsOneWidget);

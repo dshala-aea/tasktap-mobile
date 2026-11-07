@@ -33,7 +33,6 @@ Future<void> _seed(AppDatabase db) async {
             'Sifone in ottone cromato con guarnizione rinforzata, compatibile con lavabi da '
             '40 mm. Include il kit di montaggio.',
           ),
-          imageUrl: const Value('/api/materiali/m1/image'),
         ),
       );
 }

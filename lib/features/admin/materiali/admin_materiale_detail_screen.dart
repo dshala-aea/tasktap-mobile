@@ -35,9 +35,10 @@ final adminMaterialeDetailProvider = StreamProvider.autoDispose.family<Materiali
 /// Admin materiale detail — the wave-0 summary shell.
 ///
 /// Hero + `Modifica`, then Movimenti → Sintesi → Documenti. The local mirror carries the article's
-/// anagrafica and prices but no stock level, so the movement list itself is not shown: the first
-/// section keeps the existing `Giacenze e movimenti` route reachable on demand (no new read at
-/// open). Empty sections are hidden by the shell, and the hero owns `Modifica`, so there is no FAB.
+/// anagrafica and prices but no stock level or image: Movimenti opens the existing stock screen on
+/// demand and Documenti resolves the live photo only on tap (the sync payload never carries
+/// `Materiali.imageUrl`). Empty data sections are hidden by the shell, and the hero owns
+/// `Modifica`, so there is no FAB.
 class AdminMaterialeDetailScreen extends ConsumerWidget {
   const AdminMaterialeDetailScreen({super.key, required this.materialeId});
 
@@ -144,7 +145,6 @@ class _MaterialeDetailBody extends ConsumerWidget {
     final unit = _clean(materiale.unitOfMeasure);
     final marca = _clean(materiale.marca);
     final description = _clean(materiale.description);
-    final imageUrl = _clean(materiale.imageUrl);
     final salePrice = materiale.salePrice;
     final purchasePrice = materiale.purchasePrice;
 
@@ -195,7 +195,7 @@ class _MaterialeDetailBody extends ConsumerWidget {
         DetailSectionData(
           title: 'Movimenti',
           child: DetailLinkRow(
-            title: 'Apri giacenze e movimenti',
+            title: 'Apri magazzino',
             meta: 'Carichi, scarichi, rettifiche',
             onTap: () => context.push('/altro/magazzino/giacenze'),
           ),
@@ -216,29 +216,49 @@ class _MaterialeDetailBody extends ConsumerWidget {
             ],
           ),
         ),
-        if (imageUrl != null)
-          DetailSectionData(
-            title: 'Documenti',
-            trailing: const DetailSectionMeta('1 foto'),
-            child: DetailAttachmentRow(
-              name: 'Foto materiale',
-              icon: const Icon(LucideIcons.camera, size: 14),
-              size: 'FOTO',
-              isLast: true,
-              onTap: () => _openImage(context, ref, imageUrl),
-            ),
+        DetailSectionData(
+          title: 'Documenti',
+          trailing: const DetailSectionMeta('Foto'),
+          child: DetailAttachmentRow(
+            name: 'Apri foto materiale',
+            icon: const Icon(LucideIcons.camera, size: 14),
+            isLast: true,
+            onTap: () => _openPhoto(context, ref),
           ),
+        ),
       ],
     );
   }
 
-  /// The photo stays an on-demand attachment: opening it fetches the bytes, so no network image
-  /// load fires just by opening this screen.
-  Future<void> _openImage(BuildContext context, WidgetRef ref, String url) {
-    return openAttachment(
+  /// The photo is resolved only when the user asks for it: the sync payload never carries
+  /// `Materiali.imageUrl`, so the live detail endpoint (already used by the edit form) is read on
+  /// tap. No network call fires just by opening this screen.
+  Future<void> _openPhoto(BuildContext context, WidgetRef ref) async {
+    Map<String, dynamic>? detail;
+    try {
+      detail = await ref.read(adminApiClientProvider).fetchMaterialeDetail(materiale.id);
+    } catch (_) {
+      if (context.mounted) {
+        showAppToast(
+          context,
+          message: 'Foto non disponibile offline: riprova quando sei online.',
+          tone: ToastTone.error,
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
+    final url = _clean(detail?['imageContentUrl'] as String?);
+    if (url == null) {
+      showAppToast(context, message: 'Nessuna foto per questo materiale.', tone: ToastTone.warning);
+      return;
+    }
+
+    await openAttachment(
       context,
       dio: ref.read(dioProvider),
-      fileName: _fileNameFromUrl(url),
+      fileName: _photoFileName(url),
       contentType: 'image/*',
       url: url,
     );
@@ -283,8 +303,10 @@ String? _clean(String? value) {
 
 String _priceLabel(double value) => '€ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
 
-String _fileNameFromUrl(String url) {
+String _photoFileName(String url) {
   final segments = Uri.tryParse(url)?.pathSegments;
   final last = segments == null || segments.isEmpty ? '' : segments.last;
-  return last.isEmpty ? 'foto-materiale' : last;
+  // API content paths end in a bare segment such as `image`; a name without an extension would
+  // show up as the viewer's title. Fall back to a friendly name in that case.
+  return last.isEmpty || !last.contains('.') ? 'foto-materiale.jpg' : last;
 }
