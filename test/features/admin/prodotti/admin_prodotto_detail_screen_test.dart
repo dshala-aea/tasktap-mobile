@@ -1,12 +1,5 @@
 // dart format width=100
 // test/features/admin/prodotti/admin_prodotto_detail_screen_test.dart
-//
-// Feature audit module #10 (Prodotti/Servizi):
-//   - Gap 5: delete had no UI at all — now a confirm dialog + DELETE call behind the header's
-//     trash icon (mirrors admin_cantiere_detail_screen.dart's own `_deleteCantiere`).
-//   - Gap 3: Matricole — a real 1:N serial-number sub-resource with zero prior UI. Covers list,
-//     add (bottom sheet), and remove (confirm dialog), the same add/remove-only shape
-//     admin_cantiere_detail_screen.dart's crew section already established for this app.
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -17,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
@@ -30,9 +24,6 @@ import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_detail_scr
 
 class MockDio extends Mock implements Dio {}
 
-/// Answers the extension-fields reads/writes the "Campi aggiuntivi" section makes, and records what
-/// it was asked for — the entity-type key is the part worth pinning: an asset is
-/// `prodottoassistenza` to the backend, not `asset`.
 class _FakeExtensionFieldsApiClient implements ExtensionFieldsApiClient {
   _FakeExtensionFieldsApiClient({required this.defs, required this.values});
 
@@ -64,8 +55,11 @@ class _FakeExtensionFieldsApiClient implements ExtensionFieldsApiClient {
   }
 }
 
-Response<T> _ok<T>(T data, String path) =>
-    Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
+Response<T> _ok<T>(T data, String path) => Response<T>(
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 Entitlement _entitlementWith(Set<String> capabilities) => Entitlement(
   features: const {},
@@ -95,8 +89,6 @@ void main() {
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
     mockDio = MockDio();
-    // One tenant-configured asset field, the ordinary case: an admin added a custom field and the
-    // technician already filled it in once.
     extensionFields = _FakeExtensionFieldsApiClient(
       defs: [
         const ExtensionFieldDefinitionDto(
@@ -113,9 +105,7 @@ void main() {
       values: {'codice_impianto': 'IMP-9'},
     );
 
-    when(
-      () => mockDio.get<List<dynamic>>('/api/prodottoassistenza/prod-1/matricole'),
-    ).thenAnswer(
+    when(() => mockDio.get<List<dynamic>>('/api/prodottoassistenza/prod-1/matricole')).thenAnswer(
       (_) async => _ok([
         {'id': 'm1', 'numero': 'SN-001', 'note': null},
       ], '/api/prodottoassistenza/prod-1/matricole'),
@@ -126,15 +116,11 @@ void main() {
         '/api/prodottoassistenza/prod-1/matricole',
         data: any(named: 'data'),
       ),
-    ).thenAnswer(
-      (_) async => _ok({'id': 'm2'}, '/api/prodottoassistenza/prod-1/matricole'),
-    );
+    ).thenAnswer((_) async => _ok({'id': 'm2'}, '/api/prodottoassistenza/prod-1/matricole'));
 
     when(
       () => mockDio.delete<dynamic>('/api/prodottoassistenza/prod-1/matricole/m1'),
-    ).thenAnswer(
-      (_) async => _ok(null, '/api/prodottoassistenza/prod-1/matricole/m1'),
-    );
+    ).thenAnswer((_) async => _ok(null, '/api/prodottoassistenza/prod-1/matricole/m1'));
 
     when(
       () => mockDio.delete<dynamic>('/api/prodottoassistenza/prod-1'),
@@ -147,7 +133,7 @@ void main() {
   var entitlement = _entitlementWith({'contratti.contract.write'});
   setUp(() => entitlement = _entitlementWith({'contratti.contract.write'}));
 
-  Widget buildHarness() {
+  Widget buildHarness({Map<String, dynamic> data = prodotto}) {
     final router = GoRouter(
       initialLocation: '/',
       routes: [
@@ -164,7 +150,7 @@ void main() {
         ),
         GoRoute(
           path: '/detail',
-          builder: (context, state) => const AdminProdottoDetailScreen(prodotto: prodotto),
+          builder: (context, state) => AdminProdottoDetailScreen(prodotto: data),
         ),
       ],
     );
@@ -176,17 +162,79 @@ void main() {
         isOnlineProvider.overrideWithValue(true),
         extensionFieldsApiClientProvider.overrideWithValue(extensionFields),
         cachedEntitlementProvider.overrideWith((ref) => Future.value(entitlement)),
+        clockProvider.overrideWithValue(() => DateTime.utc(2026, 11, 5, 12)),
       ],
       child: MaterialApp.router(routerConfig: router),
     );
   }
 
-  /// [size] is taller than a phone for the tests that assert on a card pinned to the bottom of the
-  /// scroll view (the extension-fields section) — a `CustomScrollView` only builds the slivers in
-  /// view, so a short surface would make `find` fail for a section that is really there.
-  Future<void> openDetail(WidgetTester tester, {Size size = const Size(800, 1600)}) async {
+  Future<void> seedCustomer() async {
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'cust-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2021, 4, 12),
+            companyName: 'Rossi Srl',
+          ),
+        );
+    await db
+        .into(db.locations)
+        .insert(
+          LocationsCompanion.insert(
+            id: 'loc-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2022, 1, 1),
+            customerId: 'cust-1',
+            name: 'Sede Milano',
+          ),
+        );
+  }
+
+  Future<void> seedTicket({
+    String id = 't1',
+    String title = 'Manutenzione caldaia',
+    String? numero = 'INT-2026-0412',
+    bool closed = false,
+  }) async {
+    await db
+        .into(db.ticketStatuses)
+        .insertOnConflictUpdate(
+          TicketStatusesCompanion.insert(
+            id: const Value(1),
+            tenantId: 'tenant-1',
+            name: closed ? 'Chiuso' : 'Aperto',
+          ),
+        );
+    await db
+        .into(db.tickets)
+        .insert(
+          TicketsCompanion.insert(
+            id: id,
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 10, 3, 9),
+            title: title,
+            customerId: 'cust-1',
+            locationId: 'loc-1',
+            statusId: 1,
+            typeId: 1,
+            numero: Value(numero),
+            prodottoAssistenzaIdsJson: const Value('["prod-1"]'),
+            closedAt: Value(closed ? DateTime.utc(2026, 10, 4) : null),
+          ),
+        );
+  }
+
+  /// [size] is taller than a phone for the tests that assert on content below the fold (the
+  /// extension-fields section) — a `CustomScrollView` only builds the slivers in view.
+  Future<void> openDetail(
+    WidgetTester tester, {
+    Size size = const Size(800, 1600),
+    Map<String, dynamic> data = prodotto,
+  }) async {
     await tester.binding.setSurfaceSize(size);
-    await tester.pumpWidget(buildHarness());
+    await tester.pumpWidget(buildHarness(data: data));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apri dettaglio'));
     await tester.pumpAndSettle();
@@ -197,6 +245,113 @@ void main() {
     await tester.pumpAndSettle();
     await tester.binding.setSurfaceSize(null);
   }
+
+  group('redesigned summary shell', () {
+    testWidgets('renders the hero, Modifica and no FAB', (tester) async {
+      await seedCustomer();
+      await openDetail(tester);
+
+      expect(find.byKey(const Key('detail-hero-card')), findsOneWidget);
+      expect(find.text('Caldaia'), findsOneWidget);
+      expect(find.text('Modifica'), findsWidgets);
+      expect(find.byType(FloatingActionButton), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('hero facts carry cliente, serial and last maintenance', (tester) async {
+      await seedCustomer();
+      await openDetail(
+        tester,
+        data: const {
+          'id': 'prod-1',
+          'name': 'Caldaia Vaillant',
+          'customerId': 'cust-1',
+          'locationId': 'loc-1',
+          'isActive': true,
+          'serialNumber': 'SN-9',
+          'ultimaManutenzione': '2026-10-03T00:00:00Z',
+        },
+      );
+
+      expect(find.text('Rossi Srl · SN-9 · ultima 03/10'), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('warranty status is derived from the expiry date', (tester) async {
+      await openDetail(
+        tester,
+        data: const {
+          'id': 'prod-1',
+          'name': 'Caldaia',
+          'customerId': 'cust-1',
+          'locationId': 'loc-1',
+          'isActive': true,
+          'warrantyExpiryDate': '2027-06-01T00:00:00Z',
+        },
+      );
+
+      expect(find.text('IN GARANZIA'), findsWidgets);
+      await teardown(tester);
+    });
+
+    testWidgets('sections run Attività → Sintesi → Relazioni and Documenti is hidden', (
+      tester,
+    ) async {
+      await seedCustomer();
+      await seedTicket();
+      await openDetail(tester);
+
+      final attivita = tester.getTopLeft(find.text('Attività')).dy;
+      final sintesi = tester.getTopLeft(find.text('Sintesi')).dy;
+      final relazioni = tester.getTopLeft(find.text('Relazioni')).dy;
+      expect(attivita, lessThan(sintesi));
+      expect(sintesi, lessThan(relazioni));
+      expect(find.text('Documenti'), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('empty sections are hidden', (tester) async {
+      await openDetail(tester, data: const {'id': 'prod-1', 'name': 'Caldaia', 'isActive': true});
+
+      expect(find.text('Attività'), findsNothing);
+      expect(find.text('Relazioni'), findsNothing);
+      expect(find.text('Documenti'), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('320px does not overflow with long real strings', (tester) async {
+      await seedCustomer();
+      await seedTicket(title: 'Sostituzione valvola e controllo fumi');
+      await openDetail(
+        tester,
+        size: const Size(320, 900),
+        data: const {
+          'id': 'prod-1',
+          'name': 'Caldaia a condensazione Vaillant EcoTEC Plus',
+          'customerId': 'cust-1',
+          'locationId': 'loc-1',
+          'isActive': true,
+          'codice': 'CAL-VAILLANT-ECOTEC-PLUS-2024',
+          'serialNumber': 'SN-000000009',
+          'marchio': 'Vaillant',
+          'modello': 'EcoTEC Plus VU IT 246/5-5',
+          'tipo': 'Caldaia a condensazione',
+          'categoria': 'Caldaie e scaldabagni',
+          'um': 'pezzo',
+          'warrantyExpiryDate': '2027-06-01T00:00:00Z',
+          'ultimaManutenzione': '2026-10-03T00:00:00Z',
+          'prossimaManutenzione': '2026-12-03T00:00:00Z',
+          'dataInstallazione': '2024-05-10T00:00:00Z',
+          'externalId': 'EXT-PRODOTTO-ASSISTENZA-0001',
+          'description': 'Caldaia a condensazione installata in centrale termica.',
+          'notes': 'Accesso dalla scala interna.',
+        },
+      );
+
+      expect(tester.takeException(), isNull);
+      await teardown(tester);
+    });
+  });
 
   group('Matricole (Gap 3)', () {
     testWidgets('lists matricole from the live GET fetch', (tester) async {
@@ -212,25 +367,22 @@ void main() {
       await tester.tap(find.byTooltip('Aggiungi matricola'));
       await tester.pumpAndSettle();
 
-      // The sheet's own fields, not the page's: the page now also has a text field (the
-      // extension-fields card), so an unscoped `.first` types into the wrong one and the save
-      // silently returns early on an empty numero.
       final sheetFields = find.descendant(
         of: find.byType(BottomSheet),
         matching: find.byType(TextFormField),
       );
       await tester.enterText(sheetFields.first, 'SN-002');
-      await tester.tap(
-        find.descendant(of: find.byType(BottomSheet), matching: find.text('Salva')),
-      );
+      await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text('Salva')));
       await tester.pumpAndSettle();
 
-      final captured = verify(
-        () => mockDio.post<Map<String, dynamic>>(
-          '/api/prodottoassistenza/prod-1/matricole',
-          data: captureAny(named: 'data'),
-        ),
-      ).captured.single as Map;
+      final captured =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/prodottoassistenza/prod-1/matricole',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
       expect(captured['numero'], 'SN-002');
       await teardown(tester);
     });
@@ -254,8 +406,6 @@ void main() {
     testWidgets('confirms then DELETEs and pops', (tester) async {
       await openDetail(tester);
 
-      // HeaderIconBtn announces itself via Semantics(label:), not a Tooltip widget — mirrors
-      // admin_cantiere_detail_screen_test.dart's own convention for the same widget.
       await tester.tap(
         find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina asset'),
       );
@@ -276,7 +426,7 @@ void main() {
         find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina asset'),
         findsNothing,
       );
-      expect(find.byTooltip('Modifica'), findsNothing);
+      expect(find.text('Modifica'), findsNothing);
       await teardown(tester);
     });
   });
@@ -285,12 +435,7 @@ void main() {
     testWidgets('reads the asset\'s fields under the backend\'s prodottoassistenza key', (
       tester,
     ) async {
-      // The asset was the one entity a technician opens on every visit and could not fill in; the
-      // key is what matters, because the API knows it as `prodottoassistenza`, not `asset`.
       await openDetail(tester, size: const Size(800, 2800));
-      // The section sits at the bottom of a lazily-built `CustomScrollView`, so it only exists
-      // once it scrolls into view; dragging also pumps, which is what lets its own two async
-      // providers resolve.
       await tester.dragUntilVisible(
         find.text('IMP-9'),
         find.byType(Scrollable).first,
@@ -299,8 +444,6 @@ void main() {
 
       expect(extensionFields.definitionsEntityType, 'prodottoassistenza');
       expect(extensionFields.valuesKey, ('prodottoassistenza', 'prod-1'));
-      // AppFieldLabel renders `Text.rich` with the label upper-cased, which `find.text` only
-      // matches when told to look inside rich text.
       expect(find.text('CODICE IMPIANTO', findRichText: true), findsOneWidget);
       expect(find.text('IMP-9'), findsOneWidget);
       await teardown(tester);
@@ -309,7 +452,6 @@ void main() {
     testWidgets('saves what the technician typed against that same key', (tester) async {
       await openDetail(tester, size: const Size(800, 2800));
 
-      // Scroll the section into view first — the same lazy-sliver reason as the test above.
       await tester.dragUntilVisible(
         find.byType(TextFormField),
         find.byType(Scrollable).first,
@@ -317,7 +459,6 @@ void main() {
       );
       await tester.enterText(find.byType(TextFormField), 'IMP-10');
       await tester.pumpAndSettle();
-      // Last, for the same reason as the matricole sheet above: this card is the page's own.
       await tester.tap(find.text('Salva').last);
       await tester.pumpAndSettle();
 
