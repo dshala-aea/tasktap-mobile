@@ -4,11 +4,16 @@
 // Widget tests for AdminLocationDetailScreen ("sede" detail, admin/office-facing).
 //
 // Covers:
-//   - renders the location's KeyVal fields (Nome, Città, Indirizzo, CAP, Telefono, Note)
-//   - shows the "not synced" unavailable state when the location isn't in the local mirror
-//   - shows GeoMapCard (never a raw "Coordinate: lat, lng" row) when the location has an address
-//   - shows no map section when the location has no address at all
-//   - never renders the location's raw latitude/longitude as bare numeric text anywhere on screen
+//   - summary hero + Modifica (gated on clienti.location.write)
+//   - section order Documenti & mappa → Relazioni → Sintesi → Attività
+//   - Relazioni from the local mirror (cliente, referenti, contratti)
+//   - Sintesi facts (address, CAP, phone, notes) without repeating the hero's city
+//   - Attività tickets from the local mirror
+//   - empty sections hidden
+//   - the "not synced" / "not found" unavailable states
+//   - GeoMapCard (never a raw "Coordinate" row) when the location has an address
+//   - no map section when the location has no address at all
+//   - no raw latitude/longitude anywhere on screen
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -18,7 +23,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/locations/admin_location_detail_screen.dart';
 
@@ -33,14 +40,40 @@ class _NullGeocodingService extends GeocodingService {
   Future<GeocodedPoint?> geocode(String address) async => null;
 }
 
-Widget _buildDetail({required AppDatabase db, String locationId = 'loc-1'}) {
+Entitlement _entitlement({bool canWrite = true}) => Entitlement(
+  features: const {},
+  capabilities: canWrite ? const {'clienti.location.write'} : const {},
+  seatType: 'office',
+  fetchedAt: DateTime.utc(2026, 9, 23),
+);
+
+Widget _buildDetail({required AppDatabase db, String locationId = 'loc-1', bool canWrite = true}) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(_entitlement(canWrite: canWrite)),
+      ),
     ],
     child: MaterialApp(home: AdminLocationDetailScreen(locationId: locationId)),
   );
+}
+
+/// Pumps at a tall phone surface so every lazily-built section is on screen: the default 800×600
+/// test window only builds the hero and the first section, leaving Relazioni/Sintesi/Attività
+/// unbuilt and unfindable.
+Future<void> _pumpDetail(
+  WidgetTester tester, {
+  required AppDatabase db,
+  String locationId = 'loc-1',
+  bool canWrite = true,
+  bool settle = true,
+}) async {
+  await tester.binding.setSurfaceSize(const Size(390, 1800));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+  await tester.pumpWidget(_buildDetail(db: db, locationId: locationId, canWrite: canWrite));
+  if (settle) await tester.pumpAndSettle();
 }
 
 void main() {
@@ -62,6 +95,7 @@ void main() {
     String? notes,
     double? latitude,
     double? longitude,
+    bool isActive = true,
   }) async {
     await db
         .into(db.customers)
@@ -89,21 +123,76 @@ void main() {
             notes: Value(notes),
             latitude: Value(latitude),
             longitude: Value(longitude),
+            isActive: Value(isActive),
           ),
         );
   }
 
-  // CRITICAL: this screen watches `adminLocationDetailProvider`/`locationGeocodedLocationProvider`
-  // (a Drift stream + a FutureProvider reading the same DB), so every test below ends by
-  // explicitly unmounting the widget tree — otherwise Drift's StreamQueryStore leaves a pending
-  // Timer behind and the test framework fails with "A Timer is still pending". Mirrors the
-  // documented convention in admin_location_form_screen_test.dart / admin_cantiere_detail_screen_test.dart.
+  Future<void> seedTicket({
+    String id = 'ticket-1',
+    required String locationId,
+    String title = 'Perdita acqua sotto il lavello',
+    DateTime? createdAt,
+  }) async {
+    await db
+        .into(db.ticketStatuses)
+        .insert(
+          TicketStatusesCompanion.insert(id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'),
+        );
+    await db
+        .into(db.tickets)
+        .insert(
+          TicketsCompanion.insert(
+            id: id,
+            tenantId: 'tenant-1',
+            createdAt: createdAt ?? DateTime.utc(2026, 11, 3),
+            title: title,
+            customerId: 'cust-1',
+            locationId: locationId,
+            statusId: 1,
+            typeId: 1,
+          ),
+        );
+  }
+
+  Future<void> seedRelationData({String locationId = 'loc-1'}) async {
+    await db
+        .into(db.customerContacts)
+        .insert(
+          CustomerContactsCompanion.insert(
+            id: 'contact-1',
+            customerId: 'cust-1',
+            name: 'Mario Bianchi',
+            role: const Value('Responsabile acquisti'),
+            phone: const Value('02 9876543'),
+          ),
+        );
+    await db
+        .into(db.contracts)
+        .insert(
+          ContractsCompanion.insert(
+            id: 'contract-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            name: 'Full service',
+            customerId: 'cust-1',
+            locationId: Value(locationId),
+            startDate: DateTime.utc(2026, 1, 1),
+            endDate: Value(DateTime.utc(2026, 12, 31)),
+            isActive: const Value(true),
+          ),
+        );
+  }
+
+  // CRITICAL: this screen watches Drift streams, so every test below ends by explicitly
+  // unmounting the widget tree — otherwise Drift's StreamQueryStore leaves a pending Timer behind
+  // and the test framework fails with "A Timer is still pending".
   Future<void> unmount(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   }
 
-  testWidgets('renders KeyVal fields for a synced location', (tester) async {
+  testWidgets('renders the summary hero, Modifica and the four sections', (tester) async {
     await seedLocation(
       address: 'Via Roma 1',
       city: 'Milano',
@@ -111,13 +200,28 @@ void main() {
       phone: '02 1234567',
       notes: 'Portone sul retro',
     );
+    await seedTicket(locationId: 'loc-1');
 
-    await tester.pumpWidget(_buildDetail(db: db));
-    await tester.pumpAndSettle();
+    await _pumpDetail(tester, db: db);
 
-    expect(find.text('Sede Milano'), findsWidgets);
-    expect(find.text('Milano'), findsWidgets);
-    expect(find.text('Via Roma 1'), findsWidgets);
+    // The collapsed bar is always built (slid offscreen), so hero assertions are scoped to the
+    // hero card instead of matching its offscreen copy.
+    final hero = find.byKey(const Key('detail-hero-card'));
+    expect(find.text('Sede'), findsOneWidget); // app bar title
+    expect(find.descendant(of: hero, matching: find.text('Sede Milano')), findsOneWidget);
+    expect(find.descendant(of: hero, matching: find.text('ATTIVA')), findsOneWidget);
+    expect(
+      find.descendant(of: hero, matching: find.text('ACME Srl · Milano · 1 intervento')),
+      findsOneWidget,
+    );
+    expect(find.descendant(of: hero, matching: find.text('Modifica')), findsOneWidget);
+
+    expect(find.text('Documenti & mappa'), findsOneWidget);
+    expect(find.text('Relazioni'), findsOneWidget);
+    expect(find.text('Sintesi'), findsOneWidget);
+    expect(find.text('Attività'), findsOneWidget);
+
+    expect(find.text('Via Roma 1'), findsOneWidget);
     expect(find.text('20100'), findsOneWidget);
     expect(find.text('02 1234567'), findsOneWidget);
     expect(find.text('Portone sul retro'), findsOneWidget);
@@ -125,11 +229,65 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets('hides Modifica without the clienti.location.write capability', (tester) async {
+    await seedLocation(address: 'Via Roma 1', city: 'Milano');
+
+    await _pumpDetail(tester, db: db, canWrite: false);
+
+    expect(find.text('Modifica'), findsNothing);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Relazioni lists cliente, referenti and contratti from the local mirror', (
+    tester,
+  ) async {
+    await seedLocation(address: 'Via Roma 1', city: 'Milano');
+    await seedRelationData();
+
+    await _pumpDetail(tester, db: db);
+
+    expect(find.text('Cliente'), findsOneWidget);
+    expect(find.text('ACME SRL'), findsOneWidget);
+    expect(find.text('Mario Bianchi'), findsOneWidget);
+    expect(find.text('Full service'), findsOneWidget);
+    expect(find.textContaining('31/12/2026'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('Attività lists the sede tickets and hides when there are none', (tester) async {
+    await seedLocation(address: 'Via Roma 1', city: 'Milano');
+    await seedTicket(locationId: 'loc-1', title: 'Sostituzione sifone bagno');
+
+    await _pumpDetail(tester, db: db);
+
+    expect(find.text('Sostituzione sifone bagno'), findsOneWidget);
+    expect(find.textContaining('03/11/2026 · APERTO'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('hides Documenti & mappa, Sintesi and Attività when they have no data', (
+    tester,
+  ) async {
+    await seedLocation(name: 'Sede senza indirizzo');
+
+    await _pumpDetail(tester, db: db);
+
+    expect(find.byType(GeoMapCard), findsNothing);
+    expect(find.text('Documenti & mappa'), findsNothing);
+    expect(find.text('Sintesi'), findsNothing);
+    expect(find.text('Attività'), findsNothing);
+    expect(find.text('Relazioni'), findsOneWidget); // the cliente row still exists
+
+    await unmount(tester);
+  });
+
   testWidgets('shows the unavailable state when the location is not synced locally', (
     tester,
   ) async {
-    await tester.pumpWidget(_buildDetail(db: db, locationId: 'missing'));
-    await tester.pumpAndSettle();
+    await _pumpDetail(tester, db: db, locationId: 'missing');
 
     expect(find.text('Sede non disponibile'), findsOneWidget);
 
@@ -143,8 +301,7 @@ void main() {
   ) async {
     await db.setLastSync(DateTime.utc(2026, 10, 1));
 
-    await tester.pumpWidget(_buildDetail(db: db, locationId: 'missing'));
-    await tester.pumpAndSettle();
+    await _pumpDetail(tester, db: db, locationId: 'missing');
 
     expect(find.text('Sede non trovata'), findsOneWidget);
     expect(find.text('Sede non disponibile'), findsNothing);
@@ -157,12 +314,12 @@ void main() {
     (tester) async {
       await seedLocation(address: 'Via Roma 1', city: 'Milano', latitude: 45.4642, longitude: 9.19);
 
+      // Default 800px test surface: the embedded map's OSM attribution is a horizontal row that
+      // overflows a 390px surface under the test font, and this test needs only the first section.
       await tester.pumpWidget(_buildDetail(db: db));
       // Bounded pumps, not pumpAndSettle: the cached lat/lng resolves with no real geocoding call,
       // so GeoMapCard mounts the real (offline, tile-less-in-tests) embedded map — its TileLayer's
-      // network image requests never "settle" the way pumpAndSettle waits for, the same reason
-      // ticket_detail_screen_test.dart's own `pump()` helper uses bounded pumps for its live-timer
-      // cases. The assertions below only need the widget tree built, not tiles painted.
+      // network image requests never "settle" the way pumpAndSettle waits for.
       for (var i = 0; i < 6; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
@@ -181,8 +338,7 @@ void main() {
     (tester) async {
       await seedLocation(address: 'Via Torino 5', city: 'Torino');
 
-      await tester.pumpWidget(_buildDetail(db: db));
-      await tester.pumpAndSettle();
+      await _pumpDetail(tester, db: db);
 
       expect(find.byType(GeoMapCard), findsOneWidget);
       // The fake geocoder never resolves a point, so this exercises GeoMapCard's own fallback.
@@ -192,15 +348,4 @@ void main() {
       await unmount(tester);
     },
   );
-
-  testWidgets('shows no map section when the location has no address at all', (tester) async {
-    await seedLocation(name: 'Sede senza indirizzo');
-
-    await tester.pumpWidget(_buildDetail(db: db));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(GeoMapCard), findsNothing);
-
-    await unmount(tester);
-  });
 }
