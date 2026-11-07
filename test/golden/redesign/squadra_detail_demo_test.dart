@@ -8,8 +8,6 @@ import 'package:flutter/material.dart' show Size;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
-import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
-import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/admin/squadre/admin_squadra_detail_screen.dart';
@@ -88,16 +86,6 @@ void main() {
       overrides: [
         adminApiClientProvider.overrideWithValue(_DemoAdminApiClient()),
         isOnlineProvider.overrideWithValue(true),
-        cachedEntitlementProvider.overrideWith(
-          (ref) => Future.value(
-            Entitlement(
-              features: const {},
-              capabilities: const {'team.squadra.write'},
-              seatType: 'office',
-              fetchedAt: DateTime.utc(2026, 11, 6),
-            ),
-          ),
-        ),
       ],
     );
   });
@@ -115,16 +103,6 @@ void main() {
         overrides: [
           adminApiClientProvider.overrideWithValue(_DemoAdminApiClient()),
           isOnlineProvider.overrideWithValue(true),
-          cachedEntitlementProvider.overrideWith(
-            (ref) => Future.value(
-              Entitlement(
-                features: const {},
-                capabilities: const {'team.squadra.write'},
-                seatType: 'office',
-                fetchedAt: DateTime.utc(2026, 11, 6),
-              ),
-            ),
-          ),
         ],
       );
     },

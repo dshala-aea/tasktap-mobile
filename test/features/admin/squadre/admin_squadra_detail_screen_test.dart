@@ -28,9 +28,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
-import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
-import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
+import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
@@ -171,29 +169,16 @@ class _PickerPopulationApiClient extends AdminApiClient {
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
-const _writeCap = 'team.squadra.write';
-
 Widget _buildView({
   required AdminApiClient api,
   Map<String, dynamic>? squadra,
   bool online = true,
-  Set<String> capabilities = const {_writeCap},
   AppDatabase? db,
 }) {
   return ProviderScope(
     overrides: [
       adminApiClientProvider.overrideWithValue(api),
       isOnlineProvider.overrideWithValue(online),
-      cachedEntitlementProvider.overrideWith(
-        (ref) => Future.value(
-          Entitlement(
-            features: const {},
-            capabilities: capabilities,
-            seatType: 'office',
-            fetchedAt: DateTime.utc(2026, 9, 23),
-          ),
-        ),
-      ),
       if (db != null) appDatabaseProvider.overrideWithValue(db),
     ],
     child: MaterialApp(
@@ -232,12 +217,9 @@ Future<void> _pump(
   required AdminApiClient api,
   Map<String, dynamic>? squadra,
   bool online = true,
-  Set<String> capabilities = const {_writeCap},
   AppDatabase? db,
 }) async {
-  await tester.pumpWidget(
-    _buildView(api: api, squadra: squadra, online: online, capabilities: capabilities, db: db),
-  );
+  await tester.pumpWidget(_buildView(api: api, squadra: squadra, online: online, db: db));
   await tester.pumpAndSettle();
 }
 
@@ -400,23 +382,6 @@ void main() {
     await _dispose(tester);
   });
 
-  testWidgets('hides write actions without team.squadra.write', (tester) async {
-    await _pump(
-      tester,
-      api: _FakeAdminApiClient(_prototypeDetail(), users: _prototypeUsers()),
-      capabilities: const {},
-    );
-
-    expect(find.text('Modifica'), findsNothing);
-    expect(find.bySemanticsLabel('Aggiungi membro'), findsNothing);
-    expect(find.byIcon(LucideIcons.userMinus), findsNothing);
-    // Read-only content is still there.
-    expect(find.text('Relazioni'), findsOneWidget);
-    expect(find.bySemanticsLabel('Pianificazioni squadra'), findsOneWidget);
-
-    await _dispose(tester);
-  });
-
   testWidgets('shows the loading skeleton while the detail request is pending', (tester) async {
     final api = _PendingAdminApiClient();
     await tester.pumpWidget(_buildView(api: api));
@@ -475,16 +440,6 @@ void main() {
             _FakeAdminApiClient(_prototypeDetail(), users: _prototypeUsers()),
           ),
           isOnlineProvider.overrideWithValue(true),
-          cachedEntitlementProvider.overrideWith(
-            (ref) => Future.value(
-              Entitlement(
-                features: const {},
-                capabilities: const {_writeCap},
-                seatType: 'office',
-                fetchedAt: DateTime.utc(2026, 9, 23),
-              ),
-            ),
-          ),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),

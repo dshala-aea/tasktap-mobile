@@ -13,7 +13,6 @@ import '../../../core/widgets/detail/detail_link_row.dart';
 import '../../../core/widgets/detail/detail_scaffold.dart';
 import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
-import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/users/user_directory.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -95,7 +94,6 @@ class _SquadraDetailBody extends ConsumerWidget {
     final specializzazione = _clean(squadra['specializzazione']);
     final note = _clean(squadra['note']);
     final isActive = squadra['isActive'] as bool? ?? true;
-    final canWrite = _canWrite(ref);
 
     // One bulk fetch shared by the whole screen (the same one the list screen uses), never a
     // per-member `/api/users/{id}` call. `squadraId` is the derived field
@@ -138,14 +136,11 @@ class _SquadraDetailBody extends ConsumerWidget {
           glass: true,
           onTap: () => context.push('/altro/pianificazioni', extra: squadraId),
         ),
-        CapabilityGate(
-          capability: 'team.squadra.write',
-          child: HeaderIconBtn(
-            icon: LucideIcons.userPlus,
-            label: 'Aggiungi membro',
-            glass: true,
-            onTap: () => _showAddMemberSheet(context, ref),
-          ),
+        HeaderIconBtn(
+          icon: LucideIcons.userPlus,
+          label: 'Aggiungi membro',
+          glass: true,
+          onTap: () => _showAddMemberSheet(context, ref),
         ),
       ],
       hero: DetailHeroData(
@@ -157,18 +152,16 @@ class _SquadraDetailBody extends ConsumerWidget {
             ? const DetailStatus(label: 'Attiva', tone: DetailStatusTone.good)
             : const DetailStatus(label: 'Inattiva', tone: DetailStatusTone.bad),
         subtitle: heroFacts.isEmpty ? null : heroFacts,
-        primaryAction: canWrite
-            ? DetailAction(
-                label: 'Modifica',
-                onPressed: () async {
-                  // Awaited so a saved edit is reflected the moment the admin pops back here —
-                  // without this, the fire-and-forget push left the hero showing pre-edit values
-                  // until the admin left and re-entered the screen.
-                  await context.push<bool>('/altro/squadre/$squadraId/modifica', extra: squadra);
-                  ref.invalidate(adminSquadraDetailProvider(squadraId));
-                },
-              )
-            : null,
+        primaryAction: DetailAction(
+          label: 'Modifica',
+          onPressed: () async {
+            // Awaited so a saved edit is reflected the moment the admin pops back here —
+            // without this, the fire-and-forget push left the hero showing pre-edit values
+            // until the admin left and re-entered the screen.
+            await context.push<bool>('/altro/squadre/$squadraId/modifica', extra: squadra);
+            ref.invalidate(adminSquadraDetailProvider(squadraId));
+          },
+        ),
       ),
       sections: [
         DetailSectionData(
@@ -183,7 +176,6 @@ class _SquadraDetailBody extends ConsumerWidget {
                   membro: members[i],
                   user: usersById[members[i]['userId'] as String? ?? ''],
                   allowLocalNameFallback: allowLocalNameFallback,
-                  canRemove: canWrite,
                   showDivider: i < members.length - 1,
                   onRemove: () => _removeMember(context, members[i]),
                 ),
@@ -204,11 +196,6 @@ class _SquadraDetailBody extends ConsumerWidget {
         ),
       ],
     );
-  }
-
-  bool _canWrite(WidgetRef ref) {
-    final entitlement = ref.watch(cachedEntitlementProvider).value;
-    return entitlement?.capabilities.contains('team.squadra.write') ?? false;
   }
 
   /// The lead's display name, when `capSquadraNome` is absent but the membership list still names
@@ -282,7 +269,6 @@ class _MemberRow extends ConsumerWidget {
     required this.membro,
     required this.user,
     required this.allowLocalNameFallback,
-    required this.canRemove,
     required this.showDivider,
     required this.onRemove,
   });
@@ -290,7 +276,6 @@ class _MemberRow extends ConsumerWidget {
   final Map<String, dynamic> membro;
   final Map<String, dynamic>? user;
   final bool allowLocalNameFallback;
-  final bool canRemove;
   final bool showDivider;
   final VoidCallback onRemove;
 
@@ -311,16 +296,15 @@ class _MemberRow extends ConsumerWidget {
     return DetailLinkRow(
       title: name,
       showDivider: showDivider,
-      trailing: _MemberTrailing(meta: meta, canRemove: canRemove, onRemove: onRemove),
+      trailing: _MemberTrailing(meta: meta, onRemove: onRemove),
     );
   }
 }
 
 class _MemberTrailing extends StatelessWidget {
-  const _MemberTrailing({required this.meta, required this.canRemove, required this.onRemove});
+  const _MemberTrailing({required this.meta, required this.onRemove});
 
   final String meta;
-  final bool canRemove;
   final VoidCallback onRemove;
 
   @override
@@ -343,16 +327,14 @@ class _MemberTrailing extends StatelessWidget {
             ),
           ),
         ),
-        if (canRemove) ...[
-          const SizedBox(width: 2),
-          IconButton(
-            icon: const Icon(LucideIcons.userMinus, size: 18),
-            tooltip: 'Rimuovi dalla squadra',
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            visualDensity: VisualDensity.compact,
-            onPressed: onRemove,
-          ),
-        ],
+        const SizedBox(width: 2),
+        IconButton(
+          icon: const Icon(LucideIcons.userMinus, size: 18),
+          tooltip: 'Rimuovi dalla squadra',
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          visualDensity: VisualDensity.compact,
+          onPressed: onRemove,
+        ),
       ],
     );
   }
