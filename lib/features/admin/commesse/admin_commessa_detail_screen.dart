@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../../core/widgets/detail/detail_hero.dart';
 import '../../../core/widgets/detail/detail_link_row.dart';
 import '../../../core/widgets/detail/detail_scaffold.dart';
@@ -98,7 +99,7 @@ class _CommessaDetailBody extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Below 360 the 9px mono section meta cannot share the row with a 17px section title.
-        // Drop it there; the section bodies still carry every count.
+        // Drop it there; the rows still carry each item's own facts.
         final narrowHeader = constraints.maxWidth < 360;
 
         return DetailScaffold(
@@ -118,9 +119,7 @@ class _CommessaDetailBody extends ConsumerWidget {
             primaryAction: const DetailAction(
               label: 'Modifica',
               enabled: false,
-              disabledReason:
-                  'La modifica delle commesse non è disponibile su questo telefono. Usa il '
-                  'portale web.',
+              disabledReason: 'La modifica delle commesse non è disponibile su questo telefono.',
             ),
           ),
           sections: [
@@ -147,7 +146,7 @@ class _CommessaDetailBody extends ConsumerWidget {
             // is repeated between the two, per the prototype's own rule.
             DetailSectionData(
               title: 'Sintesi',
-              trailing: narrowHeader ? null : const DetailSectionMeta('Periodo, importo, note'),
+              trailing: narrowHeader ? null : const DetailSectionMeta('Note'),
               isEmpty: !hasNote,
               child: Text(
                 note ?? '',
@@ -211,18 +210,14 @@ class _CommessaDetailBody extends ConsumerWidget {
     return trimmed.isEmpty ? null : trimmed;
   }
 
-  static DateTime? _date(Object? value) {
-    if (value is! String) return null;
-    return DateTime.tryParse(value)?.toLocal();
-  }
+  static DateTime? _date(Object? value) => parseDateOnly(value);
 
   static String? _period(DateTime? start, DateTime? end) {
-    final dm = DateFormat('dd/MM');
     if (start != null && end != null) {
-      return '${dm.format(start)}–${dm.format(end)}';
+      return '${formatWorkDate(start, 'dd/MM')}–${formatWorkDate(end, 'dd/MM')}';
     }
-    if (start != null) return 'Dal ${dm.format(start)}';
-    if (end != null) return 'Fino al ${dm.format(end)}';
+    if (start != null) return 'Dal ${formatWorkDate(start, 'dd/MM')}';
+    if (end != null) return 'Fino al ${formatWorkDate(end, 'dd/MM')}';
     return null;
   }
 

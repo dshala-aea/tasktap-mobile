@@ -106,6 +106,28 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('labels the period by business calendar date, not the device day', (tester) async {
+    // Both instants are UTC midnight, i.e. the previous day in America/Los_Angeles. The hero must
+    // read the business date label (01/01), never a device-local conversion (31/12).
+    final boundary = <String, dynamic>{
+      ...commessa,
+      'dataApertura': '2026-01-01T00:00:00Z',
+      'dataChiusura': '2026-01-02T00:00:00Z',
+    };
+    when(
+      () => mockDio.get<Map<String, dynamic>>('/api/commesse/comm-1'),
+    ).thenAnswer((_) async => _ok(boundary, '/api/commesse/comm-1'));
+
+    await tester.pumpWidget(buildHarness());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('01/01–02/01'), findsOneWidget);
+    expect(find.textContaining('31/12'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('lists linked cantieri and tickets, in Relazioni then Attività', (tester) async {
     await db
         .into(db.cantieri)
