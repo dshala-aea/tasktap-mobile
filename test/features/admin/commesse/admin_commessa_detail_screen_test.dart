@@ -1,10 +1,9 @@
 // dart format width=100
 // test/features/admin/commesse/admin_commessa_detail_screen_test.dart
 //
-// Commessa detail — a genuinely missing screen closed by re-diffing the shipped app against the
-// Vetro mockup's own screens. Read-only: Dettagli card + Cantieri/Ticket collegati, both resolved
-// from the local Drift mirror (module #13 of the feature audit already synced commessaId on both
-// tables, just never showed the reverse link).
+// Commessa detail — the wave-0 summary shell: hero + Modifica, Relazioni (cantieri), Sintesi,
+// Attività (ticket). The commessa is fetched live through `commessaByIdProvider`; cantieri and
+// tickets come from the local Drift mirror.
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -22,8 +21,11 @@ import 'package:tasktap_mobile/features/admin/commesse/admin_commessa_detail_scr
 
 class MockDio extends Mock implements Dio {}
 
-Response<T> _ok<T>(T data, String path) =>
-    Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
+Response<T> _ok<T>(T data, String path) => Response<T>(
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 void main() {
   setUpAll(() {
@@ -40,15 +42,28 @@ void main() {
     'descrizione': 'Ristrutturazione impianto',
     'stato': 'Aperta',
     'dataApertura': '2026-06-03T00:00:00Z',
+    'dataChiusura': '2026-07-15T00:00:00Z',
     'importo': 8400.0,
+    'customerId': 'cust-1',
+    'note': 'Consegna al piano.',
   };
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
     mockDio = MockDio();
     when(
       () => mockDio.get<Map<String, dynamic>>('/api/commesse/comm-1'),
     ).thenAnswer((_) async => _ok(commessa, '/api/commesse/comm-1'));
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'cust-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            companyName: 'Rossi Srl',
+          ),
+        );
   });
 
   tearDown(() async => db.close());
@@ -64,22 +79,34 @@ void main() {
     );
   }
 
-  testWidgets('shows codice, descrizione, stato and importo', (tester) async {
+  testWidgets('hero leads with the codice, then description, facts and stamp', (tester) async {
     await tester.pumpWidget(buildHarness());
     await tester.pumpAndSettle();
 
+    expect(find.text('#4471'), findsOneWidget);
     expect(find.text('Ristrutturazione impianto'), findsOneWidget);
-    expect(find.textContaining('#4471'), findsOneWidget);
-    // Uppercased by StatusStamp now (Il Documento's stamp device) — see
-    // status_pill_test.dart's own note on this rendering change.
-    expect(find.text('APERTA'), findsOneWidget);
-    expect(find.textContaining('8400'), findsOneWidget);
+    expect(find.textContaining('Rossi Srl'), findsOneWidget);
+    expect(find.textContaining('03/06–15/07'), findsOneWidget);
+    expect(find.textContaining('8.400'), findsOneWidget);
+    // Uppercased by StatusStamp, Il Documento's stamp device. The collapsed bar holds an
+    // off-screen copy too, so scope this to the hero card.
+    expect(
+      find.descendant(of: find.byKey(const Key('detail-hero-card')), matching: find.text('APERTA')),
+      findsOneWidget,
+    );
+
+    // The prototype's Sintesi carries only what the hero does not: the notes. Period and amount
+    // stay in the hero facts, so no fact is repeated.
+    expect(find.text('Sintesi'), findsOneWidget);
+    expect(find.text('Consegna al piano.'), findsOneWidget);
+    expect(find.text('03/06/2026'), findsNothing);
+    expect(find.text('15/07/2026'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
 
-  testWidgets('lists linked cantieri and tickets from the local mirror', (tester) async {
+  testWidgets('lists linked cantieri and tickets, in Relazioni then Attività', (tester) async {
     await db
         .into(db.cantieri)
         .insert(
@@ -89,6 +116,17 @@ void main() {
             name: 'Cantiere Rossi SRL',
             createdAt: DateTime.now().toUtc(),
             commessaId: const Value('comm-1'),
+            city: const Value('Milano'),
+          ),
+        );
+    await db
+        .into(db.ticketStatuses)
+        .insert(
+          TicketStatusesCompanion.insert(
+            id: const Value(1),
+            tenantId: 'tenant-1',
+            name: 'In corso',
+            isInProgress: const Value(true),
           ),
         );
     await db
@@ -111,21 +149,62 @@ void main() {
     await tester.pumpWidget(buildHarness());
     await tester.pumpAndSettle();
 
-    expect(find.text('Cantieri collegati'), findsOneWidget);
+    expect(find.text('Relazioni'), findsOneWidget);
     expect(find.text('Cantiere Rossi SRL'), findsOneWidget);
-    expect(find.text('Ticket collegati'), findsOneWidget);
+    expect(find.text('Attività'), findsOneWidget);
     expect(find.textContaining('TKT-0142'), findsOneWidget);
+    expect(find.text('Avanzamento'), findsOneWidget);
+
+    final relazioniY = tester.getTopLeft(find.text('Relazioni')).dy;
+    final sintesiY = tester.getTopLeft(find.text('Sintesi')).dy;
+    final attivitaY = tester.getTopLeft(find.text('Attività')).dy;
+    expect(relazioniY, lessThan(sintesiY));
+    expect(sintesiY, lessThan(attivitaY));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
 
-  testWidgets('hides collegati sections when nothing is linked', (tester) async {
+  testWidgets('hides empty sections and never invents Documenti', (tester) async {
     await tester.pumpWidget(buildHarness());
     await tester.pumpAndSettle();
 
-    expect(find.text('Cantieri collegati'), findsNothing);
-    expect(find.text('Ticket collegati'), findsNothing);
+    expect(find.text('Relazioni'), findsNothing);
+    expect(find.text('Attività'), findsNothing);
+    expect(find.text('Documenti'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('keeps the hero action visible, disabled and explained — no FAB', (tester) async {
+    await tester.pumpWidget(buildHarness());
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('detail-hero-card')),
+        matching: find.text('Modifica'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('non è disponibile su questo telefono'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('lays out cleanly at 320px', (tester) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(buildHarness());
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('#4471'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -137,6 +216,33 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.text('Ristrutturazione impianto'), findsNothing);
+    expect(find.text('Commessa non disponibile'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('shows the mirror copy offline when the commessa was synced', (tester) async {
+    await db
+        .into(db.commesse)
+        .insert(
+          CommesseCompanion.insert(
+            id: 'comm-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            codice: '#4471',
+            descrizione: const Value('Ristrutturazione impianto'),
+            customerId: const Value('cust-1'),
+            stato: const Value('Aperta'),
+          ),
+        );
+
+    await tester.pumpWidget(buildHarness(isOnline: false));
+    await tester.pumpAndSettle();
+
+    expect(find.text('#4471'), findsOneWidget);
+    expect(find.text('Ristrutturazione impianto'), findsOneWidget);
+    expect(find.text('Rossi Srl'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
