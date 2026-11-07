@@ -1,28 +1,98 @@
 // dart format width=100
 import 'dart:async';
 
+import 'package:drift/drift.dart' show OrderingTerm, countAll;
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/router/app_router.dart' show AppRoutes;
+import '../../../core/theme/app_palette.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
+import '../../../core/time/business_time_providers.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/offline_guard.dart';
+import '../../../core/widgets/detail/detail_activity_timeline.dart';
+import '../../../core/widgets/detail/detail_facts_grid.dart';
+import '../../../core/widgets/detail/detail_hero.dart';
+import '../../../core/widgets/detail/detail_link_row.dart';
+import '../../../core/widgets/detail/detail_scaffold.dart';
+import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../ticket/steps/step_assegnazione.dart' show techniciansProvider;
+import '../../ticket/ticket_providers.dart' show ticketStatusMapProvider;
+import '../../../presentation/providers/schedule_providers.dart'
+    show customerByIdProvider, locationByIdProvider;
 import '../admin_api_client.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
-/// Admin contract detail — read-only with edit FAB.
+/// The tickets the contract covers, from the local mirror.
 ///
-/// Feature audit module #11: Gap A's new fields (numero, codice, tipo, externalId, autoRenewal,
-/// scadenzaGiorni, condizioni) are now shown; Gap B adds a delete action
-/// behind a confirm dialog; Gap C adds a "Genera pianificazione" trigger for
-/// `POST /contracts/{id}/genera-schedule`, previously entirely unreachable from mobile.
+/// A contract has no product or schedule relation in the local schema: the only join that
+/// survives offline is `Tickets.contractId`. Reading it keeps the Attività section honest — it
+/// shows the interventions this device actually knows about, and hides the section when none
+/// are mirrored rather than claiming the contract has never been used.
+final _contractTicketsProvider = StreamProvider.autoDispose.family<List<Ticket>, String>((
+  ref,
+  contractId,
+) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(db.tickets)
+        ..where((t) => t.contractId.equals(contractId))
+        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+      .watch();
+});
+
+/// How many interventions the Attività section shows before hiding the rest.
+const int _activityLimit = 5;
+
+/// The number of schedules attached to the contract's tickets, from the same local mirror.
+///
+/// `Schedules` has no `contractId` column; a schedule reaches its contract through the ticket it
+/// covers. Counting in SQL keeps the relation cheap even when the contract has years of rows.
+final _contractScheduleCountProvider = StreamProvider.autoDispose.family<int, String>((
+  ref,
+  contractId,
+) {
+  final db = ref.watch(appDatabaseProvider);
+  final ticketIds = db.selectOnly(db.tickets)
+    ..addColumns([db.tickets.id])
+    ..where(db.tickets.contractId.equals(contractId));
+  final count = countAll();
+  final query = db.selectOnly(db.schedules)
+    ..addColumns([count])
+    ..where(db.schedules.ticketId.isInQuery(ticketIds));
+  return query.map((row) => row.read(count) ?? 0).watchSingle();
+});
+
+enum _ContractState { inScadenza, attivo, scaduto, inattivo }
+
+extension on _ContractState {
+  String get label => switch (this) {
+    _ContractState.inScadenza => 'In scadenza',
+    _ContractState.attivo => 'Attivo',
+    _ContractState.scaduto => 'Scaduto',
+    _ContractState.inattivo => 'Inattivo',
+  };
+
+  DetailStatusTone get tone => switch (this) {
+    _ContractState.inScadenza => DetailStatusTone.warn,
+    _ContractState.attivo => DetailStatusTone.good,
+    _ContractState.scaduto => DetailStatusTone.bad,
+    _ContractState.inattivo => DetailStatusTone.bad,
+  };
+}
+
+/// Admin contract detail — the wave-0 summary shell.
+///
+/// Hero + `Modifica`, then Sintesi (scadenze) → Relazioni → Attività → Documenti. Empty sections
+/// are hidden by the shell. The delete action stays in the header; `Genera pianificazione` stays a
+/// hero secondary action, so there is no FAB competing with the hero's primary action.
 class AdminContractDetailScreen extends ConsumerWidget {
   const AdminContractDetailScreen({super.key, required this.contract});
 
@@ -30,162 +100,237 @@ class AdminContractDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final id = contract['id'] as String? ?? '';
-    final name = contract['name'] as String? ?? '';
-    final numero = contract['numero'] as String? ?? '';
-    final codice = contract['codice'] as String? ?? '';
-    final tipo = contract['tipo'] as String? ?? '';
-    final externalId = contract['externalId'] as String? ?? '';
-    final condizioni = contract['condizioni'] as String? ?? '';
-    final description = contract['description'] as String? ?? '';
-    final notes = contract['notes'] as String? ?? '';
-    final price = contract['price'] as num?;
-    final startDate = contract['startDate'] as String?;
-    final endDate = contract['endDate'] as String?;
-    // These four are absent from the synced `contracts` mirror (the sync payload carries only the
-    // list-shaped fields), so an offline visit reaches this screen without them. They stay null
-    // rather than defaulting: "Frequenza 1 mesi" and "Rinnovo automatico No" are claims about a
-    // contract, and this screen has no grounds for either when the row came from the mirror.
-    final frequencyValue = contract['frequencyValue'] as int?;
-    // The backend serializes ContractFrequencyUnit as a STRING ("Days"/"Months"/"Years") — see
-    // AdminApiClient.createContract's doc comment.
-    final frequencyUnit = contract['frequencyUnit'] as String?;
-    final autoRenewal = contract['autoRenewal'] as bool?;
-    final scadenzaGiorni = contract['scadenzaGiorni'] as int?;
+    final id = _string(contract['id']);
+    if (id == null || id.isEmpty) {
+      // The route carries the contract as `extra`; a deep link without it has nothing to show.
+      return const DetailScaffold.unavailable(
+        screenTitle: 'Contratto',
+        icon: LucideIcons.fileX,
+        title: 'Contratto non disponibile',
+        reason: "Apri il contratto dall'elenco per vederne i dettagli.",
+      );
+    }
+    return _ContractDetailBody(contract: contract, contractId: id);
+  }
+}
 
-    final startLabel = startDate != null
-        ? DateFormat('dd/MM/yyyy').format(DateTime.parse(startDate))
-        : '—';
-    final endLabel = endDate != null
-        ? DateFormat('dd/MM/yyyy').format(DateTime.parse(endDate))
-        : 'Nessuna data fine';
-    final priceLabel = price != null ? '€${price.toStringAsFixed(2)}' : '—';
-    final freqLabel = frequencyValue == null || frequencyUnit == null
-        ? '—'
-        : '$frequencyValue ${_frequencyUnitLabel(frequencyUnit)}';
-    final isActive = contract['isActive'] as bool? ?? true;
+class _ContractDetailBody extends ConsumerWidget {
+  const _ContractDetailBody({required this.contract, required this.contractId});
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-        child: AppFab(
-          icon: LucideIcons.pencil,
-          tooltip: 'Modifica',
+  final Map<String, dynamic> contract;
+  final String contractId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final name = _string(contract['name']);
+    final numero = _string(contract['numero']);
+    final codice = _string(contract['codice']);
+    final tipo = _string(contract['tipo']);
+    final descrizione = _string(contract['description']);
+    final condizioni = _string(contract['condizioni']);
+    final externalId = _string(contract['externalId']);
+    final note = _string(contract['notes']);
+    final customerId = _string(contract['customerId']);
+    final locationId = _string(contract['locationId']);
+    final startDate = parseDateOnly(contract['startDate']);
+    final endDate = parseDateOnly(contract['endDate']);
+    final price = _number(contract['price']);
+    final frequencyValue = _int(contract['frequencyValue']);
+    final frequencyUnit = _string(contract['frequencyUnit']);
+    final autoRenewal = contract['autoRenewal'] is bool ? contract['autoRenewal'] as bool : null;
+    final scadenzaGiorni = _int(contract['scadenzaGiorni']);
+    final isActive = contract['isActive'] is bool ? contract['isActive'] as bool : true;
+
+    final businessTime = ref.watch(businessTimeProvider);
+    final state = _stateFor(
+      endDate: endDate,
+      isActive: isActive,
+      today: businessTime.businessToday(),
+    );
+
+    final customer = customerId == null
+        ? null
+        : ref.watch(customerByIdProvider(customerId)).valueOrNull;
+    final location = locationId == null
+        ? null
+        : ref.watch(locationByIdProvider(locationId)).valueOrNull;
+    final tickets = ref.watch(_contractTicketsProvider(contractId)).valueOrNull ?? const <Ticket>[];
+    final scheduleCount = ref.watch(_contractScheduleCountProvider(contractId)).valueOrNull ?? 0;
+    final statusNames = ref.watch(ticketStatusMapProvider).valueOrNull ?? const <int, String>{};
+
+    final endLabel = endDate == null ? 'Nessuna scadenza' : 'scade ${_formatDate(endDate)}';
+    final factParts = <String>[
+      if (customer != null && customer.companyName.trim().isNotEmpty) customer.companyName,
+      endLabel,
+      if (autoRenewal != null) autoRenewal ? 'rinnovo auto' : 'rinnovo manuale',
+    ];
+
+    final sintesiFacts = <DetailFact>[
+      if (scadenzaGiorni != null) DetailFact(label: 'Preavviso', value: '$scadenzaGiorni giorni'),
+      if (frequencyValue != null && frequencyUnit != null)
+        DetailFact(label: 'Frequenza', value: _frequencyLabel(frequencyValue, frequencyUnit)),
+      if (startDate != null) DetailFact(label: 'Inizio', value: _formatDate(startDate)),
+      if (price != null) DetailFact(label: 'Prezzo', value: _formatCurrency(price)),
+      if (numero != null && numero.isNotEmpty) DetailFact(label: 'Numero', value: numero),
+      if (codice != null && codice.isNotEmpty) DetailFact(label: 'Codice', value: codice),
+      if (tipo != null && tipo.isNotEmpty) DetailFact(label: 'Tipo', value: tipo),
+      if (condizioni != null) DetailFact(label: 'Condizioni', value: condizioni),
+      if (externalId != null) DetailFact(label: 'ID esterno', value: externalId),
+    ];
+
+    final relations = <_Relation>[
+      if (customer != null && customerId != null && customer.companyName.trim().isNotEmpty)
+        _Relation(
+          title: 'Cliente',
+          meta: customer.companyName,
+          onTap: () => context.push(AppRoutes.clientiDetail(customerId)),
+        ),
+      if (location != null && locationId != null && location.name.trim().isNotEmpty)
+        _Relation(
+          title: 'Sede',
+          meta: location.name,
+          onTap: () => context.push('/altro/sedi/$locationId'),
+        ),
+      if (scheduleCount > 0)
+        _Relation(
+          title: 'Pianificazioni',
+          meta: scheduleCount == 1 ? '1 pianificazione' : '$scheduleCount pianificazioni',
+        ),
+    ];
+
+    final shownTickets = tickets.take(_activityLimit);
+    final activityEvents = [
+      for (final ticket in shownTickets)
+        DetailActivityEvent(
+          time: _formatDate(businessTime.businessDateOf(ticket.createdAt)),
+          title: ticket.title.isNotEmpty ? ticket.title : 'Intervento',
+          meta: statusNames[ticket.statusId],
+        ),
+    ];
+
+    return DetailScaffold(
+      screenTitle: 'Contratto',
+      hero: DetailHeroData(
+        variant: DetailHeroVariant.summary,
+        kind: 'Summary · contratto',
+        // The prototype renders the whole ref in red; the split kicker/context would mute half.
+        kicker: 'Summary · contratto',
+        title: name == null || name.isEmpty
+            ? (numero == null || numero.isEmpty ? 'Contratto' : numero)
+            : name,
+        status: DetailStatus(label: state.label, tone: state.tone),
+        subtitle: factParts.join(' · '),
+        primaryAction: DetailAction(
+          label: 'Modifica',
           onPressed: () async {
-            await context.push<bool>(
-              '/altro/contratti/${contract['id']}/modifica',
-              extra: contract,
-            );
+            await context.push<bool>('/altro/contratti/$contractId/modifica', extra: contract);
           },
         ),
+        secondaryActions: [
+          DetailAction(
+            label: 'Genera pianificazione',
+            icon: const Icon(LucideIcons.calendarDays),
+            onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
+          ),
+        ],
       ),
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: ScreenHeader(
-                    title: name,
-                    showBack: true,
-                    actions: id.isEmpty
-                        ? const []
-                        : [
-                            HeaderIconBtn(
-                              icon: LucideIcons.trash2,
-                              label: 'Elimina contratto',
-                              glass: true,
-                              onTap: () => _deleteContract(context, ref, id, name),
-                            ),
-                          ],
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                    child: AppCard(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                      child: Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              top: AppSpacing.md,
-                              bottom: AppSpacing.sm,
-                            ),
-                            child: Row(
-                              children: [StatusPill(stato: isActive ? 'Attivo' : 'Inattivo')],
-                            ),
-                          ),
-                          Divider(height: 1, thickness: 1, color: context.colors.borderLight),
-                          KeyVal(label: 'Nome', value: name),
-                          KeyVal(
-                            label: 'Numero contratto',
-                            value: numero.isNotEmpty ? numero : '—',
-                          ),
-                          KeyVal(label: 'Codice', value: codice.isNotEmpty ? codice : '—'),
-                          KeyVal(label: 'Tipo', value: tipo.isNotEmpty ? tipo : '—'),
-                          KeyVal(
-                            label: 'Descrizione',
-                            value: description.isNotEmpty ? description : '—',
-                          ),
-                          KeyVal(label: 'Data inizio', value: startLabel),
-                          KeyVal(label: 'Data fine', value: endLabel),
-                          KeyVal(label: 'Frequenza', value: freqLabel),
-                          KeyVal(label: 'Prezzo', value: priceLabel),
-                          KeyVal(
-                            label: 'Preavviso scadenza',
-                            value: scadenzaGiorni != null ? '$scadenzaGiorni giorni' : '—',
-                          ),
-                          KeyVal(
-                            label: 'Rinnovo automatico',
-                            value: autoRenewal == null ? '—' : (autoRenewal ? 'Sì' : 'No'),
-                          ),
-                          KeyVal(
-                            label: 'Condizioni',
-                            value: condizioni.isNotEmpty ? condizioni : '—',
-                          ),
-                          KeyVal(
-                            label: 'ID esterno',
-                            value: externalId.isNotEmpty ? externalId : '—',
-                          ),
-                          KeyVal(
-                            label: 'Note',
-                            value: notes.isNotEmpty ? notes : '—',
-                            showDivider: false,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ── Genera pianificazione (Gap C) ───────────────────────────────
-                if (id.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.pagePadding,
-                        0,
-                        AppSpacing.pagePadding,
-                        AppSpacing.base,
-                      ),
-                      child: AppButton.secondary(
-                        label: 'Genera pianificazione',
-                        onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
-                      ),
-                    ),
-                  ),
-
-                SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
-              ],
-            ),
+      headerActions: [
+        HeaderIconBtn(
+          icon: LucideIcons.trash2,
+          label: 'Elimina contratto',
+          glass: true,
+          onTap: () => _deleteContract(
+            context,
+            ref,
+            contractId,
+            name == null || name.isEmpty ? 'questo contratto' : name,
           ),
         ),
-      ),
+      ],
+      sections: [
+        DetailSectionData(
+          title: 'Sintesi',
+          isEmpty: sintesiFacts.isEmpty && descrizione == null && note == null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DetailFactsGrid(facts: sintesiFacts),
+              if (descrizione != null)
+                Padding(
+                  padding: EdgeInsets.only(top: sintesiFacts.isEmpty ? 0 : AppSpacing.md),
+                  child: _ContractTextBlock(label: 'Descrizione', value: descrizione),
+                ),
+              if (note != null)
+                Padding(
+                  padding: EdgeInsets.only(
+                    top: sintesiFacts.isEmpty && descrizione == null ? 0 : AppSpacing.md,
+                  ),
+                  child: _ContractTextBlock(label: 'Note', value: note),
+                ),
+            ],
+          ),
+        ),
+        DetailSectionData(
+          title: 'Relazioni',
+          isEmpty: relations.isEmpty,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < relations.length; i++)
+                DetailLinkRow(
+                  title: relations[i].title,
+                  meta: relations[i].onTap == null ? relations[i].meta : null,
+                  trailing: relations[i].onTap == null
+                      ? null
+                      : _RelationTrailing(meta: relations[i].meta),
+                  onTap: relations[i].onTap,
+                  showDivider: i < relations.length - 1,
+                ),
+            ],
+          ),
+        ),
+        DetailSectionData(
+          title: 'Attività',
+          isEmpty: activityEvents.isEmpty,
+          trailing: tickets.length > _activityLimit
+              ? DetailSectionMeta('ultimi $_activityLimit di ${tickets.length}')
+              : null,
+          child: DetailActivityTimeline(events: activityEvents),
+        ),
+      ],
     );
+  }
+
+  static _ContractState _stateFor({
+    required DateTime? endDate,
+    required bool isActive,
+    required DateTime today,
+  }) {
+    if (endDate != null && endDate.isBefore(today)) {
+      return _ContractState.scaduto;
+    }
+    if (!isActive) return _ContractState.inattivo;
+    if (endDate != null &&
+        endDate.isAfter(today) &&
+        !endDate.isAfter(today.add(const Duration(days: 30)))) {
+      return _ContractState.inScadenza;
+    }
+    return _ContractState.attivo;
+  }
+
+  static String _formatDate(DateTime date) => formatWorkDate(date, 'dd/MM/yyyy');
+
+  static String _formatCurrency(num price) =>
+      NumberFormat.currency(locale: 'it_IT', symbol: '€').format(price);
+
+  static String _frequencyLabel(int value, String unit) {
+    if (value != 1) return '$value ${_frequencyUnitLabel(unit)}';
+    final singular = switch (unit) {
+      'Days' => 'giorno',
+      'Years' => 'anno',
+      _ => 'mese',
+    };
+    return '1 $singular';
   }
 
   static String _frequencyUnitLabel(String unit) => switch (unit) {
@@ -194,6 +339,93 @@ class AdminContractDetailScreen extends ConsumerWidget {
     _ => 'mesi',
   };
 }
+
+/// Long free text under the Sintesi facts grid: a mono label above wrapped prose.
+class _ContractTextBlock extends StatelessWidget {
+  const _ContractTextBlock({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: AppTextStyles.docCode.copyWith(
+            fontSize: 8,
+            letterSpacing: 0.64,
+            color: colors.inkMuted,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: AppTextStyles.bodySmall.copyWith(fontSize: 11.5, height: 1.4, color: colors.ink),
+        ),
+      ],
+    );
+  }
+}
+
+class _Relation {
+  const _Relation({required this.title, required this.meta, this.onTap});
+
+  final String title;
+  final String meta;
+  final VoidCallback? onTap;
+}
+
+/// The right-hand side of a tappable relation row: the mono meta plus the chevron that says the
+/// row opens something. Non-tappable rows keep `DetailLinkRow`'s own meta treatment.
+class _RelationTrailing extends StatelessWidget {
+  const _RelationTrailing({required this.meta});
+
+  final String meta;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 180),
+          child: Text(
+            meta.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: AppTextStyles.docCode.copyWith(
+              fontSize: 7.5,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0.3,
+              color: context.colors.inkMuted,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Icon(LucideIcons.chevronRight, size: 14, color: context.colors.inkMuted),
+      ],
+    );
+  }
+}
+
+String? _string(Object? value) => value is String && value.trim().isNotEmpty ? value.trim() : null;
+
+num? _number(Object? value) => value is num
+    ? value
+    : value is String
+    ? num.tryParse(value)
+    : null;
+
+int? _int(Object? value) => value is num
+    ? value.toInt()
+    : value is String
+    ? int.tryParse(value)
+    : null;
 
 /// Delete confirmation dialog + API call — dialog itself is the shared `confirmDeleteDialog`.
 /// `humanErrorMessage` already surfaces the backend's 409 message
@@ -232,10 +464,9 @@ Future<void> _deleteContract(
   }
 }
 
-/// Opens the "Genera pianificazione" confirmation dialog (Gap C). Materializing recurring
-/// Schedule rows is a real write with real consequences (up to a year of rows in one call), so
-/// this asks for the one thing the backend genuinely requires and cannot default — an assignee —
-/// before firing, rather than a bare "sei sicuro?" confirm.
+/// Opens the "Genera pianificazione" confirmation dialog. Materializing recurring Schedule rows
+/// is a real write with real consequences (up to a year of rows in one call), so this asks for the
+/// one thing the backend genuinely requires and cannot default — an assignee — before firing.
 Future<void> _openGeneraScheduleDialog(
   BuildContext context,
   WidgetRef ref,
