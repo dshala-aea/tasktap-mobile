@@ -30,6 +30,11 @@ const _contract = <String, dynamic>{
   'numero': 'CTR-2026-014',
   'codice': 'FS-014',
   'tipo': 'Manutenzione',
+  'externalId': 'EXT-014',
+  'description':
+      'Manutenzione programmata della caldaia e dell\'impianto idraulico.',
+  'condizioni': 'Pagamento a 30 giorni',
+  'notes': 'Accesso dal cortile interno.',
   'customerId': 'cust-rossi',
   'locationId': 'loc-milano',
   'startDate': '2026-01-01T00:00:00Z',

@@ -1,7 +1,7 @@
 // dart format width=100
 import 'dart:async';
 
-import 'package:drift/drift.dart' show OrderingTerm, innerJoin;
+import 'package:drift/drift.dart' show OrderingTerm, countAll;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -48,19 +48,26 @@ final _contractTicketsProvider = StreamProvider.autoDispose.family<List<Ticket>,
       .watch();
 });
 
-/// The schedules attached to the contract's tickets, from the same local mirror.
+/// How many interventions the Attività section shows before hiding the rest.
+const int _activityLimit = 5;
+
+/// The number of schedules attached to the contract's tickets, from the same local mirror.
 ///
 /// `Schedules` has no `contractId` column; a schedule reaches its contract through the ticket it
-/// covers. This is a derived count, not a second network read.
-final _contractSchedulesProvider = StreamProvider.autoDispose.family<List<Schedule>, String>((
+/// covers. Counting in SQL keeps the relation cheap even when the contract has years of rows.
+final _contractScheduleCountProvider = StreamProvider.autoDispose.family<int, String>((
   ref,
   contractId,
 ) {
   final db = ref.watch(appDatabaseProvider);
-  final query = db.select(db.schedules).join([
-    innerJoin(db.tickets, db.tickets.id.equalsExp(db.schedules.ticketId)),
-  ])..where(db.tickets.contractId.equals(contractId));
-  return query.watch().map((rows) => [for (final row in rows) row.readTable(db.schedules)]);
+  final ticketIds = db.selectOnly(db.tickets)
+    ..addColumns([db.tickets.id])
+    ..where(db.tickets.contractId.equals(contractId));
+  final count = countAll();
+  final query = db.selectOnly(db.schedules)
+    ..addColumns([count])
+    ..where(db.schedules.ticketId.isInQuery(ticketIds));
+  return query.map((row) => row.read(count) ?? 0).watchSingle();
 });
 
 enum _ContractState { inScadenza, attivo, scaduto, inattivo }
@@ -119,6 +126,10 @@ class _ContractDetailBody extends ConsumerWidget {
     final numero = _string(contract['numero']);
     final codice = _string(contract['codice']);
     final tipo = _string(contract['tipo']);
+    final descrizione = _string(contract['description']);
+    final condizioni = _string(contract['condizioni']);
+    final externalId = _string(contract['externalId']);
+    final note = _string(contract['notes']);
     final customerId = _string(contract['customerId']);
     final locationId = _string(contract['locationId']);
     final startDate = parseDateOnly(contract['startDate']);
@@ -144,8 +155,7 @@ class _ContractDetailBody extends ConsumerWidget {
         ? null
         : ref.watch(locationByIdProvider(locationId)).valueOrNull;
     final tickets = ref.watch(_contractTicketsProvider(contractId)).valueOrNull ?? const <Ticket>[];
-    final schedules =
-        ref.watch(_contractSchedulesProvider(contractId)).valueOrNull ?? const <Schedule>[];
+    final scheduleCount = ref.watch(_contractScheduleCountProvider(contractId)).valueOrNull ?? 0;
     final statusNames = ref.watch(ticketStatusMapProvider).valueOrNull ?? const <int, String>{};
 
     final endLabel = endDate == null ? 'Nessuna scadenza' : 'scade ${_formatDate(endDate)}';
@@ -158,41 +168,41 @@ class _ContractDetailBody extends ConsumerWidget {
     final sintesiFacts = <DetailFact>[
       if (scadenzaGiorni != null) DetailFact(label: 'Preavviso', value: '$scadenzaGiorni giorni'),
       if (frequencyValue != null && frequencyUnit != null)
-        DetailFact(
-          label: 'Frequenza',
-          value: '$frequencyValue ${_frequencyUnitLabel(frequencyUnit)}',
-        ),
+        DetailFact(label: 'Frequenza', value: _frequencyLabel(frequencyValue, frequencyUnit)),
       if (startDate != null) DetailFact(label: 'Inizio', value: _formatDate(startDate)),
-      if (price != null) DetailFact(label: 'Prezzo', value: '€${price.toStringAsFixed(2)}'),
+      if (price != null) DetailFact(label: 'Prezzo', value: _formatCurrency(price)),
       if (numero != null && numero.isNotEmpty) DetailFact(label: 'Numero', value: numero),
       if (codice != null && codice.isNotEmpty) DetailFact(label: 'Codice', value: codice),
       if (tipo != null && tipo.isNotEmpty) DetailFact(label: 'Tipo', value: tipo),
+      if (condizioni != null) DetailFact(label: 'Condizioni', value: condizioni),
+      if (externalId != null) DetailFact(label: 'ID esterno', value: externalId),
     ];
 
     final relations = <_Relation>[
-      if (customer != null && customerId != null)
+      if (customer != null && customerId != null && customer.companyName.trim().isNotEmpty)
         _Relation(
           title: 'Cliente',
           meta: customer.companyName,
           onTap: () => context.push(AppRoutes.clientiDetail(customerId)),
         ),
-      if (location != null && locationId != null)
+      if (location != null && locationId != null && location.name.trim().isNotEmpty)
         _Relation(
           title: 'Sede',
           meta: location.name,
           onTap: () => context.push('/altro/sedi/$locationId'),
         ),
-      if (schedules.isNotEmpty)
+      if (scheduleCount > 0)
         _Relation(
           title: 'Pianificazioni',
-          meta: schedules.length == 1 ? '1 pianificazione' : '${schedules.length} pianificazioni',
+          meta: scheduleCount == 1 ? '1 pianificazione' : '$scheduleCount pianificazioni',
         ),
     ];
 
+    final shownTickets = tickets.take(_activityLimit);
     final activityEvents = [
-      for (final ticket in tickets)
+      for (final ticket in shownTickets)
         DetailActivityEvent(
-          time: _formatDate(ticket.createdAt.toUtc()),
+          time: _formatDate(businessTime.businessDateOf(ticket.createdAt)),
           title: ticket.title.isNotEmpty ? ticket.title : 'Intervento',
           meta: statusNames[ticket.statusId],
         ),
@@ -203,8 +213,8 @@ class _ContractDetailBody extends ConsumerWidget {
       hero: DetailHeroData(
         variant: DetailHeroVariant.summary,
         kind: 'Summary · contratto',
-        kicker: 'Summary',
-        kickerContext: 'contratto',
+        // The prototype renders the whole ref in red; the split kicker/context would mute half.
+        kicker: 'Summary · contratto',
         title: name == null || name.isEmpty
             ? (numero == null || numero.isEmpty ? 'Contratto' : numero)
             : name,
@@ -240,8 +250,25 @@ class _ContractDetailBody extends ConsumerWidget {
       sections: [
         DetailSectionData(
           title: 'Sintesi',
-          isEmpty: sintesiFacts.isEmpty,
-          child: DetailFactsGrid(facts: sintesiFacts),
+          isEmpty: sintesiFacts.isEmpty && descrizione == null && note == null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DetailFactsGrid(facts: sintesiFacts),
+              if (descrizione != null)
+                Padding(
+                  padding: EdgeInsets.only(top: sintesiFacts.isEmpty ? 0 : AppSpacing.md),
+                  child: _ContractTextBlock(label: 'Descrizione', value: descrizione),
+                ),
+              if (note != null)
+                Padding(
+                  padding: EdgeInsets.only(
+                    top: sintesiFacts.isEmpty && descrizione == null ? 0 : AppSpacing.md,
+                  ),
+                  child: _ContractTextBlock(label: 'Note', value: note),
+                ),
+            ],
+          ),
         ),
         DetailSectionData(
           title: 'Relazioni',
@@ -265,6 +292,9 @@ class _ContractDetailBody extends ConsumerWidget {
         DetailSectionData(
           title: 'Attività',
           isEmpty: activityEvents.isEmpty,
+          trailing: tickets.length > _activityLimit
+              ? DetailSectionMeta('ultimi $_activityLimit di ${tickets.length}')
+              : null,
           child: DetailActivityTimeline(events: activityEvents),
         ),
       ],
@@ -290,11 +320,55 @@ class _ContractDetailBody extends ConsumerWidget {
 
   static String _formatDate(DateTime date) => formatWorkDate(date, 'dd/MM/yyyy');
 
+  static String _formatCurrency(num price) =>
+      NumberFormat.currency(locale: 'it_IT', symbol: '€').format(price);
+
+  static String _frequencyLabel(int value, String unit) {
+    if (value != 1) return '$value ${_frequencyUnitLabel(unit)}';
+    final singular = switch (unit) {
+      'Days' => 'giorno',
+      'Years' => 'anno',
+      _ => 'mese',
+    };
+    return '1 $singular';
+  }
+
   static String _frequencyUnitLabel(String unit) => switch (unit) {
     'Days' => 'giorni',
     'Years' => 'anni',
     _ => 'mesi',
   };
+}
+
+/// Long free text under the Sintesi facts grid: a mono label above wrapped prose.
+class _ContractTextBlock extends StatelessWidget {
+  const _ContractTextBlock({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: AppTextStyles.docCode.copyWith(
+            fontSize: 8,
+            letterSpacing: 0.64,
+            color: colors.inkMuted,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: AppTextStyles.bodySmall.copyWith(fontSize: 11.5, height: 1.4, color: colors.ink),
+        ),
+      ],
+    );
+  }
 }
 
 class _Relation {

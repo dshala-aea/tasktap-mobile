@@ -61,6 +61,7 @@ void main() {
     'autoRenewal': true,
     'scadenzaGiorni': 30,
     'condizioni': 'Pagamento a 30gg',
+    'price': 4800,
     'startDate': '2026-01-01T00:00:00Z',
     'endDate': '2026-12-31T00:00:00Z',
     'frequencyValue': 1,
@@ -230,7 +231,8 @@ void main() {
       await openDetail(tester);
 
       expect(find.byKey(const Key('detail-hero-card')), findsOneWidget);
-      expect(find.text('SUMMARY · CONTRATTO'), findsOneWidget);
+      final kicker = tester.widget<Text>(find.byKey(const Key('detail-hero-kicker')));
+      expect(kicker.data, 'SUMMARY · CONTRATTO');
       expect(find.byKey(const Key('detail-hero-title')), findsOneWidget);
       // The collapsed bar is built off-screen and carries the same action label.
       expect(find.text('Modifica'), findsWidgets);
@@ -257,8 +259,54 @@ void main() {
       expect(find.text('C-001'), findsOneWidget);
       expect(find.text('Manutenzione'), findsOneWidget);
       expect(find.text('30 giorni'), findsOneWidget);
-      expect(find.text('1 mesi'), findsOneWidget);
+      expect(find.text('1 mese'), findsOneWidget);
+      expect(find.textContaining('4.800,00'), findsOneWidget);
       expect(find.text('01/01/2026'), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('renders the sourced description, condizioni, id esterno and note', (tester) async {
+      await openDetail(
+        tester,
+        contractOverride: const {
+          'id': 'contr-1',
+          'name': 'Manutenzione annuale',
+          'description': 'Assistenza full service',
+          'condizioni': 'Pagamento a 30gg',
+          'externalId': 'EXT-1',
+          'notes': 'Chiamare prima delle 9',
+          'isActive': true,
+        },
+      );
+
+      expect(find.text('DESCRIZIONE'), findsOneWidget);
+      expect(find.text('Assistenza full service'), findsOneWidget);
+      expect(find.text('CONDIZIONI'), findsOneWidget);
+      expect(find.text('Pagamento a 30gg'), findsOneWidget);
+      expect(find.text('ID ESTERNO'), findsOneWidget);
+      expect(find.text('EXT-1'), findsOneWidget);
+      expect(find.text('NOTE'), findsOneWidget);
+      expect(find.text('Chiamare prima delle 9'), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('does not repeat expiry or renewal in Sintesi', (tester) async {
+      await seedContractContext();
+      await openDetail(tester);
+
+      expect(find.text('SCADENZA'), findsNothing);
+      expect(find.text('RINNOVO'), findsNothing);
+      expect(find.text('31/12/2026'), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('is hidden when the contract has no Sintesi facts', (tester) async {
+      await openDetail(
+        tester,
+        contractOverride: const {'id': 'contr-1', 'name': 'Solo nome', 'isActive': true},
+      );
+
+      expect(find.text('Sintesi'), findsNothing);
       await teardown(tester);
     });
 
@@ -369,6 +417,34 @@ void main() {
 
       expect(find.text('Perdita acqua caldaia'), findsOneWidget);
       expect(find.text('Ticket di un altro contratto'), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('uses the business calendar date for a late-UTC instant', (tester) async {
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 'ticket-late',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 10, 23, 30),
+              title: 'Intervento serale',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 2,
+              typeId: 1,
+              contractId: const Value('contr-late'),
+            ),
+          );
+
+      await openDetail(
+        tester,
+        contractOverride: const {'id': 'contr-late', 'name': 'Contratto serale', 'isActive': true},
+      );
+
+      // 23:30 UTC is 00:30 in Europe/Rome, so the work date is the 11th, not the 10th.
+      expect(find.text('11/01/2026'), findsOneWidget);
+      expect(find.text('10/01/2026'), findsNothing);
       await teardown(tester);
     });
   });
