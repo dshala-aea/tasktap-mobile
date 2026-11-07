@@ -2,19 +2,26 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/theme/app_palette.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/offline_guard.dart';
+import '../../../core/widgets/detail/detail_attachment_row.dart';
+import '../../../core/widgets/detail/detail_facts_grid.dart';
+import '../../../core/widgets/detail/detail_hero.dart';
+import '../../../core/widgets/detail/detail_link_row.dart';
+import '../../../core/widgets/detail/detail_scaffold.dart';
+import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/api/dio_client.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Single materiale by id from Drift cache.
 final adminMaterialeDetailProvider = StreamProvider.autoDispose.family<MaterialiData?, String>((
@@ -25,7 +32,13 @@ final adminMaterialeDetailProvider = StreamProvider.autoDispose.family<Materiali
   return (db.select(db.materiali)..where((m) => m.id.equals(id))).watchSingleOrNull();
 });
 
-/// Admin materiale detail — read-only with edit FAB.
+/// Admin materiale detail — the wave-0 summary shell.
+///
+/// Hero + `Modifica`, then Movimenti → Sintesi → Documenti. The local mirror carries the article's
+/// anagrafica and prices but no stock level or image: Movimenti opens the existing stock screen on
+/// demand and Documenti resolves the live photo only on tap (the sync payload never carries
+/// `Materiali.imageUrl`). Empty data sections are hidden by the shell, and the hero owns
+/// `Modifica`, so there is no FAB.
 class AdminMaterialeDetailScreen extends ConsumerWidget {
   const AdminMaterialeDetailScreen({super.key, required this.materialeId});
 
@@ -35,48 +48,40 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final materialeAsync = ref.watch(adminMaterialeDetailProvider(materialeId));
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-        child: AppFab(
-          icon: LucideIcons.pencil,
-          tooltip: 'Modifica',
-          onPressed: () async {
-            await context.push<bool>('/altro/magazzino/$materialeId/modifica');
-          },
-        ),
+    return materialeAsync.when(
+      loading: () => const DetailScaffold.loading(screenTitle: 'Materiale'),
+      error: (e, _) => DetailScaffold.unavailable(
+        screenTitle: 'Materiale',
+        icon: LucideIcons.alertTriangle,
+        title: 'Materiale non disponibile',
+        reason: 'Non è stato possibile leggere il materiale da questo telefono.',
+        onRetry: () => ref.invalidate(adminMaterialeDetailProvider(materialeId)),
       ),
-      body: SafeArea(
-        child: materialeAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) =>
-              ErrorState(onRetry: () => ref.invalidate(adminMaterialeDetailProvider(materialeId))),
-          data: (materiale) {
-            if (materiale == null) {
-              // Missing on a synced device means the catalogue no longer holds this id; saying
-              // "not synced" there sent the user to wait for an update that would never come.
-              return ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
-                  ? const UnavailableState(
-                      icon: LucideIcons.cloudOff,
-                      titolo: 'Materiale non disponibile',
-                      motivo:
-                          'Il catalogo materiali non è ancora sincronizzato sul '
-                          'dispositivo, quindi questo materiale non può essere '
-                          'letto dalla cache locale anche se esiste sul server.',
-                    )
-                  : const UnavailableState(
-                      icon: LucideIcons.package,
-                      titolo: 'Materiale non trovato',
-                      motivo:
-                          'Questo materiale non è più nel catalogo: potrebbe essere stato '
-                          'eliminato.',
-                    );
-            }
-            return _MaterialeDetailBody(materiale: materiale);
-          },
-        ),
-      ),
+      data: (materiale) {
+        if (materiale == null) {
+          // Missing on a synced device means the catalogue no longer holds this id; saying
+          // "not synced" there sent the user to wait for an update that would never come.
+          return ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+              ? const DetailScaffold.unavailable(
+                  screenTitle: 'Materiale',
+                  icon: LucideIcons.cloudOff,
+                  title: 'Materiale non disponibile',
+                  reason:
+                      'Il catalogo materiali non è ancora sincronizzato sul '
+                      'dispositivo, quindi questo materiale non può essere '
+                      'letto dalla cache locale anche se esiste sul server.',
+                )
+              : const DetailScaffold.unavailable(
+                  screenTitle: 'Materiale',
+                  icon: LucideIcons.package,
+                  title: 'Materiale non trovato',
+                  reason:
+                      'Questo materiale non è più nel catalogo: potrebbe essere stato '
+                      'eliminato.',
+                );
+        }
+        return _MaterialeDetailBody(materiale: materiale);
+      },
     );
   }
 }
@@ -134,107 +139,174 @@ class _MaterialeDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: materiale.name,
-            subtitle: materiale.code,
-            showBack: true,
-            actions: [
-              HeaderIconBtn(
-                icon: materiale.isActive ? LucideIcons.xCircle : LucideIcons.checkCircle,
-                label: materiale.isActive ? 'Disattiva' : 'Riattiva',
-                glass: true,
-                onTap: () => _toggleActive(context, ref, materiale),
-              ),
+    final name = _clean(materiale.name) ?? 'Materiale';
+    final code = _clean(materiale.code);
+    final category = _clean(materiale.category);
+    final unit = _clean(materiale.unitOfMeasure);
+    final marca = _clean(materiale.marca);
+    final description = _clean(materiale.description);
+    final salePrice = materiale.salePrice;
+    final purchasePrice = materiale.purchasePrice;
+
+    // The prototype's hero line is `categoria · pz · prezzo`; stock is not in the mirror, so the
+    // unit of measure takes the middle slot and the sale price closes it.
+    final heroFacts = <String>[
+      ?category,
+      ?unit,
+      if (salePrice != null) _priceLabel(salePrice),
+    ].join(' · ');
+
+    // No fact from the hero is repeated here: the category, unit and sale price stay above, and
+    // Sintesi carries the code, brand and purchase price instead.
+    final sintesiFacts = <DetailFact>[
+      if (code != null) DetailFact(label: 'Codice', value: code),
+      if (marca != null) DetailFact(label: 'Marca', value: marca),
+      if (purchasePrice != null)
+        DetailFact(label: 'Prezzo acquisto', value: _priceLabel(purchasePrice)),
+    ];
+
+    return DetailScaffold(
+      screenTitle: 'Materiale',
+      hero: DetailHeroData(
+        variant: DetailHeroVariant.summary,
+        kind: 'Summary · articolo',
+        kicker: 'Summary · articolo',
+        title: name,
+        status: materiale.isActive
+            ? const DetailStatus(label: 'Attivo', tone: DetailStatusTone.good)
+            : const DetailStatus(label: 'Inattivo', tone: DetailStatusTone.bad),
+        subtitle: heroFacts.isEmpty ? null : heroFacts,
+        primaryAction: DetailAction(
+          label: 'Modifica',
+          onPressed: () async {
+            await context.push<bool>('/altro/magazzino/${materiale.id}/modifica');
+          },
+        ),
+      ),
+      headerActions: [
+        HeaderIconBtn(
+          icon: materiale.isActive ? LucideIcons.xCircle : LucideIcons.checkCircle,
+          label: materiale.isActive ? 'Disattiva' : 'Riattiva',
+          glass: true,
+          onTap: () => _toggleActive(context, ref, materiale),
+        ),
+      ],
+      sections: [
+        DetailSectionData(
+          title: 'Movimenti',
+          child: DetailLinkRow(
+            title: 'Apri magazzino',
+            meta: 'Carichi, scarichi, rettifiche',
+            onTap: () => context.push('/altro/magazzino/giacenze'),
+          ),
+        ),
+        DetailSectionData(
+          title: 'Sintesi',
+          trailing: const DetailSectionMeta('Anagrafica e prezzi'),
+          isEmpty: sintesiFacts.isEmpty && description == null,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DetailFactsGrid(facts: sintesiFacts),
+              if (description != null)
+                Padding(
+                  padding: EdgeInsets.only(top: sintesiFacts.isEmpty ? 0 : AppSpacing.md),
+                  child: _MaterialeTextBlock(label: 'Descrizione', value: description),
+                ),
             ],
           ),
         ),
-        // ── Image ──────────────────────────────────────────────────────
-        if (materiale.imageUrl != null)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.pagePadding,
-                0,
-                AppSpacing.pagePadding,
-                AppSpacing.base,
-              ),
-              child: ClipRRect(
-                borderRadius: AppRack.freeShape,
-                child: Image.network(
-                  materiale.imageUrl!,
-                  height: 180,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Container(
-                    height: 180,
-                    color: context.colors.bg3,
-                    child: Center(
-                      child: Icon(LucideIcons.imageOff, size: 40, color: context.colors.inkMuted),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!materiale.isActive)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                    child: StatusPill(stato: 'Inattivo'),
-                  ),
-                AppCard(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                  child: Column(
-                    children: [
-                      KeyVal(label: 'Codice', value: materiale.code),
-                      KeyVal(label: 'Nome', value: materiale.name),
-                      KeyVal(label: 'Unità di misura', value: materiale.unitOfMeasure ?? '—'),
-                      KeyVal(label: 'Categoria', value: materiale.category ?? '—'),
-                      KeyVal(label: 'Marca', value: materiale.marca ?? '—'),
-                      KeyVal(
-                        label: 'Prezzo acquisto',
-                        value: materiale.purchasePrice != null
-                            ? '€${materiale.purchasePrice!.toStringAsFixed(2)}'
-                            : '—',
-                      ),
-                      KeyVal(
-                        label: 'Prezzo vendita',
-                        value: materiale.salePrice != null
-                            ? '€${materiale.salePrice!.toStringAsFixed(2)}'
-                            : '—',
-                        showDivider: false,
-                      ),
-                    ],
-                  ),
-                ),
-                if (materiale.description?.isNotEmpty == true) ...[
-                  const SizedBox(height: AppSpacing.base),
-                  AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SectionTitle(title: 'Descrizione'),
-                        const SizedBox(height: 4),
-                        Text(materiale.description!, style: Theme.of(context).textTheme.bodyMedium),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
+        DetailSectionData(
+          title: 'Documenti',
+          trailing: const DetailSectionMeta('Foto'),
+          child: DetailAttachmentRow(
+            name: 'Apri foto materiale',
+            icon: const Icon(LucideIcons.camera, size: 14),
+            isLast: true,
+            onTap: () => _openPhoto(context, ref),
           ),
         ),
-
-        SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
       ],
     );
   }
+
+  /// The photo is resolved only when the user asks for it: the sync payload never carries
+  /// `Materiali.imageUrl`, so the live detail endpoint (already used by the edit form) is read on
+  /// tap. No network call fires just by opening this screen.
+  Future<void> _openPhoto(BuildContext context, WidgetRef ref) async {
+    Map<String, dynamic>? detail;
+    try {
+      detail = await ref.read(adminApiClientProvider).fetchMaterialeDetail(materiale.id);
+    } catch (_) {
+      if (context.mounted) {
+        showAppToast(
+          context,
+          message: 'Foto non disponibile offline: riprova quando sei online.',
+          tone: ToastTone.error,
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
+    final url = _clean(detail?['imageContentUrl'] as String?);
+    if (url == null) {
+      showAppToast(context, message: 'Nessuna foto per questo materiale.', tone: ToastTone.warning);
+      return;
+    }
+
+    await openAttachment(
+      context,
+      dio: ref.read(dioProvider),
+      fileName: _photoFileName(url),
+      contentType: 'image/*',
+      url: url,
+    );
+  }
+}
+
+/// Long free text under the Sintesi facts grid: a mono label above wrapped prose.
+class _MaterialeTextBlock extends StatelessWidget {
+  const _MaterialeTextBlock({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: AppTextStyles.docCode.copyWith(
+            fontSize: 8,
+            letterSpacing: 0.64,
+            color: colors.inkMuted,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: AppTextStyles.bodySmall.copyWith(fontSize: 11.5, height: 1.45, color: colors.ink),
+        ),
+      ],
+    );
+  }
+}
+
+String? _clean(String? value) {
+  final trimmed = value?.trim();
+  return trimmed == null || trimmed.isEmpty ? null : trimmed;
+}
+
+String _priceLabel(double value) => '€ ${value.toStringAsFixed(2).replaceAll('.', ',')}';
+
+String _photoFileName(String url) {
+  final segments = Uri.tryParse(url)?.pathSegments;
+  final last = segments == null || segments.isEmpty ? '' : segments.last;
+  // API content paths end in a bare segment such as `image`; a name without an extension would
+  // show up as the viewer's title. Fall back to a friendly name in that case.
+  return last.isEmpty || !last.contains('.') ? 'foto-materiale.jpg' : last;
 }
