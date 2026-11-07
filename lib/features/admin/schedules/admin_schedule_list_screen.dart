@@ -257,33 +257,28 @@ class _AdminScheduleListScreenState extends ConsumerState<AdminScheduleListScree
     final today = ref.watch(businessTimeProvider).businessToday();
     final preset = _presetOf(_filters, today);
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: _AdminScheduleListBody(
-          query: _query,
-          searchCtrl: _searchCtrl,
-          onQueryChanged: (q) => setState(() => _query = q),
-          viewMode: _viewMode,
-          onViewModeChanged: (v) => setState(() => _viewMode = v),
-          calendarMonth: _calendarMonth,
-          onMonthChanged: (m) => setState(() => _calendarMonth = m),
-          selectedDay: _selectedDay,
-          onDayTap: (d) => setState(() {
-            _selectedDay = d;
-            _filters = _filters.copyWith(dateFrom: () => d, dateTo: () => d);
-            _viewMode = _ViewMode.elenco;
-          }),
-          filters: _filters,
-          activePresetId: preset == _DatePresetMatch.custom ? null : preset.name,
-          onSelectPreset: _selectPreset,
-          onOpenFilters: _openFilterSheet,
-          onClearFilters: () => setState(() {
-            _filters = const AdminScheduleFilters();
-            _selectedDay = null;
-          }),
-        ),
-      ),
+    return _AdminScheduleListBody(
+      query: _query,
+      searchCtrl: _searchCtrl,
+      onQueryChanged: (q) => setState(() => _query = q),
+      viewMode: _viewMode,
+      onViewModeChanged: (v) => setState(() => _viewMode = v),
+      calendarMonth: _calendarMonth,
+      onMonthChanged: (m) => setState(() => _calendarMonth = m),
+      selectedDay: _selectedDay,
+      onDayTap: (d) => setState(() {
+        _selectedDay = d;
+        _filters = _filters.copyWith(dateFrom: () => d, dateTo: () => d);
+        _viewMode = _ViewMode.elenco;
+      }),
+      filters: _filters,
+      activePresetId: preset == _DatePresetMatch.custom ? null : preset.name,
+      onSelectPreset: _selectPreset,
+      onOpenFilters: _openFilterSheet,
+      onClearFilters: () => setState(() {
+        _filters = const AdminScheduleFilters();
+        _selectedDay = null;
+      }),
     );
   }
 }
@@ -480,63 +475,28 @@ class _AdminScheduleListBody extends ConsumerWidget {
     final isLoading = schedulesAsync.isLoading && !schedulesAsync.hasValue;
     final isUnavailable = schedulesAsync.hasError && !schedulesAsync.hasValue;
 
-    final content = _content(
-      context: context,
-      ref: ref,
-      viewMode: viewMode,
-      calendarMonth: calendarMonth,
-      onMonthChanged: onMonthChanged,
-      selectedDay: selectedDay,
-      onDayTap: onDayTap,
-      filtered: filtered,
-      groups: groups,
-      summary: ListSummaryData(left: _impegniLabel(filtered.length), right: '$todayCount oggi'),
-      isLoading: isLoading,
-      isUnavailable: isUnavailable,
-      hasActiveFilter: hasActiveFilter,
-      hasSchedules: allSchedules.isNotEmpty,
-      neverSynced: neverSynced,
-      query: query,
+    final summary = ListSummaryData(
+      left: _impegniLabel(filtered.length),
+      right: '$todayCount oggi',
+    );
+    final state = isLoading
+        ? ListShellState.loading
+        : isUnavailable
+        ? ListShellState.unavailable
+        : ListShellState.content;
+
+    final tabs = AppTabs(
+      tabs: const [
+        AppTab(label: 'Calendario'),
+        AppTab(label: 'Elenco'),
+      ],
+      selectedIndex: viewMode.index,
+      onSelected: (i) => onViewModeChanged(_ViewMode.values[i]),
     );
 
-    return Column(
-      children: [
-        ScreenHeader(
-          title: 'Pianificazioni',
-          subtitle: 'Gli impegni nel tempo, non i cantieri.',
-          subtitleMaxLines: 2,
-          showBack: true,
-          actions: [
-            ListHeaderAction(
-              label: 'Nuovo',
-              onPressed: () => context.push('/altro/pianificazioni/nuova'),
-            ),
-          ],
-        ),
-        AppTabs(
-          tabs: const [
-            AppTab(label: 'Calendario'),
-            AppTab(label: 'Elenco'),
-          ],
-          selectedIndex: viewMode.index,
-          onSelected: (i) => onViewModeChanged(_ViewMode.values[i]),
-        ),
-        AppSearchBar(
-          controller: searchCtrl,
-          hint: 'Cerca titolo, sede, tecnico o data…',
-          onChanged: onQueryChanged,
-        ),
-        ListFilterRow(
-          filters: [
-            for (final preset in _DatePreset.values)
-              ListFilterChipData(label: preset.label, id: preset.id),
-          ],
-          activeId: activePresetId,
-          onSelected: onSelectPreset,
-          onOpenFilters: onOpenFilters,
-        ),
-        if (filters.activeCount > 0)
-          Padding(
+    final clearFilters = filters.activeCount == 0
+        ? null
+        : Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.pagePadding,
               0,
@@ -567,8 +527,104 @@ class _AdminScheduleListBody extends ConsumerWidget {
                 ),
               ),
             ),
+          );
+
+    final filterChips = [
+      for (final preset in _DatePreset.values)
+        ListFilterChipData(label: preset.label, id: preset.id),
+    ];
+
+    // The calendar keeps its own chrome: it renders a scrollable month sliver, not the shell's
+    // group/row model. The elenco is a normal grouped list and uses `ListShell`; both modes share
+    // the same header, search, chips, tabs and clear-filters block.
+    if (viewMode == _ViewMode.calendario) {
+      return Scaffold(
+        backgroundColor: context.colors.bg2,
+        body: SafeArea(
+          child: Column(
+            children: [
+              _header(context),
+              AppSearchBar(
+                controller: searchCtrl,
+                hint: 'Cerca titolo, sede, tecnico o data…',
+                onChanged: onQueryChanged,
+              ),
+              ListFilterRow(
+                filters: filterChips,
+                activeId: activePresetId,
+                onSelected: onSelectPreset,
+                onOpenFilters: onOpenFilters,
+              ),
+              tabs,
+              ?clearFilters,
+              Expanded(
+                child: _calendarBody(
+                  context: context,
+                  ref: ref,
+                  calendarMonth: calendarMonth,
+                  onMonthChanged: onMonthChanged,
+                  selectedDay: selectedDay,
+                  onDayTap: onDayTap,
+                  filtered: filtered,
+                  isLoading: isLoading,
+                  isUnavailable: isUnavailable,
+                ),
+              ),
+            ],
           ),
-        Expanded(child: content),
+        ),
+      );
+    }
+
+    return ListShell(
+      title: 'Pianificazioni',
+      subtitle: 'Gli impegni nel tempo, non i cantieri.',
+      showBack: true,
+      action: ListHeaderAction(
+        label: 'Nuovo',
+        onPressed: () => context.push('/altro/pianificazioni/nuova'),
+      ),
+      searchController: searchCtrl,
+      searchHint: 'Cerca titolo, sede, tecnico o data…',
+      onSearchChanged: onQueryChanged,
+      filters: filterChips,
+      activeFilterId: activePresetId,
+      onFilterSelected: onSelectPreset,
+      onOpenFilters: onOpenFilters,
+      bodyHeader: Column(mainAxisSize: MainAxisSize.min, children: [tabs, ?clearFilters]),
+      groups: groups,
+      summary: filtered.isEmpty ? null : summary,
+      state: state,
+      empty: _emptyState(
+        query: query,
+        hasActiveFilter: hasActiveFilter,
+        hasSchedules: allSchedules.isNotEmpty,
+        neverSynced: neverSynced,
+      ),
+      unavailable: UnavailableState(
+        icon: LucideIcons.alertTriangle,
+        titolo: 'Pianificazioni non disponibili',
+        motivo: 'Non è stato possibile leggere le pianificazioni salvate su questo telefono.',
+        action: AppButton(
+          label: 'Riprova',
+          onPressed: () => ref.invalidate(adminSchedulesProvider),
+        ),
+      ),
+      onRefresh: () => refreshWithFeedback(context, ref),
+    );
+  }
+
+  Widget _header(BuildContext context) {
+    return ScreenHeader(
+      title: 'Pianificazioni',
+      subtitle: 'Gli impegni nel tempo, non i cantieri.',
+      subtitleMaxLines: 2,
+      showBack: true,
+      actions: [
+        ListHeaderAction(
+          label: 'Nuovo',
+          onPressed: () => context.push('/altro/pianificazioni/nuova'),
+        ),
       ],
     );
   }
@@ -587,23 +643,16 @@ class _AdminScheduleListBody extends ConsumerWidget {
     };
   }
 
-  Widget _content({
+  Widget _calendarBody({
     required BuildContext context,
     required WidgetRef ref,
-    required _ViewMode viewMode,
     required DateTime calendarMonth,
     required ValueChanged<DateTime> onMonthChanged,
     required DateTime? selectedDay,
     required ValueChanged<DateTime> onDayTap,
     required List<Schedule> filtered,
-    required List<ListGroupData> groups,
-    required ListSummaryData summary,
     required bool isLoading,
     required bool isUnavailable,
-    required bool hasActiveFilter,
-    required bool hasSchedules,
-    required bool neverSynced,
-    required String query,
   }) {
     Future<void> onRefresh() => refreshWithFeedback(context, ref);
 
@@ -627,66 +676,19 @@ class _AdminScheduleListBody extends ConsumerWidget {
       );
     }
 
-    if (viewMode == _ViewMode.calendario) {
-      return RefreshIndicator(
-        onRefresh: onRefresh,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            _CalendarSliver(
-              month: calendarMonth,
-              selectedDay: selectedDay ?? DateTime.now(),
-              schedules: filtered,
-              onMonthChanged: onMonthChanged,
-              onDayTap: onDayTap,
-            ),
-            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
-          ],
-        ),
-      );
-    }
-
-    if (filtered.isEmpty) {
-      return _scrollable(
-        context,
-        _emptyState(
-          query: query,
-          hasActiveFilter: hasActiveFilter,
-          hasSchedules: hasSchedules,
-          neverSynced: neverSynced,
-        ),
-        onRefresh,
-      );
-    }
-
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
-          for (final group in groups) ...[
-            SliverToBoxAdapter(
-              child: _framed(
-                child: ListGroupHeader(title: group.title!, count: group.count),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => KeyedSubtree(
-                    key: group.rows[i].rowKey,
-                    child: ListDocumentRow(data: group.rows[i]),
-                  ),
-                  childCount: group.rows.length,
-                ),
-              ),
-            ),
-          ],
-          SliverToBoxAdapter(
-            child: _framed(child: ListSummaryFooter(data: summary)),
+          _CalendarSliver(
+            month: calendarMonth,
+            selectedDay: selectedDay ?? DateTime.now(),
+            schedules: filtered,
+            onMonthChanged: onMonthChanged,
+            onDayTap: onDayTap,
           ),
-          SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );
@@ -703,18 +705,6 @@ class _AdminScheduleListBody extends ConsumerWidget {
           ),
           SizedBox(height: context.navClearance),
         ],
-      ),
-    );
-  }
-
-  Widget _framed({required Widget child}) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
-        ),
       ),
     );
   }

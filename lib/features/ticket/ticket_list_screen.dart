@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_palette.dart';
-import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../core/time/business_time_providers.dart';
@@ -329,175 +328,113 @@ class _TicketListBody extends ConsumerWidget {
       for (final name in _groupOrder)
         if (buckets[name]!.isNotEmpty) (title: name, rows: buckets[name]!),
     ];
-    final hasRows = pendingTickets.isNotEmpty || regularGroups.isNotEmpty;
 
-    Widget framed(Widget child) => Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
+    // `rowBuilder` receives presentation data only; keep the entities behind each key so the
+    // pending strip and the full ticket row can still be built.
+    final pendingByKey = {
+      for (final ticket in pendingTickets) ValueKey('pending-${ticket.id}'): ticket,
+    };
+    final ticketsByKey = {for (final ticket in filtered) ValueKey('ticket-${ticket.id}'): ticket};
+
+    final groups = <ListGroupData>[
+      if (pendingTickets.isNotEmpty)
+        ListGroupData(
+          title: 'In sospeso',
+          count: pendingTickets.length,
+          rows: [
+            for (final ticket in pendingTickets)
+              ListRowData(rowKey: ValueKey('pending-${ticket.id}'), title: ticket.title),
+          ],
         ),
-      ),
-    );
+      for (final group in regularGroups)
+        ListGroupData(
+          title: group.title,
+          count: group.rows.length,
+          rows: [
+            for (final ticket in group.rows)
+              ListRowData(rowKey: ValueKey('ticket-${ticket.id}'), title: ticket.title),
+          ],
+        ),
+      // Pending rows stay visible under an empty filter result. The shell only renders its
+      // `empty` slot when there is no group at all, so the empty answer rides in as one row.
+      if (regularGroups.isEmpty && pendingTickets.isNotEmpty)
+        ListGroupData(
+          rows: [ListRowData(rowKey: const ValueKey('ticket-empty'), title: '')],
+        ),
+    ];
 
-    Widget scrollable(Widget child) => RefreshIndicator(
+    return ListShell(
+      title: 'Ticket',
+      subtitle: 'Il lavoro aperto adesso, non l’archivio degli interventi.',
+      action: ListHeaderAction(
+        label: 'Nuovo',
+        onPressed: () async {
+          final created = await context.push<bool>('/ticket/new');
+          if (created == true && context.mounted) {
+            // The list auto-refreshes via StreamProvider; nothing to do on return.
+          }
+        },
+      ),
+      banner: const OfflineSyncBanner(),
+      searchController: searchCtrl,
+      searchHint: 'Cerca ticket, cliente, sede o numero…',
+      onSearchChanged: onQueryChanged,
+      filters: const [
+        ListFilterChipData(label: 'Tutti', id: 'tutti'),
+        ListFilterChipData(label: 'Oggi', id: 'oggi'),
+        ListFilterChipData(label: 'In corso', id: 'inCorso'),
+        ListFilterChipData(label: 'In attesa', id: 'inAttesa'),
+        ListFilterChipData(label: 'Chiusi', id: 'chiusi'),
+      ],
+      activeFilterId: filters.status.name,
+      onFilterSelected: (chip) {
+        final next = _TicketFilter.values.firstWhere((f) => f.name == chip.id);
+        onFilterChanged(filters.withStatus(next));
+      },
+      onOpenFilters: onOpenFilters,
+      groups: groups,
+      summary: regularGroups.isEmpty
+          ? null
+          : ListSummaryData(
+              // Pending rows are visible above, so they belong in the total too.
+              left: '${filtered.length + pendingTickets.length} ticket',
+              right: '$inCorsoCount in corso',
+            ),
+      state: state,
+      empty: empty,
+      unavailable: UnavailableState(
+        icon: LucideIcons.ticket,
+        titolo: 'Ticket non disponibili',
+        motivo: 'Non è stato possibile leggere i ticket salvati su questo dispositivo.',
+        action: AppButton(label: 'Riprova', onPressed: () => refreshWithFeedback(context, ref)),
+      ),
       onRefresh: () => refreshWithFeedback(context, ref),
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Center(
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-
-    Widget content;
-    if (state == ListShellState.loading) {
-      content = scrollable(const ListLoadingSkeleton());
-    } else if (state == ListShellState.unavailable) {
-      content = scrollable(
-        UnavailableState(
-          icon: LucideIcons.ticket,
-          titolo: 'Ticket non disponibili',
-          motivo: 'Non è stato possibile leggere i ticket salvati su questo dispositivo.',
-          action: AppButton(label: 'Riprova', onPressed: () => refreshWithFeedback(context, ref)),
-        ),
-      );
-    } else if (!hasRows) {
-      content = RefreshIndicator(
-        onRefresh: () => refreshWithFeedback(context, ref),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            SizedBox(height: MediaQuery.sizeOf(context).height * 0.08),
-            Center(
-              child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: empty),
-            ),
-            SizedBox(height: context.navClearance),
-          ],
-        ),
-      );
-    } else {
-      content = RefreshIndicator(
-        onRefresh: () => refreshWithFeedback(context, ref),
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            if (pendingTickets.isNotEmpty) ...[
-              SliverToBoxAdapter(
-                child: framed(ListGroupHeader(title: 'In sospeso', count: pendingTickets.length)),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) => _PendingTicketRow(
-                      key: ValueKey('pending-${pendingTickets[i].id}'),
-                      ticket: pendingTickets[i],
-                      isRepairable: repairableIds.contains(pendingTickets[i].id),
-                    ),
-                    childCount: pendingTickets.length,
-                  ),
-                ),
-              ),
-            ],
-            for (final group in regularGroups) ...[
-              SliverToBoxAdapter(
-                child: framed(ListGroupHeader(title: group.title, count: group.rows.length)),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, i) {
-                    final ticket = group.rows[i];
-                    return _TicketRow(
-                      key: ValueKey('ticket-${ticket.id}'),
-                      ticket: ticket,
-                      statusName: statusNameOf(ticket),
-                      isClosed: isClosed(ticket),
-                      technicianName: technicianNameOf(ticket),
-                      customerName: customersById[ticket.customerId]?.companyName,
-                      location: locationsById[ticket.locationId],
-                      today: businessToday,
-                    );
-                  }, childCount: group.rows.length),
-                ),
-              ),
-            ],
-            if (regularGroups.isEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.md),
-                  child: framed(empty),
-                ),
-              ),
-            if (regularGroups.isNotEmpty)
-              SliverToBoxAdapter(
-                child: framed(
-                  ListSummaryFooter(
-                    data: ListSummaryData(
-                      // Pending rows are visible above, so they belong in the total too.
-                      left: '${filtered.length + pendingTickets.length} ticket',
-                      right: '$inCorsoCount in corso',
-                    ),
-                  ),
-                ),
-              ),
-            SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-          ],
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const OfflineSyncBanner(),
-            ScreenHeader(
-              title: 'Ticket',
-              subtitle: 'Il lavoro aperto adesso, non l’archivio degli interventi.',
-              subtitleMaxLines: 2,
-              actions: [
-                ListHeaderAction(
-                  label: 'Nuovo',
-                  onPressed: () async {
-                    final created = await context.push<bool>('/ticket/new');
-                    if (created == true && context.mounted) {
-                      // The list auto-refreshes via StreamProvider; nothing to do on return.
-                    }
-                  },
-                ),
-              ],
-            ),
-            AppSearchBar(
-              controller: searchCtrl,
-              hint: 'Cerca ticket, cliente, sede o numero…',
-              onChanged: onQueryChanged,
-            ),
-            ListFilterRow(
-              filters: const [
-                ListFilterChipData(label: 'Tutti', id: 'tutti'),
-                ListFilterChipData(label: 'Oggi', id: 'oggi'),
-                ListFilterChipData(label: 'In corso', id: 'inCorso'),
-                ListFilterChipData(label: 'In attesa', id: 'inAttesa'),
-                ListFilterChipData(label: 'Chiusi', id: 'chiusi'),
-              ],
-              activeId: filters.status.name,
-              onSelected: (chip) {
-                final next = _TicketFilter.values.firstWhere((f) => f.name == chip.id);
-                onFilterChanged(filters.withStatus(next));
-              },
-              onOpenFilters: onOpenFilters,
-            ),
-            Expanded(child: content),
-          ],
-        ),
-      ),
+      rowBuilder: (context, row) {
+        final key = row.rowKey;
+        if (key == const ValueKey('ticket-empty')) {
+          return Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.md),
+            child: empty,
+          );
+        }
+        final pending = pendingByKey[key];
+        if (pending != null) {
+          return _PendingTicketRow(
+            ticket: pending,
+            isRepairable: repairableIds.contains(pending.id),
+          );
+        }
+        final ticket = ticketsByKey[key]!;
+        return _TicketRow(
+          ticket: ticket,
+          statusName: statusNameOf(ticket),
+          isClosed: isClosed(ticket),
+          technicianName: technicianNameOf(ticket),
+          customerName: customersById[ticket.customerId]?.companyName,
+          location: locationsById[ticket.locationId],
+          today: businessToday,
+        );
+      },
     );
   }
 }
@@ -505,7 +442,6 @@ class _TicketListBody extends ConsumerWidget {
 /// One server ticket row: the prototype's title/meta/secondary/stamp anatomy.
 class _TicketRow extends StatelessWidget {
   const _TicketRow({
-    super.key,
     required this.ticket,
     required this.statusName,
     required this.isClosed,
@@ -566,7 +502,7 @@ class _TicketRow extends StatelessWidget {
 /// [ListDocumentRow] carries the row anatomy; its existing Correggi / Riprova / Elimina actions sit
 /// inline in the strip below, because the shared row contract has no action slot.
 class _PendingTicketRow extends ConsumerWidget {
-  const _PendingTicketRow({super.key, required this.ticket, required this.isRepairable});
+  const _PendingTicketRow({required this.ticket, required this.isRepairable});
 
   final PendingTicket ticket;
 

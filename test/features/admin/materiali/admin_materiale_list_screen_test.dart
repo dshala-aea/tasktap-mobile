@@ -10,7 +10,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
@@ -27,6 +27,29 @@ Widget _buildScreen(AppDatabase db, {Entitlement? entitlement}) {
         cachedEntitlementProvider.overrideWith((ref) => Future.value(entitlement)),
     ],
     child: const MaterialApp(home: AdminMaterialeListScreen()),
+  );
+}
+
+/// A routed harness for the overflow menu's two navigation actions.
+Widget _buildRoutedScreen(AppDatabase db) {
+  final router = GoRouter(
+    initialLocation: '/materiali',
+    routes: [
+      GoRoute(path: '/materiali', builder: (_, _) => const AdminMaterialeListScreen()),
+      GoRoute(
+        path: '/altro/magazzino/giacenze',
+        builder: (_, _) => const Scaffold(body: Text('giacenze-screen')),
+      ),
+      GoRoute(
+        path: '/altro/magazzino/magazzini',
+        builder: (_, _) => const Scaffold(body: Text('magazzini-screen')),
+      ),
+    ],
+  );
+
+  return ProviderScope(
+    overrides: [appDatabaseProvider.overrideWithValue(db)],
+    child: MaterialApp.router(routerConfig: router),
   );
 }
 
@@ -188,20 +211,21 @@ void main() {
     await _tearDownWidget(tester);
   });
 
-  testWidgets('the eye action shows and hides inactive materials', (tester) async {
+  testWidgets('the overflow menu shows and hides inactive materials', (tester) async {
     await _seedMateriali(db);
     await _pump(tester, db);
 
-    expect(find.byIcon(LucideIcons.eyeOff), findsOneWidget);
-
-    await tester.tap(find.byIcon(LucideIcons.eyeOff));
+    await tester.tap(find.byKey(const Key('materiali-overflow-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mostra inattivi'));
     await tester.pumpAndSettle();
 
     expect(find.text('Inattivi'), findsOneWidget);
     expect(find.text('Raccordo 3/4'), findsOneWidget);
-    expect(find.byIcon(LucideIcons.eye), findsOneWidget);
 
-    await tester.tap(find.byIcon(LucideIcons.eye));
+    await tester.tap(find.byKey(const Key('materiali-overflow-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nascondi inattivi'));
     await tester.pumpAndSettle();
 
     expect(find.text('Inattivi'), findsNothing);
@@ -304,13 +328,48 @@ void main() {
     await _tearDownWidget(tester);
   });
 
-  testWidgets('the three existing header actions stay reachable', (tester) async {
+  testWidgets('the overflow menu hosts the three secondary actions', (tester) async {
     await _seedMateriali(db);
-    await _pump(tester, db);
 
-    expect(find.byIcon(LucideIcons.arrowLeftRight), findsOneWidget);
-    expect(find.byIcon(LucideIcons.warehouse), findsOneWidget);
-    expect(find.byIcon(LucideIcons.eyeOff), findsOneWidget);
+    Future<void> openList() async {
+      await tester.pumpWidget(_buildRoutedScreen(db));
+      await tester.pumpAndSettle(const Duration(seconds: 1));
+    }
+
+    await openList();
+    final menu = find.byKey(const Key('materiali-overflow-menu'));
+    expect(menu, findsOneWidget);
+    expect(tester.getSize(menu).width, greaterThanOrEqualTo(44));
+    expect(tester.getSize(menu).height, greaterThanOrEqualTo(44));
+
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    expect(find.text('Giacenze e movimenti'), findsOneWidget);
+    expect(find.text('Magazzini'), findsOneWidget);
+    expect(find.text('Mostra inattivi'), findsOneWidget);
+
+    await tester.tap(find.text('Giacenze e movimenti'));
+    await tester.pumpAndSettle();
+    expect(find.text('giacenze-screen'), findsOneWidget);
+
+    await openList();
+    await tester.tap(find.byKey(const Key('materiali-overflow-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Magazzini'));
+    await tester.pumpAndSettle();
+    expect(find.text('magazzini-screen'), findsOneWidget);
+
+    await openList();
+    await tester.tap(find.byKey(const Key('materiali-overflow-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mostra inattivi'));
+    await tester.pumpAndSettle();
+    expect(find.text('Inattivi'), findsOneWidget);
+    expect(find.text('Raccordo 3/4'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('materiali-overflow-menu')));
+    await tester.pumpAndSettle();
+    expect(find.text('Nascondi inattivi'), findsOneWidget);
 
     await _tearDownWidget(tester);
   });

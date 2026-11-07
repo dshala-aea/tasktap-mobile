@@ -294,8 +294,10 @@ class ListShell extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         if (visibleGroups.isEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
+          // Scrolls with the page instead of being squeezed into the leftover viewport: a tall
+          // `UnavailableState` under a header + chips + a `bodyHeader` used to overflow the
+          // `SliverFillRemaining` on a 320–390px phone.
+          SliverToBoxAdapter(
             child:
                 empty ??
                 const EmptyState(
@@ -336,8 +338,8 @@ class ListShell extends StatelessWidget {
             SliverToBoxAdapter(
               child: _framed(child: ListSummaryFooter(data: summary!)),
             ),
-          SliverToBoxAdapter(child: SizedBox(height: bottom)),
         ],
+        SliverToBoxAdapter(child: SizedBox(height: bottom)),
       ],
     );
 
