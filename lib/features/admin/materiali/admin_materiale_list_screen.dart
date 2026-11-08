@@ -90,18 +90,13 @@ class _AdminMaterialeListScreenState extends State<AdminMaterialeListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: _AdminMaterialeListBody(
-          query: _query,
-          filters: _filters,
-          searchCtrl: _searchCtrl,
-          onQueryChanged: (q) => setState(() => _query = q),
-          onFiltersChanged: (f) => setState(() => _filters = f),
-          onOpenFilters: _openFilters,
-        ),
-      ),
+    return _AdminMaterialeListBody(
+      query: _query,
+      filters: _filters,
+      searchCtrl: _searchCtrl,
+      onQueryChanged: (q) => setState(() => _query = q),
+      onFiltersChanged: (f) => setState(() => _filters = f),
+      onOpenFilters: _openFilters,
     );
   }
 }
@@ -159,225 +154,87 @@ class _AdminMaterialeListBody extends ConsumerWidget {
 
     Future<void> onRefresh() => refreshWithFeedback(context, ref);
 
-    return Column(
-      children: [
-        const OfflineSyncBanner(),
-        ScreenHeader(
-          title: 'Materiali',
-          subtitle: "Cosa c'è, cosa manca, quanto costa.",
-          subtitleMaxLines: 3,
-          showBack: true,
-          actions: [
-            // The only entry points to the stock/movements screen and warehouse admin. The
-            // prototype shows neither, but dropping them would strand both screens.
-            HeaderIconBtn(
-              icon: LucideIcons.arrowLeftRight,
-              label: 'Giacenze e movimenti',
-              glass: true,
-              onTap: () => context.push('/altro/magazzino/giacenze'),
-            ),
-            HeaderIconBtn(
-              icon: LucideIcons.warehouse,
-              label: 'Magazzini',
-              glass: true,
-              onTap: () => context.push('/altro/magazzino/magazzini'),
-            ),
-            HeaderIconBtn(
-              icon: showingInactive ? LucideIcons.eye : LucideIcons.eyeOff,
-              label: showingInactive ? 'Nascondi inattivi' : 'Mostra inattivi',
-              glass: true,
-              onTap: () => onFiltersChanged(
-                filters.copyWith(
-                  status: showingInactive
-                      ? _MaterialeStatusFilter.attivi
-                      : _MaterialeStatusFilter.tutti,
-                ),
-              ),
-            ),
-            CapabilityGate(
-              capability: 'magazzino.article.write',
-              child: ListHeaderAction(
-                label: 'Nuovo',
-                onPressed: () => context.push('/altro/magazzino/nuovo'),
-              ),
-            ),
-          ],
-        ),
-        Row(
-          children: [
-            Expanded(
-              child: AppSearchBar(
-                controller: searchCtrl,
-                hint: 'Cerca codice, nome o categoria…',
-                onChanged: onQueryChanged,
-                // The scan button follows the field rather than the field sitting flush against
-                // the screen edge.
-                margin: const EdgeInsets.fromLTRB(
-                  AppSpacing.pagePadding,
-                  0,
-                  AppSpacing.sm,
-                  AppSpacing.md,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.sm, bottom: AppSpacing.md),
-              child: IconButton(
-                icon: const Icon(LucideIcons.scanLine),
-                tooltip: 'Scansiona codice',
-                onPressed: () async {
-                  final match = await scanForMateriale(context, ref, title: 'Cerca materiale');
-                  if (match == null) return;
-                  searchCtrl.text = match.code;
-                  onQueryChanged(match.code);
-                },
-              ),
-            ),
-          ],
-        ),
-        ListFilterRow(
-          filters: const [
-            ListFilterChipData(label: 'Tutti'),
-            ListFilterChipData(label: 'Attivi'),
-            ListFilterChipData(label: 'Inattivi'),
-          ],
-          activeIndex: filters.status.index,
-          onSelected: (chip) => onFiltersChanged(
+    final state = materialiAsync.isLoading && !materialiAsync.hasValue
+        ? ListShellState.loading
+        : materialiAsync.hasError && !materialiAsync.hasValue
+        ? ListShellState.unavailable
+        : ListShellState.content;
+
+    return ListShell(
+      title: 'Materiali',
+      subtitle: "Cosa c'è, cosa manca, quanto costa.",
+      showBack: true,
+      headerActions: [
+        _MaterialeOverflowMenu(
+          showingInactive: showingInactive,
+          onGiacenze: () => context.push('/altro/magazzino/giacenze'),
+          onMagazzini: () => context.push('/altro/magazzino/magazzini'),
+          onToggleInactive: () => onFiltersChanged(
             filters.copyWith(
-              status: _MaterialeStatusFilter.values.firstWhere((s) => s.label == chip.label),
+              status: showingInactive
+                  ? _MaterialeStatusFilter.attivi
+                  : _MaterialeStatusFilter.tutti,
             ),
-          ),
-          onOpenFilters: onOpenFilters,
-        ),
-        Expanded(
-          child: _body(
-            context: context,
-            ref: ref,
-            materialiAsync: materialiAsync,
-            groups: groups,
-            allMateriali: allMateriali,
-            filtered: filtered,
-            activeCount: activeRows.length,
-            query: query,
-            filters: filters,
-            neverSynced: neverSynced,
-            onRefresh: onRefresh,
           ),
         ),
       ],
-    );
-  }
-
-  Widget _body({
-    required BuildContext context,
-    required WidgetRef ref,
-    required AsyncValue<List<MaterialiData>> materialiAsync,
-    required List<ListGroupData> groups,
-    required List<MaterialiData> allMateriali,
-    required List<MaterialiData> filtered,
-    required int activeCount,
-    required String query,
-    required _MaterialeFilters filters,
-    required bool neverSynced,
-    required Future<void> Function() onRefresh,
-  }) {
-    if (materialiAsync.isLoading && !materialiAsync.hasValue) {
-      return _scrollable(context, const ListLoadingSkeleton(), onRefresh);
-    }
-
-    if (materialiAsync.hasError && !materialiAsync.hasValue) {
-      return _scrollable(
-        context,
-        UnavailableState(
-          icon: LucideIcons.alertTriangle,
-          titolo: 'Materiali non disponibili',
-          motivo: 'Non è stato possibile leggere il catalogo materiali da questo telefono.',
-          action: AppButton(
-            label: 'Riprova',
-            onPressed: () => ref.invalidate(adminMaterialiProvider),
-          ),
+      action: CapabilityGate(
+        capability: 'magazzino.article.write',
+        child: ListHeaderAction(
+          label: 'Nuovo',
+          onPressed: () => context.push('/altro/magazzino/nuovo'),
         ),
-        onRefresh,
-      );
-    }
-
-    if (groups.isEmpty) {
-      return _scrollable(
-        context,
-        _emptyState(
-          query: query,
-          filters: filters,
-          allMateriali: allMateriali,
-          neverSynced: neverSynced,
+      ),
+      banner: const OfflineSyncBanner(),
+      searchController: searchCtrl,
+      searchHint: 'Cerca codice, nome o categoria…',
+      onSearchChanged: onQueryChanged,
+      searchTrailing: IconButton(
+        icon: const Icon(LucideIcons.scanLine),
+        tooltip: 'Scansiona codice',
+        onPressed: () async {
+          final match = await scanForMateriale(context, ref, title: 'Cerca materiale');
+          if (match == null) return;
+          searchCtrl.text = match.code;
+          onQueryChanged(match.code);
+        },
+      ),
+      filters: const [
+        ListFilterChipData(label: 'Tutti'),
+        ListFilterChipData(label: 'Attivi'),
+        ListFilterChipData(label: 'Inattivi'),
+      ],
+      activeFilterIndex: filters.status.index,
+      onFilterSelected: (chip) => onFiltersChanged(
+        filters.copyWith(
+          status: _MaterialeStatusFilter.values.firstWhere((s) => s.label == chip.label),
         ),
-        onRefresh,
-      );
-    }
-
-    return RefreshIndicator(
+      ),
+      onOpenFilters: onOpenFilters,
+      groups: groups,
+      summary: groups.isEmpty
+          ? null
+          : ListSummaryData(
+              left: _materialiLabel(filtered.length),
+              right: _attiviLabel(activeRows.length),
+            ),
+      state: state,
+      empty: _emptyState(
+        query: query,
+        filters: filters,
+        allMateriali: allMateriali,
+        neverSynced: neverSynced,
+      ),
+      unavailable: UnavailableState(
+        icon: LucideIcons.alertTriangle,
+        titolo: 'Materiali non disponibili',
+        motivo: 'Non è stato possibile leggere il catalogo materiali da questo telefono.',
+        action: AppButton(
+          label: 'Riprova',
+          onPressed: () => ref.invalidate(adminMaterialiProvider),
+        ),
+      ),
       onRefresh: onRefresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          for (final group in groups) ...[
-            SliverToBoxAdapter(
-              child: _framed(
-                child: ListGroupHeader(title: group.title!, count: group.count),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => KeyedSubtree(
-                    key: group.rows[i].rowKey,
-                    child: ListDocumentRow(data: group.rows[i]),
-                  ),
-                  childCount: group.rows.length,
-                ),
-              ),
-            ),
-          ],
-          SliverToBoxAdapter(
-            child: _framed(
-              child: ListSummaryFooter(
-                data: ListSummaryData(
-                  left: _materialiLabel(filtered.length),
-                  right: _attiviLabel(activeCount),
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-        ],
-      ),
-    );
-  }
-
-  Widget _scrollable(BuildContext context, Widget child, Future<void> Function() onRefresh) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Center(
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-  }
-
-  Widget _framed({required Widget child}) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
-        ),
-      ),
     );
   }
 
@@ -456,6 +313,70 @@ class _AdminMaterialeListBody extends ConsumerWidget {
   static String _materialiLabel(int count) => count == 1 ? '1 materiale' : '$count materiali';
 
   static String _attiviLabel(int count) => count == 1 ? '1 attivo' : '$count attivi';
+}
+
+enum _MaterialeMenuAction { giacenze, magazzini, toggleInactive }
+
+/// The three secondary header actions behind one 44px glass disc.
+///
+/// Materiali was the only list whose header had three icon discs beside `Nuovo`; at 320–390px that
+/// crowded the title and forced a three-line subtitle. The actions themselves are unchanged — the
+/// overflow menu is just a different, compact way to reach them (same target and glass treatment
+/// as [HeaderIconBtn], matching the Cliente detail fix).
+class _MaterialeOverflowMenu extends StatelessWidget {
+  const _MaterialeOverflowMenu({
+    required this.showingInactive,
+    required this.onGiacenze,
+    required this.onMagazzini,
+    required this.onToggleInactive,
+  });
+
+  final bool showingInactive;
+  final VoidCallback onGiacenze;
+  final VoidCallback onMagazzini;
+  final VoidCallback onToggleInactive;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_MaterialeMenuAction>(
+      key: const Key('materiali-overflow-menu'),
+      tooltip: 'Altre azioni',
+      onSelected: (action) => switch (action) {
+        _MaterialeMenuAction.giacenze => onGiacenze(),
+        _MaterialeMenuAction.magazzini => onMagazzini(),
+        _MaterialeMenuAction.toggleInactive => onToggleInactive(),
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: _MaterialeMenuAction.giacenze,
+          child: Text('Giacenze e movimenti'),
+        ),
+        const PopupMenuItem(value: _MaterialeMenuAction.magazzini, child: Text('Magazzini')),
+        PopupMenuItem(
+          value: _MaterialeMenuAction.toggleInactive,
+          child: Text(showingInactive ? 'Nascondi inattivi' : 'Mostra inattivi'),
+        ),
+      ],
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Center(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: context.colors.surface,
+              borderRadius: BorderRadius.circular(19),
+              border: Border.all(color: context.colors.borderLight),
+            ),
+            child: SizedBox(
+              width: 38,
+              height: 38,
+              child: Icon(LucideIcons.moreHorizontal, size: 17, color: context.colors.ink),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _MaterialeFilterSheet extends ConsumerStatefulWidget {

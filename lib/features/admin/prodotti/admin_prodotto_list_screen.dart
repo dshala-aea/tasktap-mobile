@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_palette.dart';
-import '../../../core/theme/app_rack.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../../core/time/business_time_providers.dart';
@@ -330,129 +328,56 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
           )
         : ErrorState(onRetry: () => ref.invalidate(adminProdottiAssistenzaProvider));
 
-    Widget framed(Widget child) => Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
-        ),
-      ),
-    );
+    final state = isUnavailable
+        ? ListShellState.unavailable
+        : isLoading
+        ? ListShellState.loading
+        : ListShellState.content;
 
-    Widget scrollable(Widget child) => RefreshIndicator(
+    final summary = filtered.isEmpty
+        ? null
+        : ListSummaryData(
+            left: '${filtered.length} ${filtered.length == 1 ? 'prodotto' : 'prodotti'}',
+            // The maintenance date is absent from the local mirror, so offline the right half
+            // reports a count the rows can actually support (inactive assets) instead of a
+            // misleading "0 in scadenza".
+            right: fromMirror
+                ? '$inactiveCount ${inactiveCount == 1 ? 'inattivo' : 'inattivi'}'
+                : '$dueCount in scadenza',
+          );
+
+    return ListShell(
+      title: 'Prodotti in assistenza',
+      subtitle: 'Gli asset del cliente e la loro prossima manutenzione.',
+      showBack: true,
+      action: ListHeaderAction(
+        label: 'Nuovo',
+        onPressed: () => context.push('/altro/prodotti/nuovo'),
+      ),
+      searchController: _searchCtrl,
+      searchHint: 'Cerca prodotto, seriale, cliente…',
+      onSearchChanged: _onQueryChanged,
+      filters: const [
+        ListFilterChipData(label: 'Tutti', id: 'tutti'),
+        ListFilterChipData(label: 'In garanzia', id: 'inGaranzia'),
+        ListFilterChipData(label: 'Garanzia scaduta', id: 'scaduta'),
+        ListFilterChipData(label: 'Inattivi', id: 'inattivi'),
+      ],
+      activeFilterId: _filters.status.name,
+      onFilterSelected: (chip) {
+        final next = _ProdottoFilter.values.firstWhere((f) => f.name == chip.id);
+        setState(() => _filters = _filters.withStatus(next));
+      },
+      onOpenFilters: () => _openFilters(rows: allRows, maintenanceAvailable: !fromMirror),
+      groups: groups,
+      summary: summary,
+      state: state,
+      empty: empty,
+      unavailable: unavailable,
+      bodyHeader: state == ListShellState.content && fromMirror
+          ? const MirrorNotice(what: 'asset')
+          : null,
       onRefresh: _refresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Center(
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-
-    final Widget content;
-    if (isLoading) {
-      content = scrollable(const ListLoadingSkeleton());
-    } else if (isUnavailable) {
-      content = scrollable(unavailable);
-    } else if (groups.isEmpty) {
-      content = RefreshIndicator(
-        onRefresh: _refresh,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            SizedBox(height: MediaQuery.sizeOf(context).height * 0.08),
-            framed(empty),
-            SizedBox(height: context.navClearance),
-          ],
-        ),
-      );
-    } else {
-      final summary = filtered.isEmpty
-          ? null
-          : ListSummaryData(
-              left: '${filtered.length} ${filtered.length == 1 ? 'prodotto' : 'prodotti'}',
-              // The maintenance date is absent from the local mirror, so offline the right half
-              // reports a count the rows can actually support (inactive assets) instead of a
-              // misleading "0 in scadenza".
-              right: fromMirror
-                  ? '$inactiveCount ${inactiveCount == 1 ? 'inattivo' : 'inattivi'}'
-                  : '$dueCount in scadenza',
-            );
-      content = RefreshIndicator(
-        onRefresh: _refresh,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            if (fromMirror) const SliverToBoxAdapter(child: MirrorNotice(what: 'asset')),
-            for (final group in groups) ...[
-              SliverToBoxAdapter(
-                child: framed(ListGroupHeader(title: group.title!, count: group.count)),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, i) {
-                    final row = group.rows[i];
-                    return KeyedSubtree(
-                      key: row.rowKey,
-                      child: ListDocumentRow(data: row),
-                    );
-                  }, childCount: group.rows.length),
-                ),
-              ),
-            ],
-            if (summary != null)
-              SliverToBoxAdapter(child: framed(ListSummaryFooter(data: summary))),
-            SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-          ],
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: Column(
-          children: [
-            ScreenHeader(
-              title: 'Prodotti in assistenza',
-              subtitle: 'Gli asset del cliente e la loro prossima manutenzione.',
-              subtitleMaxLines: 2,
-              showBack: true,
-              actions: [
-                ListHeaderAction(
-                  label: 'Nuovo',
-                  onPressed: () => context.push('/altro/prodotti/nuovo'),
-                ),
-              ],
-            ),
-            AppSearchBar(
-              controller: _searchCtrl,
-              hint: 'Cerca prodotto, seriale, cliente…',
-              onChanged: _onQueryChanged,
-            ),
-            ListFilterRow(
-              filters: const [
-                ListFilterChipData(label: 'Tutti', id: 'tutti'),
-                ListFilterChipData(label: 'In garanzia', id: 'inGaranzia'),
-                ListFilterChipData(label: 'Garanzia scaduta', id: 'scaduta'),
-                ListFilterChipData(label: 'Inattivi', id: 'inattivi'),
-              ],
-              activeId: _filters.status.name,
-              onSelected: (chip) {
-                final next = _ProdottoFilter.values.firstWhere((f) => f.name == chip.id);
-                setState(() => _filters = _filters.withStatus(next));
-              },
-              onOpenFilters: () => _openFilters(rows: allRows, maintenanceAvailable: !fromMirror),
-            ),
-            Expanded(child: content),
-          ],
-        ),
-      ),
     );
   }
 

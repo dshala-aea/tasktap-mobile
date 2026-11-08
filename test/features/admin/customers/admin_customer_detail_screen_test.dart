@@ -235,6 +235,28 @@ void main() {
       await teardown(tester);
     });
 
+    testWidgets('header overflow is a 44px glass disc that keeps its menu', (
+      tester,
+    ) async {
+      await seedCustomer('cust-1', name: 'Rossi Srl');
+
+      await pumpScreen(tester);
+
+      expect(
+        tester.getSize(find.byKey(const Key('customer-overflow-menu'))),
+        const Size(44, 44),
+      );
+
+      await tester.tap(find.byTooltip('Aggiungi'));
+      await tester.pumpAndSettle();
+      expect(find.text('Nuova sede'), findsOneWidget);
+      expect(find.text('Aggiungi referente'), findsOneWidget);
+      expect(find.text('Nuovo asset'), findsOneWidget);
+      expect(find.text('Nuovo contratto'), findsOneWidget);
+
+      await teardown(tester);
+    });
+
     testWidgets('sections run Relazioni → Sintesi → Attività → Documenti', (
       tester,
     ) async {

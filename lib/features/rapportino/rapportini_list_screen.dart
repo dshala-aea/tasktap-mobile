@@ -11,7 +11,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
-import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/time/business_time.dart' show BusinessTime, formatWorkDate;
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
@@ -175,20 +174,15 @@ class _RapportiniListScreenState extends ConsumerState<RapportiniListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: _RapportiniListBody(
-          filters: _filters,
-          query: _query,
-          searchCtrl: _searchCtrl,
-          creating: _creating,
-          onFilterChanged: (f) => setState(() => _filters = f),
-          onQueryChanged: (q) => setState(() => _query = q),
-          onOpenFilters: _openFilters,
-          onNew: _createNewDraft,
-        ),
-      ),
+    return _RapportiniListBody(
+      filters: _filters,
+      query: _query,
+      searchCtrl: _searchCtrl,
+      creating: _creating,
+      onFilterChanged: (f) => setState(() => _filters = f),
+      onQueryChanged: (q) => setState(() => _query = q),
+      onOpenFilters: _openFilters,
+      onNew: _createNewDraft,
     );
   }
 }
@@ -249,166 +243,92 @@ class _RapportiniListBody extends ConsumerWidget {
     final loading = draftsAsync.isLoading && !draftsAsync.hasValue;
     final unavailable = draftsAsync.hasError && !draftsAsync.hasValue;
 
-    return Column(
-      children: [
-        ScreenHeader(
-          title: 'Rapportini',
-          subtitle: 'Il documento che deve uscire dal cantiere: bozza, firma, invio.',
-          subtitleMaxLines: 2,
-          showBack: true,
-          actions: [ListHeaderAction(label: 'Nuovo', onPressed: creating ? null : onNew)],
-        ),
-        AppSearchBar(
-          controller: searchCtrl,
-          hint: 'Cerca rapportino, cliente, sede o data…',
-          onChanged: onQueryChanged,
-        ),
-        ListFilterRow(
-          filters: _quickFilters,
-          activeId: filters.status.name,
-          onSelected: (chip) => onFilterChanged(filters.withStatus(_statusFromId(chip.id))),
-          onOpenFilters: onOpenFilters,
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () => refreshWithFeedback(context, ref),
-            child: _body(
-              context,
-              ref,
-              loading: loading,
-              unavailable: unavailable,
-              drafts: filtered,
-              daInviareCount: daInviareCount,
-              hasActiveFilter: hasActiveFilter,
-              neverSynced: neverSynced,
-              customersById: customersById,
-              locationsById: locationsById,
-              businessTime: businessTime,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+    final state = unavailable
+        ? ListShellState.unavailable
+        : loading
+        ? ListShellState.loading
+        : ListShellState.content;
 
-  Widget _body(
-    BuildContext context,
-    WidgetRef ref, {
-    required bool loading,
-    required bool unavailable,
-    required List<DraftReport> drafts,
-    required int daInviareCount,
-    required bool hasActiveFilter,
-    required bool neverSynced,
-    required Map<String, Customer> customersById,
-    required Map<String, Location> locationsById,
-    required BusinessTime businessTime,
-  }) {
-    if (loading) return _scrollable(context, const ListLoadingSkeleton());
-    if (unavailable) {
-      return _scrollable(
-        context,
-        UnavailableState(
-          icon: LucideIcons.alertTriangle,
-          titolo: 'Rapportini non disponibili',
-          motivo: 'Non è stato possibile leggere i rapportini salvati su questo telefono.',
-          action: AppButton(
-            label: 'Riprova',
-            onPressed: () async {
-              ref.invalidate(rapportiniListProvider);
-              await refreshWithFeedback(context, ref);
-            },
-          ),
-        ),
-      );
-    }
+    final groups = _group(filtered);
+    // `rowBuilder` receives presentation data only; keep the drafts behind each key so the
+    // Dismissible/delete overlay can still be built.
+    final draftsByKey = {for (final draft in filtered) ValueKey('rapportino-${draft.id}'): draft};
 
-    if (drafts.isEmpty) {
-      final empty = hasActiveFilter
-          ? const EmptyState(
-              icon: LucideIcons.searchX,
-              title: 'Nessun risultato',
-              body: 'Nessun rapportino corrisponde ai filtri scelti.',
-            )
-          : neverSynced
-          ? const EmptyState(
-              icon: LucideIcons.cloudOff,
-              title: 'Rapportini non ancora scaricati',
-              body:
-                  'Questo telefono non ha ancora completato una sincronizzazione: i rapportini '
-                  'compariranno qui appena i dati saranno scaricati.',
-            )
-          : const EmptyState(
-              icon: LucideIcons.fileText,
-              title: 'Nessun rapportino',
-              body: 'I rapportini appariranno qui.',
-            );
-      return _scrollable(context, empty);
-    }
+    final empty = hasActiveFilter
+        ? const EmptyState(
+            icon: LucideIcons.searchX,
+            title: 'Nessun risultato',
+            body: 'Nessun rapportino corrisponde ai filtri scelti.',
+          )
+        : neverSynced
+        ? const EmptyState(
+            icon: LucideIcons.cloudOff,
+            title: 'Rapportini non ancora scaricati',
+            body:
+                'Questo telefono non ha ancora completato una sincronizzazione: i rapportini '
+                'compariranno qui appena i dati saranno scaricati.',
+          )
+        : const EmptyState(
+            icon: LucideIcons.fileText,
+            title: 'Nessun rapportino',
+            body: 'I rapportini appariranno qui.',
+          );
 
-    final groups = _group(drafts);
-
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            for (final group in groups) ...[
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: ListGroupHeader(title: group.title, count: group.rows.length),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, i) {
-                    final draft = group.rows[i];
-                    return _RapportinoRow(
-                      key: ValueKey('rapportino-${draft.id}'),
-                      draft: draft,
-                      customerName: _customerName(draft, customersById, locationsById),
-                      locationName: _locationName(draft, locationsById),
-                      dateLabel: _dateLabel(draft, businessTime),
-                    );
-                  }, childCount: group.rows.length),
-                ),
-              ),
+    return ListShell(
+      title: 'Rapportini',
+      subtitle: 'Il documento che deve uscire dal cantiere: bozza, firma, invio.',
+      showBack: true,
+      action: ListHeaderAction(label: 'Nuovo', onPressed: creating ? null : onNew),
+      searchController: searchCtrl,
+      searchHint: 'Cerca rapportino, cliente, sede o data…',
+      onSearchChanged: onQueryChanged,
+      filters: _quickFilters,
+      activeFilterId: filters.status.name,
+      onFilterSelected: (chip) => onFilterChanged(filters.withStatus(_statusFromId(chip.id))),
+      onOpenFilters: onOpenFilters,
+      groups: [
+        for (final group in groups)
+          ListGroupData(
+            title: group.title,
+            count: group.rows.length,
+            rows: [
+              for (final draft in group.rows)
+                ListRowData(rowKey: ValueKey('rapportino-${draft.id}'), title: draft.title),
             ],
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                child: ListSummaryFooter(
-                  data: ListSummaryData(
-                    left:
-                        '${drafts.length} '
-                        '${drafts.length == 1 ? 'rapportino' : 'rapportini'}',
-                    right: '$daInviareCount da inviare',
-                  ),
-                ),
-              ),
+          ),
+      ],
+      summary: filtered.isEmpty
+          ? null
+          : ListSummaryData(
+              left:
+                  '${filtered.length} '
+                  '${filtered.length == 1 ? 'rapportino' : 'rapportini'}',
+              right: '$daInviareCount da inviare',
             ),
-            SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-          ],
+      state: state,
+      empty: empty,
+      unavailable: UnavailableState(
+        icon: LucideIcons.alertTriangle,
+        titolo: 'Rapportini non disponibili',
+        motivo: 'Non è stato possibile leggere i rapportini salvati su questo telefono.',
+        action: AppButton(
+          label: 'Riprova',
+          onPressed: () async {
+            ref.invalidate(rapportiniListProvider);
+            await refreshWithFeedback(context, ref);
+          },
         ),
       ),
-    );
-  }
-
-  Widget _scrollable(BuildContext context, Widget child) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            child,
-            SizedBox(height: context.navClearance),
-          ],
-        ),
-      ),
+      onRefresh: () => refreshWithFeedback(context, ref),
+      rowBuilder: (context, row) {
+        final draft = draftsByKey[row.rowKey]!;
+        return _RapportinoRow(
+          draft: draft,
+          customerName: _customerName(draft, customersById, locationsById),
+          locationName: _locationName(draft, locationsById),
+          dateLabel: _dateLabel(draft, businessTime),
+        );
+      },
     );
   }
 }
@@ -577,7 +497,6 @@ final _importingReportIds = <String>{};
 
 class _RapportinoRow extends ConsumerWidget {
   const _RapportinoRow({
-    super.key,
     required this.draft,
     required this.customerName,
     required this.locationName,

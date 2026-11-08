@@ -96,6 +96,8 @@ class ListShell extends StatelessWidget {
     this.searchHint = 'Cerca…',
     this.searchController,
     this.onSearchChanged,
+    this.searchTrailing,
+    this.bodyHeader,
     this.filters = const [],
     this.activeFilterId,
     this.activeFilterIndex,
@@ -109,6 +111,7 @@ class ListShell extends StatelessWidget {
     this.onRefresh,
     this.bottomPadding,
     this.maxWidth = 720,
+    this.rowBuilder,
   });
 
   final String title;
@@ -135,6 +138,15 @@ class ListShell extends StatelessWidget {
   final TextEditingController? searchController;
   final ValueChanged<String>? onSearchChanged;
 
+  /// Trailing action rendered beside the search field (Materiali's scan button). When set, the
+  /// field and this widget share one row; when null, the search field renders exactly as before.
+  final Widget? searchTrailing;
+
+  /// Inserted after the filter row and before the scroll area (tab toggles, mirror notices,
+  /// stale-data alerts). Scrolls with the page only if the caller wraps it; the shell keeps it
+  /// fixed under the filters.
+  final Widget? bodyHeader;
+
   final List<ListFilterChipData> filters;
   final String? activeFilterId;
   final int? activeFilterIndex;
@@ -159,6 +171,10 @@ class ListShell extends StatelessWidget {
   final double? bottomPadding;
 
   final double maxWidth;
+
+  /// Builds each row instead of `ListDocumentRow(data: row)`. The `KeyedSubtree` key from
+  /// [ListRowData.rowKey] is still applied; a custom list can keep the shell without forking it.
+  final Widget Function(BuildContext context, ListRowData row)? rowBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -197,11 +213,7 @@ class ListShell extends StatelessWidget {
           children: [
             ?banner,
             header,
-            AppSearchBar(
-              controller: searchController,
-              hint: searchHint,
-              onChanged: onSearchChanged,
-            ),
+            _searchField(),
             if (filters.isNotEmpty || onOpenFilters != null)
               ListFilterRow(
                 filters: filters,
@@ -210,10 +222,49 @@ class ListShell extends StatelessWidget {
                 onSelected: onFilterSelected,
                 onOpenFilters: onOpenFilters,
               ),
+            ?bodyHeader,
             Expanded(child: body),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _searchField() {
+    final trailing = searchTrailing;
+    if (trailing == null) {
+      return AppSearchBar(
+        controller: searchController,
+        hint: searchHint,
+        onChanged: onSearchChanged,
+      );
+    }
+
+    // Materiali's layout: the field keeps the left page padding, the trailing action owns the
+    // right edge and the shared bottom margin.
+    return Row(
+      children: [
+        Expanded(
+          child: AppSearchBar(
+            controller: searchController,
+            hint: searchHint,
+            onChanged: onSearchChanged,
+            margin: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.sm,
+              AppSpacing.md,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(
+            right: AppSpacing.sm,
+            bottom: AppSpacing.md,
+          ),
+          child: trailing,
+        ),
+      ],
     );
   }
 
@@ -243,8 +294,10 @@ class ListShell extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         if (visibleGroups.isEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
+          // Scrolls with the page instead of being squeezed into the leftover viewport: a tall
+          // `UnavailableState` under a header + chips + a `bodyHeader` used to overflow the
+          // `SliverFillRemaining` on a 320–390px phone.
+          SliverToBoxAdapter(
             child:
                 empty ??
                 const EmptyState(
@@ -272,7 +325,9 @@ class ListShell extends StatelessWidget {
                 delegate: SliverChildBuilderDelegate(
                   (context, i) => KeyedSubtree(
                     key: group.rows[i].rowKey,
-                    child: ListDocumentRow(data: group.rows[i]),
+                    child:
+                        rowBuilder?.call(context, group.rows[i]) ??
+                        ListDocumentRow(data: group.rows[i]),
                   ),
                   childCount: group.rows.length,
                 ),
@@ -283,8 +338,8 @@ class ListShell extends StatelessWidget {
             SliverToBoxAdapter(
               child: _framed(child: ListSummaryFooter(data: summary!)),
             ),
-          SliverToBoxAdapter(child: SizedBox(height: bottom)),
         ],
+        SliverToBoxAdapter(child: SizedBox(height: bottom)),
       ],
     );
 

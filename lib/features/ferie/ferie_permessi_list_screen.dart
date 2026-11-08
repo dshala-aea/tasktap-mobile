@@ -176,60 +176,13 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
     final meId = ref.watch(_freshInternalUserIdProvider).valueOrNull;
     final myName = meId == null ? null : ref.watch(colleagueNameProvider(meId)).valueOrNull;
 
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: Column(
-          children: [
-            ScreenHeader(
-              title: 'Ferie e permessi',
-              subtitle: 'Le richieste del team e il loro stato.',
-              subtitleMaxLines: 2,
-              showBack: true,
-              actions: [
-                ListHeaderAction(
-                  label: 'Nuovo',
-                  onPressed: () => context.push('/altro/ferie/nuovo'),
-                ),
-              ],
-            ),
-            AppSearchBar(
-              controller: _searchCtrl,
-              hint: 'Cerca persona, tipo o periodo…',
-              onChanged: (q) => setState(() => _query = q),
-            ),
-            ListFilterRow(
-              filters: _visibleChips,
-              activeId: _activeChipId,
-              onSelected: _selectChip,
-              onOpenFilters: _openFilters,
-            ),
-            Expanded(
-              child: _body(ref: ref, requestsAsync: requestsAsync, myName: myName),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _body({
-    required WidgetRef ref,
-    required AsyncValue<MyAbsenceRequests> requestsAsync,
-    required String? myName,
-  }) {
     Future<void> onRefresh() => ref.refresh(myAbsenceRequestsProvider.future);
 
-    if (requestsAsync.isLoading && !requestsAsync.hasValue) {
-      return _scrollable(const ListLoadingSkeleton(), onRefresh);
-    }
-
-    if (requestsAsync.hasError && !requestsAsync.hasValue) {
-      return _scrollable(
-        ErrorState(onRetry: () => ref.invalidate(myAbsenceRequestsProvider)),
-        onRefresh,
-      );
-    }
+    final state = requestsAsync.isLoading && !requestsAsync.hasValue
+        ? ListShellState.loading
+        : requestsAsync.hasError && !requestsAsync.hasValue
+        ? ListShellState.unavailable
+        : ListShellState.content;
 
     final result =
         requestsAsync.valueOrNull ?? (items: const <AbsenceRequestDto>[], fromDevice: false);
@@ -240,35 +193,6 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
     final neverSynced =
         result.fromDevice && ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
 
-    if (result.items.isEmpty) {
-      if (neverSynced) {
-        return _scrollable(
-          UnavailableState(
-            icon: LucideIcons.wifiOff,
-            titolo: 'Richieste non ancora scaricate',
-            motivo:
-                'Nessuna copia delle tue richieste su questo dispositivo. Verrà scaricata '
-                'alla prossima sincronizzazione.',
-            action: AppButton(
-              label: 'Riprova',
-              size: AppButtonSize.sm,
-              fullWidth: false,
-              onPressed: () => ref.invalidate(myAbsenceRequestsProvider),
-            ),
-          ),
-          onRefresh,
-        );
-      }
-      return _scrollable(
-        const EmptyState(
-          icon: LucideIcons.calendarX,
-          title: 'Nessuna richiesta',
-          body: 'Invia una nuova richiesta con il pulsante Nuovo.',
-        ),
-        onRefresh,
-      );
-    }
-
     final visible = result.items.where((item) {
       if (!_filters.matchesStatus(item.status)) return false;
       if (!_filters.type.matches(item.type)) return false;
@@ -276,74 +200,81 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
       return _matchesQuery(item, myName);
     }).toList();
 
-    if (visible.isEmpty) {
-      return _scrollable(
-        EmptyState(
-          icon: LucideIcons.searchX,
-          title: 'Nessun risultato',
-          body: _query.isNotEmpty
-              ? 'Nessuna richiesta corrisponde a "$_query".'
-              : 'Nessuna richiesta corrisponde a ricerca e filtri attivi.',
-        ),
-        onRefresh,
+    final groups = _groups(visible, myName);
+    final itemsByKey = {for (final item in visible) ValueKey('ferie-${item.id}'): item};
+    final pending = visible.where((item) => item.status == 0).length;
+
+    final Widget empty;
+    if (result.items.isEmpty) {
+      empty = neverSynced
+          ? UnavailableState(
+              icon: LucideIcons.wifiOff,
+              titolo: 'Richieste non ancora scaricate',
+              motivo:
+                  'Nessuna copia delle tue richieste su questo dispositivo. Verrà scaricata '
+                  'alla prossima sincronizzazione.',
+              action: AppButton(
+                label: 'Riprova',
+                size: AppButtonSize.sm,
+                fullWidth: false,
+                onPressed: () => ref.invalidate(myAbsenceRequestsProvider),
+              ),
+            )
+          : const EmptyState(
+              icon: LucideIcons.calendarX,
+              title: 'Nessuna richiesta',
+              body: 'Invia una nuova richiesta con il pulsante Nuovo.',
+            );
+    } else {
+      empty = EmptyState(
+        icon: LucideIcons.searchX,
+        title: 'Nessun risultato',
+        body: _query.isNotEmpty
+            ? 'Nessuna richiesta corrisponde a "$_query".'
+            : 'Nessuna richiesta corrisponde a ricerca e filtri attivi.',
       );
     }
 
-    final groups = _groups(visible);
-    final pending = visible.where((item) => item.status == 0).length;
-
-    return RefreshIndicator(
+    return ListShell(
+      title: 'Ferie e permessi',
+      subtitle: 'Le richieste del team e il loro stato.',
+      showBack: true,
+      action: ListHeaderAction(label: 'Nuovo', onPressed: () => context.push('/altro/ferie/nuovo')),
+      searchController: _searchCtrl,
+      searchHint: 'Cerca persona, tipo o periodo…',
+      onSearchChanged: (q) => setState(() => _query = q),
+      filters: _visibleChips,
+      activeFilterId: _activeChipId,
+      onFilterSelected: _selectChip,
+      onOpenFilters: _openFilters,
+      groups: groups,
+      summary: visible.isEmpty
+          ? null
+          : ListSummaryData(left: _requestsLabel(visible.length), right: _pendingLabel(pending)),
+      state: state,
+      empty: empty,
+      unavailable: ErrorState(onRetry: () => ref.invalidate(myAbsenceRequestsProvider)),
       onRefresh: onRefresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          for (final group in groups) ...[
-            SliverToBoxAdapter(
-              child: _framed(
-                child: ListGroupHeader(title: group.title, count: group.count),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => KeyedSubtree(
-                    key: group.rows[i].rowKey,
-                    child: _row(context, ref, group.rows[i].item, myName),
-                  ),
-                  childCount: group.rows.length,
-                ),
-              ),
-            ),
-          ],
-          SliverToBoxAdapter(
-            child: _framed(
-              child: ListSummaryFooter(
-                data: ListSummaryData(
-                  left: _requestsLabel(visible.length),
-                  right: _pendingLabel(pending),
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-        ],
-      ),
+      rowBuilder: (context, row) => _row(context, ref, itemsByKey[row.rowKey]!, myName),
     );
   }
 
-  List<_FerieGroup> _groups(List<AbsenceRequestDto> visible) {
+  List<ListGroupData> _groups(List<AbsenceRequestDto> visible, String? myName) {
     const titles = ['In attesa', 'Approvate', 'Respinte', 'Annullate'];
-    final groups = <_FerieGroup>[];
+    final groups = <ListGroupData>[];
     for (var status = 0; status < 4; status++) {
       final rows = visible.where((item) => item.status == status).toList();
       if (rows.isEmpty) continue;
       groups.add(
-        _FerieGroup(
+        ListGroupData(
           title: titles[status],
           count: rows.length,
           rows: [
-            for (final item in rows) _FerieRow(item: item, rowKey: ValueKey('ferie-${item.id}')),
+            for (final item in rows)
+              ListRowData(
+                rowKey: ValueKey('ferie-${item.id}'),
+                title: _rowData(item, myName).title,
+              ),
           ],
         ),
       );
@@ -419,50 +350,6 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
     ].join(' ').toLowerCase();
     return haystack.contains(q);
   }
-
-  Widget _scrollable(Widget child, Future<void> Function() onRefresh) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Center(
-            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720), child: child),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-  }
-
-  Widget _framed({required Widget child}) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-          child: child,
-        ),
-      ),
-    );
-  }
-}
-
-/// One group carrying its source rows so the list can render a custom row (with the cancel strip)
-/// instead of flattening to [ListRowData] only.
-class _FerieGroup {
-  const _FerieGroup({required this.title, required this.count, required this.rows});
-
-  final String title;
-  final int count;
-  final List<_FerieRow> rows;
-}
-
-class _FerieRow {
-  const _FerieRow({required this.item, required this.rowKey});
-
-  final AbsenceRequestDto item;
-  final Key rowKey;
 }
 
 class _CancelAction extends StatelessWidget {

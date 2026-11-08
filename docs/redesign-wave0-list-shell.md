@@ -32,6 +32,12 @@ Notes:
   decoration border). Its `controller`/`onChanged`/`margin` contract is unchanged.
 - `ScreenHeader` gained `subtitleMaxLines` (default 1). `ListShell` uses 2 so a real list subtitle
   is not truncated.
+- `ListShell.rowBuilder` renders a custom row instead of `ListDocumentRow` (the `KeyedSubtree` key
+  from `ListRowData.rowKey` is kept). `ListShell.searchTrailing` puts an action beside the search
+  field in one row (Materiali's scan button); when null the `AppSearchBar` is unchanged.
+  `ListShell.bodyHeader` is inserted after the filter row and before the scroll area (tab toggles,
+  mirror notices, stale-data alerts). All three default to off, so existing callers render
+  exactly as before.
 
 ## Detail shell additions — `lib/core/widgets/detail/`
 

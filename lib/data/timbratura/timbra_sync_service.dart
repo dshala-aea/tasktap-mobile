@@ -325,7 +325,7 @@ class TimbraSyncService {
         // Transient (offline, timeout, 5xx, 401): no backoff on purpose — a reconnect or the next
         // trigger should try again immediately. A breadcrumb makes the repeated attempt visible
         // in Sentry without turning an expected offline into an error event.
-        final status = e is DioException ? (e.response?.statusCode ?? e.type.name) : e.runtimeType;
+        final status = e.response?.statusCode ?? e.type.name;
         CrashReporter.instance.addBreadcrumb(
           'timbra sync transient: status=$status '
           'events=${day.where((s) => s.isPendingSync).length}',

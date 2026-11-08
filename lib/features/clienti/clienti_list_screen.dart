@@ -84,18 +84,13 @@ class _ClientiListScreenState extends State<ClientiListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: _ClientiListBody(
-          filters: _filters,
-          query: _query,
-          searchCtrl: _searchCtrl,
-          onQueryChanged: (q) => setState(() => _query = q),
-          onFiltersChanged: (f) => setState(() => _filters = f),
-          onOpenFilters: _openFilters,
-        ),
-      ),
+    return _ClientiListBody(
+      filters: _filters,
+      query: _query,
+      searchCtrl: _searchCtrl,
+      onQueryChanged: (q) => setState(() => _query = q),
+      onFiltersChanged: (f) => setState(() => _filters = f),
+      onOpenFilters: _openFilters,
     );
   }
 }
@@ -190,188 +185,69 @@ class _ClientiListBody extends ConsumerWidget {
         ),
     ];
 
-    return Column(
-      children: [
-        const OfflineSyncBanner(),
-        ScreenHeader(
-          title: 'Clienti',
-          subtitle: 'Chi sono i clienti e cosa hanno aperto con noi.',
-          subtitleMaxLines: 2,
-          showBack: true,
-          actions: [
-            CapabilityGate(
-              capability: 'clienti.customer.write',
-              child: ListHeaderAction(
-                label: 'Nuovo',
-                onPressed: () => context.push('/altro/clienti/nuovo'),
-              ),
-            ),
-          ],
+    final isLoading = customersAsync.isLoading && !customersAsync.hasValue;
+    final state = customersAsync.hasError && !customersAsync.hasValue
+        ? ListShellState.unavailable
+        : isLoading
+        ? ListShellState.loading
+        : ListShellState.content;
+
+    return ListShell(
+      title: 'Clienti',
+      subtitle: 'Chi sono i clienti e cosa hanno aperto con noi.',
+      showBack: true,
+      action: CapabilityGate(
+        capability: 'clienti.customer.write',
+        child: ListHeaderAction(
+          label: 'Nuovo',
+          onPressed: () => context.push('/altro/clienti/nuovo'),
         ),
-        AppSearchBar(
-          controller: searchCtrl,
-          hint: 'Cerca ragione sociale, città o P.IVA…',
-          onChanged: onQueryChanged,
-        ),
-        ListFilterRow(
-          filters: const [
-            ListFilterChipData(label: 'Attivi'),
-            ListFilterChipData(label: 'Tutti'),
-            ListFilterChipData(label: 'Inattivi'),
-          ],
-          activeIndex: filters.status.index,
-          onSelected: (chip) => onFiltersChanged(
-            _ClientiFilters(
-              status: _CustomerStatusFilter.values.firstWhere(
-                (s) => s.label == chip.label,
-              ),
-              city: filters.city,
-              contracts: filters.contracts,
-              onlyWithOpenTickets: filters.onlyWithOpenTickets,
-            ),
-          ),
-          onOpenFilters: onOpenFilters,
-        ),
-        Expanded(
-          child: _body(
-            context: context,
-            ref: ref,
-            customersAsync: customersAsync,
-            groups: groups,
-            filteredCount: filtered.length,
-            activeCount: activeCount,
-            neverSynced: neverSynced,
-            hasCustomers: allCustomers.isNotEmpty,
-            query: query,
-            filters: filters,
-          ),
-        ),
+      ),
+      banner: const OfflineSyncBanner(),
+      searchController: searchCtrl,
+      searchHint: 'Cerca ragione sociale, città o P.IVA…',
+      onSearchChanged: onQueryChanged,
+      filters: const [
+        ListFilterChipData(label: 'Attivi'),
+        ListFilterChipData(label: 'Tutti'),
+        ListFilterChipData(label: 'Inattivi'),
       ],
-    );
-  }
-
-  Widget _body({
-    required BuildContext context,
-    required WidgetRef ref,
-    required AsyncValue<List<Customer>> customersAsync,
-    required List<ListGroupData> groups,
-    required int filteredCount,
-    required int activeCount,
-    required bool neverSynced,
-    required bool hasCustomers,
-    required String query,
-    required _ClientiFilters filters,
-  }) {
-    Future<void> onRefresh() => refreshWithFeedback(context, ref);
-
-    if (customersAsync.isLoading && !customersAsync.hasValue) {
-      return _scrollable(context, const ListLoadingSkeleton(), onRefresh);
-    }
-
-    if (customersAsync.hasError && !customersAsync.hasValue) {
-      return _scrollable(
-        context,
-        UnavailableState(
-          icon: LucideIcons.alertTriangle,
-          titolo: 'Clienti non disponibili',
-          motivo: 'Non è stato possibile leggere i clienti da questo telefono.',
-          action: AppButton(
-            label: 'Riprova',
-            onPressed: () => ref.invalidate(allClientiCustomersProvider),
+      activeFilterIndex: filters.status.index,
+      onFilterSelected: (chip) => onFiltersChanged(
+        _ClientiFilters(
+          status: _CustomerStatusFilter.values.firstWhere(
+            (s) => s.label == chip.label,
           ),
-        ),
-        onRefresh,
-      );
-    }
-
-    if (groups.isEmpty) {
-      return _scrollable(
-        context,
-        _emptyState(
-          query: query,
-          filters: filters,
-          neverSynced: neverSynced,
-          hasCustomers: hasCustomers,
-        ),
-        onRefresh,
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          for (final group in groups) ...[
-            SliverToBoxAdapter(
-              child: _framed(
-                child: ListGroupHeader(title: group.title!, count: group.count),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.pagePadding,
-              ),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => KeyedSubtree(
-                    key: group.rows[i].rowKey,
-                    child: ListDocumentRow(data: group.rows[i]),
-                  ),
-                  childCount: group.rows.length,
-                ),
-              ),
-            ),
-          ],
-          SliverToBoxAdapter(
-            child: _framed(
-              child: ListSummaryFooter(
-                data: ListSummaryData(
-                  left: _clientiLabel(filteredCount),
-                  right: _attiviLabel(activeCount),
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: context.navClearance)),
-        ],
-      ),
-    );
-  }
-
-  Widget _scrollable(
-    BuildContext context,
-    Widget child,
-    Future<void> Function() onRefresh,
-  ) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: child,
-            ),
-          ),
-          SizedBox(height: context.navClearance),
-        ],
-      ),
-    );
-  }
-
-  Widget _framed({required Widget child}) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.pagePadding,
-          ),
-          child: child,
+          city: filters.city,
+          contracts: filters.contracts,
+          onlyWithOpenTickets: filters.onlyWithOpenTickets,
         ),
       ),
+      onOpenFilters: onOpenFilters,
+      groups: groups,
+      summary: groups.isEmpty
+          ? null
+          : ListSummaryData(
+              left: _clientiLabel(filtered.length),
+              right: _attiviLabel(activeCount),
+            ),
+      state: state,
+      empty: _emptyState(
+        query: query,
+        filters: filters,
+        neverSynced: neverSynced,
+        hasCustomers: allCustomers.isNotEmpty,
+      ),
+      unavailable: UnavailableState(
+        icon: LucideIcons.alertTriangle,
+        titolo: 'Clienti non disponibili',
+        motivo: 'Non è stato possibile leggere i clienti da questo telefono.',
+        action: AppButton(
+          label: 'Riprova',
+          onPressed: () => ref.invalidate(allClientiCustomersProvider),
+        ),
+      ),
+      onRefresh: () => refreshWithFeedback(context, ref),
     );
   }
 
