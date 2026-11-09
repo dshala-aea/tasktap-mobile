@@ -1316,6 +1316,72 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    testWidgets(
+      'without commesse.commessa.read the Commessa fact keeps its value but is not tappable',
+      (tester) async {
+        await seedWithCommessa(db);
+        final dio = MockDio();
+        when(() => dio.get<Map<String, dynamic>>('/api/commesse/commessa-1')).thenAnswer(
+          (_) async => _okResponse({
+            'id': 'commessa-1',
+            'codice': 'COM-001',
+          }, '/api/commesse/commessa-1'),
+        );
+
+        await pump(
+          tester,
+          dio: dio,
+          isOnline: true,
+          entitlement: Entitlement(
+            features: const {'interventi', 'rapportini'},
+            capabilities: const {},
+            seatType: 'field',
+            fetchedAt: DateTime.utc(2026, 11, 9),
+          ),
+        );
+
+        // `/altro/commesse/:id` would redirect to /forbidden without the read capability.
+        expect(find.text('COM-001'), findsOneWidget);
+        expect(
+          find.ancestor(of: find.text('COM-001'), matching: find.byType(AppTappable)),
+          findsNothing,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('with commesse.commessa.read the Commessa fact is tappable', (tester) async {
+      await seedWithCommessa(db);
+      final dio = MockDio();
+      when(() => dio.get<Map<String, dynamic>>('/api/commesse/commessa-1')).thenAnswer(
+        (_) async => _okResponse({
+          'id': 'commessa-1',
+          'codice': 'COM-001',
+        }, '/api/commesse/commessa-1'),
+      );
+
+      await pump(
+        tester,
+        dio: dio,
+        isOnline: true,
+        entitlement: Entitlement(
+          features: const {'interventi', 'rapportini'},
+          capabilities: const {'commesse.commessa.read'},
+          seatType: 'field',
+          fetchedAt: DateTime.utc(2026, 11, 9),
+        ),
+      );
+
+      expect(find.text('COM-001'), findsOneWidget);
+      expect(
+        find.ancestor(of: find.text('COM-001'), matching: find.byType(AppTappable)),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 
   // Taps a tab by its label. Uses a taller surface so the tab bar isn't

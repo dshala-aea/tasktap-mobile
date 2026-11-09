@@ -74,6 +74,7 @@ Widget _buildRouted({
   required ServerReportApiClient api,
   bool online = true,
   String? internalUserId = 'user-1',
+  Entitlement? entitlement,
 }) {
   final router = GoRouter(
     routes: [
@@ -91,7 +92,7 @@ Widget _buildRouted({
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
-      cachedEntitlementProvider.overrideWith((ref) async => _writeReportEntitlement),
+      cachedEntitlementProvider.overrideWith((ref) async => entitlement ?? _writeReportEntitlement),
       syncProvider.overrideWith((ref) => _NoopSync(db)),
       serverReportApiClientProvider.overrideWithValue(api),
       connectivityProvider.overrideWith(() => _FakeConnectivity(online)),
@@ -1339,6 +1340,41 @@ void main() {
         await tester.pumpAndSettle();
       });
     }
+  });
+
+  // The editor is gated on `rapportini.report.write`; a read-only seat tapping its Bozza row must
+  // get feedback on the list rather than a push that only dead-ends at /forbidden.
+  testWidgets('a read-only seat tapping a Bozza stays on the list and is told why', (tester) async {
+    await _seedDraft(db, id: 'loc-1', title: 'Bozza locale');
+
+    await tester.pumpWidget(
+      _buildRouted(
+        db: db,
+        api: _FakeServerApi(),
+        entitlement: Entitlement(
+          features: const {'rapportini'},
+          capabilities: const {},
+          seatType: 'field',
+          fetchedAt: DateTime.utc(2026, 11, 9),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Bozza locale'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('editor:loc-1'), findsNothing);
+    expect(find.text('view:loc-1'), findsNothing);
+    expect(
+      find.text('Non hai i permessi per modificare questo rapportino.'),
+      findsOneWidget,
+    );
+    // Still on the list: the tap produced feedback, not a navigation.
+    expect(find.text('Rapportini'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
   });
 
   group('RapportiniListScreen — delete of a server-known report is online-only', () {
