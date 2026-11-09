@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/router/app_router.dart' show AppRoutes;
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -17,6 +18,7 @@ import '../../../core/widgets/detail/detail_scaffold.dart';
 import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../features/calendario/calendario_providers.dart' show scheduleStatusName;
@@ -178,6 +180,10 @@ class _ScheduleDetailBody extends ConsumerWidget {
     final locationName = location?.name;
     final lockedByAbsence = schedule.isAssenza;
     final lockedByBlock = schedule.isBlockOccupied;
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'pianificazione.schedule.write',
+    );
 
     final relations = <({String title, String meta, VoidCallback? onTap})>[
       if (customer != null && customerId != null)
@@ -216,6 +222,8 @@ class _ScheduleDetailBody extends ConsumerWidget {
             ? null
             : DetailAction(
                 label: 'Modifica',
+                enabled: canWrite,
+                disabledReason: canWrite ? null : noPermissionReason,
                 onPressed: () async {
                   await context.push<bool>('/altro/pianificazioni/$scheduleId/modifica');
                 },

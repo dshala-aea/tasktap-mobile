@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -18,6 +19,7 @@ import '../../../core/widgets/detail/detail_scaffold.dart';
 import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/api/dio_client.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
@@ -147,6 +149,10 @@ class _MaterialeDetailBody extends ConsumerWidget {
     final description = _clean(materiale.description);
     final salePrice = materiale.salePrice;
     final purchasePrice = materiale.purchasePrice;
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'magazzino.article.write',
+    );
 
     // The prototype's hero line is `categoria · pz · prezzo`; stock is not in the mirror, so the
     // unit of measure takes the middle slot and the sale price closes it.
@@ -178,18 +184,21 @@ class _MaterialeDetailBody extends ConsumerWidget {
         subtitle: heroFacts.isEmpty ? null : heroFacts,
         primaryAction: DetailAction(
           label: 'Modifica',
+          enabled: canWrite,
+          disabledReason: canWrite ? null : noPermissionReason,
           onPressed: () async {
             await context.push<bool>('/altro/magazzino/${materiale.id}/modifica');
           },
         ),
       ),
       headerActions: [
-        HeaderIconBtn(
-          icon: materiale.isActive ? LucideIcons.xCircle : LucideIcons.checkCircle,
-          label: materiale.isActive ? 'Disattiva' : 'Riattiva',
-          glass: true,
-          onTap: () => _toggleActive(context, ref, materiale),
-        ),
+        if (canWrite)
+          HeaderIconBtn(
+            icon: materiale.isActive ? LucideIcons.xCircle : LucideIcons.checkCircle,
+            label: materiale.isActive ? 'Disattiva' : 'Riattiva',
+            glass: true,
+            onTap: () => _toggleActive(context, ref, materiale),
+          ),
       ],
       sections: [
         DetailSectionData(

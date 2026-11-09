@@ -18,8 +18,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/customers/admin_customer_detail_screen.dart';
@@ -32,6 +35,19 @@ Response<T> _okResponse<T>(T data, String path) => Response<T>(
   requestOptions: RequestOptions(path: path),
 );
 
+Entitlement _entitlementWith(Set<String> capabilities) => Entitlement(
+  features: const {},
+  capabilities: capabilities,
+  seatType: 'office',
+  fetchedAt: DateTime.utc(2026, 1, 1),
+);
+
+const _allWrites = {
+  'clienti.customer.write',
+  'clienti.location.write',
+  'contratti.contract.write',
+};
+
 void main() {
   setUpAll(() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -40,6 +56,11 @@ void main() {
 
   late AppDatabase db;
   late MockDio mockDio;
+  late Entitlement entitlement;
+
+  setUp(() {
+    entitlement = _entitlementWith(_allWrites);
+  });
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
@@ -183,6 +204,9 @@ void main() {
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(mockDio),
       isOnlineProvider.overrideWithValue(online),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(entitlement),
+      ),
     ],
     child: MaterialApp(home: AdminCustomerDetailScreen(customerId: customerId)),
   );
@@ -757,5 +781,112 @@ void main() {
 
       await teardown(tester);
     });
+  });
+
+  group('capability gates', () {
+    testWidgets('a read-only seat sees no header actions, menu or row writes', (
+      tester,
+    ) async {
+      entitlement = _entitlementWith(const {});
+      await seedCustomer('cust-1');
+      await seedLocation('loc-1', customerId: 'cust-1', name: 'Sede Nord');
+      await seedContact('ct-1', customerId: 'cust-1', name: 'Mario Rossi');
+
+      await pumpScreen(tester);
+
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is HeaderIconBtn && w.label == 'Elimina cliente',
+        ),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('customer-overflow-menu')), findsNothing);
+      expect(find.text('Modifica'), findsWidgets);
+      expect(
+        find.text('Non hai i permessi per questa azione.'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Modifica sede'), findsNothing);
+      expect(find.byTooltip('Elimina sede'), findsNothing);
+      expect(find.byTooltip('Modifica referente'), findsNothing);
+      expect(find.byTooltip('Elimina referente'), findsNothing);
+
+      await teardown(tester);
+    });
+
+    testWidgets('customer write alone keeps Modifica but hides sede writes', (
+      tester,
+    ) async {
+      entitlement = _entitlementWith({'clienti.customer.write'});
+      await seedCustomer('cust-1');
+      await seedLocation('loc-1', customerId: 'cust-1', name: 'Sede Nord');
+      await seedContact('ct-1', customerId: 'cust-1', name: 'Mario Rossi');
+
+      await pumpScreen(tester);
+
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is HeaderIconBtn && w.label == 'Elimina cliente',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Modifica sede'), findsNothing);
+      expect(find.byTooltip('Modifica referente'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Aggiungi'));
+      await tester.pumpAndSettle();
+      expect(find.text('Aggiungi referente'), findsOneWidget);
+      expect(find.text('Nuova sede'), findsNothing);
+      expect(find.text('Nuovo asset'), findsNothing);
+      expect(find.text('Nuovo contratto'), findsNothing);
+
+      await teardown(tester);
+    });
+
+    testWidgets(
+      'location write alone shows sede writes but hides the delete client action',
+      (tester) async {
+        entitlement = _entitlementWith({'clienti.location.write'});
+        await seedCustomer('cust-1');
+        await seedLocation('loc-1', customerId: 'cust-1', name: 'Sede Nord');
+
+        await pumpScreen(tester);
+
+        expect(find.byTooltip('Modifica sede'), findsOneWidget);
+        expect(find.byTooltip('Elimina sede'), findsOneWidget);
+        expect(
+          find.byWidgetPredicate(
+            (w) => w is HeaderIconBtn && w.label == 'Elimina cliente',
+          ),
+          findsNothing,
+        );
+
+        await tester.tap(find.byTooltip('Aggiungi'));
+        await tester.pumpAndSettle();
+        expect(find.text('Nuova sede'), findsOneWidget);
+        expect(find.text('Nuovo asset'), findsNothing);
+
+        await teardown(tester);
+      },
+    );
+
+    testWidgets(
+      'contract write alone offers Nuovo asset and Nuovo contratto only',
+      (tester) async {
+        entitlement = _entitlementWith({'contratti.contract.write'});
+        await seedCustomer('cust-1');
+
+        await pumpScreen(tester);
+
+        await tester.tap(find.byTooltip('Aggiungi'));
+        await tester.pumpAndSettle();
+        expect(find.text('Nuovo asset'), findsOneWidget);
+        expect(find.text('Nuovo contratto'), findsOneWidget);
+        expect(find.text('Nuova sede'), findsNothing);
+        expect(find.text('Aggiungi referente'), findsNothing);
+
+        await teardown(tester);
+      },
+    );
   });
 }

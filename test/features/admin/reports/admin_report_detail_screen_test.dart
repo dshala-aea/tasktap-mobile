@@ -14,12 +14,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/core/auth/access.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/admin/reports/admin_report_detail_screen.dart';
 import 'package:tasktap_mobile/features/admin/reports/admin_report_list_screen.dart';
+
+Entitlement _entitlementWith(Set<String> capabilities, {String seatType = 'office'}) =>
+    Entitlement(
+      features: const {'rapportini'},
+      capabilities: capabilities,
+      seatType: seatType,
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+final _officeWrite = _entitlementWith(const {'rapportini.report.write'});
 
 class _FakeAdminApiClient extends AdminApiClient {
   _FakeAdminApiClient() : super(Dio());
@@ -46,6 +59,7 @@ void main() {
       ProviderScope(
         overrides: [
           adminApiClientProvider.overrideWithValue(api),
+          cachedEntitlementProvider.overrideWith((ref) async => _officeWrite),
           adminReportsProvider.overrideWith(
             (ref, filter) async => const ReportListRows([], fromMirror: false),
           ),
@@ -101,6 +115,7 @@ void main() {
       ProviderScope(
         overrides: [
           adminApiClientProvider.overrideWithValue(api),
+          cachedEntitlementProvider.overrideWith((ref) async => _officeWrite),
           adminReportsProvider.overrideWith((ref, filter) async {
             fetchCalls++;
             return const ReportListRows([], fromMirror: false);
@@ -154,6 +169,7 @@ void main() {
       ProviderScope(
         overrides: [
           adminApiClientProvider.overrideWithValue(api),
+          cachedEntitlementProvider.overrideWith((ref) async => _officeWrite),
           adminReportsProvider.overrideWith(
             (ref, filter) async => const ReportListRows([], fromMirror: false),
           ),
@@ -271,6 +287,7 @@ void main() {
     final overrides = [
       appDatabaseProvider.overrideWithValue(db),
       isOnlineProvider.overrideWithValue(false),
+      cachedEntitlementProvider.overrideWith((ref) async => _officeWrite),
     ];
     final container = ProviderContainer(overrides: overrides);
     addTearDown(container.dispose);
@@ -338,5 +355,101 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
+  });
+
+  group('role and capability gates on report transitions', () {
+    Future<_FakeAdminApiClient> pumpDetail(
+      WidgetTester tester,
+      Entitlement entitlement, {
+      String stato = 'Inviato',
+    }) async {
+      final api = _FakeAdminApiClient();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adminApiClientProvider.overrideWithValue(api),
+            cachedEntitlementProvider.overrideWith((ref) async => entitlement),
+            adminReportsProvider.overrideWith(
+              (ref, filter) async => const ReportListRows([], fromMirror: false),
+            ),
+          ],
+          child: MaterialApp(
+            home: AdminReportDetailScreen(
+              report: {'id': 'r1', 'title': 'Rapportino 1', 'stato': stato},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return api;
+    }
+
+    testWidgets('a field seat with the capability is refused with the office reason', (
+      tester,
+    ) async {
+      final api = await pumpDetail(
+        tester,
+        _entitlementWith(const {'rapportini.report.write'}, seatType: 'field'),
+      );
+
+      expect(find.text('Segna come controllato'), findsOneWidget);
+      expect(find.text(officeOnlyReason), findsOneWidget);
+      await tester.ensureVisible(find.text('Segna come controllato'));
+      await tester.tap(find.text('Segna come controllato'));
+      await tester.pumpAndSettle();
+
+      expect(api.controllaCalls, 0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an office seat without the capability is refused with the permission reason', (
+      tester,
+    ) async {
+      final api = await pumpDetail(tester, _entitlementWith(const {}));
+
+      expect(find.text('Segna come controllato'), findsOneWidget);
+      expect(find.text(noPermissionReason), findsOneWidget);
+      await tester.ensureVisible(find.text('Segna come controllato'));
+      await tester.tap(find.text('Segna come controllato'));
+      await tester.pumpAndSettle();
+
+      expect(api.controllaCalls, 0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an office seat with the capability is enabled and runs the transition', (
+      tester,
+    ) async {
+      final api = await pumpDetail(tester, _officeWrite);
+
+      expect(find.text(noPermissionReason), findsNothing);
+      expect(find.text(officeOnlyReason), findsNothing);
+      await tester.ensureVisible(find.text('Segna come controllato'));
+      await tester.tap(find.text('Segna come controllato'));
+      await tester.pumpAndSettle();
+
+      expect(api.controllaCalls, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the XML download is gated the same way for a field seat', (tester) async {
+      await pumpDetail(
+        tester,
+        _entitlementWith(const {'rapportini.report.write'}, seatType: 'field'),
+        stato: 'Fatturato',
+      );
+
+      expect(find.text('Scarica XML fattura'), findsOneWidget);
+      expect(find.text(officeOnlyReason), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 }

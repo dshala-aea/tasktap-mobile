@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -13,6 +14,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/time/business_time.dart' show formatWorkDate;
 import '../../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../../core/widgets/widgets.dart';
+import '../../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
@@ -331,6 +333,10 @@ class _AdminScheduleListBody extends ConsumerWidget {
         : ref.watch(_squadraMemberIdsProvider(filters.squadraId!)).valueOrNull;
 
     final businessToday = ref.watch(businessTimeProvider).businessToday();
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'pianificazione.schedule.write',
+    );
 
     String? technicianNameFor(Schedule s) {
       final direct = colleaguesById[s.userId];
@@ -543,7 +549,7 @@ class _AdminScheduleListBody extends ConsumerWidget {
         body: SafeArea(
           child: Column(
             children: [
-              _header(context),
+              _header(context, canWrite: canWrite),
               AppSearchBar(
                 controller: searchCtrl,
                 hint: 'Cerca titolo, sede, tecnico o data…',
@@ -580,10 +586,12 @@ class _AdminScheduleListBody extends ConsumerWidget {
       title: 'Pianificazioni',
       subtitle: 'Gli impegni nel tempo, non i cantieri.',
       showBack: true,
-      action: ListHeaderAction(
-        label: 'Nuovo',
-        onPressed: () => context.push('/altro/pianificazioni/nuova'),
-      ),
+      action: canWrite
+          ? ListHeaderAction(
+              label: 'Nuovo',
+              onPressed: () => context.push('/altro/pianificazioni/nuova'),
+            )
+          : null,
       searchController: searchCtrl,
       searchHint: 'Cerca titolo, sede, tecnico o data…',
       onSearchChanged: onQueryChanged,
@@ -614,17 +622,18 @@ class _AdminScheduleListBody extends ConsumerWidget {
     );
   }
 
-  Widget _header(BuildContext context) {
+  Widget _header(BuildContext context, {required bool canWrite}) {
     return ScreenHeader(
       title: 'Pianificazioni',
       subtitle: 'Gli impegni nel tempo, non i cantieri.',
       subtitleMaxLines: 2,
       showBack: true,
       actions: [
-        ListHeaderAction(
-          label: 'Nuovo',
-          onPressed: () => context.push('/altro/pianificazioni/nuova'),
-        ),
+        if (canWrite)
+          ListHeaderAction(
+            label: 'Nuovo',
+            onPressed: () => context.push('/altro/pianificazioni/nuova'),
+          ),
       ],
     );
   }

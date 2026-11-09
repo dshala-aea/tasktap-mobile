@@ -321,9 +321,9 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// `rapportini-admin`) is dispatcher-only — a narrower, genuinely different audience than "anyone
 /// who can use the module at all" — so each is gated on the resource's `.read` capability at
 /// minimum (its own write actions are gated further, at the button level, by `CapabilityGate`).
-/// `prodotti` is deliberately NOT gated here: the backend defines no `prodotti.*` capability yet
-/// (see `PermissionCatalogue.All`'s own comment — "a capability nothing requires governs
-/// nothing"), so there is nothing correct to check.
+/// `prodotti` has no `prodotti.*` capability yet (see `PermissionCatalogue.All`'s own comment —
+/// "a capability nothing requires governs nothing"), so it is gated on its module only, with the
+/// existing `contratti.contract.write` proxy closing its `nuovo`/`modifica` write leaves.
 ///
 /// The end-user/operational routes (`/ticket`, `/cantieri`, `/altro/rapportini`, `/altro/ferie`,
 /// `/altro/smart-working`)
@@ -333,23 +333,60 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// A dynamic segment defeats plain prefix matching for a *write* leaf nested past it (e.g.
 /// `/altro/clienti/:id/modifica` — the `:id` varies, so no fixed prefix covers only `modifica`).
 /// Each entry's optional third element, `writeRequirement`, closes that: when the visited path's
-/// LAST segment is `nuovo` or `modifica` (see `_writeLeafSegments`), that stricter requirement is
-/// checked instead of the base one — still prefix-matched first, so it only applies within a
-/// section this table already governs. Left `null` for sections where read and write are gated
-/// identically at the section level already (nothing sharper to express); given only where a
-/// section mixes open read with gated write (`clienti`, `sedi`) — the base `.read` requirement
-/// alone would let a held-read/denied-write user past the button-level `CapabilityGate` that hides
-/// `nuovo`/`modifica` triggers in the UI, by deep-linking straight to the path.
+/// LAST segment is `nuovo`, `nuova`, `modifica` or `new` (see `_writeLeafSegments`), that stricter
+/// requirement is checked instead of the base one — still prefix-matched first, so it only applies
+/// within a section this table already governs. Left `null` for sections where read and write are
+/// gated identically at the section level already (nothing sharper to express); given where a
+/// section mixes open read with gated write (`clienti`, `sedi`, `contratti`, `squadre`,
+/// `magazzino`/`magazzini`, `cantieri`, `pianificazioni`) — the base `.read` requirement alone
+/// would let a held-read/denied-write user past the button-level `CapabilityGate` that hides
+/// `nuovo`/`nuova`/`modifica` triggers in the UI, by deep-linking straight to the path.
 final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, RouteRequirement? writeRequirement)>[
   ('/altro/preferenze-notifiche', const RouteRequirement.capability('sistema.notification.read'), null),
-  ('/altro/pianificazioni', const RouteRequirement.capability('pianificazione.schedule.write'), null),
+  (
+    '/altro/pianificazioni',
+    const RouteRequirement.capability('pianificazione.schedule.read'),
+    const RouteRequirement.capability('pianificazione.schedule.write'),
+  ),
   ('/altro/rapportini-admin', const RouteRequirement.capability('rapportini.report.read'), null),
+  // Must precede the broader `/altro/rapportini` entry: the editor is the one write surface under
+  // it, while view/detail stay read-open on the module.
+  (
+    '/altro/rapportini/editor',
+    const RouteRequirement.capability('rapportini.report.write'),
+    null,
+  ),
   ('/altro/rapportini', const RouteRequirement.module('rapportini'), null),
-  ('/altro/magazzino/magazzini', const RouteRequirement.capability('magazzino.warehouse.read'), null),
-  ('/altro/magazzino', const RouteRequirement.capability('magazzino.article.read'), null),
-  ('/altro/squadre', const RouteRequirement.capability('team.squadra.read'), null),
-  ('/altro/cantieri', const RouteRequirement.capability('cantieri.cantiere.read'), null),
-  ('/altro/contratti', const RouteRequirement.capability('contratti.contract.read'), null),
+  (
+    '/altro/magazzino/magazzini',
+    const RouteRequirement.capability('magazzino.warehouse.read'),
+    const RouteRequirement.capability('magazzino.warehouse.write'),
+  ),
+  (
+    '/altro/magazzino',
+    const RouteRequirement.capability('magazzino.article.read'),
+    const RouteRequirement.capability('magazzino.article.write'),
+  ),
+  (
+    '/altro/squadre',
+    const RouteRequirement.capability('team.squadra.read'),
+    const RouteRequirement.capability('team.squadra.write'),
+  ),
+  (
+    '/altro/cantieri',
+    const RouteRequirement.capability('cantieri.cantiere.read'),
+    const RouteRequirement.capability('cantieri.cantiere.write'),
+  ),
+  (
+    '/altro/contratti',
+    const RouteRequirement.capability('contratti.contract.read'),
+    const RouteRequirement.capability('contratti.contract.write'),
+  ),
+  (
+    '/altro/prodotti',
+    const RouteRequirement.module('prodotti'),
+    const RouteRequirement.capability('contratti.contract.write'),
+  ),
   ('/altro/commesse', const RouteRequirement.capability('commesse.commessa.read'), null),
   (
     '/altro/sedi',
@@ -368,14 +405,20 @@ final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, Ro
   ),
   ('/altro/ferie', const RouteRequirement.module('presenze'), null),
   ('/altro/smart-working', const RouteRequirement.module('presenze'), null),
-  ('/ticket', const RouteRequirement.module('interventi'), null),
+  (
+    '/ticket',
+    const RouteRequirement.module('interventi'),
+    const RouteRequirement.capability('interventi.ticket.write'),
+  ),
   ('/cantieri', const RouteRequirement.module('cantieri'), null),
 ];
 
 /// Leaf path segments that mean "this specific visit is a write attempt" — checked against
 /// `state.matchedLocation`'s LAST segment only, so a record id that happens to be the literal
-/// string `nuovo` (impossible — ids are GUIDs) or `modifica` can never false-positive.
-const _writeLeafSegments = {'nuovo', 'modifica'};
+/// string `nuovo`/`nuova` (impossible — ids are GUIDs) or `modifica` can never false-positive.
+/// `nuova` is the feminine form `/altro/sedi/nuova` and `/altro/pianificazioni/nuova` use; `new`
+/// is the ticket form's own English leaf, `/ticket/new`.
+const _writeLeafSegments = {'nuovo', 'nuova', 'modifica', 'new'};
 
 /// Builds and returns the [GoRouter] for the TaskTap app.
 ///

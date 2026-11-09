@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -17,6 +18,7 @@ import '../../../core/widgets/detail/detail_scaffold.dart';
 import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/clienti/customer_contact_api_client.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/local/app_database.dart' show Customer, CustomerContactRow, Location, Ticket;
 import '../../../data/reference/reference_cache_repository.dart';
 import '../../../data/sync/connectivity_provider.dart';
@@ -140,6 +142,26 @@ class _CustomerDetailBody extends ConsumerWidget {
     final prodottiAsync = ref.watch(adminCustomerProdottiProvider(customerId));
     final ticketsAsync = ref.watch(ticketsForCustomerProvider(customerId));
     final online = ref.watch(isOnlineProvider);
+    final entitlement = ref.watch(cachedEntitlementProvider).value;
+    final canWriteCustomer = capabilityHeld(entitlement, 'clienti.customer.write');
+    final canWriteLocation = capabilityHeld(entitlement, 'clienti.location.write');
+    final canWriteContract = capabilityHeld(entitlement, 'contratti.contract.write');
+
+    // Secondary/destructive actions are hidden when their capability is missing; the menu itself
+    // disappears when no item would remain.
+    final menuItems = <PopupMenuEntry<_CustomerAction>>[
+      if (canWriteLocation)
+        const PopupMenuItem(value: _CustomerAction.nuovaSede, child: Text('Nuova sede')),
+      if (canWriteCustomer && online)
+        const PopupMenuItem(
+          value: _CustomerAction.nuovoReferente,
+          child: Text('Aggiungi referente'),
+        ),
+      if (canWriteContract)
+        const PopupMenuItem(value: _CustomerAction.nuovoAsset, child: Text('Nuovo asset')),
+      if (canWriteContract)
+        const PopupMenuItem(value: _CustomerAction.nuovoContratto, child: Text('Nuovo contratto')),
+    ];
 
     final overview = overviewAsync.valueOrNull;
     final locations = locationsAsync.valueOrNull;
@@ -168,50 +190,44 @@ class _CustomerDetailBody extends ConsumerWidget {
         return DetailScaffold(
           screenTitle: 'Cliente',
           headerActions: [
-            HeaderIconBtn(
-              icon: LucideIcons.trash2,
-              label: 'Elimina cliente',
-              glass: true,
-              onTap: () => _deleteCustomer(context, ref, customerId),
-            ),
-            PopupMenuButton<_CustomerAction>(
-              tooltip: 'Aggiungi',
-              // Same 44px target / 38px glass disc as HeaderIconBtn beside it, so the overflow
-              // menu reads as one more header action rather than a bare Material icon.
-              child: SizedBox(
-                key: const Key('customer-overflow-menu'),
-                width: 44,
-                height: 44,
-                child: Center(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: context.colors.surface,
-                      borderRadius: BorderRadius.circular(19),
-                      border: Border.all(color: context.colors.borderLight),
-                    ),
-                    child: SizedBox(
-                      width: 38,
-                      height: 38,
-                      child: Icon(LucideIcons.moreHorizontal, size: 17, color: context.colors.ink),
-                    ),
-                  ),
-                ),
+            if (canWriteCustomer)
+              HeaderIconBtn(
+                icon: LucideIcons.trash2,
+                label: 'Elimina cliente',
+                glass: true,
+                onTap: () => _deleteCustomer(context, ref, customerId),
               ),
-              onSelected: (action) => _handleAction(context, ref, action, online: online),
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: _CustomerAction.nuovaSede, child: Text('Nuova sede')),
-                if (online)
-                  const PopupMenuItem(
-                    value: _CustomerAction.nuovoReferente,
-                    child: Text('Aggiungi referente'),
+            if (menuItems.isNotEmpty)
+              PopupMenuButton<_CustomerAction>(
+                tooltip: 'Aggiungi',
+                // Same 44px target / 38px glass disc as HeaderIconBtn beside it, so the overflow
+                // menu reads as one more header action rather than a bare Material icon.
+                child: SizedBox(
+                  key: const Key('customer-overflow-menu'),
+                  width: 44,
+                  height: 44,
+                  child: Center(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: context.colors.surface,
+                        borderRadius: BorderRadius.circular(19),
+                        border: Border.all(color: context.colors.borderLight),
+                      ),
+                      child: SizedBox(
+                        width: 38,
+                        height: 38,
+                        child: Icon(
+                          LucideIcons.moreHorizontal,
+                          size: 17,
+                          color: context.colors.ink,
+                        ),
+                      ),
+                    ),
                   ),
-                const PopupMenuItem(value: _CustomerAction.nuovoAsset, child: Text('Nuovo asset')),
-                const PopupMenuItem(
-                  value: _CustomerAction.nuovoContratto,
-                  child: Text('Nuovo contratto'),
                 ),
-              ],
-            ),
+                onSelected: (action) => _handleAction(context, ref, action, online: online),
+                itemBuilder: (context) => menuItems,
+              ),
           ],
           hero: DetailHeroData(
             variant: DetailHeroVariant.summary,
@@ -223,6 +239,8 @@ class _CustomerDetailBody extends ConsumerWidget {
             status: DetailStatus(label: customer.isActive ? 'Attivo' : 'Inattivo'),
             primaryAction: DetailAction(
               label: 'Modifica',
+              enabled: canWriteCustomer,
+              disabledReason: canWriteCustomer ? null : noPermissionReason,
               onPressed: () async {
                 await context.push<bool>('/altro/clienti/$customerId/modifica');
               },
@@ -357,6 +375,10 @@ class _CustomerDetailBody extends ConsumerWidget {
     WidgetRef ref,
     AsyncValue<List<Location>> locationsAsync,
   ) {
+    final canWriteLocation = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'clienti.location.write',
+    );
     return locationsAsync.when(
       loading: () => const _SectionLoading(),
       error: (e, _) =>
@@ -373,9 +395,17 @@ class _CustomerDetailBody extends ConsumerWidget {
                 meta: locations[i].city,
                 editTooltip: 'Modifica sede',
                 deleteTooltip: 'Elimina sede',
-                onEdit: () => context.push('/altro/sedi/${locations[i].id}/modifica'),
-                onDelete: () =>
-                    _deleteLocation(context, ref, id: locations[i].id, name: locations[i].name),
+                onEdit: canWriteLocation
+                    ? () => context.push('/altro/sedi/${locations[i].id}/modifica')
+                    : null,
+                onDelete: canWriteLocation
+                    ? () => _deleteLocation(
+                        context,
+                        ref,
+                        id: locations[i].id,
+                        name: locations[i].name,
+                      )
+                    : null,
               ),
               onTap: () => context.push('/altro/sedi/${locations[i].id}'),
             ),
@@ -390,6 +420,11 @@ class _CustomerDetailBody extends ConsumerWidget {
     AsyncValue<List<CustomerContactRow>> contactsAsync, {
     required bool online,
   }) {
+    final canWriteCustomer = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'clienti.customer.write',
+    );
+    final canWrite = online && canWriteCustomer;
     return contactsAsync.when(
       loading: () => const _SectionLoading(),
       // A Drift read has nothing to fail with short of a corrupt database, so this is a plain
@@ -413,7 +448,7 @@ class _CustomerDetailBody extends ConsumerWidget {
                 deleteTooltip: 'Elimina referente',
                 // Edit and delete are POST/PUT/DELETE with no queue behind them, so offline the
                 // affordance is hidden rather than left to fail. The rows themselves stay.
-                onEdit: online
+                onEdit: canWrite
                     ? () => _openContactSheet(
                         context,
                         ref,
@@ -421,7 +456,7 @@ class _CustomerDetailBody extends ConsumerWidget {
                         contact: contacts[i],
                       )
                     : null,
-                onDelete: online
+                onDelete: canWrite
                     ? () => _deleteContact(
                         context,
                         ref,

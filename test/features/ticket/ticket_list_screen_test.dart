@@ -12,7 +12,9 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart' show BusinessTime, formatDateOnly;
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
@@ -33,11 +35,19 @@ class _FakeConnectivity extends ConnectivityNotifier {
   Future<bool> build() async => _value;
 }
 
+Entitlement _entitlementWith(Set<String> capabilities) => Entitlement(
+  features: const {'interventi'},
+  capabilities: capabilities,
+  seatType: 'field',
+  fetchedAt: DateTime.utc(2026, 11, 9),
+);
+
 Widget _buildList({
   required AppDatabase db,
   required MockAuthRepository repo,
   bool online = true,
   String? myId = 'u1',
+  Entitlement? entitlement,
 }) {
   return ProviderScope(
     overrides: [
@@ -46,6 +56,9 @@ Widget _buildList({
       dioProvider.overrideWithValue(MockDio()),
       connectivityProvider.overrideWith(() => _FakeConnectivity(online)),
       internalUserIdProvider.overrideWith((ref) async => myId),
+      cachedEntitlementProvider.overrideWith(
+        (ref) async => entitlement ?? _entitlementWith(const {'interventi.ticket.write'}),
+      ),
     ],
     child: const MaterialApp(home: TicketListScreen()),
   );
@@ -83,8 +96,21 @@ void main() {
     await db.close();
   });
 
-  Future<void> pump(WidgetTester tester, {bool online = true, String? myId = 'u1'}) async {
-    await tester.pumpWidget(_buildList(db: db, repo: repo, online: online, myId: myId));
+  Future<void> pump(
+    WidgetTester tester, {
+    bool online = true,
+    String? myId = 'u1',
+    Entitlement? entitlement,
+  }) async {
+    await tester.pumpWidget(
+      _buildList(
+        db: db,
+        repo: repo,
+        online: online,
+        myId: myId,
+        entitlement: entitlement,
+      ),
+    );
     await tester.pump();
     authStream.add(fakeUser);
     await tester.pumpAndSettle(const Duration(seconds: 2));
@@ -548,11 +574,19 @@ void main() {
       await disposeScreen(tester);
     });
 
-    testWidgets('Nuovo is always shown', (tester) async {
+    testWidgets('Nuovo is shown with interventi.ticket.write', (tester) async {
       await pump(tester);
 
       expect(find.byType(ListHeaderAction), findsOneWidget);
       expect(find.text('NUOVO'), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('Nuovo is hidden without interventi.ticket.write', (tester) async {
+      await pump(tester, entitlement: _entitlementWith(const {}));
+
+      expect(find.byType(ListHeaderAction), findsNothing);
+      expect(find.text('NUOVO'), findsNothing);
       await disposeScreen(tester);
     });
 

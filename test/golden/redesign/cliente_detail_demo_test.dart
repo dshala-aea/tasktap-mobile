@@ -14,7 +14,9 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart'
     show appDatabaseProvider;
@@ -172,6 +174,20 @@ Future<void> _seed(AppDatabase db) async {
 List<Override> _overrides(AppDatabase db) => [
   appDatabaseProvider.overrideWithValue(db),
   isOnlineProvider.overrideWithValue(false),
+  cachedEntitlementProvider.overrideWith(
+    (ref) => Future.value(
+      Entitlement(
+        features: const {},
+        capabilities: const {
+          'clienti.customer.write',
+          'clienti.location.write',
+          'contratti.contract.write',
+        },
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 1, 1),
+      ),
+    ),
+  ),
 ];
 
 void main() {

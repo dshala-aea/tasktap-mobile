@@ -6,11 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../../core/time/business_time_providers.dart';
 import '../../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../../core/widgets/widgets.dart';
+import '../../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
 import '../../../data/local/app_database.dart';
 import '../../../data/reference/reference_cache_repository.dart';
 import '../../../data/sync/connectivity_provider.dart';
@@ -242,6 +244,10 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
     final fromMirror = data?.fromMirror ?? false;
     final search = ref.watch(adminProdottiQueryProvider);
     final businessToday = ref.watch(businessTimeProvider).businessToday();
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'contratti.contract.write',
+    );
 
     bool matchesStatus(Map<String, dynamic> row) => switch (_filters.status) {
       _ProdottoFilter.tutti => true,
@@ -350,10 +356,12 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
       title: 'Prodotti in assistenza',
       subtitle: 'Gli asset del cliente e la loro prossima manutenzione.',
       showBack: true,
-      action: ListHeaderAction(
-        label: 'Nuovo',
-        onPressed: () => context.push('/altro/prodotti/nuovo'),
-      ),
+      action: canWrite
+          ? ListHeaderAction(
+              label: 'Nuovo',
+              onPressed: () => context.push('/altro/prodotti/nuovo'),
+            )
+          : null,
       searchController: _searchCtrl,
       searchHint: 'Cerca prodotto, seriale, cliente…',
       onSearchChanged: _onQueryChanged,

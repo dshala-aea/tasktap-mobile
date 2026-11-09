@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/location/geocoding_service.dart' show GeocodedPoint;
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -15,6 +16,7 @@ import '../../../core/widgets/detail/detail_scaffold.dart';
 import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/geo_map_card.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/magazzino/magazzino_api_client.dart';
 import '../../magazzino/magazzino_providers.dart';
 import '../../ticket/steps/step_assegnazione.dart' show techniciansProvider;
@@ -94,6 +96,10 @@ class _AdminMagazzinoDetailScreenState extends ConsumerState<AdminMagazzinoDetai
       ?address,
       if (assignedId != null) 'Assegnato a ${assignedName ?? assignedId}',
     ].join(' · ');
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'magazzino.warehouse.write',
+    );
 
     return DetailScaffold(
       screenTitle: 'Magazzino',
@@ -108,6 +114,8 @@ class _AdminMagazzinoDetailScreenState extends ConsumerState<AdminMagazzinoDetai
         subtitle: heroFacts.isEmpty ? null : heroFacts,
         primaryAction: DetailAction(
           label: 'Modifica',
+          enabled: canWrite,
+          disabledReason: canWrite ? null : noPermissionReason,
           onPressed: () async {
             final saved = await context.push<bool>(
               '/altro/magazzino/magazzini/${mag.id}/modifica',

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/auth/access.dart';
 import '../../core/files/capture_store.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
@@ -118,6 +119,13 @@ class _TicketDetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final statusName = statusMap[ticket.statusId] ?? '';
     final typeName = typeMap[ticket.typeId] ?? '';
+    final entitlement = ref.watch(cachedEntitlementProvider).value;
+    // Editing the ticket, assigning it, taking it in charge and moving its status are all one
+    // write permission server-side (`interventi.ticket.write`). Starting a rapportino is a
+    // different catalogue entry: a technician may be able to document work on a ticket without
+    // being allowed to rewrite the ticket itself.
+    final canWriteTicket = capabilityHeld(entitlement, 'interventi.ticket.write');
+    final canWriteReport = capabilityHeld(entitlement, 'rapportini.report.write');
     final reference = ticketReference(ticket.numero);
     final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(ticket.createdAt.toLocal());
     final closedLabel = ticket.closedAt != null
@@ -220,18 +228,20 @@ class _TicketDetailBody extends ConsumerWidget {
     return DetailScaffold(
       screenTitle: 'Ticket',
       headerActions: [
-        HeaderIconBtn(
-          icon: LucideIcons.pencil,
-          label: 'Modifica',
-          glass: true,
-          onTap: () => _openEditTicket(context, ticket),
-        ),
-        HeaderIconBtn(
-          icon: LucideIcons.userCheck,
-          label: 'Assegna',
-          glass: true,
-          onTap: () => _showAssignSheet(context, ref, ticket),
-        ),
+        if (canWriteTicket)
+          HeaderIconBtn(
+            icon: LucideIcons.pencil,
+            label: 'Modifica',
+            glass: true,
+            onTap: () => _openEditTicket(context, ticket),
+          ),
+        if (canWriteTicket)
+          HeaderIconBtn(
+            icon: LucideIcons.userCheck,
+            label: 'Assegna',
+            glass: true,
+            onTap: () => _showAssignSheet(context, ref, ticket),
+          ),
         // Delete sits here, beside the ticket's other actions, for the one person who may
         // perform it: a tenant admin, the same `sistema.tenant.admin` capability the server's
         // own `[RequirePermission]` on DELETE /api/tickets/{id} enforces. Not a swipe — a
@@ -287,7 +297,7 @@ class _TicketDetailBody extends ConsumerWidget {
         // this ticket is linked to a cantiere, and it opens the cantiere clock rather than
         // pretending the ticket timer is a cantiere punch.
         secondaryActions: [
-          if (hasOwner && !closed) ...[
+          if (hasOwner && !closed && canWriteReport) ...[
             DetailAction(
               label: 'AI Copilot',
               onPressed: () => context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
@@ -316,7 +326,12 @@ class _TicketDetailBody extends ConsumerWidget {
           children: [
             // Status pill + type chip + the two workflow controls. Changing a status is editing
             // the thing the pill displays, so they belong in the same row.
-            _TicketStatusRow(ticket: ticket, statusName: statusName, typeName: typeName),
+            _TicketStatusRow(
+              ticket: ticket,
+              statusName: statusName,
+              typeName: typeName,
+              canWrite: canWriteTicket,
+            ),
 
             if (hasOwner && closed)
               Padding(
@@ -1907,9 +1922,9 @@ class _PianificazioniTab extends ConsumerWidget {
                     showDivider: s != schedules.last,
                     // The row was inert: the box listed a ticket's schedules and offered no way to
                     // read one. Opens the same read-only card the calendar shows — not
-                    // `/altro/pianificazioni/:id`, which is the editable office screen behind
-                    // `pianificazione.schedule.write`, and reading your own day should not cost a
-                    // permission. Mirror-backed, so it opens with no signal.
+                    // `/altro/pianificazioni/:id`, which is the editable office screen behind the
+                    // `pianificazione.schedule.*` capabilities, and reading your own day should
+                    // not cost a permission. Mirror-backed, so it opens with no signal.
                     onTap: () => showScheduleInfoSheet(context, s),
                   );
                 }).toList(),
@@ -2089,11 +2104,20 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
 /// record, which is the one thing this app does not do. So self-assign asks for a sync and lets
 /// the server's answer land.
 class _TicketStatusRow extends ConsumerStatefulWidget {
-  const _TicketStatusRow({required this.ticket, required this.statusName, required this.typeName});
+  const _TicketStatusRow({
+    required this.ticket,
+    required this.statusName,
+    required this.typeName,
+    required this.canWrite,
+  });
 
   final Ticket ticket;
   final String statusName;
   final String typeName;
+
+  /// Whether the seat may move this ticket's status or take it in charge. Without it the status
+  /// pill stays on screen — it is also how the status is read — but is no longer a control.
+  final bool canWrite;
 
   @override
   ConsumerState<_TicketStatusRow> createState() => _TicketStatusRowState();
@@ -2269,24 +2293,29 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final unassigned = widget.ticket.assignedUserId == null;
+    final canTapStatus = widget.canWrite && !_busy;
 
-    return Row(
+    final row = Row(
       children: [
         if (widget.statusName.isNotEmpty)
           // A 44dp target around the pill: the pill itself is a 20dp badge, and this is now a
           // control rather than a label.
           AppTappable(
-            onTap: _busy ? null : _openStatusSheet,
+            onTap: canTapStatus ? _openStatusSheet : null,
             borderRadius: AppRack.insetShape,
-            semanticLabel: 'Stato: ${widget.statusName}. Tocca per cambiare.',
+            semanticLabel: widget.canWrite
+                ? 'Stato: ${widget.statusName}. Tocca per cambiare.'
+                : 'Stato: ${widget.statusName}.',
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 44),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   StatusPill(stato: widget.statusName),
-                  const SizedBox(width: 4),
-                  Icon(LucideIcons.chevronRight, size: 14, color: c.inkMuted),
+                  if (widget.canWrite) ...[
+                    const SizedBox(width: 4),
+                    Icon(LucideIcons.chevronRight, size: 14, color: c.inkMuted),
+                  ],
                 ],
               ),
             ),
@@ -2298,7 +2327,9 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
         const Spacer(),
         if (_busy)
           const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-        else if (unassigned)
+        // A seat that cannot write cannot take the ticket either. The pill above still shows the
+        // state, and the reason below says why neither control is available.
+        else if (unassigned && widget.canWrite)
           // fullWidth: false — same reasoning as _PendingTicketRow's own Riprova button and the
           // timer bar's Avvia/Ferma above: this sits directly in a Row with no Expanded/Flexible.
           AppButton(
@@ -2307,6 +2338,19 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
             fullWidth: false,
             onPressed: _selfAssign,
           ),
+      ],
+    );
+
+    if (widget.canWrite || widget.statusName.isEmpty) return row;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        row,
+        const SizedBox(height: 4),
+        Text(
+          noPermissionReason,
+          style: TextStyle(fontSize: 11.5, color: c.inkMuted),
+        ),
       ],
     );
   }

@@ -108,4 +108,100 @@ void main() {
 
     expect(find.text('Approvazioni'), findsOneWidget);
   });
+
+  // The office-admin tiles require the same `.read` capability their route requires. The tenant
+  // holds every module here, so only the capability filter can be removing them.
+  testWidgets('the admin Gestione tiles are hidden without their read capability', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final cached = Entitlement(
+      features: const {
+        'clienti',
+        'contratti',
+        'magazzino',
+        'team',
+        'pianificazione',
+        'interventi',
+        'rapportini',
+        'cantieri',
+        'prodotti',
+        'presenze',
+      },
+      capabilities: const {},
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(_app(cached: cached));
+    await tester.pumpAndSettle();
+
+    for (final label in const [
+      'Clienti',
+      'Sedi',
+      'Contratti',
+      'Magazzino',
+      'Squadre',
+      'Pianificazioni',
+    ]) {
+      expect(find.text(label), findsNothing, reason: label);
+    }
+
+    // Module-only tiles still render — the filter is capability-specific, not a blank screen.
+    expect(find.text('Interventi'), findsOneWidget);
+    expect(find.text('Asset'), findsOneWidget);
+    expect(find.text('Ferie e Permessi'), findsOneWidget);
+  });
+
+  testWidgets('the admin Gestione tiles are drawn when their read capability is held', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final cached = Entitlement(
+      features: const {
+        'clienti',
+        'contratti',
+        'magazzino',
+        'team',
+        'pianificazione',
+        'interventi',
+        'rapportini',
+        'cantieri',
+        'prodotti',
+        'presenze',
+      },
+      capabilities: const {
+        'clienti.customer.read',
+        'clienti.location.read',
+        'contratti.contract.read',
+        'magazzino.article.read',
+        'team.squadra.read',
+        'pianificazione.schedule.read',
+      },
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(_app(cached: cached));
+    await tester.pumpAndSettle();
+
+    for (final label in const [
+      'Clienti',
+      'Sedi',
+      'Contratti',
+      'Magazzino',
+      'Squadre',
+      'Pianificazioni',
+    ]) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+  });
 }

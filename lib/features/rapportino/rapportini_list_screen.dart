@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/auth/access.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
@@ -17,6 +18,7 @@ import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
+import '../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
 import '../../data/local/app_database.dart';
 import '../../data/reports/import_server_report.dart' show ServerReportNotEditableException;
 import '../../data/sync/connectivity_provider.dart' show connectivityProvider;
@@ -217,6 +219,10 @@ class _RapportiniListBody extends ConsumerWidget {
     final draftsAsync = ref.watch(rapportiniListProvider);
     final allDrafts = draftsAsync.valueOrNull ?? const <DraftReport>[];
     final businessTime = ref.watch(businessTimeProvider);
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'rapportini.report.write',
+    );
 
     // One stream each for the whole list, not one per row. These are deliberately the UNFILTERED
     // admin streams: a report's customer/site can be deactivated after the report was written, and
@@ -278,7 +284,9 @@ class _RapportiniListBody extends ConsumerWidget {
       title: 'Rapportini',
       subtitle: 'Il documento che deve uscire dal cantiere: bozza, firma, invio.',
       showBack: true,
-      action: ListHeaderAction(label: 'Nuovo', onPressed: creating ? null : onNew),
+      action: canWrite
+          ? ListHeaderAction(label: 'Nuovo', onPressed: creating ? null : onNew)
+          : null,
       searchController: searchCtrl,
       searchHint: 'Cerca rapportino, cliente, sede o data…',
       onSearchChanged: onQueryChanged,
@@ -516,7 +524,14 @@ class _RapportinoRow extends ConsumerWidget {
 
     final statusLabel = rapportinoStatusLabel(draft);
     final opensEditor = rapportinoOpensEditor(draft);
-    final canDelete = rapportinoCanDelete(draft);
+    // Deleting a report is a write: withhold it from a seat that cannot write reports, on top of
+    // the existing draft/server-import guards in [rapportinoCanDelete].
+    final canDelete =
+        capabilityHeld(
+          ref.watch(cachedEntitlementProvider).value,
+          'rapportini.report.write',
+        ) &&
+        rapportinoCanDelete(draft);
 
     final meta = [
       customerName,

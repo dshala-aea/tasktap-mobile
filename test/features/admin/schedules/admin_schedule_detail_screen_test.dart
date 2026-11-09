@@ -16,7 +16,9 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_detail_screen.dart';
 
@@ -101,11 +103,25 @@ Future<void> _seedSchedule(AppDatabase db) async {
       );
 }
 
-Widget _buildView({required AppDatabase db, String scheduleId = 'sched-1'}) {
+Widget _buildView({
+  required AppDatabase db,
+  String scheduleId = 'sched-1',
+  Set<String> capabilities = const {'pianificazione.schedule.write'},
+}) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome', clock: () => _now)),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(
+          Entitlement(
+            features: const {},
+            capabilities: capabilities,
+            seatType: 'office',
+            fetchedAt: DateTime.utc(2026, 1, 1),
+          ),
+        ),
+      ),
     ],
     child: MaterialApp(home: AdminScheduleDetailScreen(scheduleId: scheduleId)),
   );
@@ -353,6 +369,27 @@ void main() {
     );
     expect(find.byType(AppFab), findsNothing);
     expect(find.textContaining('Assenza approvata'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('without schedule write Modifica stays visible but disabled with a reason', (
+    tester,
+  ) async {
+    await _seedSchedule(db);
+
+    await tester.pumpWidget(_buildView(db: db, capabilities: const {}));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('detail-hero-card')),
+        matching: find.text('Modifica'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Non hai i permessi per questa azione.'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

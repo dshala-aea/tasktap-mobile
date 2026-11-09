@@ -13,6 +13,7 @@ import 'package:image_picker_platform_interface/image_picker_platform_interface.
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/auth/access.dart';
 import 'package:tasktap_mobile/core/files/capture_store.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
@@ -64,6 +65,16 @@ class _FakeImagePickerPlatform extends ImagePickerPlatform {
 class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
+
+/// The default seat for this file's existing tests: a technician who may write the ticket and
+/// start a rapportino. Individual tests override it to exercise the read-only and office-only
+/// paths; a test that passes an [Entitlement] replaces it wholesale.
+final _ticketWriteEntitlement = Entitlement(
+  features: const {'interventi', 'rapportini'},
+  capabilities: const {'interventi.ticket.write', 'rapportini.report.write'},
+  seatType: 'field',
+  fetchedAt: DateTime.utc(2026, 11, 9),
+);
 
 /// Never geocodes for real — every test in this file overrides `geocodingServiceProvider` with
 /// this, so a ticket location with an address exercises `GeoMapCard`'s fallback path
@@ -122,8 +133,9 @@ Widget _buildDetail({
         attachmentContentCacheProvider.overrideWithValue(attachmentCache),
       if (ticketMirrorKnown != null)
         ticketMirrorKnownProvider.overrideWith((ref, _) async => ticketMirrorKnown),
-      if (entitlement != null)
-        cachedEntitlementProvider.overrideWith((ref) async => entitlement),
+      cachedEntitlementProvider.overrideWith(
+        (ref) async => entitlement ?? _ticketWriteEntitlement,
+      ),
     ],
     child: MaterialApp(home: TicketDetailScreen(ticketId: ticketId)),
   );
@@ -433,6 +445,42 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('a read-only seat keeps the ticket readable but loses every write action', (
+      tester,
+    ) async {
+      await seedBase(db);
+      await pump(
+        tester,
+        entitlement: Entitlement(
+          features: const {'interventi', 'rapportini'},
+          capabilities: const {},
+          seatType: 'field',
+          fetchedAt: DateTime.utc(2026, 11, 9),
+        ),
+      );
+
+      // Ticket write actions are withheld entirely: they are secondary surface and a read-only
+      // seat has no use for them.
+      expect(find.bySemanticsLabel('Modifica'), findsNothing);
+      expect(find.bySemanticsLabel('Assegna'), findsNothing);
+      expect(find.text('Crea rapportino'), findsNothing);
+      expect(find.text('AI Copilot'), findsNothing);
+
+      // The status stays on screen — it is also how the ticket is read — but is no longer a
+      // control, and the reason is stated rather than left to an opaque refusal.
+      expect(find.byType(StatusPill), findsOneWidget);
+      expect(find.text(noPermissionReason), findsOneWidget);
+      await tester.tap(find.byType(StatusPill));
+      await tester.pumpAndSettle();
+      expect(find.text('Cambia stato'), findsNothing);
+
+      // Timbra/worklog is a different permission surface and stays exactly as it was.
+      expect(find.text('Avvia intervento'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('delete is hidden without the tenant-admin capability', (tester) async {
       await seedBase(db);
       await pump(tester);
@@ -722,7 +770,7 @@ void main() {
       await seedOfficeOnlyStatus();
       await pump(
         tester,
-        entitlement: withCapabilities(const {'interventi.ticket.configure'}),
+        entitlement: withCapabilities(const {'interventi.ticket.configure', 'interventi.ticket.write'}),
       );
 
       await tester.tap(find.byType(StatusPill));
@@ -766,7 +814,7 @@ void main() {
       await seedOfficeOnlyStatus(statusId: 6);
       await pump(
         tester,
-        entitlement: withCapabilities(const {'interventi.ticket.configure'}),
+        entitlement: withCapabilities(const {'interventi.ticket.configure', 'interventi.ticket.write'}),
       );
 
       await tester.tap(find.byType(StatusPill));
@@ -864,9 +912,9 @@ void main() {
 
     testWidgets('a Pianificazioni row opens the schedule detail card', (tester) async {
       // The box listed a ticket's schedules and offered no way to read one — the detail existed
-      // only from the calendar. Same read-only card, so a technician does not need
-      // `pianificazione.schedule.write` (the admin screen's gate) to read their own day, and the
-      // card comes from the mirror, so it opens offline too.
+      // only from the calendar. Same read-only card, so a technician does not need the
+      // `pianificazione.schedule.*` capabilities (the admin screen's gate) to read their own day,
+      // and the card comes from the mirror, so it opens offline too.
       await seedBase(db);
       await db
           .into(db.schedules)

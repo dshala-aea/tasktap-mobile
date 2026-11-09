@@ -9,13 +9,14 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/router/app_router.dart';
-import '../../../core/time/business_time.dart'
-    show formatWorkDate, parseDateOnly;
+import '../../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/app_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
@@ -53,17 +54,30 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cantiereAsync = ref.watch(adminCantiereDetailProvider(cantiereId));
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'cantieri.cantiere.write',
+    );
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
+      // The edit FAB is the screen's primary affordance: keep it on screen when the seat cannot
+      // write, dimmed, and explain the refusal instead of silently removing the way to edit.
       floatingActionButton: Padding(
         padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-        child: AppFab(
-          icon: LucideIcons.pencil,
-          tooltip: 'Modifica',
-          onPressed: () async {
-            await context.push<bool>('/altro/cantieri/$cantiereId/modifica');
-          },
+        child: Opacity(
+          opacity: canWrite ? 1 : 0.45,
+          child: AppFab(
+            icon: LucideIcons.pencil,
+            tooltip: canWrite ? 'Modifica' : noPermissionReason,
+            onPressed: () async {
+              if (!canWrite) {
+                showAppToast(context, message: noPermissionReason, tone: ToastTone.warning);
+                return;
+              }
+              await context.push<bool>('/altro/cantieri/$cantiereId/modifica');
+            },
+          ),
         ),
       ),
       body: SafeArea(
@@ -87,7 +101,8 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
                   : const UnavailableState(
                       icon: LucideIcons.hardHat,
                       titolo: 'Cantiere non trovato',
-                      motivo: 'Questo cantiere non è più disponibile: potrebbe essere stato '
+                      motivo:
+                          'Questo cantiere non è più disponibile: potrebbe essere stato '
                           'eliminato.',
                     );
             }
@@ -140,6 +155,11 @@ class _CantiereDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final entitlement = ref.watch(cachedEntitlementProvider).value;
+    final canWrite = capabilityHeld(entitlement, 'cantieri.cantiere.write');
+    // Minting a rapportino from a cantiere writes a report, not the cantiere itself: a technician
+    // may document the work without being allowed to edit the site record.
+    final canWriteReport = capabilityHeld(entitlement, 'rapportini.report.write');
     final startLabel = cantiere.startDate != null
         ? DateFormat('dd/MM/yyyy').format(cantiere.startDate!.toLocal())
         : '—';
@@ -167,12 +187,13 @@ class _CantiereDetailBody extends ConsumerWidget {
             subtitle: cantiere.city ?? '',
             showBack: true,
             actions: [
-              HeaderIconBtn(
-                icon: LucideIcons.trash2,
-                label: 'Elimina cantiere',
-                glass: true,
-                onTap: () => _deleteCantiere(context, ref, cantiereId),
-              ),
+              if (canWrite)
+                HeaderIconBtn(
+                  icon: LucideIcons.trash2,
+                  label: 'Elimina cantiere',
+                  glass: true,
+                  onTap: () => _deleteCantiere(context, ref, cantiereId),
+                ),
             ],
           ),
         ),
@@ -237,21 +258,22 @@ class _CantiereDetailBody extends ConsumerWidget {
         // to Rapportini and start blank, typing the customer/address/cantiere link by hand. Same
         // prefill contract as Ticket detail's own "Crea rapportino" (createLocalDraft): every
         // field this screen already knows goes straight into the draft.
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              0,
-              AppSpacing.pagePadding,
-              AppSpacing.pagePadding,
-            ),
-            child: AppButton(
-              label: 'Crea rapporto di intervento',
-              icon: const Icon(LucideIcons.fileText),
-              onPressed: () => _createRapportino(context, ref, cantiere),
+        if (canWriteReport)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+              ),
+              child: AppButton(
+                label: 'Crea rapporto di intervento',
+                icon: const Icon(LucideIcons.fileText),
+                onPressed: () => _createRapportino(context, ref, cantiere),
+              ),
             ),
           ),
-        ),
 
         // ── Contatti (Gap 1) ────────────────────────────────────────────
         SliverToBoxAdapter(child: _ContactsSection(cantiereId: cantiereId)),
@@ -329,85 +351,87 @@ class CantiereSectionRows {
 /// from `db.tickets`, which already carries `cantiereId` (schema 12). A device that has never
 /// synced has nothing to answer with and says so via [TicketDetailOfflineException] rather than
 /// claiming the cantiere has no tickets.
-final adminCantiereTicketsProvider = FutureProvider.autoDispose
-    .family<CantiereSectionRows, String>((ref, id) async {
-      Future<CantiereSectionRows> fromMirror() async {
-        final db = ref.watch(appDatabaseProvider);
-        final rows =
-            await (db.select(db.tickets)
-                  ..where((t) => t.cantiereId.equals(id))
-                  ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
-                .get();
-        if (rows.isEmpty && await db.getLastSync() == null) {
-          throw const TicketDetailOfflineException();
-        }
-        return CantiereSectionRows([
-          for (final t in rows)
-            {'id': t.id, 'title': t.title, 'numero': t.numero, 'statusId': t.statusId},
-        ], fromMirror: true);
+final adminCantiereTicketsProvider = FutureProvider.autoDispose.family<CantiereSectionRows, String>(
+  (ref, id) async {
+    Future<CantiereSectionRows> fromMirror() async {
+      final db = ref.watch(appDatabaseProvider);
+      final rows =
+          await (db.select(db.tickets)
+                ..where((t) => t.cantiereId.equals(id))
+                ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+              .get();
+      if (rows.isEmpty && await db.getLastSync() == null) {
+        throw const TicketDetailOfflineException();
       }
+      return CantiereSectionRows([
+        for (final t in rows)
+          {'id': t.id, 'title': t.title, 'numero': t.numero, 'statusId': t.statusId},
+      ], fromMirror: true);
+    }
 
-      if (ref.watch(isOnlineProvider)) {
-        try {
-          final rows = await ref.watch(adminApiClientProvider).fetchCantiereTickets(id);
-          return CantiereSectionRows(rows, fromMirror: false);
-        } catch (e) {
-          if (!isTransportOrServerFault(e)) rethrow;
-        }
+    if (ref.watch(isOnlineProvider)) {
+      try {
+        final rows = await ref.watch(adminApiClientProvider).fetchCantiereTickets(id);
+        return CantiereSectionRows(rows, fromMirror: false);
+      } catch (e) {
+        if (!isTransportOrServerFault(e)) rethrow;
       }
-      return fromMirror();
-    });
+    }
+    return fromMirror();
+  },
+);
 
 /// Rapportini documenting work on this cantiere.
 ///
 /// Same split as [adminCantiereTicketsProvider], answered from `db.draft_reports` (which sync
 /// fills with both drafts and submitted reports, `cantiereId` included). The mirror therefore
 /// holds this technician's reports, not the tenant's — hence [CantiereSectionRows.fromMirror].
-final adminCantiereReportsProvider = FutureProvider.autoDispose
-    .family<CantiereSectionRows, String>((ref, id) async {
-      // Drift stores the enum's own name (`ReportStatoEnum` string); the list below renders the
-      // ordinal the server's anonymous projection sends. Kept next to the mapping so the two
-      // shapes cannot drift apart silently.
-      const statoOrdinals = {
-        'Bozza': 0,
-        'Inviato': 1,
-        'Controllato': 2,
-        'Fatturato': 3,
-        'Respinto': 4,
-        'Annullato': 5,
-      };
+final adminCantiereReportsProvider = FutureProvider.autoDispose.family<CantiereSectionRows, String>(
+  (ref, id) async {
+    // Drift stores the enum's own name (`ReportStatoEnum` string); the list below renders the
+    // ordinal the server's anonymous projection sends. Kept next to the mapping so the two
+    // shapes cannot drift apart silently.
+    const statoOrdinals = {
+      'Bozza': 0,
+      'Inviato': 1,
+      'Controllato': 2,
+      'Fatturato': 3,
+      'Respinto': 4,
+      'Annullato': 5,
+    };
 
-      Future<CantiereSectionRows> fromMirror() async {
-        final db = ref.watch(appDatabaseProvider);
-        final rows =
-            await (db.select(db.draftReports)
-                  ..where((r) => r.cantiereId.equals(id))
-                  ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
-                .get();
-        if (rows.isEmpty && await db.getLastSync() == null) {
-          throw const TicketDetailOfflineException();
-        }
-        return CantiereSectionRows([
-          for (final r in rows)
-            {
-              'id': r.id,
-              'title': r.title,
-              'stato': statoOrdinals[r.stato] ?? 0,
-              'createdAt': r.createdAt.toIso8601String(),
-            },
-        ], fromMirror: true);
+    Future<CantiereSectionRows> fromMirror() async {
+      final db = ref.watch(appDatabaseProvider);
+      final rows =
+          await (db.select(db.draftReports)
+                ..where((r) => r.cantiereId.equals(id))
+                ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
+              .get();
+      if (rows.isEmpty && await db.getLastSync() == null) {
+        throw const TicketDetailOfflineException();
       }
+      return CantiereSectionRows([
+        for (final r in rows)
+          {
+            'id': r.id,
+            'title': r.title,
+            'stato': statoOrdinals[r.stato] ?? 0,
+            'createdAt': r.createdAt.toIso8601String(),
+          },
+      ], fromMirror: true);
+    }
 
-      if (ref.watch(isOnlineProvider)) {
-        try {
-          final rows = await ref.watch(adminApiClientProvider).fetchReports(cantiereId: id);
-          return CantiereSectionRows(rows, fromMirror: false);
-        } catch (e) {
-          if (!isTransportOrServerFault(e)) rethrow;
-        }
+    if (ref.watch(isOnlineProvider)) {
+      try {
+        final rows = await ref.watch(adminApiClientProvider).fetchReports(cantiereId: id);
+        return CantiereSectionRows(rows, fromMirror: false);
+      } catch (e) {
+        if (!isTransportOrServerFault(e)) rethrow;
       }
-      return fromMirror();
-    });
+    }
+    return fromMirror();
+  },
+);
 
 /// Hours logged on this cantiere.
 final adminCantiereWorkLogsProvider = FutureProvider.autoDispose
@@ -428,17 +452,24 @@ class _ContactsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detailAsync = ref.watch(adminCantiereRemoteDetailProvider(cantiereId));
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'cantieri.cantiere.write',
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionTitle(
           title: 'Contatti',
-          action: IconButton(
-            icon: const Icon(LucideIcons.plus),
-            tooltip: 'Aggiungi contatto',
-            onPressed: () => _openContactSheet(context, ref, cantiereId: cantiereId, contact: null),
-          ),
+          action: canWrite
+              ? IconButton(
+                  icon: const Icon(LucideIcons.plus),
+                  tooltip: 'Aggiungi contatto',
+                  onPressed: () =>
+                      _openContactSheet(context, ref, cantiereId: cantiereId, contact: null),
+                )
+              : null,
         ),
         detailAsync.when(
           loading: () => const Padding(
@@ -473,28 +504,34 @@ class _ContactsSection extends ConsumerWidget {
                     leading: const RowIconTile(icon: LucideIcons.user),
                     title: name.isNotEmpty ? name : 'Contatto',
                     subtitle: subtitleParts.isNotEmpty ? subtitleParts.join(' · ') : null,
-                    meta: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(LucideIcons.pencil, size: 18),
-                          tooltip: 'Modifica contatto',
-                          onPressed: () =>
-                              _openContactSheet(context, ref, cantiereId: cantiereId, contact: c),
-                        ),
-                        IconButton(
-                          icon: const Icon(LucideIcons.trash2, size: 18),
-                          tooltip: 'Elimina contatto',
-                          onPressed: () => _deleteContact(
-                            context,
-                            ref,
-                            cantiereId: cantiereId,
-                            contactId: c['id'] as String,
-                            name: name,
-                          ),
-                        ),
-                      ],
-                    ),
+                    meta: canWrite
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(LucideIcons.pencil, size: 18),
+                                tooltip: 'Modifica contatto',
+                                onPressed: () => _openContactSheet(
+                                  context,
+                                  ref,
+                                  cantiereId: cantiereId,
+                                  contact: c,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(LucideIcons.trash2, size: 18),
+                                tooltip: 'Elimina contatto',
+                                onPressed: () => _deleteContact(
+                                  context,
+                                  ref,
+                                  cantiereId: cantiereId,
+                                  contactId: c['id'] as String,
+                                  name: name,
+                                ),
+                              ),
+                            ],
+                          )
+                        : null,
                     showDivider: entry.key < contacts.length - 1,
                   );
                 }).toList(),
@@ -711,17 +748,23 @@ class _CrewSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detailAsync = ref.watch(adminCantiereRemoteDetailProvider(cantiereId));
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'cantieri.cantiere.write',
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionTitle(
           title: 'Personale',
-          action: IconButton(
-            icon: const Icon(LucideIcons.userPlus),
-            tooltip: 'Aggiungi persona',
-            onPressed: () => _openAddSheet(context, ref),
-          ),
+          action: canWrite
+              ? IconButton(
+                  icon: const Icon(LucideIcons.userPlus),
+                  tooltip: 'Aggiungi persona',
+                  onPressed: () => _openAddSheet(context, ref),
+                )
+              : null,
         ),
         detailAsync.when(
           loading: () => const Padding(
@@ -755,16 +798,18 @@ class _CrewSection extends ConsumerWidget {
                     leading: AppAvatar(name: nome ?? '?', size: 36),
                     title: nome ?? 'Persona non sincronizzata',
                     subtitle: role != null && role.isNotEmpty ? role : null,
-                    meta: IconButton(
-                      icon: const Icon(LucideIcons.userMinus, size: 18),
-                      tooltip: 'Rimuovi dal cantiere',
-                      onPressed: () => _removeAssignment(
-                        context,
-                        ref,
-                        assignmentId: a['id'] as String,
-                        nome: nome ?? 'questa persona',
-                      ),
-                    ),
+                    meta: canWrite
+                        ? IconButton(
+                            icon: const Icon(LucideIcons.userMinus, size: 18),
+                            tooltip: 'Rimuovi dal cantiere',
+                            onPressed: () => _removeAssignment(
+                              context,
+                              ref,
+                              assignmentId: a['id'] as String,
+                              nome: nome ?? 'questa persona',
+                            ),
+                          )
+                        : null,
                     showDivider: entry.key < assignments.length - 1,
                   );
                 }).toList(),

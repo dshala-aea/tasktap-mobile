@@ -34,7 +34,9 @@ import 'package:tasktap_mobile/core/widgets/detail/detail_section.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/reports/report_pdf_cache.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -274,6 +276,13 @@ Future<void> _insertAllegato(
       );
 }
 
+final _writeReportEntitlement = Entitlement(
+  features: const {'rapportini'},
+  capabilities: const {'rapportini.report.write'},
+  seatType: 'field',
+  fetchedAt: DateTime.utc(2026, 11, 9),
+);
+
 Widget _buildView({
   required AppDatabase db,
   String reportId = 'report-1',
@@ -281,6 +290,7 @@ Widget _buildView({
   bool isOnline = true,
   ReportPdfCache? pdfCache,
   ReportPdfShare? share,
+  Entitlement? entitlement,
 }) {
   return ProviderScope(
     overrides: [
@@ -290,6 +300,9 @@ Widget _buildView({
       if (share != null) reportPdfShareProvider.overrideWithValue(share),
       isOnlineProvider.overrideWithValue(isOnline),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+      cachedEntitlementProvider.overrideWith(
+        (ref) async => entitlement ?? _writeReportEntitlement,
+      ),
     ],
     child: MaterialApp(home: RapportinoViewScreen(reportId: reportId)),
   );
@@ -318,6 +331,7 @@ Widget _buildRoutedView({required AppDatabase db, String reportId = 'report-1'})
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
       currentUserProvider.overrideWithValue(_testUser),
       internalUserIdProvider.overrideWith((ref) async => _testInternalUserId),
+      cachedEntitlementProvider.overrideWith((ref) async => _writeReportEntitlement),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -786,6 +800,33 @@ void main() {
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
       // status_pill_test.dart's own note on this rendering change.
       expect(find.text('RESPINTA'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a read-only seat cannot Rilavora a rejected report but keeps the PDF', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db, stato: 'Respinto');
+      await tester.pumpWidget(
+        _buildView(
+          db: db,
+          entitlement: Entitlement(
+            features: const {'rapportini'},
+            capabilities: const {},
+            seatType: 'field',
+            fetchedAt: DateTime.utc(2026, 11, 9),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final hero = find.byType(DetailHero);
+      expect(find.descendant(of: hero, matching: find.text('Rilavora')), findsNothing);
+      expect(find.descendant(of: hero, matching: find.text('Scarica PDF')), findsOneWidget);
+      // The rejection itself stays readable.
+      expect(find.textContaining("L'ufficio ha respinto"), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

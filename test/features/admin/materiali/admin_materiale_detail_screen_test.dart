@@ -23,7 +23,9 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/materiali/admin_materiale_detail_screen.dart';
@@ -95,6 +97,7 @@ Widget _buildScreen(
   MockDio dio, {
   String materialeId = 'm1',
   List<Override> overrides = const [],
+  Set<String> capabilities = const {'magazzino.article.write'},
 }) {
   final router = GoRouter(
     initialLocation: '/detail',
@@ -121,6 +124,16 @@ Widget _buildScreen(
       dioProvider.overrideWithValue(dio),
       isOnlineProvider.overrideWithValue(true),
       syncProvider.overrideWith((ref) => _NoopSync(db)),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(
+          Entitlement(
+            features: const {},
+            capabilities: capabilities,
+            seatType: 'office',
+            fetchedAt: DateTime.utc(2026, 1, 1),
+          ),
+        ),
+      ),
       ...overrides,
     ],
     child: MaterialApp.router(routerConfig: router),
@@ -133,8 +146,17 @@ Future<void> _pump(
   MockDio dio, {
   String materialeId = 'm1',
   List<Override> overrides = const [],
+  Set<String> capabilities = const {'magazzino.article.write'},
 }) async {
-  await tester.pumpWidget(_buildScreen(db, dio, materialeId: materialeId, overrides: overrides));
+  await tester.pumpWidget(
+    _buildScreen(
+      db,
+      dio,
+      materialeId: materialeId,
+      overrides: overrides,
+      capabilities: capabilities,
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -459,5 +481,30 @@ void main() {
     expect(tester.takeException(), isNull);
 
     await _unmount(tester);
+  });
+
+  group('capability gates', () {
+    testWidgets('without article write Modifica is disabled with a reason and the toggle hidden', (
+      tester,
+    ) async {
+      await _seedMateriale(db);
+      await _pump(tester, db, dio, capabilities: const {});
+
+      expect(find.text('Non hai i permessi per questa azione.'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.xCircle), findsNothing);
+      expect(find.byIcon(LucideIcons.checkCircle), findsNothing);
+
+      await _unmount(tester);
+    });
+
+    testWidgets('with article write Modifica is enabled and the toggle is offered', (tester) async {
+      await _seedMateriale(db);
+      await _pump(tester, db, dio);
+
+      expect(find.text('Non hai i permessi per questa azione.'), findsNothing);
+      expect(find.byIcon(LucideIcons.xCircle), findsOneWidget);
+
+      await _unmount(tester);
+    });
   });
 }

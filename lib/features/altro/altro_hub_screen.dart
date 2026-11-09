@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/auth/access.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
@@ -100,24 +101,37 @@ class AltroHubScreen extends ConsumerWidget {
   /// Keys are `ModuleKeys` from the backend (`src/TaskTapAPI.Core/Billing/ModuleKeys.cs`).
   /// Never gate on a key that is not in that file — a typo reads as "not entitled" and silently
   /// removes a screen.
+  ///
+  /// The office-admin tiles additionally require the same `.read` capability their route requires
+  /// (see `_routeRequirements` in `app_router.dart`), so a tile never offers a screen the guard
+  /// will refuse. Fail-closed when no entitlement is cached, like `CapabilityGate`.
   List<Widget> _buildGestioneTiles(BuildContext context, Entitlement? entitlement) {
-    final tiles = <({IconData icon, String label, String module, VoidCallback onTap})>[
+    final tiles = <({
+      IconData icon,
+      String label,
+      String module,
+      String? capability,
+      VoidCallback onTap,
+    })>[
       (
         icon: LucideIcons.clipboardList,
         label: 'Interventi',
         module: 'interventi',
+        capability: null,
         onTap: () => context.go(AppRoutes.ticket),
       ),
       (
         icon: LucideIcons.fileText,
         label: 'Rapporti di intervento',
         module: 'rapportini',
+        capability: null,
         onTap: () => context.go(AppRoutes.altroRapportini),
       ),
       (
         icon: LucideIcons.users,
         label: 'Clienti',
         module: 'clienti',
+        capability: 'clienti.customer.read',
         onTap: () => context.push(AppRoutes.altroClienti),
       ),
       // Sedi are customer sites: the same always-on module, not one of its own.
@@ -125,12 +139,14 @@ class AltroHubScreen extends ConsumerWidget {
         icon: LucideIcons.mapPin,
         label: 'Sedi',
         module: 'clienti',
+        capability: 'clienti.location.read',
         onTap: () => context.push('/altro/sedi'),
       ),
       (
         icon: LucideIcons.hardHat,
         label: 'Cantieri',
         module: 'cantieri',
+        capability: null,
         // The technician-scoped Cantieri tab (with "Timbrato oggi" badges and proper
         // empty/error states), not the office CRUD screen under /altro/cantieri.
         onTap: () => context.go(AppRoutes.cantieri),
@@ -139,18 +155,21 @@ class AltroHubScreen extends ConsumerWidget {
         icon: LucideIcons.package,
         label: 'Asset',
         module: 'prodotti',
+        capability: null,
         onTap: () => context.push('/altro/prodotti'),
       ),
       (
         icon: LucideIcons.warehouse,
         label: 'Magazzino',
         module: 'magazzino',
+        capability: 'magazzino.article.read',
         onTap: () => context.push(AppRoutes.altroMagazzino),
       ),
       (
         icon: LucideIcons.fileSignature,
         label: 'Contratti',
         module: 'contratti',
+        capability: 'contratti.contract.read',
         onTap: () => context.push('/altro/contratti'),
       ),
       // Squadre is crew management — the always-on `team` module.
@@ -158,18 +177,21 @@ class AltroHubScreen extends ConsumerWidget {
         icon: LucideIcons.users2,
         label: 'Squadre',
         module: 'team',
+        capability: 'team.squadra.read',
         onTap: () => context.push('/altro/squadre'),
       ),
       (
         icon: LucideIcons.calendarDays,
         label: 'Pianificazioni',
         module: 'pianificazione',
+        capability: 'pianificazione.schedule.read',
         onTap: () => context.push('/altro/pianificazioni'),
       ),
       (
         icon: LucideIcons.calendarX,
         label: 'Ferie e Permessi',
         module: 'presenze',
+        capability: null,
         onTap: () => context.push(AppRoutes.altroFerie),
       ),
       // Smart working is the same `presenze` module as Ferie: a request is a marker for a remote
@@ -178,15 +200,17 @@ class AltroHubScreen extends ConsumerWidget {
         icon: LucideIcons.laptop,
         label: 'Smart working',
         module: 'presenze',
+        capability: null,
         onTap: () => context.push(AppRoutes.altroSmartWorking),
       ),
     ];
 
-    final canApprove = entitlement?.capabilities.contains('presenze.absence.approve') ?? false;
+    final canApprove = capabilityHeld(entitlement, 'presenze.absence.approve');
 
     return [
       for (final t in tiles)
-        if (moduleIsOffered(t.module, entitlement))
+        if (moduleIsOffered(t.module, entitlement) &&
+            (t.capability == null || capabilityHeld(entitlement, t.capability!)))
           AppCompartmentTile(icon: t.icon, label: t.label, onTap: t.onTap),
       // Approving is office work, not part of either self-service screen: the tile appears only
       // for a capability holder (fail-closed when the cache is missing), like the route guard.
