@@ -26,6 +26,8 @@ import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/features/timbra/timbra_providers.dart'
     show giornataProvider, serverDayProvider, todaySessionsProvider;
 import 'package:tasktap_mobile/features/timbra/timbra_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
+    show internalUserIdProvider;
 
 // ── No-op stubs (prevent Dio from being constructed by providers) ─────────────
 
@@ -121,6 +123,9 @@ Widget _buildApp(
       appDatabaseProvider.overrideWithValue(db),
       timbraSyncServiceProvider.overrideWithValue(_makeNoopSyncService()),
       worklogApiClientProvider.overrideWithValue(_NoopApiClient()),
+      // serverDayProvider reads the persisted internal User.Id (a SharedPreferences value). A
+      // widget test has no plugin, so give it a stable id; the no-op client returns no rows.
+      internalUserIdProvider.overrideWith((ref) async => 'test-user'),
       // Real LocationService touches platform channels (Geolocator) that no widget test here
       // mocks, and PunchNotifier now calls it (best-effort, silent GPS capture — see
       // PunchNotifier._captureGpsSilently) on every punch/pause. DisabledLocationService is the
@@ -179,6 +184,9 @@ void main() {
   testWidgets('shows Nessuna timbratura oggi when no sessions', (tester) async {
     await tester.pumpWidget(_buildApp(db));
     await tester.pump(const Duration(milliseconds: 100));
+    // serverDayProvider waits for the persisted internal user id before it can say the server's
+    // day is complete; let that future settle before asserting the empty-day copy.
+    await tester.pump();
     expect(find.text('Nessuna timbratura oggi'), findsOneWidget);
     await _teardownTimer(tester);
   });
@@ -624,6 +632,103 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('SAB 11 LUG 2026'), findsOneWidget);
+      await _teardownTimer(tester);
+    });
+  });
+
+  // ── Server-day freshness ─────────────────────────────────────────────────
+  //
+  // The guard used to keep the first `/api/worklog/today` answer for as long as the screen
+  // stayed open. After a punch (or a punch from another device) it could therefore keep saying
+  // "Non risulti in servizio" even though the local day says the shift is open — and the finish
+  // button stayed disabled. The day must be re-read when the screen refreshes and after a punch.
+  group('server-day freshness', () {
+    testWidgets('a live refresh clears a stale not_clocked_in guard', (tester) async {
+      final repo = WorkSessionRepository(db);
+      await repo.addEvent(
+        id: 'open-shift',
+        eventTime: DateTime.now().toUtc(),
+        eventType: 'ingresso',
+      );
+      await repo.markSynced(['open-shift']);
+
+      var calls = 0;
+      await tester.pumpWidget(
+        _buildApp(
+          db,
+          extraOverrides: [
+            giornataProvider.overrideWith((ref) async {
+              calls++;
+              if (calls == 1) {
+                return const GiornataDto(
+                  status: 'ClockedOut',
+                  workedMinutes: 0,
+                  breakMinutes: 0,
+                  isPayrollLocked: false,
+                  actions: [
+                    GiornataActionDto(
+                      action: 'ClockOut',
+                      enabled: false,
+                      reasonCode: 'not_clocked_in',
+                      reason: 'Non risulti in servizio.',
+                    ),
+                  ],
+                );
+              }
+              return const GiornataDto(
+                status: 'Working',
+                workedMinutes: 0,
+                breakMinutes: 0,
+                isPayrollLocked: false,
+                actions: [GiornataActionDto(action: 'ClockOut', enabled: true)],
+              );
+            }),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.textContaining('Non risulti in servizio'), findsOneWidget);
+
+      // WorkLogLiveRefresh polls every 15s; the second answer is the synced truth.
+      await tester.pump(const Duration(seconds: 16));
+      await tester.pump();
+
+      expect(calls, greaterThan(1));
+      expect(find.textContaining('Non risulti in servizio'), findsNothing);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('a local punch invalidates the guard immediately', (tester) async {
+      var calls = 0;
+      await tester.pumpWidget(
+        _buildApp(
+          db,
+          extraOverrides: [
+            giornataProvider.overrideWith((ref) async {
+              calls++;
+              return const GiornataDto(
+                status: 'ClockedOut',
+                workedMinutes: 0,
+                breakMinutes: 0,
+                isPayrollLocked: false,
+                actions: [GiornataActionDto(action: 'ClockIn', enabled: true)],
+              );
+            }),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump();
+      final initialCalls = calls;
+      expect(initialCalls, greaterThanOrEqualTo(1));
+
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(find.text('IN TURNO'), findsOneWidget);
+      expect(calls, greaterThan(initialCalls));
       await _teardownTimer(tester);
     });
   });

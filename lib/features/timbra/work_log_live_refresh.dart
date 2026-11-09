@@ -23,7 +23,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/timbratura/work_log_refresh_coordinator.dart';
-import 'timbra_providers.dart' show serverDayProvider;
+import 'timbra_providers.dart' show giornataProvider, serverDayProvider;
 
 class WorkLogLiveRefresh extends ConsumerStatefulWidget {
   const WorkLogLiveRefresh({super.key, required this.child});
@@ -88,6 +88,10 @@ class _WorkLogLiveRefreshState extends ConsumerState<WorkLogLiveRefresh>
     // when the screen opened. Cheap where it does not apply: the provider is autoDispose, so from
     // the dashboard (no listener) this invalidates nothing.
     ref.invalidate(serverDayProvider);
+    // The punch guard's `/api/worklog/today` is a third read with the same staleness problem:
+    // without invalidating it, a shift opened here (or on another device) leaves the guard on the
+    // pre-shift answer, which disables the finish button with a false "Non risulti in servizio".
+    ref.invalidate(giornataProvider);
   });
 
   void _syncPoll() {
