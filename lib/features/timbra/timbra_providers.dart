@@ -1,11 +1,13 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
-import '../../presentation/providers/auth_providers.dart' show currentUserProvider;
+import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../data/sync/sync_service.dart';
@@ -58,7 +60,13 @@ final todaySessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref
 /// the endpoint for it — it omits `workLogType`, so a break arrives indistinguishable from work
 /// and the day's arithmetic would be wrong in a new way. See [DayWorkLogEntry].
 final serverDayProvider = FutureProvider.autoDispose<List<DayWorkLogEntry>>((ref) async {
-  final userId = ref.watch(currentUserProvider.select((u) => u?.id));
+  // `GET /api/WorkLog?userId=` expects the internal database Guid, not the OIDC `sub` that
+  // `currentUserProvider.id` carries. Sending the sub made the whole server-day read fail (400 /
+  // no rows), which is the "giornata del server non è raggiungibile" banner. See
+  // `internalUserIdProvider`'s own doc comment: it exists precisely for server-side foreign keys.
+  // `watch(...).valueOrNull` (not `await ...future`) keeps the first frame's empty rail a normal
+  // empty day while the id loads; the provider re-reads as soon as the id arrives.
+  final userId = ref.watch(internalUserIdProvider).valueOrNull;
   if (userId == null) return const [];
 
   final client = ref.watch(worklogApiClientProvider);
@@ -369,6 +377,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     this._syncService,
     ILocationService? locationService,
     this._confirmOnline,
+    this._onShiftChanged,
   ]) : _locationService = locationService ?? const DisabledLocationService(),
        super(const AsyncData(null));
 
@@ -376,6 +385,11 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
 
   /// Authoritative "is there really a connection right now" probe. Null = never gate.
   final Future<bool> Function()? _confirmOnline;
+
+  /// Re-read the server's day after a local punch (and again after the best-effort sync lands).
+  /// Without this the punch guard keeps the pre-punch `/api/worklog/today` answer and can leave
+  /// the finish button disabled with a false "Non risulti in servizio".
+  final void Function()? _onShiftChanged;
 
   /// Fine / Pausa / Ripresa on a shift started on ANOTHER device are online-only — the server
   /// stamps its own clock, so an offline tap would be recorded at delivery time. See
@@ -431,6 +445,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
           longitude: coords?.lng,
           gpsAccuracyMeters: coords?.accuracy,
         );
+        _onShiftChanged?.call();
       } else {
         // End shift
         await _requireOnlineForRemoteShift();
@@ -443,10 +458,16 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
             analyseRemoteShifts(await _repo.getAllSessions()).openRemoteOpenerTime;
         if (opener != null && !stop.isAfter(opener)) stop = opener.add(const Duration(seconds: 1));
         await _repo.addEvent(id: _uuid.v4(), eventTime: stop, eventType: _kFine);
+        _onShiftChanged?.call();
       }
       state = const AsyncData(null);
-      // Best-effort sync after punch (fire-and-forget; ignore failure).
-      _syncService?.syncNow();
+      // Best-effort sync after punch (fire-and-forget; ignore failure). Re-read the server day
+      // once the sync lands, so the guard sees the same state the server now has.
+      final sync = _syncService?.syncNow();
+      _onShiftChanged?.call();
+      if (sync != null) {
+        unawaited(sync.then((_) => _onShiftChanged?.call()).catchError((_) {}));
+      }
     } catch (e, st) {
       state = AsyncError(e, st);
     }
@@ -468,12 +489,19 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
           longitude: coords?.lng,
           gpsAccuracyMeters: coords?.accuracy,
         );
+        _onShiftChanged?.call();
       } else {
         await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kPausa);
+        _onShiftChanged?.call();
       }
       state = const AsyncData(null);
-      // Best-effort sync after pause/resume (fire-and-forget; ignore failure).
-      _syncService?.syncNow();
+      // Best-effort sync after pause/resume (fire-and-forget; ignore failure). Re-read the server
+      // day once the sync lands, same as punch.
+      final sync = _syncService?.syncNow();
+      _onShiftChanged?.call();
+      if (sync != null) {
+        unawaited(sync.then((_) => _onShiftChanged?.call()).catchError((_) {}));
+      }
     } catch (e, st) {
       state = AsyncError(e, st);
     }
@@ -502,6 +530,11 @@ final punchNotifierProvider = StateNotifierProvider<PunchNotifier, AsyncValue<vo
       // The cached provider value can be stale-false; confirm with a real probe.
       final r = await Connectivity().checkConnectivity();
       return r.any((c) => c != ConnectivityResult.none);
+    },
+    () {
+      // The local punch has changed the day; the server answer the guard holds is now stale.
+      ref.invalidate(giornataProvider);
+      ref.invalidate(serverDayProvider);
     },
   );
 });
