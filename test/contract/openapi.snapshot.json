@@ -1763,7 +1763,7 @@
           "Billing"
         ],
         "summary": "The tenant\u0027s subscription as it stands: status, dates, seats and entitled modules.",
-        "description": "     Every field here already lived on the tenant row; nothing projected it, so the office web\n     could not show a plan, a renewal date or how many days of trial were left. That is why\n     Impostazioni \u2192 Fatturazione was an \u0022unavailable\u0022 panel while checkout and seat changes both\n     worked \u2014 the writes existed and the read did not.\n\n     No tier field, deliberately. Nothing persists whether a tenant is on starter or pro:\nthe tier is a Stripe product, and what reaches this database is the set of module keys it\ngranted. Reporting a tier would mean inferring one from that set, which is a guess that\ngoes wrong the first time someone is granted an add-on outside their tier. The modules are\nthe truth, so the modules are what this returns.",
+        "description": "     Every field here already lived on the tenant row; nothing projected it, so the office web\n     could not show a plan, a renewal date or how many days of trial were left. That is why\n     Impostazioni \u2192 Fatturazione was an \u0022unavailable\u0022 panel while checkout and seat changes both\n     worked \u2014 the writes existed and the read did not.\n\n     No tier for Stripe tenants, deliberately. For them the tier is a Stripe product, and\nwhat reaches this database is the set of module keys it granted. Reporting a tier would mean\ninferring one from that set, which is a guess that goes wrong the first time someone is\ngranted an add-on outside their tier. The modules are the truth, so the modules are what\nthis returns. A tenant billed locally (comp / contract) is different: its tier was chosen by\nan operator and IS persisted (GrantedTier), so GrantedTier is reported for those.",
         "responses": {
           "200": {
             "description": "OK",
@@ -28948,6 +28948,17 @@
               "string"
             ],
             "description": "Billing contact for the new tenant. Optional: when omitted the creating platform admin\u0027s own\nemail is used, because the tenant\u0027s invoices and welcome email need \u003Ci\u003Esome\u003C/i\u003E address."
+          },
+          "contract": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Optional: create the tenant already on a contract (no Stripe, no trial). Same shape and rules\nas \u0060POST /api/tenants/{id}/billing/contract\u0060. Omitted = the ordinary trial tenant.\nPlatform-admin only like the rest of this endpoint.",
+                "$ref": "#/components/schemas/GrantContractRequest"
+              }
+            ]
           }
         }
       },
@@ -38725,6 +38736,18 @@
           },
           "cancelAtPeriodEnd": {
             "type": "boolean"
+          },
+          "billingMode": {
+            "type": "string",
+            "description": "\u0060Stripe\u0060, or \u0060Comped\u0060/\u0060Contract\u0060 while the tenant is billed locally with no subscription. The page keys \u0022offer checkout / seat editor\u0022 vs \u0022read-only contract summary\u0022 off this.",
+            "default": "Stripe"
+          },
+          "grantedTier": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The operator-granted tier (\u0060starter\u0060/\u0060pro\u0060/\u0060business\u0060) for a locally billed tenant; null for Stripe tenants."
           }
         },
         "description": "The tenant\u0027s subscription as it stands."
