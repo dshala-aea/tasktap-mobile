@@ -199,6 +199,18 @@ class NotificationService {
 
     // The token could not be fetched at startup if permission was not held then.
     _currentToken ??= await _tryGetToken();
+
+    // ...and for the same reason the login-time registration ran with no token and returned
+    // silently. Register now that there is one, or a freshly installed device that grants
+    // permission AFTER login (onboarding, or the Impostazioni switch) stays unknown to the
+    // backend until the next cold start: permission granted, nothing ever delivered. This is the
+    // normal first-run path on iOS, where permission is never held at login; Android below 13
+    // holds it from install, which is why it never showed there. `registerDeviceToken` is an
+    // upsert on the backend, so a caller that registers again afterwards is harmless.
+    final accessToken = _lastAccessToken;
+    if (_currentToken != null && accessToken != null) {
+      await registerDeviceToken(accessToken);
+    }
     return true;
   }
 
