@@ -420,13 +420,22 @@ void main() {
 
     testWidgets('a user without contract-write is not offered edit or delete', (tester) async {
       entitlement = _entitlementWith({'contratti.contract.read'});
-      await openDetail(tester);
+      await openDetail(tester, size: const Size(800, 2800));
 
       expect(
         find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina asset'),
         findsNothing,
       );
       expect(find.text('Modifica'), findsNothing);
+      // Matricole are a contract-write sub-resource: no add/remove, and the extension fields are
+      // read-only rather than offering a save the server would refuse.
+      expect(find.byTooltip('Aggiungi matricola'), findsNothing);
+      expect(find.byTooltip('Rimuovi matricola'), findsNothing);
+      expect(find.text('Salva'), findsNothing);
+      expect(
+        find.text('Sola lettura: non hai i permessi per modificare questi campi.'),
+        findsOneWidget,
+      );
       await teardown(tester);
     });
   });

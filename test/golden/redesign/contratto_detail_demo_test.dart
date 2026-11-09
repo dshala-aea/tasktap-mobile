@@ -14,7 +14,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/sync_service.dart'
     show appDatabaseProvider;
 import 'package:tasktap_mobile/features/admin/contracts/admin_contract_detail_screen.dart';
@@ -148,6 +150,19 @@ List<Override> _overrides(AppDatabase db) => [
   appDatabaseProvider.overrideWithValue(db),
   businessTimeProvider.overrideWithValue(
     BusinessTime('Europe/Rome', clock: () => _now),
+  ),
+  cachedEntitlementProvider.overrideWith(
+    (ref) => Future.value(
+      Entitlement(
+        features: const {},
+        capabilities: const {
+          'contratti.contract.write',
+          'pianificazione.schedule.write',
+        },
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 1, 1),
+      ),
+    ),
   ),
 ];
 

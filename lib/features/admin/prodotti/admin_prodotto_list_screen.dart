@@ -350,9 +350,12 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
       title: 'Prodotti in assistenza',
       subtitle: 'Gli asset del cliente e la loro prossima manutenzione.',
       showBack: true,
-      action: ListHeaderAction(
-        label: 'Nuovo',
-        onPressed: () => context.push('/altro/prodotti/nuovo'),
+      action: CapabilityGate(
+        capability: 'contratti.contract.write',
+        child: ListHeaderAction(
+          label: 'Nuovo',
+          onPressed: () => context.push('/altro/prodotti/nuovo'),
+        ),
       ),
       searchController: _searchCtrl,
       searchHint: 'Cerca prodotto, seriale, cliente…',

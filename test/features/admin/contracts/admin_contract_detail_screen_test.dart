@@ -22,7 +22,9 @@ import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/contracts/admin_contract_detail_screen.dart';
@@ -39,6 +41,13 @@ Response<T> _ok<T>(T data, String path) => Response<T>(
 /// before today is Scaduto, and the 30-day window is deterministic.
 final _now = DateTime.utc(2026, 1, 15, 11);
 
+Entitlement _entitlementWith(Set<String> capabilities) => Entitlement(
+  features: const {},
+  capabilities: capabilities,
+  seatType: 'office',
+  fetchedAt: DateTime.utc(2026, 1, 1),
+);
+
 void main() {
   setUpAll(() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -48,6 +57,11 @@ void main() {
 
   late AppDatabase db;
   late MockDio mockDio;
+  late Entitlement entitlement;
+
+  setUp(() {
+    entitlement = _entitlementWith({'contratti.contract.write', 'pianificazione.schedule.write'});
+  });
 
   const contract = {
     'id': 'contr-1',
@@ -198,6 +212,7 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),
         isOnlineProvider.overrideWithValue(true),
+        cachedEntitlementProvider.overrideWith((ref) => Future.value(entitlement)),
         businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome', clock: () => _now)),
       ],
       child: MaterialApp.router(routerConfig: router),
@@ -568,6 +583,51 @@ void main() {
               as Map;
       expect(captured['userId'], 'tech-1');
       expect(find.text('12 pianificazioni generate.'), findsOneWidget);
+      await teardown(tester);
+    });
+  });
+
+  group('capability gates', () {
+    testWidgets('a read-only seat gets Modifica disabled with a reason and no writes', (
+      tester,
+    ) async {
+      entitlement = _entitlementWith(const {});
+      await openDetail(tester);
+
+      expect(find.text('Non hai i permessi per questa azione.'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina contratto'),
+        findsNothing,
+      );
+      expect(find.text('Genera pianificazione'), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('contract write alone keeps Modifica and delete but hides Genera', (tester) async {
+      entitlement = _entitlementWith({'contratti.contract.write'});
+      await openDetail(tester);
+
+      expect(find.text('Non hai i permessi per questa azione.'), findsNothing);
+      expect(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina contratto'),
+        findsOneWidget,
+      );
+      expect(find.text('Genera pianificazione'), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('schedule write alone shows Genera but disables Modifica and hides delete', (
+      tester,
+    ) async {
+      entitlement = _entitlementWith({'pianificazione.schedule.write'});
+      await openDetail(tester);
+
+      expect(find.text('Genera pianificazione'), findsOneWidget);
+      expect(find.text('Non hai i permessi per questa azione.'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina contratto'),
+        findsNothing,
+      );
       await teardown(tester);
     });
   });

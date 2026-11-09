@@ -580,9 +580,12 @@ class _AdminScheduleListBody extends ConsumerWidget {
       title: 'Pianificazioni',
       subtitle: 'Gli impegni nel tempo, non i cantieri.',
       showBack: true,
-      action: ListHeaderAction(
-        label: 'Nuovo',
-        onPressed: () => context.push('/altro/pianificazioni/nuova'),
+      action: CapabilityGate(
+        capability: 'pianificazione.schedule.write',
+        child: ListHeaderAction(
+          label: 'Nuovo',
+          onPressed: () => context.push('/altro/pianificazioni/nuova'),
+        ),
       ),
       searchController: searchCtrl,
       searchHint: 'Cerca titolo, sede, tecnico o data…',
@@ -621,9 +624,12 @@ class _AdminScheduleListBody extends ConsumerWidget {
       subtitleMaxLines: 2,
       showBack: true,
       actions: [
-        ListHeaderAction(
-          label: 'Nuovo',
-          onPressed: () => context.push('/altro/pianificazioni/nuova'),
+        CapabilityGate(
+          capability: 'pianificazione.schedule.write',
+          child: ListHeaderAction(
+            label: 'Nuovo',
+            onPressed: () => context.push('/altro/pianificazioni/nuova'),
+          ),
         ),
       ],
     );

@@ -6,7 +6,9 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart'
     show appDatabaseProvider;
@@ -53,6 +55,16 @@ void main() {
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(false),
+        cachedEntitlementProvider.overrideWith(
+          (ref) => Future.value(
+            Entitlement(
+              features: const {},
+              capabilities: const {'magazzino.article.write'},
+              seatType: 'office',
+              fetchedAt: DateTime.utc(2026, 1, 1),
+            ),
+          ),
+        ),
       ],
     );
 

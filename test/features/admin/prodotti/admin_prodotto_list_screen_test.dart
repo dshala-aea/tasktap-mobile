@@ -25,7 +25,9 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
@@ -33,6 +35,13 @@ import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_list_scree
 
 /// Fixed "today" for the warranty / maintenance predicates: 5 November 2026 in the business zone.
 final _fixedNow = DateTime.utc(2026, 11, 5, 12);
+
+Entitlement _entitlementWith(Set<String> capabilities) => Entitlement(
+  features: const {},
+  capabilities: capabilities,
+  seatType: 'office',
+  fetchedAt: DateTime.utc(2026, 1, 1),
+);
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
 
@@ -73,6 +82,7 @@ Widget _buildScreen({
   required AdminApiClient api,
   required bool isOnline,
   String query = '',
+  Entitlement? entitlement,
 }) {
   return ProviderScope(
     overrides: [
@@ -80,6 +90,9 @@ Widget _buildScreen({
       adminApiClientProvider.overrideWithValue(api),
       isOnlineProvider.overrideWithValue(isOnline),
       clockProvider.overrideWithValue(() => _fixedNow),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(entitlement ?? _entitlementWith({'contratti.contract.write'})),
+      ),
       // The search box lives in a real StateProvider; this test sets it up-front instead of
       // typing, because the 350ms debounce is not what is under test.
       adminProdottiQueryProvider.overrideWith((ref) => query),
@@ -758,6 +771,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), null);
+
+    await _disposeScreen(tester);
+  });
+
+  testWidgets('Nuovo is hidden without contract write', (tester) async {
+    final db = _makeDb();
+    final api = _FakeAdminApiClient(
+      prodotti: [_serverRow(id: 'p1', name: 'Caldaia')],
+    );
+
+    await tester.pumpWidget(
+      _buildScreen(db: db, api: api, isOnline: true, entitlement: _entitlementWith(const {})),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('NUOVO'), findsNothing);
 
     await _disposeScreen(tester);
   });

@@ -236,8 +236,12 @@ class _ProdottoDetailBody extends ConsumerWidget {
               if (sintesiFacts.isNotEmpty) DetailFactsGrid(facts: sintesiFacts),
               if (description.isNotEmpty) _TextBlock(label: 'Descrizione', text: description),
               if (notes.isNotEmpty) _TextBlock(label: 'Note', text: notes),
-              _MatricoleGroup(prodottoId: id, matricoleAsync: matricoleAsync),
-              ExtensionFieldsSection(entityType: 'prodottoassistenza', entityId: id),
+              _MatricoleGroup(prodottoId: id, matricoleAsync: matricoleAsync, canEdit: canWrite),
+              ExtensionFieldsSection(
+                entityType: 'prodottoassistenza',
+                entityId: id,
+                canEdit: canWrite,
+              ),
             ],
           ),
         ),
@@ -322,10 +326,15 @@ class _TextBlock extends StatelessWidget {
 }
 
 class _MatricoleGroup extends ConsumerWidget {
-  const _MatricoleGroup({required this.prodottoId, required this.matricoleAsync});
+  const _MatricoleGroup({
+    required this.prodottoId,
+    required this.matricoleAsync,
+    required this.canEdit,
+  });
 
   final String prodottoId;
   final AsyncValue<List<Map<String, dynamic>>> matricoleAsync;
+  final bool canEdit;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -348,13 +357,15 @@ class _MatricoleGroup extends ConsumerWidget {
                   showDivider: i < value.length - 1,
                   trailing: _MatricolaTrailing(
                     note: _string(value[i]['note']),
-                    onRemove: () => _deleteMatricola(
-                      context,
-                      ref,
-                      prodottoId: prodottoId,
-                      matricolaId: value[i]['id'] as String,
-                      numero: _string(value[i]['numero']) ?? 'Matricola',
-                    ),
+                    onRemove: canEdit
+                        ? () => _deleteMatricola(
+                            context,
+                            ref,
+                            prodottoId: prodottoId,
+                            matricolaId: value[i]['id'] as String,
+                            numero: _string(value[i]['numero']) ?? 'Matricola',
+                          )
+                        : null,
                   ),
                 ),
             ],
@@ -393,11 +404,12 @@ class _MatricoleGroup extends ConsumerWidget {
                   ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(LucideIcons.plus, size: 18),
-                tooltip: 'Aggiungi matricola',
-                onPressed: () => _openAddMatricolaSheet(context, ref, prodottoId: prodottoId),
-              ),
+              if (canEdit)
+                IconButton(
+                  icon: const Icon(LucideIcons.plus, size: 18),
+                  tooltip: 'Aggiungi matricola',
+                  onPressed: () => _openAddMatricolaSheet(context, ref, prodottoId: prodottoId),
+                ),
             ],
           ),
           body,
@@ -411,7 +423,7 @@ class _MatricolaTrailing extends StatelessWidget {
   const _MatricolaTrailing({required this.note, required this.onRemove});
 
   final String? note;
-  final VoidCallback onRemove;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -434,11 +446,12 @@ class _MatricolaTrailing extends StatelessWidget {
               ),
             ),
           ),
-        IconButton(
-          icon: const Icon(LucideIcons.trash2, size: 18),
-          tooltip: 'Rimuovi matricola',
-          onPressed: onRemove,
-        ),
+        if (onRemove != null)
+          IconButton(
+            icon: const Icon(LucideIcons.trash2, size: 18),
+            tooltip: 'Rimuovi matricola',
+            onPressed: onRemove,
+          ),
       ],
     );
   }

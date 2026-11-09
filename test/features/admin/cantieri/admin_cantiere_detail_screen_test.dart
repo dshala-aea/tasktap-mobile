@@ -19,8 +19,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
@@ -158,12 +161,23 @@ Widget _buildScreen({
   // matches that: true, unlike ticket_detail_screen_test.dart's own harness which defaults to
   // false. Only the new commessa row (Gap 6) reads isOnlineProvider at all.
   bool isOnline = true,
+  Set<String> capabilities = const {'cantieri.cantiere.write'},
 }) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       adminApiClientProvider.overrideWithValue(api),
       isOnlineProvider.overrideWithValue(isOnline),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(
+          Entitlement(
+            features: const {},
+            capabilities: capabilities,
+            seatType: 'office',
+            fetchedAt: DateTime.utc(2026, 1, 1),
+          ),
+        ),
+      ),
       // Explicit null (not left unoverridden) so "Crea rapportino" — the only control that reads
       // this — has a deterministic, unauthenticated starting point.
       currentUserProvider.overrideWithValue(null),
@@ -201,9 +215,12 @@ Future<void> _pumpScreen(
   required AdminApiClient api,
   String id = 'cant-1',
   bool isOnline = true,
+  Set<String> capabilities = const {'cantieri.cantiere.write'},
 }) async {
   await tester.binding.setSurfaceSize(const Size(800, 2400));
-  await tester.pumpWidget(_buildScreen(db: db, api: api, id: id, isOnline: isOnline));
+  await tester.pumpWidget(
+    _buildScreen(db: db, api: api, id: id, isOnline: isOnline, capabilities: capabilities),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -588,6 +605,65 @@ void main() {
       expect(find.text('Accedi per creare un rapporto di intervento.'), findsOneWidget);
       // Nothing was created — createLocalDraft refuses before ever reaching the repository.
       expect(await db.select(db.draftReports).get(), isEmpty);
+      await _teardown(tester);
+    });
+  });
+
+  group('capability gates', () {
+    testWidgets('without cantieri.cantiere.write every write affordance is hidden', (tester) async {
+      await _seedCantiere(db);
+      final api = _FakeAdminApiClient(
+        cantiereDetail: {
+          'contacts': [
+            {'id': 'contact-1', 'name': 'Mario Rossi'},
+          ],
+          'assignments': [
+            {'id': 'assign-1', 'userId': 'u1', 'role': 'Elettricista'},
+          ],
+        },
+      );
+      await _pumpScreen(tester, db: db, api: api, capabilities: const {});
+
+      expect(find.byType(AppFab), findsNothing);
+      expect(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina cantiere'),
+        findsNothing,
+      );
+      expect(find.byTooltip('Aggiungi contatto'), findsNothing);
+      expect(find.byTooltip('Modifica contatto'), findsNothing);
+      expect(find.byTooltip('Elimina contatto'), findsNothing);
+      expect(find.byTooltip('Aggiungi persona'), findsNothing);
+      expect(find.byIcon(LucideIcons.userMinus), findsNothing);
+      // The rapportino action is not a cantiere write and stays.
+      expect(find.text('Crea rapporto di intervento'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('with cantieri.cantiere.write the write affordances are offered', (tester) async {
+      await _seedCantiere(db);
+      final api = _FakeAdminApiClient(
+        cantiereDetail: {
+          'contacts': [
+            {'id': 'contact-1', 'name': 'Mario Rossi'},
+          ],
+          'assignments': [
+            {'id': 'assign-1', 'userId': 'u1', 'role': 'Elettricista'},
+          ],
+        },
+      );
+      await _pumpScreen(tester, db: db, api: api);
+
+      expect(find.byType(AppFab), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina cantiere'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Aggiungi contatto'), findsOneWidget);
+      expect(find.byTooltip('Modifica contatto'), findsOneWidget);
+      expect(find.byTooltip('Aggiungi persona'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.userMinus), findsOneWidget);
+
       await _teardown(tester);
     });
   });

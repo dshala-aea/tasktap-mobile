@@ -13,7 +13,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/magazzino/magazzino_api_client.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
@@ -151,6 +153,7 @@ Widget _screen({
   required MagazzinoApiClient api,
   MagazzinoDto? magazzino,
   bool online = true,
+  Set<String> capabilities = const {'magazzino.warehouse.write'},
 }) {
   final router = GoRouter(
     initialLocation: '/detail',
@@ -171,6 +174,16 @@ Widget _screen({
       appDatabaseProvider.overrideWithValue(db),
       magazzinoApiClientProvider.overrideWithValue(api),
       isOnlineProvider.overrideWithValue(online),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(
+          Entitlement(
+            features: const {},
+            capabilities: capabilities,
+            seatType: 'office',
+            fetchedAt: DateTime.utc(2026, 1, 1),
+          ),
+        ),
+      ),
       techniciansProvider.overrideWith(
         (ref) async => [
           {'id': 'u-daniel', 'displayName': 'Daniel Shala'},
@@ -187,10 +200,13 @@ Future<void> _pump(
   required MagazzinoApiClient api,
   MagazzinoDto? magazzino,
   bool online = true,
+  Set<String> capabilities = const {'magazzino.warehouse.write'},
 }) async {
   await tester.binding.setSurfaceSize(const Size(800, 2200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(_screen(db: db, api: api, magazzino: magazzino, online: online));
+  await tester.pumpWidget(
+    _screen(db: db, api: api, magazzino: magazzino, online: online, capabilities: capabilities),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -374,6 +390,15 @@ void main() {
 
     expect(find.text('Magazzino non disponibile'), findsOneWidget);
     expect(find.text("Torna all'elenco e riapri questo magazzino."), findsOneWidget);
+
+    await _unmount(tester);
+  });
+
+  testWidgets('without warehouse write Modifica is disabled with a reason', (tester) async {
+    final api = _FakeMagazzinoApiClient();
+    await _pump(tester, db: db, api: api, magazzino: _sede(), capabilities: const {});
+
+    expect(find.text('Non hai i permessi per questa azione.'), findsOneWidget);
 
     await _unmount(tester);
   });

@@ -28,7 +28,9 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
@@ -169,16 +171,25 @@ class _PickerPopulationApiClient extends AdminApiClient {
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
+Entitlement _entitlementWith(Set<String> capabilities) => Entitlement(
+  features: const {},
+  capabilities: capabilities,
+  seatType: 'office',
+  fetchedAt: DateTime.utc(2026, 1, 1),
+);
+
 Widget _buildView({
   required AdminApiClient api,
   Map<String, dynamic>? squadra,
   bool online = true,
   AppDatabase? db,
+  Set<String> capabilities = const {'team.squadra.write'},
 }) {
   return ProviderScope(
     overrides: [
       adminApiClientProvider.overrideWithValue(api),
       isOnlineProvider.overrideWithValue(online),
+      cachedEntitlementProvider.overrideWith((ref) => Future.value(_entitlementWith(capabilities))),
       if (db != null) appDatabaseProvider.overrideWithValue(db),
     ],
     child: MaterialApp(
@@ -218,8 +229,11 @@ Future<void> _pump(
   Map<String, dynamic>? squadra,
   bool online = true,
   AppDatabase? db,
+  Set<String> capabilities = const {'team.squadra.write'},
 }) async {
-  await tester.pumpWidget(_buildView(api: api, squadra: squadra, online: online, db: db));
+  await tester.pumpWidget(
+    _buildView(api: api, squadra: squadra, online: online, db: db, capabilities: capabilities),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -440,6 +454,9 @@ void main() {
             _FakeAdminApiClient(_prototypeDetail(), users: _prototypeUsers()),
           ),
           isOnlineProvider.overrideWithValue(true),
+          cachedEntitlementProvider.overrideWith(
+            (ref) => Future.value(_entitlementWith({'team.squadra.write'})),
+          ),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -672,5 +689,40 @@ void main() {
     expect(tester.takeException(), isNull);
 
     await _dispose(tester);
+  });
+
+  // Regression for c6a3a5b8: the squadra detail lost its `team.squadra.write` guards.
+  group('capability gates', () {
+    testWidgets('without team.squadra.write every write action is withheld', (tester) async {
+      await _pump(
+        tester,
+        api: _FakeAdminApiClient(_prototypeDetail(), users: _prototypeUsers()),
+        capabilities: const {},
+      );
+
+      expect(find.text('Non hai i permessi per questa azione.'), findsOneWidget);
+      expect(find.bySemanticsLabel('Aggiungi membro'), findsNothing);
+      expect(find.byIcon(LucideIcons.userMinus), findsNothing);
+      // The read-only pianificazioni link is not a write and stays.
+      expect(find.bySemanticsLabel('Pianificazioni squadra'), findsOneWidget);
+
+      await _dispose(tester);
+    });
+
+    testWidgets('with team.squadra.write Modifica is enabled and members are actionable', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        api: _FakeAdminApiClient(_prototypeDetail(), users: _prototypeUsers()),
+        capabilities: const {'team.squadra.write'},
+      );
+
+      expect(find.text('Non hai i permessi per questa azione.'), findsNothing);
+      expect(find.bySemanticsLabel('Aggiungi membro'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.userMinus), findsWidgets);
+
+      await _dispose(tester);
+    });
   });
 }

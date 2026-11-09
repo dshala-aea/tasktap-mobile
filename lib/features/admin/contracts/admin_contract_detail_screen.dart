@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/router/app_router.dart' show AppRoutes;
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -23,6 +24,7 @@ import '../../../core/widgets/detail/detail_link_row.dart';
 import '../../../core/widgets/detail/detail_scaffold.dart';
 import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../ticket/steps/step_assegnazione.dart' show techniciansProvider;
@@ -157,6 +159,9 @@ class _ContractDetailBody extends ConsumerWidget {
     final tickets = ref.watch(_contractTicketsProvider(contractId)).valueOrNull ?? const <Ticket>[];
     final scheduleCount = ref.watch(_contractScheduleCountProvider(contractId)).valueOrNull ?? 0;
     final statusNames = ref.watch(ticketStatusMapProvider).valueOrNull ?? const <int, String>{};
+    final entitlement = ref.watch(cachedEntitlementProvider).value;
+    final canWrite = capabilityHeld(entitlement, 'contratti.contract.write');
+    final canSchedule = capabilityHeld(entitlement, 'pianificazione.schedule.write');
 
     final endLabel = endDate == null ? 'Nessuna scadenza' : 'scade ${_formatDate(endDate)}';
     final factParts = <String>[
@@ -222,30 +227,34 @@ class _ContractDetailBody extends ConsumerWidget {
         subtitle: factParts.join(' · '),
         primaryAction: DetailAction(
           label: 'Modifica',
+          enabled: canWrite,
+          disabledReason: canWrite ? null : noPermissionReason,
           onPressed: () async {
             await context.push<bool>('/altro/contratti/$contractId/modifica', extra: contract);
           },
         ),
         secondaryActions: [
-          DetailAction(
-            label: 'Genera pianificazione',
-            icon: const Icon(LucideIcons.calendarDays),
-            onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
-          ),
+          if (canSchedule)
+            DetailAction(
+              label: 'Genera pianificazione',
+              icon: const Icon(LucideIcons.calendarDays),
+              onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
+            ),
         ],
       ),
       headerActions: [
-        HeaderIconBtn(
-          icon: LucideIcons.trash2,
-          label: 'Elimina contratto',
-          glass: true,
-          onTap: () => _deleteContract(
-            context,
-            ref,
-            contractId,
-            name == null || name.isEmpty ? 'questo contratto' : name,
+        if (canWrite)
+          HeaderIconBtn(
+            icon: LucideIcons.trash2,
+            label: 'Elimina contratto',
+            glass: true,
+            onTap: () => _deleteContract(
+              context,
+              ref,
+              contractId,
+              name == null || name.isEmpty ? 'questo contratto' : name,
+            ),
           ),
-        ),
       ],
       sections: [
         DetailSectionData(

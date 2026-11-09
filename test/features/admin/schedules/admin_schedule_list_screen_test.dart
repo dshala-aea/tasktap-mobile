@@ -17,7 +17,9 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_list_screen.dart';
@@ -118,11 +120,25 @@ Future<void> _seedSchedules(AppDatabase db) async {
       );
 }
 
-Widget _buildView({required AppDatabase db, String? initialSquadraId}) {
+Widget _buildView({
+  required AppDatabase db,
+  String? initialSquadraId,
+  Set<String> capabilities = const {'pianificazione.schedule.write'},
+}) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome', clock: () => _now)),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(
+          Entitlement(
+            features: const {},
+            capabilities: capabilities,
+            seatType: 'office',
+            fetchedAt: DateTime.utc(2026, 1, 1),
+          ),
+        ),
+      ),
       adminApiClientProvider.overrideWithValue(
         _FakeAdminApiClient(
           squadraMembers: {
@@ -474,6 +490,21 @@ void main() {
 
     expect(find.text('NUOVO'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Nuovo is hidden without schedule write, in both calendar and elenco', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_buildView(db: db, capabilities: const {}));
+    await tester.pumpAndSettle();
+
+    expect(find.text('NUOVO'), findsNothing);
+
+    await _openElenco(tester);
+    expect(find.text('NUOVO'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
