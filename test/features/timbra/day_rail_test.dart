@@ -324,4 +324,70 @@ void main() {
       expect(day.worked, Duration.zero);
     });
   });
+
+  group('a server row the app recorded but the clientId join misses', () {
+    test('is absorbed when it is the same stretch (same start and end)', () {
+      final day = buildDayRail(
+        localEvents: [_event('a', _t8, 'ingresso'), _event('b', _t12, 'fine')],
+        serverRows: [
+          _row('srv', start: _t8.add(const Duration(seconds: 20)), end: _t12, clientId: 'other', sorgente: 'app'),
+        ],
+        now: DateTime.utc(2026, 7, 10, 18),
+      );
+
+      expect(day.entries, hasLength(1), reason: 'one stretch, not two');
+      expect(day.worked, const Duration(hours: 4));
+    });
+
+    test('is kept when it is NOT an app row (a totem at the same minute is another record)', () {
+      final day = buildDayRail(
+        localEvents: [_event('a', _t8, 'ingresso'), _event('b', _t12, 'fine')],
+        serverRows: [_row('srv', start: _t8, end: _t12, clientId: null, sorgente: 'totem')],
+        now: DateTime.utc(2026, 7, 10, 18),
+      );
+
+      expect(day.entries, hasLength(2));
+    });
+
+    test('is kept when it starts at a different time', () {
+      final day = buildDayRail(
+        localEvents: [_event('a', _t8, 'ingresso'), _event('b', _t12, 'fine')],
+        serverRows: [_row('srv', start: _t13, end: _t17, clientId: null, sorgente: 'app')],
+        now: DateTime.utc(2026, 7, 10, 18),
+      );
+
+      expect(day.entries, hasLength(2));
+    });
+
+    test('absorbs at most one server row per phone stretch', () {
+      final day = buildDayRail(
+        localEvents: [_event('a', _t8, 'ingresso'), _event('b', _t12, 'fine')],
+        serverRows: [
+          _row('s1', start: _t8, end: _t12, clientId: null, sorgente: 'app'),
+          _row('s2', start: _t8, end: _t12, clientId: null, sorgente: 'app'),
+        ],
+        now: DateTime.utc(2026, 7, 10, 18),
+      );
+
+      expect(day.entries, hasLength(2), reason: 'the second is a genuinely separate server row');
+    });
+
+    test('a break is matched to a break, never to work', () {
+      final day = buildDayRail(
+        localEvents: [
+          _event('a', _t8, 'ingresso'),
+          _event('p', _t12, 'pausa'),
+          _event('r', _t13, 'ripresa'),
+          _event('f', _t17, 'fine'),
+        ],
+        serverRows: [
+          _row('srv-break', start: _t12, end: _t13, kind: DayWorkLogKind.longBreak, clientId: null, sorgente: 'app'),
+        ],
+        now: DateTime.utc(2026, 7, 10, 18),
+      );
+
+      expect(day.entries.where((e) => e.origin == RailOrigin.server), isEmpty);
+      expect(day.entries, hasLength(3));
+    });
+  });
 }
