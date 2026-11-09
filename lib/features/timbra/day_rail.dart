@@ -276,9 +276,44 @@ DayRail buildDayRail({
   }
 
   // ── The server's rows this phone did not produce ────────────────────────────
+  //
+  // Belt and braces for the join below: a row the APP recorded (`sorgente == app`) whose clientId
+  // is not one of this phone's events — a server that regrouped or re-keyed the row, a stale
+  // local id — still describes a stretch the phone already draws if it starts (and ends) at the
+  // same instant, give or take clock rounding. Showing both doubles the day, which is exactly the
+  // defect this merge exists to prevent. Deliberately limited to app rows (a totem, QR or office
+  // row at the same minute is a different record), one-to-one (two server rows can never both be
+  // absorbed by a single phone stretch) and to a tight tolerance.
+  final phoneEntries = entries.where((e) => e.origin == RailOrigin.phone).toList();
+  final absorbedPhone = <RailEntry>{};
+
+  bool sameStretchAsPhone(DayWorkLogEntry row) {
+    if (row.sorgente != 'app') return false;
+    final rowIsBreak = _isBreakKind(row.kind);
+    for (final p in phoneEntries) {
+      if (absorbedPhone.contains(p)) continue;
+      final pIsBreak =
+          p.kind == RailKind.breakShort ||
+          p.kind == RailKind.breakLong ||
+          p.kind == RailKind.breakUndecided;
+      if (pIsBreak != rowIsBreak) continue;
+      if (p.start.difference(row.start).abs() > _sameInstantTolerance) continue;
+      final bothOpen = p.end == null && row.end == null;
+      final bothClosed =
+          p.end != null &&
+          row.end != null &&
+          p.end!.difference(row.end!).abs() <= _sameInstantTolerance;
+      if (!bothOpen && !bothClosed) continue;
+      absorbedPhone.add(p);
+      return true;
+    }
+    return false;
+  }
+
   for (final row in serverRows) {
     final clientId = row.clientId;
     if (clientId != null && localIds.contains(clientId)) continue;
+    if (sameStretchAsPhone(row)) continue;
 
     entries.add(
       RailEntry(
@@ -312,6 +347,15 @@ DayRail buildDayRail({
 
   return DayRail(entries: entries, gaps: gaps, now: now);
 }
+
+/// How far apart two instants may be and still be the same punch (clock rounding, second
+/// truncation on one side).
+const _sameInstantTolerance = Duration(seconds: 90);
+
+bool _isBreakKind(DayWorkLogKind kind) =>
+    kind == DayWorkLogKind.shortBreak ||
+    kind == DayWorkLogKind.longBreak ||
+    kind == DayWorkLogKind.breakTime;
 
 RailKind _kindOf(DayWorkLogKind kind) => switch (kind) {
   DayWorkLogKind.ordinary => RailKind.work,
