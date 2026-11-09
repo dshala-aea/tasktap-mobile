@@ -1,12 +1,11 @@
 // Integration test for buildRouter's `redirect` callback applying the `_routeRequirements`
-// route-requirement guard (lib/core/router/app_router.dart) to the admin schedule routes.
+// route-requirement guard (lib/core/router/app_router.dart) to the admin routes.
 //
 // Before this guard existed, a technician who navigated straight to an admin route (deep link,
 // restored nav state, guessed URL) would simply render it — authorization only ever hid the tile.
-// This asserts the actual regression this task closes: visiting the admin schedule list's full
-// matched-location path (`/altro/pianificazioni`, traced from the route tree — see
-// app_router.dart's `_routeRequirements` doc comment) while the `pianificazione.schedule.write`
-// capability is denied lands on ForbiddenScreen, not AdminScheduleListScreen.
+// These assert the actual regression this task closes: a route whose capability is denied lands on
+// ForbiddenScreen, not the admin screen, while the matching `.read` holder can still open the list
+// and is stopped only at write leaves (`nuovo`/`nuova`/`modifica`).
 //
 // Mirrors test/presentation/app_shell_test.dart's proven scaffolding for pumping the real
 // TaskTapApp with a working router (mock auth repo, in-memory Drift DB, stubbed sync Dio) rather
@@ -148,14 +147,43 @@ void main() {
   });
 
   testWidgets(
-    'denied pianificazione.schedule.write capability redirects /altro/pianificazioni to /forbidden',
+    'read-only pianificazione.schedule.read can open /altro/pianificazioni',
     (tester) async {
       final cached = Entitlement(
         features: const {'pianificazione'},
-        // Module is offered but the finer-grained write capability is NOT held — the admin
-        // schedule surface must still be unreachable (this is exactly why the guard checks the
-        // capability, not just the module).
+        // The dispatcher can read the schedule surface without holding its write capability;
+        // write actions are hidden/gated further down. The base requirement is `.read`.
         capabilities: const {'pianificazione.schedule.read'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 9, 17),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/pianificazioni');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsNothing);
+      expect(find.byType(AdminScheduleListScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'without pianificazione.schedule.read /altro/pianificazioni redirects to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'pianificazione'},
+        // Module offered, but neither the read nor write capability — the route guard checks the
+        // capability, not just the module.
+        capabilities: const {},
         seatType: 'office',
         fetchedAt: DateTime.utc(2026, 9, 17),
       );
@@ -179,11 +207,38 @@ void main() {
   );
 
   testWidgets(
-    'held pianificazione.schedule.write capability reaches the admin schedule list, not /forbidden',
+    'read-only pianificazione.schedule.read is redirected from /altro/pianificazioni/nuova',
     (tester) async {
       final cached = Entitlement(
         features: const {'pianificazione'},
-        capabilities: const {'pianificazione.schedule.write'},
+        capabilities: const {'pianificazione.schedule.read'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 9, 17),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/pianificazioni/nuova');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'held pianificazione.schedule.read and .write reach the admin schedule list, not /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'pianificazione'},
+        capabilities: const {'pianificazione.schedule.read', 'pianificazione.schedule.write'},
         seatType: 'office',
         fetchedAt: DateTime.utc(2026, 9, 17),
       );
@@ -379,6 +434,59 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  // Every write leaf under an admin section that mixes read and write: a seat holding the `.read`
+  // capability but not its `.write` must be stopped at the guard, not admitted to a form the
+  // button-level CapabilityGate would have hidden. One read-only entitlement exercises every path
+  // through the shared harness above; `nuova` is included because sedi and pianificazioni use the
+  // feminine segment.
+  testWidgets('a read-only seat is redirected from every admin write leaf', (tester) async {
+    final cached = Entitlement(
+      features: const {'clienti', 'contratti', 'team', 'magazzino', 'cantieri'},
+      capabilities: const {
+        'clienti.location.read',
+        'contratti.contract.read',
+        'team.squadra.read',
+        'magazzino.article.read',
+        'magazzino.warehouse.read',
+        'cantieri.cantiere.read',
+      },
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    final router = GoRouter.of(context);
+
+    const paths = [
+      '/altro/sedi/nuova',
+      '/altro/contratti/nuovo',
+      '/altro/contratti/abc123/modifica',
+      '/altro/squadre/nuovo',
+      '/altro/squadre/abc123/modifica',
+      '/altro/magazzino/nuovo',
+      '/altro/magazzino/abc123/modifica',
+      '/altro/magazzino/magazzini/nuovo',
+      '/altro/magazzino/magazzini/abc123/modifica',
+      '/altro/cantieri/nuovo',
+      '/altro/cantieri/abc123/modifica',
+    ];
+
+    for (final path in paths) {
+      router.go(path);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+      expect(find.byType(ForbiddenScreen), findsOneWidget, reason: path);
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
 
   // The smart-working form is a real route, not just a `context.push` the list makes and hopes
   // for: `/altro/smart-working/nuovo` is registered as a child of the list (app_router.dart). Until

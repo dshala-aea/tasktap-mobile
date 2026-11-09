@@ -864,9 +864,9 @@ void main() {
 
     testWidgets('a Pianificazioni row opens the schedule detail card', (tester) async {
       // The box listed a ticket's schedules and offered no way to read one — the detail existed
-      // only from the calendar. Same read-only card, so a technician does not need
-      // `pianificazione.schedule.write` (the admin screen's gate) to read their own day, and the
-      // card comes from the mirror, so it opens offline too.
+      // only from the calendar. Same read-only card, so a technician does not need the
+      // `pianificazione.schedule.*` capabilities (the admin screen's gate) to read their own day,
+      // and the card comes from the mirror, so it opens offline too.
       await seedBase(db);
       await db
           .into(db.schedules)

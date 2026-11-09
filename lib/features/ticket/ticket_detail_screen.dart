@@ -1907,9 +1907,9 @@ class _PianificazioniTab extends ConsumerWidget {
                     showDivider: s != schedules.last,
                     // The row was inert: the box listed a ticket's schedules and offered no way to
                     // read one. Opens the same read-only card the calendar shows — not
-                    // `/altro/pianificazioni/:id`, which is the editable office screen behind
-                    // `pianificazione.schedule.write`, and reading your own day should not cost a
-                    // permission. Mirror-backed, so it opens with no signal.
+                    // `/altro/pianificazioni/:id`, which is the editable office screen behind the
+                    // `pianificazione.schedule.*` capabilities, and reading your own day should
+                    // not cost a permission. Mirror-backed, so it opens with no signal.
                     onTap: () => showScheduleInfoSheet(context, s),
                   );
                 }).toList(),

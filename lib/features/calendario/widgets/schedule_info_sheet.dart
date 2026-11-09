@@ -13,8 +13,8 @@ import '../calendario_providers.dart';
 ///
 /// Lifted out of the calendar screen so the ticket's Pianificazioni box can open the same card:
 /// a technician could list a ticket's schedules but never read one, and the admin route
-/// (`/altro/pianificazioni/:id`) is gated behind `pianificazione.schedule.write`, which is not what
-/// reading your own day should cost. Everything here comes from the local mirror, so it opens with
+/// (`/altro/pianificazioni/:id`) is gated behind the `pianificazione.schedule.*` capabilities,
+/// which is not what reading your own day should cost. Everything here comes from the local mirror, so it opens with
 /// no signal.
 void showScheduleInfoSheet(BuildContext context, Schedule schedule) {
   showModalBottomSheet<void>(
