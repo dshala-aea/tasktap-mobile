@@ -524,14 +524,14 @@ class _RapportinoRow extends ConsumerWidget {
 
     final statusLabel = rapportinoStatusLabel(draft);
     final opensEditor = rapportinoOpensEditor(draft);
-    // Deleting a report is a write: withhold it from a seat that cannot write reports, on top of
-    // the existing draft/server-import guards in [rapportinoCanDelete].
-    final canDelete =
-        capabilityHeld(
-          ref.watch(cachedEntitlementProvider).value,
-          'rapportini.report.write',
-        ) &&
-        rapportinoCanDelete(draft);
+    // Computed once per row: the same capability both withholds delete and closes the editor
+    // entry point. A Bozza opens the editor, which the route guard requires
+    // `rapportini.report.write` for — a read-only seat tapping it would dead-end at /forbidden.
+    final canWriteReports = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'rapportini.report.write',
+    );
+    final canDelete = canWriteReports && rapportinoCanDelete(draft);
 
     final meta = [
       customerName,
@@ -551,7 +551,12 @@ class _RapportinoRow extends ConsumerWidget {
       secondary: secondary.isEmpty ? null : secondary,
       status: statusLabel,
       statusTone: _toneFor(statusLabel),
-      onTap: () => _open(context, ref, opensEditor: opensEditor),
+      onTap: () => _open(
+        context,
+        ref,
+        opensEditor: opensEditor,
+        canWriteReports: canWriteReports,
+      ),
     );
 
     Widget row = ListDocumentRow(data: data);
@@ -593,10 +598,27 @@ class _RapportinoRow extends ConsumerWidget {
     );
   }
 
-  Future<void> _open(BuildContext context, WidgetRef ref, {required bool opensEditor}) async {
+  Future<void> _open(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool opensEditor,
+    required bool canWriteReports,
+  }) async {
     // Only a Bozza opens the editor. Inviato / Respinto / Controllato / Fatturato (and an
     // Annullato) always open the read-only view; a Respinto offers "Rielabora" there.
     if (opensEditor) {
+      // The editor is gated on `rapportini.report.write` both at the route guard and here.
+      // A local-only Bozza has no read-only view to fall back to, and the shared view expects a
+      // server copy, so a seat without the capability gets a clear refusal instead of a navigation
+      // that only dead-ends at /forbidden.
+      if (!canWriteReports) {
+        showAppToast(
+          context,
+          message: 'Non hai i permessi per modificare questo rapportino.',
+          tone: ToastTone.warning,
+        );
+        return;
+      }
       // A Bozza that only arrived through sync is a header with no staff/materiali/controlli:
       // pull the full report first. Offline or failed means we do not open it at all.
       if (draft.stato == 'Bozza' && !draft.isLocalOnly) {

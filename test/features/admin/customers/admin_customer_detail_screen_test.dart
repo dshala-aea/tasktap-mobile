@@ -888,5 +888,41 @@ void main() {
         await teardown(tester);
       },
     );
+
+    testWidgets('without clienti.location.read the Sede row keeps its text but is not tappable', (
+      tester,
+    ) async {
+      entitlement = _entitlementWith({});
+      await seedCustomer('cust-1');
+      await seedLocation('loc-1', customerId: 'cust-1', name: 'Sede Nord');
+
+      await pumpScreen(tester);
+
+      // `/altro/sedi/:id` would redirect to /forbidden without the read capability: keep the name,
+      // drop the link.
+      expect(find.text('Sede Nord'), findsOneWidget);
+      expect(
+        find.ancestor(of: find.text('Sede Nord'), matching: find.byType(InkWell)),
+        findsNothing,
+      );
+
+      await teardown(tester);
+    });
+
+    testWidgets('with clienti.location.read the Sede row is tappable', (tester) async {
+      entitlement = _entitlementWith({'clienti.location.read'});
+      await seedCustomer('cust-1');
+      await seedLocation('loc-1', customerId: 'cust-1', name: 'Sede Nord');
+
+      await pumpScreen(tester);
+
+      expect(find.text('Sede Nord'), findsOneWidget);
+      expect(
+        find.ancestor(of: find.text('Sede Nord'), matching: find.byType(InkWell)),
+        findsOneWidget,
+      );
+
+      await teardown(tester);
+    });
   });
 }

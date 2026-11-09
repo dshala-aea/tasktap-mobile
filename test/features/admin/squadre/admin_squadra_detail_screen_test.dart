@@ -183,7 +183,7 @@ Widget _buildView({
   Map<String, dynamic>? squadra,
   bool online = true,
   AppDatabase? db,
-  Set<String> capabilities = const {'team.squadra.write'},
+  Set<String> capabilities = const {'team.squadra.write', 'pianificazione.schedule.read'},
 }) {
   return ProviderScope(
     overrides: [
@@ -229,7 +229,7 @@ Future<void> _pump(
   Map<String, dynamic>? squadra,
   bool online = true,
   AppDatabase? db,
-  Set<String> capabilities = const {'team.squadra.write'},
+  Set<String> capabilities = const {'team.squadra.write', 'pianificazione.schedule.read'},
 }) async {
   await tester.pumpWidget(
     _buildView(api: api, squadra: squadra, online: online, db: db, capabilities: capabilities),
@@ -697,14 +697,33 @@ void main() {
       await _pump(
         tester,
         api: _FakeAdminApiClient(_prototypeDetail(), users: _prototypeUsers()),
-        capabilities: const {},
+        capabilities: const {'pianificazione.schedule.read'},
       );
 
       expect(find.text('Non hai i permessi per questa azione.'), findsOneWidget);
       expect(find.bySemanticsLabel('Aggiungi membro'), findsNothing);
       expect(find.byIcon(LucideIcons.userMinus), findsNothing);
-      // The read-only pianificazioni link is not a write and stays.
+      // The read-only pianificazioni link is not a write and stays when its own read capability is
+      // held.
       expect(find.bySemanticsLabel('Pianificazioni squadra'), findsOneWidget);
+
+      await _dispose(tester);
+    });
+
+    testWidgets('without pianificazione.schedule.read the pianificazioni link is withheld', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        api: _FakeAdminApiClient(_prototypeDetail(), users: _prototypeUsers()),
+        capabilities: const {'team.squadra.write'},
+      );
+
+      // `/altro/pianificazioni` would redirect to /forbidden without the read capability, so the
+      // header action is hidden rather than left to dead-end.
+      expect(find.bySemanticsLabel('Pianificazioni squadra'), findsNothing);
+      // The write action is independent of it.
+      expect(find.bySemanticsLabel('Aggiungi membro'), findsOneWidget);
 
       await _dispose(tester);
     });

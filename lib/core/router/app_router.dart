@@ -356,6 +356,19 @@ final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, Ro
     const RouteRequirement.capability('rapportini.report.write'),
     null,
   ),
+  // Also write surfaces, and likewise listed before the broader `/altro/rapportini` module entry:
+  // the AI Copilot drafts a report and the signing step completes one. The read-open
+  // `/altro/rapportini/view` route stays on the module alone.
+  (
+    '/altro/rapportini/copilot',
+    const RouteRequirement.capability('rapportini.report.write'),
+    null,
+  ),
+  (
+    '/altro/rapportini/firma',
+    const RouteRequirement.capability('rapportini.report.write'),
+    null,
+  ),
   ('/altro/rapportini', const RouteRequirement.module('rapportini'), null),
   (
     '/altro/magazzino/magazzini',

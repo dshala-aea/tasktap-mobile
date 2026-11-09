@@ -379,6 +379,12 @@ class _CustomerDetailBody extends ConsumerWidget {
       ref.watch(cachedEntitlementProvider).value,
       'clienti.location.write',
     );
+    // `/altro/sedi/:id` requires `clienti.location.read`; without it the row would only dead-end
+    // at /forbidden, so it stays readable text without the link.
+    final canReadLocation = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'clienti.location.read',
+    );
     return locationsAsync.when(
       loading: () => const _SectionLoading(),
       error: (e, _) =>
@@ -407,7 +413,9 @@ class _CustomerDetailBody extends ConsumerWidget {
                       )
                     : null,
               ),
-              onTap: () => context.push('/altro/sedi/${locations[i].id}'),
+              onTap: canReadLocation
+                  ? () => context.push('/altro/sedi/${locations[i].id}')
+                  : null,
             ),
         ],
       ),

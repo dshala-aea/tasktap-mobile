@@ -41,6 +41,8 @@ import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_list_scre
 import 'package:tasktap_mobile/features/altro/forbidden_screen.dart';
 import 'package:tasktap_mobile/features/approvazioni/approvazioni_screen.dart';
 import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/ai_copilot_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/ai_report/ai_sign_screen.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportino_form_screen.dart';
 import 'package:tasktap_mobile/features/smart_working/smart_working_form_screen.dart';
 import 'package:tasktap_mobile/features/ticket/new_ticket_form_screen.dart';
@@ -736,6 +738,109 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 2));
 
     expect(find.byType(ForbiddenScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  // The AI Copilot drafts a report and the signing step completes one: both are write surfaces
+  // under `/altro/rapportini` and must be listed before the broader module entry, or a read-open
+  // module seat would reach them by deep link.
+  testWidgets('the rapportini copilot requires rapportini.report.write', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/altro/rapportini/copilot');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsOneWidget);
+    expect(find.byType(AiCopilotScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('holding rapportini.report.write reaches the copilot', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {'rapportini.report.write'},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/altro/rapportini/copilot');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsNothing);
+    expect(find.byType(AiCopilotScreen), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the rapportini signing route requires rapportini.report.write', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/firma/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsOneWidget);
+    expect(find.byType(AiSignScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('holding rapportini.report.write reaches the signing route', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {'rapportini.report.write'},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/firma/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsNothing);
+    expect(find.byType(AiSignScreen), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

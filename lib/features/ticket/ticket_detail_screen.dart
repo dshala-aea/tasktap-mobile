@@ -126,6 +126,9 @@ class _TicketDetailBody extends ConsumerWidget {
     // being allowed to rewrite the ticket itself.
     final canWriteTicket = capabilityHeld(entitlement, 'interventi.ticket.write');
     final canWriteReport = capabilityHeld(entitlement, 'rapportini.report.write');
+    // `/altro/commesse/:id` requires `commesse.commessa.read`; without it the fact stays readable
+    // text instead of a link that only dead-ends at /forbidden.
+    final canReadCommessa = capabilityHeld(entitlement, 'commesse.commessa.read');
     final reference = ticketReference(ticket.numero);
     final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(ticket.createdAt.toLocal());
     final closedLabel = ticket.closedAt != null
@@ -215,7 +218,9 @@ class _TicketDetailBody extends ConsumerWidget {
         DetailFact(
           label: 'Commessa',
           value: commessaLabel,
-          onTap: commessaId == null ? null : () => context.push('/altro/commesse/$commessaId'),
+          onTap: commessaId == null || !canReadCommessa
+              ? null
+              : () => context.push('/altro/commesse/$commessaId'),
         ),
       if (contractLabel != null)
         DetailFact(

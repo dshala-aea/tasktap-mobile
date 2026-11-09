@@ -100,6 +100,12 @@ class _SquadraDetailBody extends ConsumerWidget {
       ref.watch(cachedEntitlementProvider).value,
       'team.squadra.write',
     );
+    // `/altro/pianificazioni` requires `pianificazione.schedule.read`; without it the header
+    // action would only dead-end at /forbidden, so it is withheld rather than left actionable.
+    final canReadSchedule = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'pianificazione.schedule.read',
+    );
 
     // One bulk fetch shared by the whole screen (the same one the list screen uses), never a
     // per-member `/api/users/{id}` call. `squadraId` is the derived field
@@ -136,12 +142,13 @@ class _SquadraDetailBody extends ConsumerWidget {
       headerActions: [
         // Keep the existing pre-filtered pianificazioni link: the list screen opens this same
         // route with the squadra id as `extra`.
-        HeaderIconBtn(
-          icon: LucideIcons.calendarDays,
-          label: 'Pianificazioni squadra',
-          glass: true,
-          onTap: () => context.push('/altro/pianificazioni', extra: squadraId),
-        ),
+        if (canReadSchedule)
+          HeaderIconBtn(
+            icon: LucideIcons.calendarDays,
+            label: 'Pianificazioni squadra',
+            glass: true,
+            onTap: () => context.push('/altro/pianificazioni', extra: squadraId),
+          ),
         if (canWrite)
           HeaderIconBtn(
             icon: LucideIcons.userPlus,
