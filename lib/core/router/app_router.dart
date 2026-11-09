@@ -497,7 +497,12 @@ GoRouter buildRouter(WidgetRef ref) {
       // route-requirement guard below: an account that hasn't finished onboarding gets sent
       // there regardless of what module/capability the destination route would otherwise
       // require, rather than being bounced to /forbidden first.
-      final onboardingAsync = ref.read(onboardingCompletedProvider(user.id));
+      // An account with no id (a session whose claims could not be read) has no per-account state
+      // to key the "completed" flag on, so it would always read as "never onboarded". Skip the
+      // gate rather than show the flow again on every cold start.
+      final onboardingAsync = user.id.isEmpty
+          ? const AsyncData<bool>(true)
+          : ref.read(onboardingCompletedProvider(user.id));
       final onboardingRedirect = onboardingAsync.when(
         loading: () => null,
         error: (err, stack) => null,

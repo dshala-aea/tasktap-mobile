@@ -404,16 +404,24 @@ class ZitadelAuthRepository implements IAuthRepository {
           grantType: 'refresh_token',
         ),
       ).timeout(_refreshTimeout);
-      final user = _fromTokens(
+      final fresh = _fromTokens(
         accessToken: result.accessToken,
         // Zitadel may rotate the refresh token; fall back to the one we sent.
         refreshToken: result.refreshToken ?? refreshToken,
         idToken: result.idToken,
         expiry: result.accessTokenExpirationDateTime,
       );
-      if (user == null) {
+      if (fresh == null) {
         return (user: null, failure: const SessionExpired());
       }
+      // A refresh response does not always carry an id_token, and the access token may be opaque:
+      // the claims then decode to nothing and the user comes back with an EMPTY id. Keep the
+      // identity we already know instead (in memory, else the cached one).
+      final inMemory = _current;
+      final known = (inMemory != null && inMemory.id.isNotEmpty)
+          ? inMemory
+          : _cachedAsUser(await _readCachedIdentity().catchError((_) => null));
+      final user = withKnownIdentity(fresh, known);
       await _persistRefreshToken(user.refreshToken);
       await _persistCachedIdentity(user);
       _emit(user);
@@ -656,6 +664,9 @@ class ZitadelAuthRepository implements IAuthRepository {
   /// so a cold-start-offline session has something to display without ever
   /// putting a bearer token on disk.
   Future<void> _persistCachedIdentity(AuthUser user) async {
+    // Never overwrite a good cached identity with an id-less one: the cache is what an offline cold
+    // start restores from, and an empty id there poisons every later start.
+    if (user.id.isEmpty) return;
     final json = jsonEncode({
       'id': user.id,
       'email': user.email,
@@ -675,6 +686,38 @@ class ZitadelAuthRepository implements IAuthRepository {
     } catch (_) {
       return null;
     }
+  }
+
+  AuthUser? _cachedAsUser(Map<String, dynamic>? cached) {
+    final id = cached?['id']?.toString() ?? '';
+    if (id.isEmpty) return null;
+    return AuthUser(
+      id: id,
+      email: cached?['email']?.toString() ?? '',
+      displayName: cached?['displayName']?.toString(),
+      accessToken: '',
+      refreshToken: '',
+      expiresAt: DateTime.now().toUtc(),
+    );
+  }
+
+  /// [fresh] with the identity fields [known] supplies wherever the refresh response left them
+  /// empty. Tokens always come from [fresh]. Exposed for tests.
+  ///
+  /// Why it matters beyond auth: the user id keys per-account local state, notably the
+  /// "onboarding completed" flag. An empty id keys a flag that was never set, so the onboarding
+  /// flow reappeared on cold start whenever the refresh response had no usable claims.
+  @visibleForTesting
+  static AuthUser withKnownIdentity(AuthUser fresh, AuthUser? known) {
+    if (known == null || fresh.id.isNotEmpty) return fresh;
+    return AuthUser(
+      id: known.id,
+      email: fresh.email.isNotEmpty ? fresh.email : known.email,
+      displayName: fresh.displayName ?? known.displayName,
+      accessToken: fresh.accessToken,
+      refreshToken: fresh.refreshToken,
+      expiresAt: fresh.expiresAt,
+    );
   }
 
   /// Builds a signed-in-but-offline [AuthUser] from the cached identity and
