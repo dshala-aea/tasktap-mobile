@@ -61,18 +61,25 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: canWrite
-          ? Padding(
-              padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-              child: AppFab(
-                icon: LucideIcons.pencil,
-                tooltip: 'Modifica',
-                onPressed: () async {
-                  await context.push<bool>('/altro/cantieri/$cantiereId/modifica');
-                },
-              ),
-            )
-          : null,
+      // The edit FAB is the screen's primary affordance: keep it on screen when the seat cannot
+      // write, dimmed, and explain the refusal instead of silently removing the way to edit.
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
+        child: Opacity(
+          opacity: canWrite ? 1 : 0.45,
+          child: AppFab(
+            icon: LucideIcons.pencil,
+            tooltip: canWrite ? 'Modifica' : noPermissionReason,
+            onPressed: () async {
+              if (!canWrite) {
+                showAppToast(context, message: noPermissionReason, tone: ToastTone.warning);
+                return;
+              }
+              await context.push<bool>('/altro/cantieri/$cantiereId/modifica');
+            },
+          ),
+        ),
+      ),
       body: SafeArea(
         child: cantiereAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -148,10 +155,11 @@ class _CantiereDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canWrite = capabilityHeld(
-      ref.watch(cachedEntitlementProvider).value,
-      'cantieri.cantiere.write',
-    );
+    final entitlement = ref.watch(cachedEntitlementProvider).value;
+    final canWrite = capabilityHeld(entitlement, 'cantieri.cantiere.write');
+    // Minting a rapportino from a cantiere writes a report, not the cantiere itself: a technician
+    // may document the work without being allowed to edit the site record.
+    final canWriteReport = capabilityHeld(entitlement, 'rapportini.report.write');
     final startLabel = cantiere.startDate != null
         ? DateFormat('dd/MM/yyyy').format(cantiere.startDate!.toLocal())
         : '—';
@@ -250,21 +258,22 @@ class _CantiereDetailBody extends ConsumerWidget {
         // to Rapportini and start blank, typing the customer/address/cantiere link by hand. Same
         // prefill contract as Ticket detail's own "Crea rapportino" (createLocalDraft): every
         // field this screen already knows goes straight into the draft.
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              0,
-              AppSpacing.pagePadding,
-              AppSpacing.pagePadding,
-            ),
-            child: AppButton(
-              label: 'Crea rapporto di intervento',
-              icon: const Icon(LucideIcons.fileText),
-              onPressed: () => _createRapportino(context, ref, cantiere),
+        if (canWriteReport)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+              ),
+              child: AppButton(
+                label: 'Crea rapporto di intervento',
+                icon: const Icon(LucideIcons.fileText),
+                onPressed: () => _createRapportino(context, ref, cantiere),
+              ),
             ),
           ),
-        ),
 
         // ── Contatti (Gap 1) ────────────────────────────────────────────
         SliverToBoxAdapter(child: _ContactsSection(cantiereId: cantiereId)),

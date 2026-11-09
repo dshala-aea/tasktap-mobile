@@ -36,10 +36,12 @@ import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/admin/customers/admin_customer_form_screen.dart';
 import 'package:tasktap_mobile/features/admin/magazzini/admin_magazzino_list_screen.dart';
+import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_form_screen.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_list_screen.dart';
 import 'package:tasktap_mobile/features/altro/forbidden_screen.dart';
 import 'package:tasktap_mobile/features/approvazioni/approvazioni_screen.dart';
 import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/rapportino_form_screen.dart';
 import 'package:tasktap_mobile/features/smart_working/smart_working_form_screen.dart';
 import 'package:tasktap_mobile/features/ticket/new_ticket_form_screen.dart';
 import 'package:tasktap_mobile/main.dart';
@@ -605,4 +607,137 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  // Prodotti has no prodotti.* capability, so its write leaves are closed with the existing
+  // contratti.contract.write proxy while reads stay on the module.
+  testWidgets('prodotti write leaves redirect to /forbidden without contract write', (
+    tester,
+  ) async {
+    final cached = Entitlement(
+      features: const {'prodotti', 'contratti'},
+      capabilities: const {'contratti.contract.read'},
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
+    for (final path in const ['/altro/prodotti/nuovo', '/altro/prodotti/abc123/modifica']) {
+      router.go(path);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+      expect(find.byType(ForbiddenScreen), findsOneWidget, reason: path);
+      expect(find.byType(AdminProdottoFormScreen), findsNothing, reason: path);
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('holding contract write reaches the prodotti write leaves', (tester) async {
+    final cached = Entitlement(
+      features: const {'prodotti', 'contratti'},
+      capabilities: const {'contratti.contract.read', 'contratti.contract.write'},
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
+    for (final path in const ['/altro/prodotti/nuovo', '/altro/prodotti/abc123/modifica']) {
+      router.go(path);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+      expect(find.byType(ForbiddenScreen), findsNothing, reason: path);
+      expect(find.byType(AdminProdottoFormScreen), findsOneWidget, reason: path);
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the rapportini editor requires rapportini.report.write', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/editor/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsOneWidget);
+    expect(find.byType(RapportinoFormScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('holding rapportini.report.write reaches the rapportini editor', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {'rapportini.report.write'},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/editor/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsNothing);
+    expect(find.byType(RapportinoFormScreen), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the rapportini view stays read-open on the module', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/view/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
 }

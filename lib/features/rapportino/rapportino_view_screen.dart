@@ -12,6 +12,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/auth/access.dart';
 import '../../core/router/app_router.dart';
 import '../../core/widgets/detail/detail_activity_timeline.dart';
 import '../../core/widgets/detail/detail_attachment_row.dart';
@@ -23,6 +24,7 @@ import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/attachments/attachment_content_cache.dart';
+import '../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
 import '../../data/local/app_database.dart';
 import '../../data/reports/report_pdf_cache.dart';
 import '../../data/reports/ticket_controls_cache_repository.dart' show cachedTicketControlsProvider;
@@ -763,6 +765,12 @@ DetailHeroData _buildRapportinoHero(
   final rejected = rapportinoIsRejected(draft);
   final pdfBusy = ref.watch(_rapportinoPdfBusyProvider(draft.id));
   final reworkBusy = ref.watch(_rapportinoReworkBusyProvider(draft.id));
+  // Rielabora mints a new editable draft, so it is a report write. A read-only seat still sees
+  // the rejected report and keeps the PDF action; it just cannot start the rework.
+  final canWriteReport = capabilityHeld(
+    ref.watch(cachedEntitlementProvider).value,
+    'rapportini.report.write',
+  );
   final oreLabel = ref.watch(rapportinoOreProvider(draft.id));
   final numero = draft.numero;
   final touched = draft.updatedAt ?? draft.createdAt;
@@ -791,7 +799,7 @@ DetailHeroData _buildRapportinoHero(
               ],
       ),
     ),
-    primaryAction: rejected
+    primaryAction: rejected && canWriteReport
         ? DetailAction(
             label: 'Rilavora',
             icon: const Icon(LucideIcons.penTool, size: 16),

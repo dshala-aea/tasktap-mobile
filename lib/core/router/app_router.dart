@@ -321,9 +321,9 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// `rapportini-admin`) is dispatcher-only — a narrower, genuinely different audience than "anyone
 /// who can use the module at all" — so each is gated on the resource's `.read` capability at
 /// minimum (its own write actions are gated further, at the button level, by `CapabilityGate`).
-/// `prodotti` is deliberately NOT gated here: the backend defines no `prodotti.*` capability yet
-/// (see `PermissionCatalogue.All`'s own comment — "a capability nothing requires governs
-/// nothing"), so there is nothing correct to check.
+/// `prodotti` has no `prodotti.*` capability yet (see `PermissionCatalogue.All`'s own comment —
+/// "a capability nothing requires governs nothing"), so it is gated on its module only, with the
+/// existing `contratti.contract.write` proxy closing its `nuovo`/`modifica` write leaves.
 ///
 /// The end-user/operational routes (`/ticket`, `/cantieri`, `/altro/rapportini`, `/altro/ferie`,
 /// `/altro/smart-working`)
@@ -349,6 +349,13 @@ final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, Ro
     const RouteRequirement.capability('pianificazione.schedule.write'),
   ),
   ('/altro/rapportini-admin', const RouteRequirement.capability('rapportini.report.read'), null),
+  // Must precede the broader `/altro/rapportini` entry: the editor is the one write surface under
+  // it, while view/detail stay read-open on the module.
+  (
+    '/altro/rapportini/editor',
+    const RouteRequirement.capability('rapportini.report.write'),
+    null,
+  ),
   ('/altro/rapportini', const RouteRequirement.module('rapportini'), null),
   (
     '/altro/magazzino/magazzini',
@@ -373,6 +380,11 @@ final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, Ro
   (
     '/altro/contratti',
     const RouteRequirement.capability('contratti.contract.read'),
+    const RouteRequirement.capability('contratti.contract.write'),
+  ),
+  (
+    '/altro/prodotti',
+    const RouteRequirement.module('prodotti'),
     const RouteRequirement.capability('contratti.contract.write'),
   ),
   ('/altro/commesse', const RouteRequirement.capability('commesse.commessa.read'), null),

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/router/app_router.dart' show AppRoutes;
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -203,14 +204,18 @@ class _ProdottoDetailBody extends ConsumerWidget {
         title: name,
         status: DetailStatus(label: status.$1, tone: status.$2),
         subtitle: heroFacts.isEmpty ? null : heroFacts,
-        primaryAction: canWrite
-            ? DetailAction(
-                label: 'Modifica',
-                onPressed: () async {
+        // The primary action stays on screen when denied so the hero does not lose its only
+        // affordance; it is disabled and states why, matching the other detail screens.
+        primaryAction: DetailAction(
+          label: 'Modifica',
+          enabled: canWrite,
+          disabledReason: canWrite ? null : noPermissionReason,
+          onPressed: canWrite
+              ? () async {
                   await context.push<bool>('/altro/prodotti/$id/modifica', extra: prodotto);
-                },
-              )
-            : null,
+                }
+              : null,
+        ),
       ),
       sections: [
         DetailSectionData(

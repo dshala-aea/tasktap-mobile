@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/core/auth/access.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
@@ -161,7 +162,7 @@ Widget _buildScreen({
   // matches that: true, unlike ticket_detail_screen_test.dart's own harness which defaults to
   // false. Only the new commessa row (Gap 6) reads isOnlineProvider at all.
   bool isOnline = true,
-  Set<String> capabilities = const {'cantieri.cantiere.write'},
+  Set<String> capabilities = const {'cantieri.cantiere.write', 'rapportini.report.write'},
 }) {
   return ProviderScope(
     overrides: [
@@ -215,7 +216,7 @@ Future<void> _pumpScreen(
   required AdminApiClient api,
   String id = 'cant-1',
   bool isOnline = true,
-  Set<String> capabilities = const {'cantieri.cantiere.write'},
+  Set<String> capabilities = const {'cantieri.cantiere.write', 'rapportini.report.write'},
 }) async {
   await tester.binding.setSurfaceSize(const Size(800, 2400));
   await tester.pumpWidget(
@@ -622,9 +623,14 @@ void main() {
           ],
         },
       );
-      await _pumpScreen(tester, db: db, api: api, capabilities: const {});
+      await _pumpScreen(tester, db: db, api: api, capabilities: const {'rapportini.report.write'});
 
-      expect(find.byType(AppFab), findsNothing);
+      // The edit FAB stays on screen as the primary affordance, dimmed, and explains the refusal
+      // instead of silently disappearing.
+      expect(find.byType(AppFab), findsOneWidget);
+      await tester.tap(find.byType(AppFab));
+      await tester.pumpAndSettle();
+      expect(find.text(noPermissionReason), findsOneWidget);
       expect(
         find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina cantiere'),
         findsNothing,
@@ -635,6 +641,36 @@ void main() {
       expect(find.byTooltip('Aggiungi persona'), findsNothing);
       expect(find.byIcon(LucideIcons.userMinus), findsNothing);
       // The rapportino action is not a cantiere write and stays.
+      expect(find.text('Crea rapporto di intervento'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('without rapportini.report.write the rapportino action is hidden', (tester) async {
+      await _seedCantiere(db);
+      await _pumpScreen(
+        tester,
+        db: db,
+        api: _FakeAdminApiClient(),
+        capabilities: const {'cantieri.cantiere.write'},
+      );
+
+      expect(find.text('Crea rapporto di intervento'), findsNothing);
+      // The cantiere's own write affordances are unaffected by the report gate.
+      expect(find.byType(AppFab), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('with rapportini.report.write the rapportino action is offered', (tester) async {
+      await _seedCantiere(db);
+      await _pumpScreen(
+        tester,
+        db: db,
+        api: _FakeAdminApiClient(),
+        capabilities: const {'cantieri.cantiere.write', 'rapportini.report.write'},
+      );
+
       expect(find.text('Crea rapporto di intervento'), findsOneWidget);
 
       await _teardown(tester);
