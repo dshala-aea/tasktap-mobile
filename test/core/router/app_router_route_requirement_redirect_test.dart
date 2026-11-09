@@ -41,6 +41,7 @@ import 'package:tasktap_mobile/features/altro/forbidden_screen.dart';
 import 'package:tasktap_mobile/features/approvazioni/approvazioni_screen.dart';
 import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
 import 'package:tasktap_mobile/features/smart_working/smart_working_form_screen.dart';
+import 'package:tasktap_mobile/features/ticket/new_ticket_form_screen.dart';
 import 'package:tasktap_mobile/main.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/kiosk_providers.dart';
@@ -541,6 +542,64 @@ void main() {
 
       expect(find.byType(ForbiddenScreen), findsOneWidget);
       expect(find.byType(SmartWorkingFormScreen), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  // /ticket is module-gated for the list, but its only write leaf — the create form at
+  // /ticket/new — must not be reachable by deep link on module entitlement alone.
+  testWidgets(
+    'the interventi module without interventi.ticket.write redirects /ticket/new to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'interventi'},
+        capabilities: const {},
+        seatType: 'field',
+        fetchedAt: DateTime.utc(2026, 11, 9),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/ticket/new');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+      expect(find.byType(NewTicketFormScreen), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'holding interventi.ticket.write reaches /ticket/new, not /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'interventi'},
+        capabilities: const {'interventi.ticket.write'},
+        seatType: 'field',
+        fetchedAt: DateTime.utc(2026, 11, 9),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/ticket/new');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsNothing);
+      expect(find.byType(NewTicketFormScreen), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

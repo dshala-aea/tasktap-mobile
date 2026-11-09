@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/auth/access.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../core/time/business_time_providers.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_freshness_provider.dart';
 import '../../data/tickets/pending_ticket_state.dart';
@@ -185,6 +187,10 @@ class _TicketListBody extends ConsumerWidget {
     };
     final myId = ref.watch(internalUserIdProvider).valueOrNull;
     final businessToday = ref.watch(businessTimeProvider).businessToday();
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'interventi.ticket.write',
+    );
 
     bool isClosed(Ticket t) => t.closedAt != null || closedIds.contains(t.statusId);
 
@@ -366,15 +372,17 @@ class _TicketListBody extends ConsumerWidget {
     return ListShell(
       title: 'Ticket',
       subtitle: 'Il lavoro aperto adesso, non l’archivio degli interventi.',
-      action: ListHeaderAction(
-        label: 'Nuovo',
-        onPressed: () async {
-          final created = await context.push<bool>('/ticket/new');
-          if (created == true && context.mounted) {
-            // The list auto-refreshes via StreamProvider; nothing to do on return.
-          }
-        },
-      ),
+      action: canWrite
+          ? ListHeaderAction(
+              label: 'Nuovo',
+              onPressed: () async {
+                final created = await context.push<bool>('/ticket/new');
+                if (created == true && context.mounted) {
+                  // The list auto-refreshes via StreamProvider; nothing to do on return.
+                }
+              },
+            )
+          : null,
       banner: const OfflineSyncBanner(),
       searchController: searchCtrl,
       searchHint: 'Cerca ticket, cliente, sede o numero…',

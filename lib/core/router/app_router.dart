@@ -333,7 +333,7 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// A dynamic segment defeats plain prefix matching for a *write* leaf nested past it (e.g.
 /// `/altro/clienti/:id/modifica` — the `:id` varies, so no fixed prefix covers only `modifica`).
 /// Each entry's optional third element, `writeRequirement`, closes that: when the visited path's
-/// LAST segment is `nuovo`, `nuova` or `modifica` (see `_writeLeafSegments`), that stricter
+/// LAST segment is `nuovo`, `nuova`, `modifica` or `new` (see `_writeLeafSegments`), that stricter
 /// requirement is checked instead of the base one — still prefix-matched first, so it only applies
 /// within a section this table already governs. Left `null` for sections where read and write are
 /// gated identically at the section level already (nothing sharper to express); given where a
@@ -393,15 +393,20 @@ final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, Ro
   ),
   ('/altro/ferie', const RouteRequirement.module('presenze'), null),
   ('/altro/smart-working', const RouteRequirement.module('presenze'), null),
-  ('/ticket', const RouteRequirement.module('interventi'), null),
+  (
+    '/ticket',
+    const RouteRequirement.module('interventi'),
+    const RouteRequirement.capability('interventi.ticket.write'),
+  ),
   ('/cantieri', const RouteRequirement.module('cantieri'), null),
 ];
 
 /// Leaf path segments that mean "this specific visit is a write attempt" — checked against
 /// `state.matchedLocation`'s LAST segment only, so a record id that happens to be the literal
 /// string `nuovo`/`nuova` (impossible — ids are GUIDs) or `modifica` can never false-positive.
-/// `nuova` is the feminine form `/altro/sedi/nuova` and `/altro/pianificazioni/nuova` use.
-const _writeLeafSegments = {'nuovo', 'nuova', 'modifica'};
+/// `nuova` is the feminine form `/altro/sedi/nuova` and `/altro/pianificazioni/nuova` use; `new`
+/// is the ticket form's own English leaf, `/ticket/new`.
+const _writeLeafSegments = {'nuovo', 'nuova', 'modifica', 'new'};
 
 /// Builds and returns the [GoRouter] for the TaskTap app.
 ///

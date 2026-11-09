@@ -25,7 +25,9 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/reports/server_report_api_client.dart';
 import 'package:tasktap_mobile/data/reports/server_report_dto.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart'
@@ -89,6 +91,7 @@ Widget _buildRouted({
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
+      cachedEntitlementProvider.overrideWith((ref) async => _writeReportEntitlement),
       syncProvider.overrideWith((ref) => _NoopSync(db)),
       serverReportApiClientProvider.overrideWithValue(api),
       connectivityProvider.overrideWith(() => _FakeConnectivity(online)),
@@ -101,6 +104,15 @@ Widget _buildRouted({
 }
 
 class MockDio extends Mock implements Dio {}
+
+/// The default seat for this file: a technician who may create and delete rapportini. Tests that
+/// exercise the read-only path pass an entitlement without `rapportini.report.write`.
+final _writeReportEntitlement = Entitlement(
+  features: const {'rapportini'},
+  capabilities: const {'rapportini.report.write'},
+  seatType: 'field',
+  fetchedAt: DateTime.utc(2026, 11, 9),
+);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -209,10 +221,13 @@ Future<void> _seedHours(AppDatabase db, {required String reportId, required doub
       );
 }
 
-Widget _buildList({required AppDatabase db}) {
+Widget _buildList({required AppDatabase db, Entitlement? entitlement}) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
+      cachedEntitlementProvider.overrideWith(
+        (ref) async => entitlement ?? _writeReportEntitlement,
+      ),
       connectivityProvider.overrideWith(() => _FakeConnectivity(true)),
       pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
       lastSyncProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 6, 1))),
@@ -303,6 +318,27 @@ void main() {
       expect(find.text('Accedi per creare un rapporto di intervento.'), findsOneWidget);
       expect(find.textContaining('editor:'), findsNothing);
       expect(await db.select(db.draftReports).get(), isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Nuovo is hidden without rapportini.report.write', (tester) async {
+      await tester.pumpWidget(
+        _buildList(
+          db: db,
+          entitlement: Entitlement(
+            features: const {'rapportini'},
+            capabilities: const {},
+            seatType: 'field',
+            fetchedAt: DateTime.utc(2026, 11, 9),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('NUOVO'), findsNothing);
+      expect(find.byType(ListHeaderAction), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1117,6 +1153,7 @@ void main() {
     Widget buildWithDio({required AppDatabase db}) => ProviderScope(
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
+        cachedEntitlementProvider.overrideWith((ref) async => _writeReportEntitlement),
         dioProvider.overrideWithValue(mockDio),
         connectivityProvider.overrideWith(() => _FakeConnectivity(true)),
         pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
@@ -1157,6 +1194,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Da eliminare'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('delete is hidden without rapportini.report.write', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Da eliminare', submissionState: 'draft');
+      await tester.pumpWidget(
+        _buildList(
+          db: db,
+          entitlement: Entitlement(
+            features: const {'rapportini'},
+            capabilities: const {},
+            seatType: 'field',
+            fetchedAt: DateTime.utc(2026, 11, 9),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // No inline trash button and no swipe affordance: both reach the same delete path.
+      expect(find.byTooltip('Elimina'), findsNothing);
+      expect(find.byType(Dismissible), findsNothing);
+      expect(find.text('Da eliminare'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1295,6 +1356,7 @@ void main() {
         ProviderScope(
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
+            cachedEntitlementProvider.overrideWith((ref) async => _writeReportEntitlement),
             dioProvider.overrideWithValue(mockDio),
             connectivityProvider.overrideWith(() => _FakeConnectivity(true)),
             pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
@@ -1329,6 +1391,7 @@ void main() {
         ProviderScope(
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
+            cachedEntitlementProvider.overrideWith((ref) async => _writeReportEntitlement),
             dioProvider.overrideWithValue(mockDio),
             connectivityProvider.overrideWith(() => _FakeConnectivity(true)),
             pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),

@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -21,6 +22,7 @@ import '../../../core/widgets/detail/detail_section.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/api/dio_client.dart';
 import '../../../data/attachments/attachment_content_cache.dart';
+import '../../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
 import '../../../data/local/app_database.dart';
 import '../../../data/reports/report_pdf_cache.dart';
 import '../../../data/sync/connectivity_provider.dart' show isOnlineProvider;
@@ -169,6 +171,17 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
 
     final canTransition = stato == 'Inviato' || stato == 'Controllato';
     final canDownloadXml = stato == 'Fatturato';
+
+    // Controlla/Fattura are role-gated Office/Admin server-side *in addition to* the write
+    // permission, so both halves have to hold before any of these is offered. A field seat holding
+    // the capability would otherwise get an opaque 403; capability alone would let an office seat
+    // without it through. Fail closed on an unknown seat or entitlement: both checks default false.
+    final entitlement = ref.watch(cachedEntitlementProvider).value;
+    final hasWrite = capabilityHeld(entitlement, 'rapportini.report.write');
+    final officeSeat = isOfficeSeat(entitlement);
+    final transitionBlockedReason = !officeSeat
+        ? officeOnlyReason
+        : (!hasWrite ? noPermissionReason : null);
     return DetailScaffold(
       screenTitle: 'Report admin',
       hero: DetailHeroData(
@@ -252,18 +265,26 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
               if (timeline.isNotEmpty) DetailActivityTimeline(events: timeline),
               if (canTransition) ...[
                 if (timeline.isNotEmpty) const SizedBox(height: AppSpacing.base),
-                _StateTransitionButtons(stato: stato, busy: _busy, onTransition: _handleAction),
+                _StateTransitionButtons(
+                  stato: stato,
+                  busy: _busy,
+                  onTransition: _handleAction,
+                  disabledReason: transitionBlockedReason,
+                ),
               ],
               // Fatturato reports keep an XML re-download available, not just the moment
               // right after the transition — an office user coming back to this screen
               // later still needs a copy of the invoice.
               if (canDownloadXml) ...[
                 if (timeline.isNotEmpty) const SizedBox(height: AppSpacing.base),
-                DetailHeroButton(
+                _ActionWithReason(
                   label: _busy ? 'Download in corso...' : 'Scarica XML fattura',
                   icon: _busy ? null : const Icon(LucideIcons.download, size: 14),
                   variant: DetailHeroButtonVariant.secondary,
-                  onPressed: _busy ? null : _downloadFatturaXml,
+                  onPressed: _busy || transitionBlockedReason != null
+                      ? null
+                      : _downloadFatturaXml,
+                  disabledReason: transitionBlockedReason,
                 ),
               ],
             ],
@@ -498,28 +519,75 @@ class _StateTransitionButtons extends StatelessWidget {
     required this.stato,
     required this.busy,
     required this.onTransition,
+    required this.disabledReason,
   });
 
   final String stato;
   final bool busy;
   final ValueChanged<String> onTransition;
 
+  /// Why the role/permission gate refuses this transition, or null when it may run.
+  final String? disabledReason;
+
   @override
   Widget build(BuildContext context) {
     if (stato == 'Inviato') {
-      return DetailHeroButton(
+      return _ActionWithReason(
         label: 'Segna come controllato',
         icon: const Icon(LucideIcons.checkCircle, size: 14),
-        onPressed: busy ? null : () => onTransition('controlla'),
+        onPressed: busy || disabledReason != null ? null : () => onTransition('controlla'),
+        disabledReason: disabledReason,
       );
     }
     if (stato == 'Controllato') {
-      return DetailHeroButton(
+      return _ActionWithReason(
         label: 'Segna come fatturato',
         icon: const Icon(LucideIcons.receipt, size: 14),
-        onPressed: busy ? null : () => onTransition('fattura'),
+        onPressed: busy || disabledReason != null ? null : () => onTransition('fattura'),
+        disabledReason: disabledReason,
       );
     }
     return const SizedBox.shrink();
+  }
+}
+
+/// A hero-style action that keeps its label visible when refused and states why underneath —
+/// the same treatment `DetailHero` gives a disabled primary action, reused here because these
+/// transition buttons live in the Attività section rather than the hero.
+class _ActionWithReason extends StatelessWidget {
+  const _ActionWithReason({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.variant = DetailHeroButtonVariant.primary,
+    this.disabledReason,
+  });
+
+  final String label;
+  final Widget? icon;
+  final VoidCallback? onPressed;
+  final DetailHeroButtonVariant variant;
+  final String? disabledReason;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DetailHeroButton(
+          label: label,
+          icon: icon,
+          variant: variant,
+          onPressed: onPressed,
+        ),
+        if (disabledReason != null) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            disabledReason!,
+            style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+          ),
+        ],
+      ],
+    );
   }
 }
