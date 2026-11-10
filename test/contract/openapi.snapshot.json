@@ -15618,7 +15618,44 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleCreatedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleCreatedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleCreatedResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleCreatedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleCreatedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleCreatedResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -15752,7 +15789,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleMessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleMessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleMessageResponse"
+                }
+              }
+            }
           }
         }
       },
@@ -15769,11 +15823,43 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "notifyCustomer",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "notifyCustomerEmail",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleMessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleMessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleMessageResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -28799,6 +28885,17 @@
               "string"
             ],
             "format": "int32"
+          },
+          "notifyCustomer": {
+            "type": "boolean",
+            "description": "Opt in to emailing the customer about this save. Off by default; absent or false changes\nnothing."
+          },
+          "notifyCustomerEmail": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The customer\u0027s email address, as the client sends it: one mailbox, at most 254 characters.\nMalformed or more than one address is a 400 (\u0060notify_customer_email_invalid\u0060) before\nanything is written. Blank with \u0060notifyCustomer\u0060 set sends nothing (outcome\n\u0060skipped_no_recipient\u0060); the schedule is still saved. The server never substitutes an\naddress on file."
           }
         }
       },
@@ -29516,6 +29613,26 @@
             "format": "date-time"
           }
         }
+      },
+      "CustomerEmailOutcome": {
+        "required": [
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "One of CustomerEmailStatus."
+          },
+          "recipient": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The masked address (\u0060m***@domain\u0060) when one was resolved; else null."
+          }
+        },
+        "description": "What became of a requested customer email. Present on a response only when requested."
       },
       "CustomerPortalCreateTicketRequest": {
         "required": [
@@ -36784,6 +36901,51 @@
         },
         "description": "One existing schedule that overlaps a proposed create/update window for the same technician\nor squadra.\n\nShared by every caller of the conflict rule: \u0060IScheduleCommandService.CheckConflictsAsync\u0060\n(the create/edit UI\u0027s preflight probe) and \u0060CreateAsync\u0060/\u0060UpdateAsync\u0060 themselves\n(via ScheduleConflictException when the caller didn\u0027t\npass force=true) \u2014 one shape, so a client sees the same fields whichever path produced them."
       },
+      "ScheduleMessageResponse": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "customerEmail": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CustomerEmailOutcome"
+              }
+            ]
+          }
+        },
+        "description": "The answer to updating or deleting a schedule: the confirmation message, plus the\ncustomer-email outcome when (and only when) the caller asked for one."
+      },
+      "ScheduleCreatedResponse": {
+        "required": [
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customerEmail": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CustomerEmailOutcome"
+              }
+            ]
+          }
+        },
+        "description": "The answer to creating a schedule: the new id, plus the customer-email outcome when (and only\nwhen) the caller asked for one \u2014 absent otherwise, so the legacy body is unchanged."
+      },
       "ScheduleOggiDto": {
         "required": [
           "id",
@@ -44034,6 +44196,17 @@
               "string"
             ],
             "format": "int32"
+          },
+          "notifyCustomer": {
+            "type": "boolean",
+            "description": "Opt in to emailing the customer about this save. Off by default; absent or false changes\nnothing."
+          },
+          "notifyCustomerEmail": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The customer\u0027s email address, as the client sends it: one mailbox, at most 254 characters.\nMalformed or more than one address is a 400 (\u0060notify_customer_email_invalid\u0060) before\nanything is written. Blank with \u0060notifyCustomer\u0060 set sends nothing (outcome\n\u0060skipped_no_recipient\u0060); the schedule is still saved. The server never substitutes an\naddress on file."
           }
         }
       },
