@@ -236,7 +236,8 @@ class DayWorkLogEntry {
 
   final DayWorkLogKind kind;
 
-  /// `Manuale` | `Totem` | `QrCode` | `App`, lowercase, or null when the server did not say.
+  /// `manuale` | `totem` | `qr` | `app` | `trasferta` | `smartworking`, or null when the server did
+  /// not say (or said something this build does not know).
   final String? sorgente;
 
   static DayWorkLogKind _kindOf(Object? raw) => switch (raw) {
@@ -247,13 +248,34 @@ class DayWorkLogEntry {
     _ => DayWorkLogKind.unknown,
   };
 
-  static String? _sorgenteOf(Object? raw) => switch (raw) {
-    0 => 'manuale',
-    1 => 'totem',
-    2 => 'qr',
-    3 => 'app',
-    _ => null,
-  };
+  /// `WorkLogSorgenteEnum` on the wire is a bare int (Manuale 0, Totem 1, QrCode 2, App 3,
+  /// Trasferta 4, SmartWorking 5). A string spelling is tolerated too. Anything else — a member a
+  /// newer server added — is null, which the rail renders as the neutral "server": never a throw.
+  static String? _sorgenteOf(Object? raw) {
+    if (raw is String) {
+      return switch (raw.trim().toLowerCase()) {
+        'manuale' => 'manuale',
+        'totem' => 'totem',
+        'qrcode' || 'qr' => 'qr',
+        'app' => 'app',
+        'trasferta' => 'trasferta',
+        'smartworking' => 'smartworking',
+        _ => null,
+      };
+    }
+    return switch (raw) {
+      0 => 'manuale',
+      1 => 'totem',
+      2 => 'qr',
+      3 => 'app',
+      4 => 'trasferta',
+      5 => 'smartworking',
+      _ => null,
+    };
+  }
+
+  /// Test seam for the mapping above.
+  static String? sorgenteOfForTest(Object? raw) => _sorgenteOf(raw);
 
   factory DayWorkLogEntry.fromJson(Map<String, dynamic> json, {required BusinessTime businessTime}) {
     final workDate = parseDateOnlyOrThrow(json['workDate']);
