@@ -844,14 +844,22 @@ String _originOf(RailEntry entry) {
   if (entry.origin == RailOrigin.phone) {
     return entry.pending ? 'questo telefono · in attesa' : 'questo telefono';
   }
-  return switch (entry.sorgente) {
-    'totem' => 'totem',
-    'qr' => 'QR',
-    'app' => 'altro dispositivo',
-    'manuale' => 'ufficio',
-    _ => 'server',
-  };
+  return railSorgenteLabel(entry.sorgente);
 }
+
+/// The origin word for a server row's `sorgente` key. Anything unknown — null, or a source a newer
+/// server added — is the neutral "server": the rail never throws on, or mislabels, a source it
+/// has not met.
+@visibleForTesting
+String railSorgenteLabel(String? sorgente) => switch (sorgente) {
+  'totem' => 'totem',
+  'qr' => 'QR',
+  'app' => 'altro dispositivo',
+  'manuale' => 'ufficio',
+  'trasferta' => 'trasferta',
+  'smartworking' => 'smart working',
+  _ => 'server',
+};
 
 /// `1h 12m`, `34m`, `4m` — never `0h 12m`, because a pause of a quarter of an hour is not a
 /// truncated hour.

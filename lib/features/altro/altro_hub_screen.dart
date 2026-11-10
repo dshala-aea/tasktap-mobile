@@ -203,6 +203,14 @@ class AltroHubScreen extends ConsumerWidget {
         capability: null,
         onTap: () => context.push(AppRoutes.altroSmartWorking),
       ),
+      // Trasferta (travel time recognised as worked time) sits beside the other presenze requests.
+      (
+        icon: LucideIcons.mapPin,
+        label: 'Trasferta',
+        module: 'presenze',
+        capability: null,
+        onTap: () => context.push(AppRoutes.altroTrasferta),
+      ),
     ];
 
     final canApprove = capabilityHeld(entitlement, 'presenze.absence.approve');
