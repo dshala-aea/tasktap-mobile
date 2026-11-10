@@ -74,11 +74,15 @@ class _RecordingCrashReporter implements CrashReporter {
   final exceptions = <Object>[];
 
   @override
-  Future<void> captureException(Object exception, {StackTrace? stackTrace, String? hint}) async =>
-      exceptions.add(exception);
+  Future<void> captureException(
+    Object exception, {
+    StackTrace? stackTrace,
+    String? hint,
+    Map<String, String>? tags,
+  }) async => exceptions.add(exception);
 
   @override
-  Future<void> captureMessage(String message) async {}
+  Future<void> captureMessage(String message, {Map<String, String>? tags}) async {}
 
   @override
   void addBreadcrumb(String message, {String? category}) {}

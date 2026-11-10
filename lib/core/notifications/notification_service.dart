@@ -8,9 +8,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/env.dart';
 import '../router/app_router.dart';
+import 'push_reporting.dart';
 
 /// Background message handler — must be a top-level function, registered by main.dart via
 /// `FirebaseMessaging.onBackgroundMessage` before `runApp`.
+///
+/// Nothing is reported to the crash reporter from here on purpose: the OS runs this in a fresh
+/// isolate where nothing in `main()` has executed, so the Sentry SDK is not initialised and a
+/// capture would go nowhere (or throw). A data-only push that the tray never shows therefore
+/// leaves no trace anywhere — the foreground handler below reports the same condition instead.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Background messages are handled by the OS notification tray.
@@ -113,8 +119,9 @@ class NotificationService {
       if (initialMessage != null) {
         _handleNotificationTap(initialMessage);
       }
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('FCM getInitialMessage failed: $e');
+      reportPushFailure(PushStage.initialMessage, e, stackTrace: st, onceKey: 'initial-message');
     }
 
     // Foreground presentation is an Apple-only concern: on iOS a notification that arrives while
@@ -143,9 +150,15 @@ class NotificationService {
               sound: true,
             )
             .timeout(_coldStartBudget);
-      } catch (e) {
+      } catch (e, st) {
         lastError = 'Notifiche in primo piano: $e';
         debugPrint('setForegroundNotificationPresentationOptions failed: $e');
+        reportPushFailure(
+          PushStage.foregroundPresentation,
+          e,
+          stackTrace: st,
+          onceKey: 'foreground-presentation',
+        );
       }
     }
   }
@@ -192,6 +205,16 @@ class NotificationService {
     final status = settings.authorizationStatus;
     debugPrint('FCM permission: $status');
 
+    // The permission outcome is a milestone, not noise: without it "no notifications arrived"
+    // cannot be told apart from "the technician said no", and on iOS the dialog can only be shown
+    // once, so the answer recorded here is permanent for that install.
+    reportPushEvent(
+      PushStage.permission,
+      'requestPermission → ${status.name}',
+      tags: {'push.authorization': status.name},
+      onceKey: 'permission:${status.name}',
+    );
+
     final granted =
         status == AuthorizationStatus.authorized ||
         status == AuthorizationStatus.provisional;
@@ -210,6 +233,14 @@ class NotificationService {
     final accessToken = _lastAccessToken;
     if (_currentToken != null && accessToken != null) {
       await registerDeviceToken(accessToken);
+    } else if (_currentToken != null) {
+      // Token in hand, nobody signed in yet: registration is deferred to the auth listener, and
+      // saying so stops this state being read as a failure later.
+      reportPushEvent(
+        PushStage.deviceRegistration,
+        'token issued before sign-in; registration deferred',
+        onceKey: 'deferred-until-login',
+      );
     }
     return true;
   }
@@ -221,11 +252,30 @@ class NotificationService {
   Future<void> registerDeviceToken(String accessToken) async {
     _lastAccessToken = accessToken;
     final token = _currentToken;
-    if (token == null || accessToken.isEmpty || Env.apiBaseUrl.isEmpty) return;
+
+    // Every one of these used to be a silent `return`, and each describes a handset that will
+    // never receive a notification. "Registered nothing, said nothing" is exactly how the iOS
+    // first-run fault survived several releases, so the reason is now reported once per app run.
+    final skip = registrationSkipReason(
+      token: token,
+      accessToken: accessToken,
+      apiBaseUrl: Env.apiBaseUrl,
+    );
+    if (skip != null) {
+      reportPushEvent(
+        PushStage.deviceRegistration,
+        'skipped: $skip',
+        // The authorization status is what separates "the technician said no" (nothing to fix)
+        // from "granted, but APNs still has not issued a token" (everything to fix).
+        tags: token == null ? {'push.authorization': await _authorizationTag()} : null,
+        onceKey: 'skip:$skip',
+      );
+      return;
+    }
 
     try {
       final dio = _createDio(accessToken);
-      await dio.post(
+      final response = await dio.post(
         '/api/devices',
         data: {
           'deviceToken': token,
@@ -234,9 +284,51 @@ class NotificationService {
         },
       );
       debugPrint('FCM token registered with backend');
-    } catch (e) {
-      debugPrint('Failed to register FCM token: $e');
+      reportPushEvent(
+        PushStage.deviceRegistration,
+        'registered with the backend (HTTP ${response.statusCode})',
+        tags: {'fcm.token': maskToken(token), 'push.http_status': '${response.statusCode}'},
+        onceKey: 'registered:${maskToken(token)}',
+      );
+    } on DioException catch (e, st) {
+      // The backend's own words are usually the answer — a 400 naming the rejected field, a 401
+      // from an expired access token — and Dio's message drops the body, so it is carried here.
+      final status = e.response?.statusCode;
+      final body = _bodySnippet(e.response?.data);
+      reportPushFailure(
+        PushStage.deviceRegistration,
+        'POST /api/devices → HTTP ${status ?? 'no response'}${body.isEmpty ? '' : ': $body'}',
+        stackTrace: st,
+        tags: {'push.http_status': '${status ?? 'none'}', 'fcm.token': maskToken(token)},
+        onceKey: 'register-failed:${status ?? 'no-response'}',
+      );
+    } catch (e, st) {
+      reportPushFailure(
+        PushStage.deviceRegistration,
+        e,
+        stackTrace: st,
+        tags: {'fcm.token': maskToken(token)},
+        onceKey: 'register-failed',
+      );
     }
+  }
+
+  /// Why this device cannot be registered right now, or null when it can.
+  ///
+  /// Extracted from [registerDeviceToken] so the three conditions are one testable list rather than
+  /// three consecutive silent returns. On iOS the first one is the normal state of a fresh install
+  /// until the technician answers the permission dialog, which is why it is a reason to try again
+  /// later and not an exception.
+  @visibleForTesting
+  static String? registrationSkipReason({
+    required String? token,
+    required String accessToken,
+    required String apiBaseUrl,
+  }) {
+    if (token == null) return 'no FCM token yet';
+    if (accessToken.isEmpty) return 'no access token';
+    if (apiBaseUrl.isEmpty) return 'API_BASE_URL was not set at build time';
+    return null;
   }
 
   /// Unregister the current device token on logout.
@@ -256,8 +348,17 @@ class NotificationService {
           break;
         }
       }
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('Failed to unregister FCM token: $e');
+      // A registration that outlives the sign-out is a push that reaches the wrong technician,
+      // which is why this is an error event and not a breadcrumb.
+      reportPushFailure(
+        PushStage.deviceUnregistration,
+        e,
+        stackTrace: st,
+        tags: {'fcm.token': maskToken(token)},
+        onceKey: 'unregister-failed',
+      );
     }
   }
 
@@ -265,8 +366,27 @@ class NotificationService {
   void _handleForegroundMessage(RemoteMessage message) {
     debugPrint('FCM foreground message: ${message.messageId}');
 
+    pushBreadcrumb(
+      'message received (notification: ${message.notification != null ? 'yes' : 'no'}, '
+      'data keys: ${message.data.keys.join(',')})',
+      stage: PushStage.foregroundMessage,
+    );
+
     final notification = message.notification;
-    if (notification == null) return;
+    if (notification == null) {
+      // A data-only push is presented by nobody: the tray does not draw one, and this handler has
+      // no text to show. It is worth an event because it is invisible from the outside — a payload
+      // without a `notification` block looks exactly like "pushes do not arrive" on a handset that
+      // is receiving every one of them. (The background handler cannot report this: it runs in an
+      // isolate where Sentry is not initialised.)
+      reportPushEvent(
+        PushStage.foregroundMessage,
+        'data-only push with no notification block: nothing can be displayed',
+        tags: {'push.data_keys': message.data.keys.take(5).join(',')},
+        onceKey: 'data-only-push',
+      );
+      return;
+    }
 
     debugPrint('FCM foreground: ${notification.title} — ${notification.body}');
 
@@ -332,9 +452,19 @@ class NotificationService {
   /// never blocks [initialize]; the result is only ever a cached token for the first registration.
   Future<void> _warmToken() async {
     try {
-      if (!await hasPermission()) return;
+      if (!await hasPermission()) {
+        // The normal first run on iOS: permission has not been asked yet, so APNs has not issued
+        // anything and there is nothing to warm. Reported as a breadcrumb only — it is the
+        // expected state, not a fault, but it explains a session with no token at all.
+        pushBreadcrumb('token warm-up skipped: notification permission not granted yet');
+        return;
+      }
       _currentToken = await _tryGetToken();
       debugPrint('FCM token: $_currentToken');
+
+      if (_currentToken != null) {
+        pushBreadcrumb('token issued ${maskToken(_currentToken)}', stage: PushStage.tokenFetch);
+      }
 
       // A token that arrives after the login-time registration has nobody to hand it to:
       // `registerDeviceToken` ran while this was still in flight. Register it here so a slow APNs
@@ -344,9 +474,16 @@ class NotificationService {
       if (_currentToken != null && accessToken != null) {
         await registerDeviceToken(accessToken);
       }
-    } catch (e) {
+    } catch (e, st) {
       lastError = 'Token: $e';
       debugPrint('FCM token warm-up failed: $e');
+      reportPushFailure(
+        PushStage.tokenFetch,
+        e,
+        stackTrace: st,
+        tags: {'push.apns_token': await _apnsTokenState()},
+        onceKey: 'warm-token-failed',
+      );
     }
   }
 
@@ -371,11 +508,74 @@ class NotificationService {
   ///
   /// The same fault also HANGS instead of throwing on some iOS devices, which is why the fetch is
   /// bounded by [tokenFetchTimeout] as well as caught.
-  Future<String?> _tryGetToken() => fetchToken(
-    () => _messaging.getToken(),
-    timeout: tokenFetchTimeout,
-    recordError: (message) => lastError = message,
-  );
+  ///
+  /// The failure is reported here rather than inside [fetchToken] so that the report can carry the
+  /// APNs state, which is the one field that tells the two Apple causes apart (see
+  /// [_apnsTokenState]).
+  Future<String?> _tryGetToken() async {
+    final token = await fetchToken(
+      () => _messaging.getToken(),
+      timeout: tokenFetchTimeout,
+      recordError: (message) => lastError = message,
+    );
+
+    if (token == null) {
+      reportPushFailure(
+        PushStage.tokenFetch,
+        // `lastError` already names the cause (throw or timeout); falling back covers the silent
+        // "platform returned null" case, which on iOS also means no APNs token has arrived.
+        lastError ?? 'platform issued no FCM token',
+        tags: {'push.apns_token': await _apnsTokenState()},
+        onceKey: 'token-fetch-failed',
+      );
+    }
+    return token;
+  }
+
+  /// Whether APNs has issued a token for this install.
+  ///
+  /// This is the field that decides who owns an iOS delivery failure, and neither `getToken()`
+  /// nor the thrown error says it:
+  ///
+  ///   `absent`  — APNs never registered this handset. The App ID lacks the Push capability, the
+  ///               provisioning profile was not regenerated after it, or the signed app carries a
+  ///               `development` aps-environment under a distribution profile. Fixing it is an
+  ///               Apple Developer portal / signing change; no code in this app can.
+  ///   `present` — Apple is fine, and a failing `getToken()` points at the Firebase project
+  ///               instead (no APNs authentication key uploaded, wrong Team ID).
+  ///
+  /// Bounded because this is read from inside failure paths, where a hung call would turn one
+  /// diagnosable fault into a stuck bootstrap.
+  Future<String> _apnsTokenState() async {
+    if (!Platform.isIOS) return 'n/a';
+    try {
+      final apns = await _messaging.getAPNSToken().timeout(const Duration(seconds: 2));
+      return apns == null ? 'absent' : 'present';
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
+  /// The OS authorization status as a tag-safe string, or `unknown` if it cannot be read.
+  Future<String> _authorizationTag() async {
+    try {
+      final settings = await _messaging.getNotificationSettings();
+      return settings.authorizationStatus.name;
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
+  /// A short, single-line rendering of a failed response body, for the error message.
+  ///
+  /// Long enough to carry an ASP.NET validation problem's field name, short enough not to ship a
+  /// page of HTML into a crash report.
+  static String _bodySnippet(Object? body) {
+    if (body == null) return '';
+    final text = body is String ? body : body.toString();
+    final collapsed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return collapsed.length <= 200 ? collapsed : '${collapsed.substring(0, 200)}…';
+  }
 
   /// [fetch], bounded and recorded — the testable half of [_tryGetToken].
   ///

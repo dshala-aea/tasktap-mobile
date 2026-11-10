@@ -17,6 +17,7 @@ import 'core/time/business_time.dart';
 import 'core/crash_reporting/sentry_crash_reporter.dart';
 import 'core/notifications/deep_link_drainer.dart';
 import 'core/notifications/notification_service.dart';
+import 'core/notifications/push_reporting.dart';
 import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -79,23 +80,39 @@ Future<void> initializePush({
   // The two steps are caught separately so that the recorded failure names which one broke. They
   // used to share a single catch, so "Firebase is not configured" and "the APNs token fetch
   // failed" produced the same sentence in the log and the same silent `false` at every call site.
+  //
+  // Both are also reported: this is the only place that can tell "push is off on this build" from
+  // "push is on and failing later", and on a store build that distinction exists nowhere else.
   try {
     await initFirebase().timeout(timeout);
-  } catch (e) {
+  } catch (e, st) {
     NotificationService.lastError = 'Firebase: $e';
     debugPrint('Firebase init failed (push disabled): $e');
+    reportPushFailure(
+      PushStage.firebaseInit,
+      e,
+      stackTrace: st,
+      onceKey: 'bootstrap-firebase',
+    );
     return;
   }
 
   try {
     await initNotifications().timeout(timeout);
-  } catch (e) {
+  } catch (e, st) {
     NotificationService.lastError = 'Notifiche: $e';
     debugPrint('Notification init failed (push disabled): $e');
+    reportPushFailure(
+      PushStage.messagingInit,
+      e,
+      stackTrace: st,
+      onceKey: 'bootstrap-notifications',
+    );
     return;
   }
 
   NotificationService.isAvailable = true;
+  pushBreadcrumb('push available: Firebase started and listeners are wired');
 }
 
 /// Initialise Supabase and launch the Flutter widget tree.
