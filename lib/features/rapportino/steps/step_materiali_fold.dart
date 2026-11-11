@@ -2,6 +2,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
@@ -742,7 +743,7 @@ class _MaterialeLookupField extends ConsumerWidget {
 
 // ── Qty stepper card ──────────────────────────────────────────────────────────
 
-class _MaterialeQtyStepper extends ConsumerWidget {
+class _MaterialeQtyStepper extends ConsumerStatefulWidget {
   const _MaterialeQtyStepper({
     required this.row,
     required this.onQtyChanged,
@@ -754,11 +755,50 @@ class _MaterialeQtyStepper extends ConsumerWidget {
   final VoidCallback onRemove;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MaterialeQtyStepper> createState() => _MaterialeQtyStepperState();
+}
+
+class _MaterialeQtyStepperState extends ConsumerState<_MaterialeQtyStepper> {
+  late final TextEditingController _qtyCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _qtyCtrl = TextEditingController(text: _format(widget.row.quantity));
+  }
+
+  @override
+  void didUpdateWidget(_MaterialeQtyStepper oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The −/+ buttons (and an import) change quantity outside the field; typing writes the parsed
+    // value back first, so an equal value means there is nothing to refresh.
+    final typed = double.tryParse(_qtyCtrl.text.replaceAll(',', '.')) ?? 0;
+    if (typed != widget.row.quantity) {
+      _qtyCtrl.text = _format(widget.row.quantity);
+    }
+  }
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    super.dispose();
+  }
+
+  static String _format(double q) =>
+      q == q.truncateToDouble() ? q.toInt().toString() : q.toString();
+
+  void _onChanged(String text) {
+    final parsed = double.tryParse(text.replaceAll(',', '.'));
+    if (parsed != null && parsed > 0) widget.onQtyChanged(parsed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = widget.row;
     // A catalog pick (materialeId set, no free text) only carries the raw id on this row — the
     // name lives in the local materiali mirror, same resolver used by rapportino_view_screen.dart
-    // and _MaterialeLookupField in this same file. Without this, a technician sees a bare GUID
-    // for every catalog material until the report reloads.
+    // and the add-material picker. Without this, a technician sees a bare GUID for every catalog
+    // material until the report reloads.
     final resolvedName = row.freeTextName != null || row.materialeId == null
         ? null
         : ref.watch(materialeNameProvider(row.materialeId!)).valueOrNull;
@@ -797,32 +837,47 @@ class _MaterialeQtyStepper extends ConsumerWidget {
               ],
             ),
           ),
-          // − qty + stepper
+          // − [typeable qty] + — the field takes the numeric keyboard and decimals; the buttons
+          // remain for quick whole-unit adjustments.
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               _QtyBtn(
                 icon: LucideIcons.minus,
                 label: 'Diminuisci quantità',
-                onTap: row.quantity > 1 ? () => onQtyChanged(row.quantity - 1) : null,
+                onTap: row.quantity > 1
+                    ? () => widget.onQtyChanged(row.quantity - 1)
+                    : null,
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Text(
-                  row.quantity.toStringAsFixed(
-                    row.quantity == row.quantity.truncateToDouble() ? 0 : 1,
-                  ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 76,
+                child: TextField(
+                  key: const Key('materiale-qty-field'),
+                  controller: _qtyCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  ],
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                     color: context.colors.ink,
                   ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onChanged: _onChanged,
                 ),
               ),
+              const SizedBox(width: 6),
               _QtyBtn(
                 icon: LucideIcons.plus,
                 label: 'Aumenta quantità',
-                onTap: () => onQtyChanged(row.quantity + 1),
+                onTap: () => widget.onQtyChanged(row.quantity + 1),
               ),
             ],
           ),
@@ -831,7 +886,7 @@ class _MaterialeQtyStepper extends ConsumerWidget {
             icon: Icon(LucideIcons.trash2, color: context.colors.red, size: 18),
             tooltip: 'Rimuovi materiale',
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            onPressed: onRemove,
+            onPressed: widget.onRemove,
           ),
         ],
       ),
