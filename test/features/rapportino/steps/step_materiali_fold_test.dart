@@ -45,6 +45,7 @@ ProviderContainer _buildContainer({
   Dio? dio,
   bool isOnline = true,
   String? ticketId = _ticketId,
+  List<MaterialeRow> materialeRows = const [],
 }) {
   final container = ProviderContainer(
     overrides: [
@@ -58,6 +59,7 @@ ProviderContainer _buildContainer({
             tenantId: 'tenant-1',
             insertedUserId: 'user-1',
             ticketId: ticketId,
+            materialeRows: materialeRows,
           ),
           repo: DraftReportRepository(db),
         ),
@@ -810,6 +812,47 @@ void main() {
 
       expect(find.text('scheda-tecnica.pdf'), findsOneWidget);
       expect(find.byIcon(LucideIcons.fileText), findsWidgets);
+    });
+  });
+
+  group('Saved material quantity', () {
+    testWidgets('can be typed with the numeric keyboard and decimals, and the buttons still work', (
+      tester,
+    ) async {
+      final container = _buildContainer(
+        db: db,
+        ticketId: null,
+        materialeRows: const [
+          MaterialeRow(
+            id: 'mat-row-1',
+            reportId: _reportId,
+            freeTextName: 'Nastro isolante',
+            quantity: 1,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('materiale-qty-field')), '2,5');
+      await tester.pump();
+
+      expect(
+        container.read(reportEditorProvider(_reportId)).materialeRows.single.quantity,
+        2.5,
+      );
+
+      await tester.tap(find.byIcon(LucideIcons.plus));
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(reportEditorProvider(_reportId)).materialeRows.single.quantity,
+        3.5,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     });
   });
 }
