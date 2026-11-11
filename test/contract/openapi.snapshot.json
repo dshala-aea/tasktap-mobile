@@ -46860,10 +46860,13 @@
             "format": "double"
           },
           "reason": {
+            "maxLength": 1000,
+            "minLength": 0,
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Capped at the column width (varchar(1000))."
           }
         }
       },
@@ -46887,10 +46890,13 @@
             "format": "double"
           },
           "reason": {
+            "maxLength": 1000,
+            "minLength": 0,
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Capped at the column width (varchar(1000))."
           }
         }
       },
