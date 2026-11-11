@@ -256,6 +256,47 @@
         }
       }
     },
+    "/api/absence-requests/{id}/block-impact": {
+      "get": {
+        "tags": [
+          "AbsenceRequests"
+        ],
+        "summary": "What approving (Pending) or having approved (Approved) this request does to multi-day block\ndays. Empty for a partial-day, Rejected or Cancelled request. Never exposes the absence type.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockImpactDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockImpactDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlockImpactDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Agents": {
       "get": {
         "tags": [
@@ -26606,6 +26647,56 @@
           }
         }
       },
+      "BlockImpactDto": {
+        "required": [
+          "blocks"
+        ],
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlockImpactItemDto"
+            }
+          }
+        }
+      },
+      "BlockImpactItemDto": {
+        "required": [
+          "blockId",
+          "title",
+          "dates",
+          "leadAffected",
+          "squadraConflictUserIds"
+        ],
+        "type": "object",
+        "properties": {
+          "blockId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "dates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "leadAffected": {
+            "type": "boolean"
+          },
+          "squadraConflictUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
       "BrandingOptionsDto": {
         "required": [
           "logoPosition"
@@ -30242,6 +30333,56 @@
       },
       "CustomerSignatureAbsenceReason": {
         "type": "integer"
+      },
+      "DayAbsenceMarkerDto": {
+        "required": [
+          "userId",
+          "kind",
+          "absenceType",
+          "startTime",
+          "endTime",
+          "absenceRequestId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "description": "\u0022full_day_removed\u0022, \u0022partial\u0022 or \u0022squadra_member_conflict\u0022."
+          },
+          "absenceType": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The \u0060AbsenceTypeEnum\u0060 value; office callers only.",
+            "format": "int32"
+          },
+          "startTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "HH:mm of a partial permesso, else null."
+          },
+          "endTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "HH:mm of a partial permesso, else null."
+          },
+          "absenceRequestId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "An absence marker on a block row of the calendar."
       },
       "DecideAbsenceRequestBody": {
         "type": "object",
@@ -36948,6 +37089,56 @@
         },
         "description": "One crew entry on a block. Exactly one of UserId / SquadraId\nis set, mirroring ScheduleBlockAssignment."
       },
+      "ScheduleBlockDayAbsenceDto": {
+        "required": [
+          "date",
+          "userId",
+          "kind",
+          "absenceType",
+          "startTime",
+          "endTime"
+        ],
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "description": "\u0022full_day_removed\u0022, \u0022partial\u0022 or \u0022squadra_member_conflict\u0022 \u2014 the same\n            vocabulary as the calendar\u0027s absence markers."
+          },
+          "absenceType": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The \u0060AbsenceTypeEnum\u0060 value.",
+            "format": "int32"
+          },
+          "startTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "HH:mm of a partial permesso, else null."
+          },
+          "endTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "HH:mm of a partial permesso, else null."
+          }
+        },
+        "description": "One person\u0027s approved absence on one occupied day of a block."
+      },
       "ScheduleBlockDayOverrideDto": {
         "required": [
           "date",
@@ -37025,7 +37216,8 @@
           "assignments",
           "excludedDates",
           "occupiedDates",
-          "dayOverrides"
+          "dayOverrides",
+          "dayAbsences"
         ],
         "type": "object",
         "properties": {
@@ -37107,6 +37299,12 @@
             "items": {
               "$ref": "#/components/schemas/ScheduleBlockDayOverrideDto"
             }
+          },
+          "dayAbsences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleBlockDayAbsenceDto"
+            }
           }
         },
         "description": "One multi-day block as the calendar reads it (design \u00A79): the \u003Cem\u003Eoriginal\u003C/em\u003E range, the\ncrew, and the dates that are excluded or actually occupied.\n\nThe range is carried whole rather than reconstructed from IReadOnlyList\u0026lt;DateOnly\u0026gt; ScheduleBlockDto.OccupiedDates: a block\nwhose days were all excluded has an empty occupancy list and is still a commitment, and a gap\ninside the range is a removed day, not a shorter bar. Both date lists are bounded by this\nblock\u0027s own range, so the payload stays proportional to the block.\n\n\u003Cb\u003ENo hours.\u003C/b\u003E Nothing here is a duration, and nothing may become one: occupancy rows span a\nwhole local day, which is not time worked (design \u00A712)."
@@ -37158,7 +37356,10 @@
           "interventoId",
           "sede",
           "sedeId",
-          "isAssenza"
+          "isAssenza",
+          "absentUserIds",
+          "absenceMarkers",
+          "dayProblems"
         ],
         "type": "object",
         "properties": {
@@ -37355,6 +37556,25 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "absentUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "absenceMarkers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayAbsenceMarkerDto"
+            }
+          },
+          "dayProblems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "description": "One schedule item on the planning calendar."
@@ -37481,6 +37701,17 @@
           },
           "conflictOnSquadra": {
             "type": "boolean"
+          },
+          "isAbsence": {
+            "type": "boolean",
+            "default": false
+          },
+          "absenceRequestId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
         "description": "One existing schedule that overlaps a proposed create/update window for the same technician\nor squadra.\n\nShared by every caller of the conflict rule: \u0060IScheduleCommandService.CheckConflictsAsync\u0060\n(the create/edit UI\u0027s preflight probe) and \u0060CreateAsync\u0060/\u0060UpdateAsync\u0060 themselves\n(via ScheduleConflictException when the caller didn\u0027t\npass force=true) \u2014 one shape, so a client sees the same fields whichever path produced them."
