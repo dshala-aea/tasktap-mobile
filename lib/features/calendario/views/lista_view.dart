@@ -18,13 +18,31 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// as ListRows (title, time range, StatusPill, location), soonest first.
 /// Shows an EmptyState when there are no schedules.
 class ListaView extends ConsumerWidget {
-  const ListaView({super.key, required this.schedules, this.onTapTicket});
+  const ListaView({
+    super.key,
+    required this.schedules,
+    this.onTapTicket,
+    this.reverseDays = false,
+    this.emptyTitle = 'Nessun intervento',
+    this.emptyBody = 'Non ci sono interventi pianificati nel periodo selezionato.',
+    this.bottomPadding,
+  });
 
   /// All schedules to display — already sorted by date/time.
   final List<Schedule> schedules;
 
   /// Called when the user taps a row that has a ticketId.
   final void Function(String ticketId)? onTapTicket;
+
+  /// Newest day first instead of oldest first — used by Storico.
+  final bool reverseDays;
+
+  /// Copy used when [schedules] is empty, so a history screen does not say "periodo selezionato".
+  final String emptyTitle;
+  final String emptyBody;
+
+  /// Bottom padding override; defaults to the shell nav clearance.
+  final double? bottomPadding;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,20 +61,21 @@ class ListaView extends ConsumerWidget {
               'compariranno qui appena i dati saranno scaricati.',
         );
       }
-      return const EmptyState(
+      return EmptyState(
         icon: LucideIcons.calendarX,
-        title: 'Nessun intervento',
-        body: 'Non ci sono interventi pianificati nel periodo selezionato.',
+        title: emptyTitle,
+        body: emptyBody,
       );
     }
 
     final grouped = groupSchedulesByDay(schedules);
+    final entries = reverseDays ? grouped.entries.toList().reversed : grouped.entries;
     final dayFmt = DateFormat('EEEE d MMMM', 'it');
     final teamScheduleIds =
         ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
 
     final children = <Widget>[];
-    for (final entry in grouped.entries) {
+    for (final entry in entries) {
       // Section header
       children.add(_DateHeader(date: entry.key, formatter: dayFmt));
       for (final s in entry.value) {
@@ -71,7 +90,7 @@ class ListaView extends ConsumerWidget {
     }
 
     return ListView(
-      padding: EdgeInsets.only(bottom: context.navClearance),
+      padding: EdgeInsets.only(bottom: bottomPadding ?? context.navClearance),
       children: children,
     );
   }

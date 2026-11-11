@@ -190,6 +190,20 @@ ScheduleBucket bucketOfSchedule(
   return ScheduleBucket.actionable;
 }
 
+/// Every locally synced schedule before the current business day, newest first.
+/// Same business-zone day as [todaySchedulesProvider] and [upcomingSchedulesProvider].
+final pastSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final startOfToday = ref.watch(businessTimeProvider).businessToday();
+  return (db.select(db.schedules)
+        ..where((s) => s.activityDate.isSmallerThanValue(startOfToday))
+        ..orderBy([
+          (s) => OrderingTerm.desc(s.activityDate),
+          (s) => OrderingTerm.desc(s.timeStartMinutes),
+        ]))
+      .watch();
+});
+
 /// Computed 2×2 stats from the providers above.
 /// Uses [AsyncValue.valueOrNull] so it reads synchronously without blocking.
 final dashboardStatsProvider = Provider.autoDispose<DashboardStats>((ref) {

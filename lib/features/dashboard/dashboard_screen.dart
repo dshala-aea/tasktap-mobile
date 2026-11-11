@@ -73,6 +73,7 @@ class _DashboardView extends ConsumerWidget {
                 userName: userName,
                 todayCount: stats.todayCount,
                 completedCount: stats.completedCount,
+                upcomingCount: stats.upcomingCount,
                 actions: [
                   HeaderIconBtn(
                     icon: LucideIcons.bell,
@@ -135,6 +136,10 @@ class _DashboardView extends ConsumerWidget {
                 trailing: stats.completedCount > 0
                     ? '${stats.completedCount} di ${stats.todayCount} completati'
                     : null,
+                action: TextButton(
+                  onPressed: () => context.push(AppRoutes.storico),
+                  child: const Text('Storico'),
+                ),
               ),
             ),
             const SliverToBoxAdapter(child: WorkQueueSection()),

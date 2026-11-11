@@ -168,35 +168,36 @@ class _RowContent {
   final String subtitle;
   final String? customerLabel;
 
-  /// Null for an all-day schedule — there is no real start time to show (see
-  /// `_resolveRow`'s own doc comment), so the badge/meta row omits the time entirely rather
-  /// than formatting the placeholder minute values into a literal "00:00". Same gate
-  /// `giorno_view.dart`'s `_EventBlock`, `lista_view.dart`'s `_ScheduleListRow` and
-  /// `calendario/widgets/schedule_info_sheet.dart`'s `ScheduleInfoSheet` already use for the same
-  /// reason.
-  final String? timeLabel;
+  /// The single line that says when this job is: `HH:MM` today, `Tutto il giorno` for an
+  /// all-day job today, and a day-qualified label for anything later (including each day of a
+  /// multi-day run, which is one schedule row per day). Never the placeholder `00:00`.
+  final String timeLabel;
 }
 
 final _weekdayFmt = DateFormat('EEE d', 'it');
 
-/// "14:30" for today; "Dom 21, 14:30" for anything else — the next-seven-days block holds items
-/// up to a week out, and a bare HH:MM told the technician nothing about which day it was for. No shared
-/// "today vs. other day" helper exists elsewhere yet (calendario's own views each inline their
-/// own `isToday` check against a full day view, not a compact single-line label), so this is a
-/// small local one rather than a half-fit reuse.
-String _dateQualifiedTimeLabel(DateTime activityDate, int timeStartMinutes) {
-  final h = timeStartMinutes ~/ 60;
-  final m = timeStartMinutes % 60;
-  final time = '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+/// "14:30" for a timed job today; "Tutto il giorno" for an all-day job today;
+/// "Dom 21, 14:30" / "Dom 21 · Tutto il giorno" for anything else — Programmato can hold items up
+/// to 7 days out, and a bare HH:MM told the technician nothing about which day it was for. An
+/// all-day row must never format its placeholder 0/0 bounds into "00:00", and a multi-day plan is
+/// one ordinary row per day, so naming each row's own day is what makes the run readable.
+String _twoDigits(int n) => n.toString().padLeft(2, '0');
+
+String _scheduleDayLabel(
+  DateTime activityDate,
+  int timeStartMinutes, {
+  required bool allDay,
+}) {
+  final time = '${_twoDigits(timeStartMinutes ~/ 60)}:${_twoDigits(timeStartMinutes % 60)}';
 
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(activityDate.year, activityDate.month, activityDate.day);
-  if (day == today) return time;
+  if (day == today) return allDay ? 'Tutto il giorno' : time;
 
   final label = _weekdayFmt.format(day);
   final capitalised = '${label[0].toUpperCase()}${label.substring(1)}';
-  return '$capitalised, $time';
+  return allDay ? '$capitalised · Tutto il giorno' : '$capitalised, $time';
 }
 
 _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
@@ -210,12 +211,12 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
     location?.postalCode,
   ].where((s) => s != null && s.isNotEmpty).join(' · ');
   // An all-day schedule's timeStartMinutes/timeEndMinutes are placeholder bounds (always
-  // 0/0), not a real time of day — formatting them unconditionally produced a literal "00:00"
-  // that read as "starts at midnight" rather than "no time, all day". Gate on `allDay` the
-  // same way Calendario's own views already do.
-  final timeLabel = schedule.allDay
-      ? null
-      : _dateQualifiedTimeLabel(schedule.activityDate, schedule.timeStartMinutes);
+  // 0/0), so the label branches on `allDay` rather than formatting them into "00:00".
+  final timeLabel = _scheduleDayLabel(
+    schedule.activityDate,
+    schedule.timeStartMinutes,
+    allDay: schedule.allDay,
+  );
   return _RowContent(
     // The server titles an absence row with the plain type label ("ferie", "permesso" — the same
     // lowercase words the presenze export prints). A job title is written by a person and keeps
@@ -308,17 +309,16 @@ class _FocusCard extends ConsumerWidget {
                     color: badgeColor,
                   ),
                 ),
-                if (row.timeLabel != null)
-                  Text(
-                    '  ·  ${row.timeLabel}',
-                    style: TextStyle(
-                      fontFamily: 'Archivo',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: c.inkMuted,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                Text(
+                  '  ·  ${row.timeLabel}',
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: c.inkMuted,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
+                ),
                 const Spacer(),
                 // Flat AppColors.Y for every tier, live included — was a per-tier gradient
                 // override (green for live); AppButton's 5 named variants don't carry a
@@ -399,18 +399,16 @@ class _CompactRow extends ConsumerWidget {
         leading: RowIconTile(icon: tier.badge.$1, size: 36, iconSize: 16),
         title: row.title,
         subtitle: row.subtitle,
-        meta: row.timeLabel == null
-            ? null
-            : Text(
-                row.timeLabel!,
-                style: TextStyle(
-                  fontFamily: 'Archivo',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.inkMuted,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
+        meta: Text(
+          row.timeLabel,
+          style: TextStyle(
+            fontFamily: 'Archivo',
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: context.colors.inkMuted,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
         onTap: schedule.ticketId != null ? () => _open(context, schedule) : null,
       ),
     );
