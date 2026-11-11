@@ -22658,7 +22658,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Export work log entries to Excel (EPPlus): one sheet, technician \u00D7 tipo \u00D7 day\n(Ordinario/Straordinario/Festivo/Notturno), plus an Incomplete Records sheet for any\nforgotten clock-outs in the period.",
+        "summary": "Export work log entries to Excel (EPPlus): one sheet, technician \u00D7 tipo \u00D7 day\n(Ordinario/Supplementare/Straordinario/Festivo/Notturno), plus an Incomplete Records sheet for any\nforgotten clock-outs in the period. Overtime follows the daily rule: each day is judged against the\ncontracted day (weekly hours / 5), and on non-working days every hour is straordinario.",
         "parameters": [
           {
             "name": "year",
@@ -33307,7 +33307,7 @@
             "format": "double"
           }
         },
-        "description": "One person\u0027s month. OreStraordinario is the month\u0027s, not any day\u0027s \u2014\novertime is a weekly figure and has no per-cell meaning."
+        "description": "One person\u0027s month. OreStraordinario is the month\u0027s total of the overtime\ndecided day by day from the contracted day; the cells carry the hours worked, not an overtime split."
       },
       "MonthlySummaryEntry": {
         "required": [
@@ -44785,7 +44785,7 @@
             ]
           }
         },
-        "description": "\u0060ShortBreakMaxMinutes\u0060/\u0060ShortBreakPaid\u0060/\u0060TimeFormat\u0060 are optional on the wire so a\nclient that has not been taught about break classification or the hours format yet (an older\nweb build, a mobile release) can keep PUTting only Mode\u002BMinutes without silently resetting a\ntenant\u0027s break policy and display format to the defaults. Absent means \u0022leave as configured\u0022."
+        "description": "\u0060ShortBreakMaxMinutes\u0060/\u0060ShortBreakPaid\u0060/\u0060TimeFormat\u0060 are optional on the wire so a\nclient that has not been taught about break classification or the hours format yet (an older\nweb build, a mobile release) can keep PUTting only Mode\u002BMinutes without silently resetting a\ntenant\u0027s break policy and display format to the defaults. Absent means \u0022leave as configured\u0022.\n\u0060DailyOvertimeAfterHours\u0060 is deprecated and ignored by every calculation (overtime is\ndecided per day from the contracted day); it is still accepted (0.5-24, 0 clears it, absent\nleaves it) and returned (null when unset) so clients keep round-tripping."
       },
       "UpdateScheduleBlockRequest": {
         "type": "object",
