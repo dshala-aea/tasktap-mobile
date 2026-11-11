@@ -653,6 +653,29 @@ GoRouter buildRouter(WidgetRef ref) {
         builder: (context, state) => const NewTicketFormScreen(),
       ),
 
+      // ── Ticket list (root-level, pushed from Altro › Interventi) ───────────
+      GoRoute(
+        path: AppRoutes.ticket,
+        builder: (context, state) => const TicketListScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (context, state) => TicketDetailScreen(
+              ticketId: state.pathParameters['id']!,
+            ),
+            routes: [
+              GoRoute(
+                path: 'assets',
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (context, state) =>
+                    AssetChecklistScreen(ticketId: state.pathParameters['id']!),
+              ),
+            ],
+          ),
+        ],
+      ),
+
       // ── Forbidden (route-requirement guard's redirect target) ────────────
       GoRoute(
         path: AppRoutes.forbidden,
@@ -675,31 +698,58 @@ GoRouter buildRouter(WidgetRef ref) {
               ),
             ],
           ),
-          // 1 — Ticket
+          // 1 — Rapportini
           StatefulShellBranch(
-            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'ticket'),
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'rapportini'),
             routes: [
               GoRoute(
-                path: AppRoutes.ticket,
-                builder: (context, state) => const TicketListScreen(),
+                path: AppRoutes.altroRapportini,
+                builder: (context, state) => const RapportiniListScreen(),
                 routes: [
                   GoRoute(
-                    path: ':id',
-                    // Full-screen, no persistent bottom nav: a dense multi-tab detail screen
-                    // needs the vertical space the shell's floating pill nav would otherwise
-                    // eat permanently. See parentNavigatorKey on every form/detail route below.
+                    path: 'editor/:reportId',
                     parentNavigatorKey: rootNavigatorKey,
-                    builder: (context, state) => TicketDetailScreen(
-                      ticketId: state.pathParameters['id']!,
+                    builder: (context, state) => RapportinoFormScreen(
+                      reportId: state.pathParameters['reportId']!,
                     ),
                     routes: [
                       GoRoute(
                         path: 'assets',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            AssetChecklistScreen(ticketId: state.pathParameters['id']!),
+                        builder: (context, state) => AssetChecklistScreen(
+                          reportId: state.pathParameters['reportId']!,
+                          focusAssetId: state.uri.queryParameters['focus'],
+                          initialFilter: ChecklistFilter.values.firstWhere(
+                            (f) => f.name == state.uri.queryParameters['filter'],
+                            orElse: () => ChecklistFilter.all,
+                          ),
+                        ),
                       ),
                     ],
+                  ),
+                  GoRoute(
+                    path: 'copilot',
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (context, state) => AiCopilotScreen(
+                      ticketId: state.uri.queryParameters['ticketId'],
+                      cantiereId: state.uri.queryParameters['cantiereId'],
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'view/:reportId',
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (context, state) => RapportinoViewScreen(
+                      reportId: state.pathParameters['reportId']!,
+                    ),
+                  ),
+                  // Step 3 of the AI report flow. Keyed by the local report id Confirm created,
+                  // so it is an ordinary signing surface — nothing AI-specific survives into it.
+                  GoRoute(
+                    path: 'firma/:reportId',
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (context, state) => AiSignScreen(
+                      reportId: state.pathParameters['reportId']!,
+                    ),
                   ),
                 ],
               ),
@@ -745,7 +795,7 @@ GoRouter buildRouter(WidgetRef ref) {
               ),
             ],
           ),
-          // 4 — Altro (hub + Rapportini + Profilo + Impostazioni + Notifiche)
+          // 4 — Altro (hub + Profilo + Impostazioni + Notifiche)
           StatefulShellBranch(
             navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'altro'),
             routes: [
@@ -753,57 +803,6 @@ GoRouter buildRouter(WidgetRef ref) {
                 path: AppRoutes.altro,
                 builder: (context, state) => const AltroHubScreen(),
                 routes: [
-                  GoRoute(
-                    path: 'rapportini',
-                    builder: (context, state) => const RapportiniListScreen(),
-                    routes: [
-                      GoRoute(
-                        path: 'editor/:reportId',
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => RapportinoFormScreen(
-                          reportId: state.pathParameters['reportId']!,
-                        ),
-                        routes: [
-                          GoRoute(
-                            path: 'assets',
-                            parentNavigatorKey: rootNavigatorKey,
-                            builder: (context, state) => AssetChecklistScreen(
-                              reportId: state.pathParameters['reportId']!,
-                              focusAssetId: state.uri.queryParameters['focus'],
-                              initialFilter: ChecklistFilter.values.firstWhere(
-                                (f) => f.name == state.uri.queryParameters['filter'],
-                                orElse: () => ChecklistFilter.all,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      GoRoute(
-                        path: 'copilot',
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => AiCopilotScreen(
-                          ticketId: state.uri.queryParameters['ticketId'],
-                          cantiereId: state.uri.queryParameters['cantiereId'],
-                        ),
-                      ),
-                      GoRoute(
-                        path: 'view/:reportId',
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => RapportinoViewScreen(
-                          reportId: state.pathParameters['reportId']!,
-                        ),
-                      ),
-                      // Step 3 of the AI report flow. Keyed by the local report id Confirm created,
-                      // so it is an ordinary signing surface — nothing AI-specific survives into it.
-                      GoRoute(
-                        path: 'firma/:reportId',
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => AiSignScreen(
-                          reportId: state.pathParameters['reportId']!,
-                        ),
-                      ),
-                    ],
-                  ),
                   GoRoute(
                     path: 'profilo',
                     builder: (context, state) => const ProfiloScreen(),

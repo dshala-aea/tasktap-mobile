@@ -11,7 +11,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// Default tab icons (exposed so screens/tests need not import lucide directly).
 abstract final class AppBottomNavIcons {
   static const IconData dashboard = LucideIcons.home;
-  static const IconData ticket = LucideIcons.ticket;
+  static const IconData reports = LucideIcons.fileText;
   static const IconData cantieri = LucideIcons.hardHat;
   static const IconData calendario = LucideIcons.calendar;
   static const IconData altro = LucideIcons.moreHorizontal;
@@ -52,7 +52,7 @@ class AppBottomNav extends StatelessWidget {
 
   static const List<AppBottomNavItem> defaultItems = [
     AppBottomNavItem(icon: AppBottomNavIcons.dashboard, label: 'Dashboard'),
-    AppBottomNavItem(icon: AppBottomNavIcons.ticket, label: 'Ticket'),
+    AppBottomNavItem(icon: AppBottomNavIcons.reports, label: 'Reports'),
     AppBottomNavItem(icon: AppBottomNavIcons.cantieri, label: 'Cantieri'),
     AppBottomNavItem(icon: AppBottomNavIcons.calendario, label: 'Calendario'),
     AppBottomNavItem(icon: AppBottomNavIcons.altro, label: 'Altro'),
@@ -313,7 +313,6 @@ const _preferredActiveWidth = 96.0;
 /// already gets whenever there's room to spare — rather than crashing or silently under-sizing.
 const Map<String, double> _measuredActiveLabelWidths = {
   'Dashboard': 96.0, // 63.29px glyph width, measured
-  'Ticket': 68.0, // 35.95px
   'Cantieri': 78.0, // 45.53px
   'Calendario': 95.0, // 62.98px
   'Altro': 61.0, // 28.09px
