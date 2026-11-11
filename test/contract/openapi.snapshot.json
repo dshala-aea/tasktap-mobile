@@ -37216,7 +37216,8 @@
           "assignments",
           "excludedDates",
           "occupiedDates",
-          "dayOverrides"
+          "dayOverrides",
+          "dayAbsences"
         ],
         "type": "object",
         "properties": {
@@ -37300,10 +37301,7 @@
             }
           },
           "dayAbsences": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ScheduleBlockDayAbsenceDto"
             }
@@ -37358,7 +37356,10 @@
           "interventoId",
           "sede",
           "sedeId",
-          "isAssenza"
+          "isAssenza",
+          "absentUserIds",
+          "absenceMarkers",
+          "dayProblems"
         ],
         "type": "object",
         "properties": {
@@ -37557,29 +37558,20 @@
             }
           },
           "absentUserIds": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": "array",
             "items": {
               "type": "string",
               "format": "uuid"
             }
           },
           "absenceMarkers": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": "array",
             "items": {
               "$ref": "#/components/schemas/DayAbsenceMarkerDto"
             }
           },
           "dayProblems": {
-            "type": [
-              "null",
-              "array"
-            ],
+            "type": "array",
             "items": {
               "type": "string"
             }
