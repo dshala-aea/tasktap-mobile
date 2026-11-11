@@ -303,13 +303,16 @@ class _TicketDetailBody extends ConsumerWidget {
         // pretending the ticket timer is a cantiere punch.
         secondaryActions: [
           if (hasOwner && !closed && canWriteReport) ...[
+            // The report is the ticket's primary downstream action, so it leads the row and takes
+            // the filled secondary style (the hero's timer stays the primary action).
+            DetailAction(
+              label: 'Crea report',
+              icon: const Icon(LucideIcons.fileEdit, size: 16),
+              onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
+            ),
             DetailAction(
               label: 'AI Copilot',
               onPressed: () => context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
-            ),
-            DetailAction(
-              label: 'Crea rapportino',
-              onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
             ),
           ],
           if (ticket.cantiereId != null)
