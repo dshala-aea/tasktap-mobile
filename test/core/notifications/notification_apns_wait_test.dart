@@ -6,6 +6,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/crash_reporting/crash_reporter.dart';
+import 'package:tasktap_mobile/core/notifications/apns_diagnostics.dart';
 import 'package:tasktap_mobile/core/notifications/notification_service.dart';
 import 'package:tasktap_mobile/core/notifications/push_reporting.dart';
 
@@ -259,6 +260,23 @@ void main() {
       final event = reporter.exceptions.single;
       expect(event.hint, 'push/fcm-token');
       expect(event.tags!['push.apns_token'], 'absent');
+    });
+
+    test('the native APNs failure rides along as push.apns_error', () async {
+      await NotificationService.fetchAndReportToken(
+        () async => throw _apnsNotSet(),
+        isIOS: true,
+        readApnsToken: () async => null,
+        delay: _fakeDelay().delay,
+        apnsDiagnostics: ApnsDiagnostics(
+          isIOS: true,
+          invokeStatus: () async => {'registered': false, 'error': 'NSCocoaErrorDomain:3000:no aps-environment'},
+        ),
+      );
+
+      final tags = reporter.exceptions.single.tags!;
+      expect(tags['push.apns_error'], 'NSCocoaErrorDomain:3000:no aps-environment');
+      expect(tags['push.apns_registered'], 'false');
     });
   });
 }

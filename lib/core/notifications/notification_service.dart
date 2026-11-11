@@ -10,6 +10,7 @@ import '../../core/config/env.dart';
 import '../router/app_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'apns_diagnostics.dart';
 import 'push_reporting.dart';
 import 'push_resume_recheck.dart';
 
@@ -270,7 +271,13 @@ class NotificationService {
         'skipped: $skip',
         // The authorization status is what separates "the technician said no" (nothing to fix)
         // from "granted, but APNs still has not issued a token" (everything to fix).
-        tags: token == null ? {'push.authorization': await _authorizationTag()} : null,
+        tags: token == null
+            ? {
+                'push.authorization': await _authorizationTag(),
+                'push.apns_token': await _apnsTokenState(),
+                ...await _apnsDiagnostics.tags(),
+              }
+            : null,
         onceKey: 'skip:$skip',
       );
       return;
@@ -505,7 +512,7 @@ class NotificationService {
         PushStage.tokenFetch,
         e,
         stackTrace: st,
-        tags: {'push.apns_token': await _apnsTokenState()},
+        tags: {'push.apns_token': await _apnsTokenState(), ...await _apnsDiagnostics.tags()},
         onceKey: 'warm-token-failed',
       );
     }
@@ -558,6 +565,7 @@ class NotificationService {
     Duration apnsWait = apnsTokenWait,
     Duration apnsPollInterval = apnsTokenPollInterval,
     Future<void> Function(Duration) delay = _realDelay,
+    ApnsDiagnostics? apnsDiagnostics,
   }) async {
     final token = await fetchToken(
       fetch,
@@ -581,7 +589,10 @@ class NotificationService {
         // `lastError` already names the cause (throw or timeout); falling back covers the silent
         // "platform returned null" case, which on iOS also means no APNs token has arrived.
         lastError ?? 'platform issued no FCM token',
-        tags: {'push.apns_token': await _apnsState(isIOS, readApnsToken)},
+        tags: {
+          'push.apns_token': await _apnsState(isIOS, readApnsToken),
+          ...await (apnsDiagnostics ?? ApnsDiagnostics(isIOS: isIOS)).tags(),
+        },
         onceKey: 'token-fetch-failed',
       );
     }
@@ -614,6 +625,9 @@ class NotificationService {
       return 'unknown';
     }
   }
+
+  /// Native APNs registration outcome (`push.apns_error`, `push.apns_registered`); see [ApnsDiagnostics].
+  final ApnsDiagnostics _apnsDiagnostics = ApnsDiagnostics();
 
   /// The OS authorization status as a tag-safe string, or `unknown` if it cannot be read.
   Future<String> _authorizationTag() async {
