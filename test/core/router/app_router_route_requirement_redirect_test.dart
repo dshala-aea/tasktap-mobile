@@ -25,6 +25,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/kiosk/kiosk_lock_service.dart';
+import 'package:tasktap_mobile/core/widgets/bottom_nav.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
@@ -44,8 +45,10 @@ import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
 import 'package:tasktap_mobile/features/rapportino/ai_copilot_screen.dart';
 import 'package:tasktap_mobile/features/rapportino/ai_report/ai_sign_screen.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportino_form_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/rapportini_list_screen.dart';
 import 'package:tasktap_mobile/features/smart_working/smart_working_form_screen.dart';
 import 'package:tasktap_mobile/features/ticket/new_ticket_form_screen.dart';
+import 'package:tasktap_mobile/features/ticket/ticket_list_screen.dart';
 import 'package:tasktap_mobile/main.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/kiosk_providers.dart';
@@ -841,6 +844,93 @@ void main() {
 
     expect(find.byType(ForbiddenScreen), findsNothing);
     expect(find.byType(AiSignScreen), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  // ── Nav swap: Rapportini is shell branch 1, /ticket is a pushed full-screen route ──
+  //
+  // The ticket list used to be branch 1, so these three pin the two things that could silently
+  // regress: the list still renders at its old path, and it no longer renders inside the shell.
+  testWidgets('direct /ticket renders the ticket list without the shell', (tester) async {
+    final cached = Entitlement(
+      features: const {'interventi', 'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 11),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/ticket');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(TicketListScreen), findsOneWidget);
+    expect(
+      find.byType(AppBottomNav),
+      findsNothing,
+      reason: '/ticket is now a root-level full-screen route, not a shell branch',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('direct /altro/rapportini renders the report list', (tester) async {
+    final cached = Entitlement(
+      features: const {'interventi', 'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 11),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/altro/rapportini');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(RapportiniListScreen), findsOneWidget);
+    expect(
+      tester.widget<AppBottomNav>(find.byType(AppBottomNav)).currentIndex,
+      equals(1),
+      reason: 'Rapportini now owns shell branch 1',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('unentitled interventi redirects /ticket to /forbidden', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 11),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/ticket');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsOneWidget);
+    expect(find.byType(TicketListScreen), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

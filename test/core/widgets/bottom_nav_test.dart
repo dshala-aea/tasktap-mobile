@@ -13,7 +13,7 @@ void main() {
 
       // Only the active (Dashboard) label is shown.
       expect(find.text('Dashboard'), findsOneWidget);
-      expect(find.text('Ticket'), findsNothing);
+      expect(find.text('Reports'), findsNothing);
       expect(find.text('Cantieri'), findsNothing);
       expect(find.text('Calendario'), findsNothing);
       expect(find.text('Altro'), findsNothing);
@@ -52,7 +52,7 @@ void main() {
     testWidgets('changing currentIndex moves the active label', (tester) async {
       await tester.pumpWidget(_wrap(AppBottomNav(currentIndex: 1, onTap: (_) {})));
       await tester.pumpAndSettle();
-      expect(find.text('Ticket'), findsOneWidget);
+      expect(find.text('Reports'), findsOneWidget);
       expect(find.text('Dashboard'), findsNothing);
     });
 
@@ -60,7 +60,7 @@ void main() {
       await tester.pumpWidget(_wrap(AppBottomNav(currentIndex: 0, onTap: (_) {})));
       await tester.pumpAndSettle();
       expect(find.byIcon(AppBottomNavIcons.dashboard), findsOneWidget);
-      expect(find.byIcon(AppBottomNavIcons.ticket), findsOneWidget);
+      expect(find.byIcon(AppBottomNavIcons.reports), findsOneWidget);
       expect(find.byIcon(AppBottomNavIcons.cantieri), findsOneWidget);
       expect(find.byIcon(AppBottomNavIcons.calendario), findsOneWidget);
       expect(find.byIcon(AppBottomNavIcons.altro), findsOneWidget);

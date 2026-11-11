@@ -372,6 +372,9 @@ class _TicketListBody extends ConsumerWidget {
     return ListShell(
       title: 'Ticket',
       subtitle: 'Il lavoro aperto adesso, non l’archivio degli interventi.',
+      // Reached with `push` from Altro › Interventi, so there is something behind this screen —
+      // in the shell it was tab 1 and no back affordance was wanted.
+      showBack: Navigator.of(context).canPop(),
       action: canWrite
           ? ListHeaderAction(
               label: 'Nuovo',

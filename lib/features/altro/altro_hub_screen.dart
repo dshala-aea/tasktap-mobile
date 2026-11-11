@@ -118,14 +118,9 @@ class AltroHubScreen extends ConsumerWidget {
         label: 'Interventi',
         module: 'interventi',
         capability: null,
-        onTap: () => context.go(AppRoutes.ticket),
-      ),
-      (
-        icon: LucideIcons.fileText,
-        label: 'Rapporti di intervento',
-        module: 'rapportini',
-        capability: null,
-        onTap: () => context.go(AppRoutes.altroRapportini),
+        // Pushed, not `go`: the ticket list is a root-level route now, so the shell branch this
+        // tile used to open no longer exists.
+        onTap: () => context.push(AppRoutes.ticket),
       ),
       (
         icon: LucideIcons.users,
