@@ -135,6 +135,42 @@ void main() {
   }
 
   group('MagazzinoScreen', () {
+    testWidgets('header exposes the carico/scarico action', (tester) async {
+      await pump(tester);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == 'Carico/Scarico',
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('hides the carico/scarico header action without the write capability', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        cachedEntitlement: Entitlement(
+          features: const {},
+          capabilities: const {},
+          seatType: 'office',
+          fetchedAt: DateTime.utc(2026, 9, 23),
+        ),
+      );
+
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == 'Carico/Scarico',
+        ),
+        findsNothing,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('shows unavailable state when no materiali', (tester) async {
       await pump(tester);
       expect(find.byType(UnavailableState), findsOneWidget);
