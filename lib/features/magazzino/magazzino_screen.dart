@@ -9,6 +9,7 @@ import '../../core/theme/app_rack.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
+import '../materiali/magazzino_movimento_dialog.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
@@ -119,7 +120,19 @@ class _MagazzinoBody extends ConsumerWidget {
       },
       child: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(child: ScreenHeader(title: 'Magazzino', showBack: true)),
+          SliverToBoxAdapter(
+            child: ScreenHeader(
+              title: 'Magazzino',
+              showBack: true,
+              actions: [
+                HeaderIconBtn(
+                  icon: LucideIcons.arrowLeftRight,
+                  label: 'Carico/Scarico',
+                  onTap: () => showMagazzinoMovimentoDialog(context),
+                ),
+              ],
+            ),
+          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.xs),

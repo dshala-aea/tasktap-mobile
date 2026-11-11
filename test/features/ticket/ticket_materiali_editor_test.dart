@@ -6,7 +6,7 @@
 // TicketMaterialiEditor.tsx already allowed this via the ticket detail page's Materials tab).
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,22 +24,32 @@ class MockDio extends Mock implements Dio {}
 Response<T> _okResponse<T>(T data, String path) =>
     Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
 
-Widget _wrap(Widget child, {required Dio dio}) {
+Widget _wrap(Widget child, {required Dio dio, AppDatabase? db}) {
   return ProviderScope(
-    overrides: [dioProvider.overrideWithValue(dio)],
+    overrides: [
+      dioProvider.overrideWithValue(dio),
+      if (db != null) appDatabaseProvider.overrideWithValue(db),
+    ],
     child: MaterialApp(home: Scaffold(body: SingleChildScrollView(child: child))),
   );
 }
 
 void main() {
   late MockDio mockDio;
+  late AppDatabase basicDb;
 
   setUpAll(() {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     registerFallbackValue(RequestOptions(path: '/'));
   });
 
   setUp(() {
     mockDio = MockDio();
+    basicDb = AppDatabase(NativeDatabase.memory());
+  });
+
+  tearDown(() async {
+    await basicDb.close();
   });
 
   testWidgets('starts with one row per initial dto, pre-filled', (tester) async {
@@ -61,6 +71,7 @@ void main() {
           onCancel: () {},
         ),
         dio: mockDio,
+        db: basicDb,
       ),
     );
 
@@ -69,11 +80,14 @@ void main() {
     expect(find.text('pz'), findsOneWidget);
   });
 
-  testWidgets('"Aggiungi materiale" appends a new empty row', (tester) async {
+  testWidgets('"Aggiungi materiale" opens the shared picker and adds a free-text row', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       _wrap(
         TicketMaterialiEditor(initialRows: const [], onSave: (_) async {}, onCancel: () {}),
         dio: mockDio,
+        db: basicDb,
       ),
     );
 
@@ -82,8 +96,62 @@ void main() {
     await tester.tap(find.text('Aggiungi materiale'));
     await tester.pumpAndSettle();
 
-    // Article-search + quantity + unit + notes fields — one new row's worth.
-    expect(find.byType(TextFormField), findsNWidgets(4));
+    // The shared modal: lookup + numeric quantity, not an inline empty row.
+    expect(find.text('Qtà'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField).first, 'Guarnizione custom');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('materiale-qty-field')), '2,5');
+    await tester.pump();
+
+    await tester.tap(find.text('Aggiungi').last);
+    await tester.pumpAndSettle();
+
+    // Back in the editor with one editable row.
+    expect(find.text('Guarnizione custom'), findsOneWidget);
+    expect(find.text('2.5'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('"Aggiungi materiale" adds a catalogue article from the shared picker', (
+    tester,
+  ) async {
+    await basicDb
+        .into(basicDb.materiali)
+        .insert(
+          MaterialiCompanion.insert(
+            id: 'mat-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            code: 'ART001',
+            name: 'Valvola idraulica',
+            unitOfMeasure: const Value('pz'),
+          ),
+        );
+
+    await tester.pumpWidget(
+      _wrap(
+        TicketMaterialiEditor(initialRows: const [], onSave: (_) async {}, onCancel: () {}),
+        dio: mockDio,
+        db: basicDb,
+      ),
+    );
+
+    await tester.tap(find.text('Aggiungi materiale'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TextFormField).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Valvola idraulica').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Aggiungi').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Valvola idraulica'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
   });
 
   testWidgets('remove button deletes the row', (tester) async {
@@ -102,6 +170,7 @@ void main() {
           onCancel: () {},
         ),
         dio: mockDio,
+        db: basicDb,
       ),
     );
 
@@ -135,6 +204,7 @@ void main() {
           onCancel: () {},
         ),
         dio: mockDio,
+        db: basicDb,
       ),
     );
 
@@ -155,13 +225,17 @@ void main() {
 
     await tester.pumpWidget(
       _wrap(
-        TicketMaterialiEditor(initialRows: const [], onSave: (_) async {}, onCancel: () {}),
+        TicketMaterialiEditor(
+          initialRows: const [
+            TicketMaterialeDto(id: 'row-1', nome: '', quantita: 1, disponibile: true),
+          ],
+          onSave: (_) async {},
+          onCancel: () {},
+        ),
         dio: mockDio,
+        db: basicDb,
       ),
     );
-
-    await tester.tap(find.text('Aggiungi materiale'));
-    await tester.pumpAndSettle();
 
     // Empty row: neither an article nor free text — save must not run.
     final salvaFinder = find.text('Salva');
@@ -182,6 +256,7 @@ void main() {
           onCancel: () => cancelled = true,
         ),
         dio: mockDio,
+        db: basicDb,
       ),
     );
 
@@ -207,19 +282,18 @@ void main() {
           onCancel: () {},
         ),
         dio: mockDio,
+        db: basicDb,
       ),
     );
 
     await tester.tap(find.text('Aggiungi materiale'));
     await tester.pumpAndSettle();
-
-    // Field order within a row: Articolo (0), Quantità (1), Unità (2), Note (3) — see
-    // _MaterialeRowEditorState.build.
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'Guarnizione custom');
+    await tester.enterText(find.byType(TextFormField).first, 'Guarnizione custom');
     await tester.pump();
-    await tester.enterText(fields.at(1), '3');
+    await tester.enterText(find.byKey(const Key('materiale-qty-field')), '3');
     await tester.pump();
+    await tester.tap(find.text('Aggiungi').last);
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Salva'));
     await tester.pumpAndSettle();
@@ -432,7 +506,9 @@ void main() {
             home: Scaffold(
               body: SingleChildScrollView(
                 child: TicketMaterialiEditor(
-                  initialRows: const [],
+                  initialRows: const [
+                    TicketMaterialeDto(id: 'row-1', nome: '', quantita: 1, disponibile: true),
+                  ],
                   onSave: onSave ?? (_) async {},
                   onCancel: () {},
                 ),
@@ -442,10 +518,9 @@ void main() {
         );
 
     Future<void> typeArticle(WidgetTester tester, String text) async {
-      await tester.tap(find.text('Aggiungi materiale'));
-      await tester.pumpAndSettle();
-
-      // Articolo is the first field of the row — see _MaterialeRowEditorState.build.
+      // Articolo is the first field of the (already present) row — see
+      // _MaterialeRowEditorState.build. Adding is now the shared modal; the row editor remains
+      // the way an existing line is edited.
       await tester.enterText(find.byType(TextFormField).at(0), text);
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();

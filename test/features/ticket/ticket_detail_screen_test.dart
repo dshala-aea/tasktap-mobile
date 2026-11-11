@@ -2432,15 +2432,17 @@ void main() {
         await tester.tap(find.text('Aggiungi materiale'));
         await tester.pumpAndSettle();
 
-        // New row's own fields are the last 4 TextFormFields on screen (Articolo/Quantità/
-        // Unità/Note) — the article field is 4 before the last, quantity 3 before.
-        final fieldCount = tester.widgetList(find.byType(TextFormField)).length;
-        final articleFieldForNewRow = find.byType(TextFormField).at(fieldCount - 4);
-        await tester.enterText(articleFieldForNewRow, 'Guarnizione custom');
+        // Add is the shared modal now: lookup + numeric qty inside the dialog.
+        final modalFields = find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byType(TextFormField),
+        );
+        await tester.enterText(modalFields.first, 'Guarnizione custom');
         await tester.pump();
-        final qtyFieldForNewRow = find.byType(TextFormField).at(fieldCount - 3);
-        await tester.enterText(qtyFieldForNewRow, '5');
+        await tester.enterText(find.byKey(const Key('materiale-qty-field')), '5');
         await tester.pump();
+        await tester.tap(find.text('Aggiungi').last);
+        await tester.pumpAndSettle();
 
         await tester.tap(find.text('Salva'));
         await tester.pumpAndSettle();

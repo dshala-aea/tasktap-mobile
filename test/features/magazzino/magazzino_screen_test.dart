@@ -135,6 +135,18 @@ void main() {
   }
 
   group('MagazzinoScreen', () {
+    testWidgets('header exposes the carico/scarico action', (tester) async {
+      await pump(tester);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == 'Carico/Scarico',
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('shows unavailable state when no materiali', (tester) async {
       await pump(tester);
       expect(find.byType(UnavailableState), findsOneWidget);
