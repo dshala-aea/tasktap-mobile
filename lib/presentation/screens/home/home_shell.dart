@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/dictation/dictation_service.dart';
+import '../../../core/notifications/notification_service.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
@@ -208,6 +209,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
       // `AsyncValue.when`'s default `skipLoadingOnRefresh` keeps the dependents on the previous
       // answer while it re-resolves, so nothing flickers.
       ref.invalidate(dictationCapabilityProvider);
+      // Permission granted in the phone's Settings while backgrounded, or an APNs token that was
+      // late: register the device now rather than at the next cold start. Never prompts.
+      if (NotificationService.isAvailable) {
+        unawaited(NotificationService.instance.onAppResumed());
+      }
       _startReconcilePoll();
     } else {
       // Backgrounded (paused/inactive/hidden): stop the foreground fallback poll. This is

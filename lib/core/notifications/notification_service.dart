@@ -8,7 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/env.dart';
 import '../router/app_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'apns_diagnostics.dart';
 import 'push_reporting.dart';
+import 'push_resume_recheck.dart';
 
 /// Background message handler — must be a top-level function, registered by main.dart via
 /// `FirebaseMessaging.onBackgroundMessage` before `runApp`.
@@ -267,7 +271,13 @@ class NotificationService {
         'skipped: $skip',
         // The authorization status is what separates "the technician said no" (nothing to fix)
         // from "granted, but APNs still has not issued a token" (everything to fix).
-        tags: token == null ? {'push.authorization': await _authorizationTag()} : null,
+        tags: token == null
+            ? {
+                'push.authorization': await _authorizationTag(),
+                'push.apns_token': await _apnsTokenState(),
+                ...await _apnsDiagnostics.tags(),
+              }
+            : null,
         onceKey: 'skip:$skip',
       );
       return;
@@ -361,6 +371,27 @@ class NotificationService {
       );
     }
   }
+
+  /// Foreground re-check, called by the home shell on `AppLifecycleState.resumed`. Registers the
+  /// device when permission was granted outside the app (iOS Settings) or the APNs token only
+  /// arrived after the first attempt. Never prompts, and the in-app switch wins. See
+  /// [PushResumeRecheck].
+  Future<void> onAppResumed() => (_resumeRecheck ??= PushResumeRecheck(
+    accessToken: () => _lastAccessToken,
+    pushPreferenceEnabled: () async {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(kPushPreferenceKey) ?? true;
+    },
+    permissionGranted: hasPermission,
+    hasToken: () => _currentToken != null,
+    fetchToken: () async {
+      _currentToken ??= await _tryGetToken();
+      return _currentToken != null;
+    },
+    register: registerDeviceToken,
+  )).onResumed();
+
+  PushResumeRecheck? _resumeRecheck;
 
   /// Handle a foreground notification — show an in-app banner or update state.
   void _handleForegroundMessage(RemoteMessage message) {
@@ -481,7 +512,7 @@ class NotificationService {
         PushStage.tokenFetch,
         e,
         stackTrace: st,
-        tags: {'push.apns_token': await _apnsTokenState()},
+        tags: {'push.apns_token': await _apnsTokenState(), ...await _apnsDiagnostics.tags()},
         onceKey: 'warm-token-failed',
       );
     }
@@ -512,11 +543,44 @@ class NotificationService {
   /// The failure is reported here rather than inside [fetchToken] so that the report can carry the
   /// APNs state, which is the one field that tells the two Apple causes apart (see
   /// [_apnsTokenState]).
-  Future<String?> _tryGetToken() async {
+  Future<String?> _tryGetToken() => fetchAndReportToken(
+    () => _messaging.getToken(),
+    isIOS: Platform.isIOS,
+    readApnsToken: () => _messaging.getAPNSToken(),
+  );
+
+  /// [fetchToken] plus the report of a token that is STILL missing afterwards — the testable
+  /// half of [_tryGetToken].
+  ///
+  /// Nothing is reported while the APNs token is merely late: that is the normal first-run path
+  /// (see [fetchToken]). A report here means the wait window ran out too, which is a real fault,
+  /// and it carries the `push.apns_token` tag so the Apple-side and Firebase-side causes stay
+  /// distinguishable.
+  @visibleForTesting
+  static Future<String?> fetchAndReportToken(
+    Future<String?> Function() fetch, {
+    required bool isIOS,
+    required Future<String?> Function() readApnsToken,
+    Duration timeout = tokenFetchTimeout,
+    Duration apnsWait = apnsTokenWait,
+    Duration apnsPollInterval = apnsTokenPollInterval,
+    Future<void> Function(Duration) delay = _realDelay,
+    ApnsDiagnostics? apnsDiagnostics,
+  }) async {
     final token = await fetchToken(
-      () => _messaging.getToken(),
-      timeout: tokenFetchTimeout,
+      fetch,
+      timeout: timeout,
       recordError: (message) => lastError = message,
+      isIOS: isIOS,
+      readApnsToken: readApnsToken,
+      apnsWait: apnsWait,
+      apnsPollInterval: apnsPollInterval,
+      delay: delay,
+      onApnsPending: () => pushBreadcrumb('apns token pending, waiting', stage: PushStage.tokenFetch),
+      onApnsResolved: (waited) => pushBreadcrumb(
+        'token issued after waiting ${waited.inMilliseconds / 1000}s for the APNs token',
+        stage: PushStage.tokenFetch,
+      ),
     );
 
     if (token == null) {
@@ -525,7 +589,10 @@ class NotificationService {
         // `lastError` already names the cause (throw or timeout); falling back covers the silent
         // "platform returned null" case, which on iOS also means no APNs token has arrived.
         lastError ?? 'platform issued no FCM token',
-        tags: {'push.apns_token': await _apnsTokenState()},
+        tags: {
+          'push.apns_token': await _apnsState(isIOS, readApnsToken),
+          ...await (apnsDiagnostics ?? ApnsDiagnostics(isIOS: isIOS)).tags(),
+        },
         onceKey: 'token-fetch-failed',
       );
     }
@@ -546,15 +613,21 @@ class NotificationService {
   ///
   /// Bounded because this is read from inside failure paths, where a hung call would turn one
   /// diagnosable fault into a stuck bootstrap.
-  Future<String> _apnsTokenState() async {
-    if (!Platform.isIOS) return 'n/a';
+  Future<String> _apnsTokenState() =>
+      _apnsState(Platform.isIOS, () => _messaging.getAPNSToken());
+
+  static Future<String> _apnsState(bool isIOS, Future<String?> Function() read) async {
+    if (!isIOS) return 'n/a';
     try {
-      final apns = await _messaging.getAPNSToken().timeout(const Duration(seconds: 2));
+      final apns = await read().timeout(const Duration(seconds: 2));
       return apns == null ? 'absent' : 'present';
     } catch (_) {
       return 'unknown';
     }
   }
+
+  /// Native APNs registration outcome (`push.apns_error`, `push.apns_registered`); see [ApnsDiagnostics].
+  final ApnsDiagnostics _apnsDiagnostics = ApnsDiagnostics();
 
   /// The OS authorization status as a tag-safe string, or `unknown` if it cannot be read.
   Future<String> _authorizationTag() async {
@@ -577,18 +650,102 @@ class NotificationService {
     return collapsed.length <= 200 ? collapsed : '${collapsed.substring(0, 200)}…';
   }
 
+  /// How long to wait for the APNs device token before a missing FCM token is called a fault.
+  ///
+  /// Inside the [tokenFetchTimeout] bound (15 s) with room for the two `getToken()` calls around
+  /// it, so the settings sheet never hangs longer than before.
+  static const Duration apnsTokenWait = Duration(seconds: 8);
+
+  /// How often the APNs token is polled while waiting.
+  static const Duration apnsTokenPollInterval = Duration(milliseconds: 500);
+
+  static Future<void> _realDelay(Duration d) => Future<void>.delayed(d);
+
+  /// Polls [read] until it yields a token or [timeout] is spent; null when it never does.
+  ///
+  /// One immediate read, then one per [interval]. [delay] is injectable so a test does not sleep.
+  /// A read that throws counts as "not yet": this runs inside a failure path.
+  @visibleForTesting
+  static Future<String?> waitForApnsToken(
+    Future<String?> Function() read, {
+    Duration timeout = apnsTokenWait,
+    Duration interval = apnsTokenPollInterval,
+    Future<void> Function(Duration) delay = _realDelay,
+  }) async {
+    final polls = interval <= Duration.zero ? 0 : timeout.inMicroseconds ~/ interval.inMicroseconds;
+    for (var i = 0; ; i++) {
+      try {
+        final token = await read();
+        if (token != null) return token;
+      } catch (_) {
+        // Not yet.
+      }
+      if (i >= polls) return null;
+      await delay(interval);
+    }
+  }
+
+  static bool _isApnsNotSet(Object error) => error.toString().contains('apns-token-not-set');
+
   /// [fetch], bounded and recorded — the testable half of [_tryGetToken].
   ///
   /// Returns null on any failure (throw or timeout) and names it through [recordError], so
   /// Impostazioni can show a real cause instead of a generic "not available on this device".
+  ///
+  /// iOS only, and only when [readApnsToken] is given: a first answer of "no token" /
+  /// `apns-token-not-set` is usually just the APNs device token still in flight (permission was
+  /// granted a moment ago, so iOS has only now started registering). The fetch then waits for the
+  /// APNs token ([apnsWait], polled every [apnsPollInterval]) and asks [fetch] ONCE more. A token
+  /// that is still missing after that is the real fault and is returned as null. Other errors, and
+  /// a hang (the misconfiguration case), are not waited on. The whole sequence stays inside
+  /// [timeout].
   @visibleForTesting
   static Future<String?> fetchToken(
     Future<String?> Function() fetch, {
     Duration timeout = tokenFetchTimeout,
     void Function(String message)? recordError,
+    bool? isIOS,
+    Future<String?> Function()? readApnsToken,
+    Duration apnsWait = apnsTokenWait,
+    Duration apnsPollInterval = apnsTokenPollInterval,
+    Future<void> Function(Duration) delay = _realDelay,
+    void Function()? onApnsPending,
+    void Function(Duration waited)? onApnsResolved,
   }) async {
+    final waits = (isIOS ?? Platform.isIOS) && readApnsToken != null;
+
+    Future<String?> run() async {
+      String? firstError;
+      try {
+        final first = await fetch();
+        if (first != null || !waits) return first;
+      } catch (e) {
+        if (!waits || !_isApnsNotSet(e)) rethrow;
+        firstError = 'Token: $e';
+        debugPrint('FCM getToken failed, waiting for the APNs token: $e');
+      }
+
+      onApnsPending?.call();
+      var polls = 0;
+      final apns = await waitForApnsToken(
+        () {
+          polls++;
+          return readApnsToken();
+        },
+        timeout: apnsWait,
+        interval: apnsPollInterval,
+        delay: delay,
+      );
+      if (apns == null) {
+        if (firstError != null) recordError?.call(firstError);
+        return null;
+      }
+      onApnsResolved?.call(apnsPollInterval * (polls - 1));
+      return fetch();
+    }
+
     try {
-      return await fetch().timeout(timeout);
+      return await run().timeout(timeout);
     } on TimeoutException {
       recordError?.call('Token: nessuna risposta da APNs entro $timeout');
       debugPrint('FCM getToken timed out after $timeout');
