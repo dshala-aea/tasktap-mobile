@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
+import '../../../core/dictation/dictate_button.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/time/business_time.dart' show BusinessTime;
 import '../../../core/time/business_time_providers.dart' show businessTimeProvider;
@@ -435,6 +436,12 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
             label: 'Osservazioni cliente',
             hint: 'Confermo l\'esecuzione dei lavori e la presa visione del rapporto di intervento.',
             maxLines: 3,
+            suffixIcon: DictateButton(
+              controller: _signoffCtrl,
+              onChanged: (v) => ref
+                  .read(reportEditorProvider(widget.reportId).notifier)
+                  .setCustomerSignoffText(v),
+            ),
             onChanged: (v) => ref
                 .read(reportEditorProvider(widget.reportId).notifier)
                 .setCustomerSignoffText(v),
@@ -1127,6 +1134,7 @@ class _TypedSigDialogState extends State<_TypedSigDialog> {
               hint: 'Mario Rossi',
               controller: _nameCtrl,
               textInputAction: TextInputAction.done,
+              suffixIcon: DictateButton(controller: _nameCtrl, onChanged: (_) => setState(() {})),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),

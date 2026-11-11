@@ -15,7 +15,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:tasktap_mobile/core/dictation/dictation_target.dart';
+import 'package:tasktap_mobile/core/dictation/dictation_capability.dart';
+import 'package:tasktap_mobile/core/dictation/dictation_service.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
@@ -57,6 +58,16 @@ ProviderContainer _buildContainer({
   return ProviderContainer(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
+      dictationCapabilityProvider.overrideWith(
+        (ref) => Future.value(
+          const DictationCapability(
+            recognizerAvailable: true,
+            italianLocaleId: 'it_IT',
+            onDeviceRecognitionAvailable: true,
+            microphoneGranted: true,
+          ),
+        ),
+      ),
       aiApiClientProvider.overrideWithValue(_FakeAiApiClient()),
       // StepDettagli itself no longer captures GPS (that moved to RapportinoFormScreen — see its
       // own header comment), so this override only keeps the manual "Acquisisci"/"Aggiorna" button
@@ -91,12 +102,12 @@ ProviderContainer _buildContainer({
   );
 }
 
-Widget _buildStep(ProviderContainer container, {DictationTargetRegistry? dictation}) {
+Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
       home: Scaffold(
-        body: StepDettagli(reportId: _reportId, dictation: dictation),
+        body: StepDettagli(reportId: _reportId),
       ),
     ),
   );
@@ -308,51 +319,17 @@ void main() {
     });
   });
 
-  group('StepDettagli — the step microphone is one control, not a suffix per field', () {
-    testWidgets('no per-field microphone is rendered any more', (tester) async {
+  group('StepDettagli — per-field dictation', () {
+    testWidgets('every prose field has its own microphone', (tester) async {
       final container = _buildContainer(db: db, ticketId: 'ticket-1');
       addTearDown(container.dispose);
 
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
-      // The microphone now lives in the sheet footer (DictationBar), outside this step — so neither
-      // the live nor the crossed-out icon belongs here.
-      expect(find.byIcon(LucideIcons.mic), findsNothing);
+      // Titolo, Indirizzo di lavoro, Descrizione, Diagnosi, Soluzione.
+      expect(find.byIcon(LucideIcons.mic), findsNWidgets(5));
       expect(find.byIcon(LucideIcons.micOff), findsNothing);
-    });
-
-    testWidgets('a passed-in registry learns the three dictate-capable fields', (tester) async {
-      final container = _buildContainer(db: db, ticketId: 'ticket-1');
-      addTearDown(container.dispose);
-      final registry = DictationTargetRegistry();
-
-      await tester.pumpWidget(_buildStep(container, dictation: registry));
-      await tester.pumpAndSettle();
-
-      // Descrizione is the first registered, so it is the default target.
-      expect(registry.active?.label, 'Descrizione');
-      // select() is a no-op for an id it never registered, so each of these only moves if the step
-      // really registered the field.
-      registry.select('diagnosi');
-      expect(registry.active?.id, 'diagnosi');
-      registry.select('soluzione');
-      expect(registry.active?.id, 'soluzione');
-    });
-
-    testWidgets('typing in a field makes it the microphone target', (tester) async {
-      final container = _buildContainer(db: db, ticketId: 'ticket-1', diagnosi: 'Pompa bloccata');
-      addTearDown(container.dispose);
-      final registry = DictationTargetRegistry();
-
-      await tester.pumpWidget(_buildStep(container, dictation: registry));
-      await tester.pumpAndSettle();
-      expect(registry.active?.id, 'details');
-
-      await tester.enterText(find.widgetWithText(TextField, 'Pompa bloccata'), 'Guasto');
-      await tester.pump();
-
-      expect(registry.active?.id, 'diagnosi');
     });
   });
 }
