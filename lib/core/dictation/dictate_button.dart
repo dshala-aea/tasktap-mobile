@@ -59,6 +59,11 @@ class _DictateButtonState extends ConsumerState<DictateButton> {
       return;
     }
 
+    // One recogniser, one field: starting here must end whichever other field's session is live,
+    // or the first button keeps reading "listening" while this one captures the words.
+    if (service.isListening) await service.stop();
+    if (!mounted) return;
+
     _base = widget.controller.text;
     setState(() => _listening = true);
 

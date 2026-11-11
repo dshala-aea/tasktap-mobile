@@ -6,8 +6,6 @@ import '../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/dictation/dictation_bar.dart';
-import '../../core/dictation/dictation_target.dart';
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
@@ -99,16 +97,11 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     );
   }
 
-  /// Opens Dettagli with the step's single microphone pinned below the form — outside the fields
-  /// it writes into, so the technician never has to aim before speaking. The registry is created
-  /// per open, so the "last field touched" memory never outlives the sheet it belongs to.
   void _openDettagli(BuildContext context) {
-    final dictation = DictationTargetRegistry();
     openCompartmentSheet(
       context,
       label: 'Dettagli',
-      content: StepDettagli(reportId: widget.reportId, dictation: dictation),
-      footer: DictationBar(registry: dictation),
+      content: StepDettagli(reportId: widget.reportId),
     );
   }
 
