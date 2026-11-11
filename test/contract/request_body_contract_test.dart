@@ -14,6 +14,7 @@ import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_preferences_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
 import 'package:tasktap_mobile/data/smart_working/smart_working_request_api_client.dart';
+import 'package:tasktap_mobile/data/trasferta/trasferta_request_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/ticket_timer_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
@@ -427,6 +428,31 @@ void main() {
     contractTest('rejecting an absence request matches the server', () {
       final client = AbsenceRequestApiClient(dio);
       return capture(() => client.reject(_id(31), reason: 'Copertura insufficiente'));
+    });
+  });
+
+  group('trasferta', () {
+    contractTest('a trasferta request matches the server', () {
+      final client = TrasfertaRequestApiClient(dio);
+      return capture(
+        () => client.create(
+          date: DateTime(2026, 11, 3),
+          startHour: 7,
+          startMinute: 30,
+          hours: 1.5,
+          reason: 'cantiere',
+        ),
+      );
+    });
+
+    contractTest('the list carries the caller’s own id as a declared query parameter', () {
+      final client = TrasfertaRequestApiClient(dio);
+      return capture(() => client.fetchMine(userId: _id(20)));
+    });
+
+    contractTest('cancelling a trasferta matches the server', () {
+      final client = TrasfertaRequestApiClient(dio);
+      return capture(() => client.cancel(_id(20)));
     });
   });
 

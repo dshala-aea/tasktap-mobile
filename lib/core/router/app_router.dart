@@ -64,6 +64,8 @@ import '../../features/ferie/ferie_permessi_form_screen.dart';
 import '../../features/ferie/ferie_permessi_list_screen.dart';
 import '../../features/smart_working/smart_working_form_screen.dart';
 import '../../features/smart_working/smart_working_list_screen.dart';
+import '../../features/trasferta/trasferta_form_screen.dart';
+import '../../features/trasferta/trasferta_list_screen.dart';
 import '../../features/clienti/clienti_list_screen.dart';
 import '../../features/rapportino/ai_copilot_screen.dart';
 import '../../features/rapportino/ai_report/ai_sign_screen.dart';
@@ -237,6 +239,9 @@ abstract final class AppRoutes {
   ///
   /// The same `presenze` module as [altroFerie].
   static const String altroSmartWorking = '/altro/smart-working';
+
+  /// Self-service Trasferta against `/api/trasferta-requests` — travel time as worked time. Online-only.
+  static const String altroTrasferta = '/altro/trasferta';
 
   /// The approver's worklist: every pending absence and smart-working request in the tenant.
   ///
@@ -418,6 +423,7 @@ final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, Ro
   ),
   ('/altro/ferie', const RouteRequirement.module('presenze'), null),
   ('/altro/smart-working', const RouteRequirement.module('presenze'), null),
+  ('/altro/trasferta', const RouteRequirement.module('presenze'), null),
   (
     '/ticket',
     const RouteRequirement.module('interventi'),
@@ -864,6 +870,17 @@ GoRouter buildRouter(WidgetRef ref) {
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) =>
                             const SmartWorkingFormScreen(),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'trasferta',
+                    builder: (context, state) => const TrasfertaListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) => const TrasfertaFormScreen(),
                       ),
                     ],
                   ),
