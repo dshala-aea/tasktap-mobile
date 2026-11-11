@@ -1,3 +1,4 @@
+import firebase_messaging
 import Flutter
 import Speech
 import UIKit
@@ -8,6 +9,10 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // UIScene apps register plugins AFTER this method, but Apple requires the
+    // UNUserNotificationCenter delegate to be set before it returns. firebase_messaging
+    // (>= 16.5) documents this explicit call for the UIScene lifecycle.
+    FLTFirebaseMessagingPlugin.configureNotificationCenterDelegate()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
