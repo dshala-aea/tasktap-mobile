@@ -369,4 +369,106 @@ void main() {
 
     await _unmount(tester);
   });
+
+  testWidgets('an empty quantity explains what is wrong and blocks Add', (tester) async {
+    when(
+      () => dio.get<Map<String, dynamic>>(
+        '/api/app/magazzino/giacenze',
+        queryParameters: any(named: 'queryParameters'),
+      ),
+    ).thenAnswer(
+      (_) async => Response<Map<String, dynamic>>(
+        requestOptions: RequestOptions(path: '/api/app/magazzino/giacenze'),
+        statusCode: 200,
+        data: _giacenzeResponse([_giacenza('m1', 'Furgone Mario', 3)]),
+      ),
+    );
+
+    MaterialePickerResult? result;
+    await tester.pumpWidget(_build(db: db, dio: dio, online: true, onResult: (r) => result = r));
+    await openAndPick(tester);
+
+    await tester.enterText(find.byKey(const Key('materiale-qty-field')), '');
+    await tester.pump();
+
+    expect(find.text('Inserisci una quantità valida.'), findsOneWidget);
+
+    await tester.tap(find.text('Aggiungi'));
+    await tester.pumpAndSettle();
+
+    expect(result, isNull);
+
+    await _unmount(tester);
+  });
+
+  testWidgets('a third decimal is rejected instead of silently rounded', (tester) async {
+    when(
+      () => dio.get<Map<String, dynamic>>(
+        '/api/app/magazzino/giacenze',
+        queryParameters: any(named: 'queryParameters'),
+      ),
+    ).thenAnswer(
+      (_) async => Response<Map<String, dynamic>>(
+        requestOptions: RequestOptions(path: '/api/app/magazzino/giacenze'),
+        statusCode: 200,
+        data: _giacenzeResponse([_giacenza('m1', 'Furgone Mario', 3)]),
+      ),
+    );
+
+    MaterialePickerResult? result;
+    await tester.pumpWidget(_build(db: db, dio: dio, online: true, onResult: (r) => result = r));
+    await openAndPick(tester);
+
+    await tester.enterText(find.byKey(const Key('materiale-qty-field')), '1,234');
+    await tester.pump();
+
+    final field = tester.widget<TextField>(find.byKey(const Key('materiale-qty-field')));
+    expect(field.controller!.text, '1');
+
+    await tester.tap(find.text('Aggiungi'));
+    await tester.pumpAndSettle();
+
+    expect(result?.quantity, 1);
+
+    await _unmount(tester);
+  });
+
+  testWidgets('free text says no scarico will be recorded', (tester) async {
+    await tester.pumpWidget(_build(db: db, dio: dio, online: true, onResult: (_) {}));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TextFormField).first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'Guarnizione custom');
+    await tester.pump();
+
+    expect(find.text('Testo libero: lo scarico non sarà registrato.'), findsOneWidget);
+
+    await _unmount(tester);
+  });
+
+  testWidgets('a permission error is not reported as offline', (tester) async {
+    when(
+      () => dio.get<Map<String, dynamic>>(
+        '/api/app/magazzino/giacenze',
+        queryParameters: any(named: 'queryParameters'),
+      ),
+    ).thenThrow(
+      DioException(
+        requestOptions: RequestOptions(path: '/api/app/magazzino/giacenze'),
+        response: Response<Map<String, dynamic>>(
+          statusCode: 403,
+          data: null,
+          requestOptions: RequestOptions(path: '/api/app/magazzino/giacenze'),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(_build(db: db, dio: dio, online: true, onResult: (_) {}));
+    await openAndPick(tester);
+
+    expect(find.text('Disponibilità non verificabile offline'), findsNothing);
+
+    await _unmount(tester);
+  });
 }

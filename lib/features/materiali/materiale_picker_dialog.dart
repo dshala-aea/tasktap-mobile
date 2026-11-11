@@ -1,11 +1,11 @@
 // dart format width=100
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/constants/catalog_constants.dart';
 import '../../core/scanner/barcode_scan_sheet.dart';
+import '../../core/utils/error_message.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_spacing.dart';
@@ -19,10 +19,7 @@ import '../../presentation/providers/schedule_providers.dart';
 import '../magazzino/magazzino_providers.dart';
 import '../ticket/ticket_detail_api_client.dart' show TicketMaterialeDto;
 import '../ticket/ticket_providers.dart' show ticketMaterialiProvider;
-
-/// Opens the camera scan sheet and returns the raw scanned code, or null if the technician backed
-/// out. Swappable in tests, where there is no camera.
-typedef BarcodeScanner = Future<String?> Function(BuildContext context);
+import 'materiale_qty_field.dart';
 
 /// What the shared material picker returns. The caller decides how to store it: the rapportino
 /// maps it to a [MaterialeRow] (including `magazzinoId`, which books the scarico), the ticket
@@ -123,7 +120,7 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
   String? _magazzinoId;
   String? _magazzinoNome;
 
-  double get _qty => double.tryParse(_qtyCtrl.text.replaceAll(',', '.')) ?? 0;
+  double get _qty => parseMaterialeQty(_qtyCtrl.text) ?? 0;
 
   bool get _canAdd {
     final identified = _materialeId != null || (_freeTextName?.trim().isNotEmpty ?? false);
@@ -250,7 +247,15 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
           _magazzinoNome = matches.first.magazzinoNome;
         }
       });
-    } catch (_) {
+    } catch (e) {
+      if (!isTransportOrServerFault(e)) {
+        if (stale()) return;
+        setState(() {
+          _sourceLoading = false;
+          _sourceError = humanErrorMessage(e, azione: 'verificare le giacenze');
+        });
+        return;
+      }
       final list = await _mirrorMagazzini();
       if (stale()) return;
       setState(() {
@@ -271,12 +276,9 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
 
   void _bumpQty(double delta) {
     final next = (_qty + delta).clamp(1, 999999).toDouble();
-    _qtyCtrl.text = _formatQty(next);
+    _qtyCtrl.text = formatMaterialeQty(next);
     setState(() {});
   }
-
-  static String _formatQty(double q) =>
-      q == q.truncateToDouble() ? q.toInt().toString() : q.toString();
 
   void _submit() {
     if (!_canAdd) return;
@@ -329,7 +331,7 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
                           setState(() {
                             _materialeId = m.materialeId;
                             _freeTextName = m.materialeId == null ? m.nome : null;
-                            _qtyCtrl.text = _formatQty(m.quantita > 0 ? m.quantita : 1);
+                            _qtyCtrl.text = formatMaterialeQty(m.quantita > 0 ? m.quantita : 1);
                             if (m.unitaMisura?.isNotEmpty ?? false) _uom = m.unitaMisura;
                             _picked = m.materialeId == null
                                 ? null
@@ -363,11 +365,12 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _QtyRow(
+                    MaterialeQtyField(
                       controller: _qtyCtrl,
                       onChanged: () => setState(() {}),
                       onMinus: _qty > 1 ? () => _bumpQty(-1) : null,
                       onPlus: () => _bumpQty(1),
+                      errorText: _qty > 0 ? null : 'Inserisci una quantità valida.',
                     ),
                     if (widget.showSource && _picked != null) ...[
                       const SizedBox(height: 10),
@@ -383,6 +386,16 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
                         }),
                       ),
                     ],
+                    if (widget.showSource &&
+                        _picked == null &&
+                        (_freeTextName?.trim().isNotEmpty ?? false))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Testo libero: lo scarico non sarà registrato.',
+                          style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+                        ),
+                      ),
                     const SizedBox(height: 10),
                     InkWell(
                       onTap: () => setState(() => _showAdvanced = !_showAdvanced),
@@ -464,117 +477,6 @@ Future<String?> _openCameraScanner(BuildContext context) =>
     openBarcodeScanSheet(context, title: 'Scansiona materiale');
 
 // ── Quantity: numeric keyboard + steppers ────────────────────────────────────
-
-class _QtyRow extends StatelessWidget {
-  const _QtyRow({
-    required this.controller,
-    required this.onChanged,
-    this.onMinus,
-    this.onPlus,
-  });
-
-  final TextEditingController controller;
-  final VoidCallback onChanged;
-  final VoidCallback? onMinus;
-  final VoidCallback? onPlus;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          'Qtà',
-          style: TextStyle(
-            fontFamily: 'Archivo',
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: context.colors.inkMuted,
-          ),
-        ),
-        const Spacer(),
-        QtyStepButton(
-          icon: LucideIcons.minus,
-          label: 'Diminuisci quantità',
-          onTap: onMinus,
-        ),
-        const SizedBox(width: 6),
-        SizedBox(
-          width: 76,
-          child: TextField(
-            key: const Key('materiale-qty-field'),
-            controller: controller,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: context.colors.ink,
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onChanged: (_) => onChanged(),
-          ),
-        ),
-        const SizedBox(width: 6),
-        QtyStepButton(
-          icon: LucideIcons.plus,
-          label: 'Aumenta quantità',
-          onTap: onPlus,
-        ),
-      ],
-    );
-  }
-}
-
-/// Circular −/+ target. Moved here from the rapportino step so the picker and the report's saved
-/// row share one control.
-class QtyStepButton extends StatelessWidget {
-  const QtyStepButton({super.key, required this.icon, required this.label, this.onTap});
-
-  final IconData icon;
-
-  /// Announced by TalkBack. The glyph carries no text, so without this the stepper was two
-  /// unnamed buttons either side of a number.
-  final String label;
-
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      enabled: onTap != null,
-      label: label,
-      child: AppTappable(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: onTap != null ? context.colors.bg3 : context.colors.bg4,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icon,
-                size: 16,
-                color: onTap != null ? context.colors.ink : context.colors.inkDisabled,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 // ── Source magazzino ──────────────────────────────────────────────────────────
 

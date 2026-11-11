@@ -22,6 +22,7 @@ import '../../data/materiali/materiale_barcode_lookup.dart'
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../materiali/materiale_picker_dialog.dart';
+import '../materiali/materiale_qty_field.dart';
 import 'ticket_detail_api_client.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -89,10 +90,6 @@ class MaterialeEditRow {
     notes: notes,
   );
 }
-
-/// Opens the camera scan sheet and returns the raw scanned code, or null if the technician backed
-/// out. Swappable in tests, where there is no camera.
-typedef BarcodeScanner = Future<String?> Function(BuildContext context);
 
 Future<String?> _openCameraScanner(BuildContext context) =>
     openBarcodeScanSheet(context, title: 'Scansiona materiale');

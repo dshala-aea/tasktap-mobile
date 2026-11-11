@@ -108,6 +108,10 @@ class _MagazzinoBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final canWrite = ref.watch(cachedEntitlementProvider).value?.capabilities.contains(
+          'magazzino.warehouse.write',
+        ) ??
+        false;
     return RefreshIndicator(
       onRefresh: () async {
         // Articoli is the offline mirror (synced); Giacenze/Movimenti are online-only reads —
@@ -125,11 +129,12 @@ class _MagazzinoBody extends ConsumerWidget {
               title: 'Magazzino',
               showBack: true,
               actions: [
-                HeaderIconBtn(
-                  icon: LucideIcons.arrowLeftRight,
-                  label: 'Carico/Scarico',
-                  onTap: () => showMagazzinoMovimentoDialog(context),
-                ),
+                if (canWrite)
+                  HeaderIconBtn(
+                    icon: LucideIcons.arrowLeftRight,
+                    label: 'Carico/Scarico',
+                    onTap: () => showMagazzinoMovimentoDialog(context),
+                  ),
               ],
             ),
           ),

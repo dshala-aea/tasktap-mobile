@@ -387,9 +387,9 @@ Expected: all pass. Report any unrelated pre-existing failure by name.
 
 Report changed files, test/analyze output, and the handoff path. Do not commit or push.
 
-## Deferred minors (follow-up)
+## Deferred minors (addressed on this branch)
 
-Carried from the final review; none blocks this change.
+Carried from the final review and addressed on this branch: shared `MaterialeQtyField` with a 2-decimal formatter, explicit invalid-qty feedback, the free-text no-scarico notice, transport/server-fault splitting, the `magazzino.warehouse.write` gate on the header action, and one `BarcodeScanner` typedef.
 
 1. **Max 2 decimals + invalid-qty feedback.** The shared qty fields accept any digits/separators,
    so `1,234` becomes `1.234` and `1,2,3` silently parses to 0. Add one shared parser/formatter

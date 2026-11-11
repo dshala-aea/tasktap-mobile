@@ -1,7 +1,6 @@
 // dart format width=100
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -16,6 +15,7 @@ import '../../data/materiali/materiale_barcode_lookup.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../magazzino/magazzino_providers.dart';
 import 'materiale_picker_dialog.dart';
+import 'materiale_qty_field.dart';
 
 enum MagazzinoMovimentoTipo { carico, scarico, trasferimento }
 
@@ -252,11 +252,13 @@ class _MagazzinoMovimentoDialogState extends ConsumerState<MagazzinoMovimentoDia
                       ),
                     ],
                     const SizedBox(height: 10),
-                    _QtyRow(
+                    MaterialeQtyField(
                       controller: _qtyCtrl,
+                      fieldKey: const Key('movimento-qty-field'),
                       onChanged: () => setState(() {}),
                       onMinus: _qty > 1 ? () => _bumpQty(-1) : null,
                       onPlus: () => _bumpQty(1),
+                      errorText: _qty > 0 ? null : 'Inserisci una quantità valida.',
                     ),
                     const SizedBox(height: 10),
                     AppFieldShell(
@@ -337,63 +339,6 @@ class _WarehouseDropdown extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _QtyRow extends StatelessWidget {
-  const _QtyRow({
-    required this.controller,
-    required this.onChanged,
-    this.onMinus,
-    this.onPlus,
-  });
-
-  final TextEditingController controller;
-  final VoidCallback onChanged;
-  final VoidCallback? onMinus;
-  final VoidCallback? onPlus;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Text(
-          'Qtà',
-          style: TextStyle(
-            fontFamily: 'Archivo',
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: context.colors.inkMuted,
-          ),
-        ),
-        const Spacer(),
-        QtyStepButton(icon: LucideIcons.minus, label: 'Diminuisci quantità', onTap: onMinus),
-        const SizedBox(width: 6),
-        SizedBox(
-          width: 76,
-          child: TextField(
-            key: const Key('movimento-qty-field'),
-            controller: controller,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: context.colors.ink,
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onChanged: (_) => onChanged(),
-          ),
-        ),
-        const SizedBox(width: 6),
-        QtyStepButton(icon: LucideIcons.plus, label: 'Aumenta quantità', onTap: onPlus),
-      ],
     );
   }
 }

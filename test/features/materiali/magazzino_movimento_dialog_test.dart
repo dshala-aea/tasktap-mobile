@@ -14,7 +14,7 @@ import 'package:tasktap_mobile/data/sync/sync_freshness_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/magazzino/magazzino_providers.dart';
 import 'package:tasktap_mobile/features/materiali/magazzino_movimento_dialog.dart';
-import 'package:tasktap_mobile/features/materiali/materiale_picker_dialog.dart';
+import 'package:tasktap_mobile/features/materiali/materiale_qty_field.dart';
 
 class MockDio extends Mock implements Dio {}
 
