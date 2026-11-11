@@ -42,6 +42,7 @@ class ListRowData {
     this.secondary,
     this.status,
     this.statusTone,
+    this.badge,
     this.leading,
     this.onTap,
     this.rowKey,
@@ -61,6 +62,9 @@ class ListRowData {
 
   /// Overrides the stamp family. Defaults to `statusFamilyOf(status)`.
   final ListStatusTone? statusTone;
+
+  /// A small marker next to the title (e.g. the AI-assisted badge), before the status stamp.
+  final Widget? badge;
 
   /// Optional leading icon/badge slot. Omit for the prototype's text-first row.
   final Widget? leading;

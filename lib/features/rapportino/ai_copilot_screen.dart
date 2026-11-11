@@ -23,6 +23,7 @@ import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider, reportEditorProvider;
 import 'ai_draft_feed.dart';
+import 'ai_transparency_notice.dart';
 import 'ai_report/ai_describe_step.dart';
 import 'ai_report/ai_report_context.dart';
 import 'ai_report/ai_review_step.dart';
@@ -1370,6 +1371,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
               showBack: true,
               onBack: _leave,
             ),
+            const AiTransparencyNotice(),
             if (_starting) const Expanded(child: Center(child: CircularProgressIndicator())),
             if (_startError != null)
               Expanded(

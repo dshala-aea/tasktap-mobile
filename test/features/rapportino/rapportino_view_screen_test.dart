@@ -41,6 +41,7 @@ import 'package:tasktap_mobile/data/reports/report_pdf_cache.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
+import 'package:tasktap_mobile/features/rapportino/ai_assisted_badge.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportino_view_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
@@ -895,6 +896,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('AI, poi rivista'), findsOneWidget);
+      expect(find.byType(AiAssistedBadge), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

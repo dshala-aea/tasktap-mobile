@@ -22,6 +22,7 @@ import '../../core/widgets/detail/detail_scaffold.dart';
 import '../../core/widgets/detail/detail_section.dart';
 import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
+import 'ai_assisted_badge.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/attachments/attachment_content_cache.dart';
 import '../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
@@ -785,19 +786,29 @@ DetailHeroData _buildRapportinoHero(
     subtitle: '${_customerLabel(context, ref, draft)} · $site\n$techNames',
     status: DetailStatus(label: rapportinoStatusLabel(draft)),
     liveValue: oreLabel == '—' ? null : Text(oreLabel),
-    heroCopy: Text.rich(
-      TextSpan(
-        children: rejected
-            ? [
-                const TextSpan(text: 'Respinto '),
-                TextSpan(text: "dall'ufficio", style: emphasis),
-                const TextSpan(text: '. Rilavora per correggerlo e reinviarlo.'),
-              ]
-            : [
-                const TextSpan(text: 'Aggiornato il '),
-                TextSpan(text: _eventTime(touched), style: emphasis),
-              ],
-      ),
+    heroCopy: Row(
+      children: [
+        if (draft.isAiAssisted) ...[
+          const AiAssistedBadge(),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: rejected
+                  ? [
+                      const TextSpan(text: 'Respinto '),
+                      TextSpan(text: "dall'ufficio", style: emphasis),
+                      const TextSpan(text: '. Rilavora per correggerlo e reinviarlo.'),
+                    ]
+                  : [
+                      const TextSpan(text: 'Aggiornato il '),
+                      TextSpan(text: _eventTime(touched), style: emphasis),
+                    ],
+            ),
+          ),
+        ),
+      ],
     ),
     primaryAction: rejected && canWriteReport
         ? DetailAction(

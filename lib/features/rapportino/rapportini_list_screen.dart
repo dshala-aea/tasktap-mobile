@@ -31,6 +31,7 @@ import '../../presentation/providers/schedule_providers.dart'
 import '../admin/admin_providers.dart' show adminCustomersProvider;
 import '../admin/locations/admin_location_list_screen.dart' show adminLocationsProvider;
 import '../ticket/ticket_label.dart' show ticketReference;
+import 'ai_assisted_badge.dart';
 import 'create_draft.dart';
 import 'import_server_report_action.dart';
 import 'rapportino_list_providers.dart';
@@ -547,6 +548,7 @@ class _RapportinoRow extends ConsumerWidget {
 
     final data = ListRowData(
       title: title,
+      badge: draft.isAiAssisted ? const AiAssistedBadge() : null,
       meta: meta.isEmpty ? null : meta,
       secondary: secondary.isEmpty ? null : secondary,
       status: statusLabel,
