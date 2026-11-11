@@ -21,6 +21,8 @@ import '../../data/materiali/materiale_barcode_lookup.dart'
     show MaterialeMatch, lookupMaterialeByBarcode;
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
+import '../materiali/materiale_picker_dialog.dart';
+import '../materiali/materiale_qty_field.dart';
 import 'ticket_detail_api_client.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -89,10 +91,6 @@ class MaterialeEditRow {
   );
 }
 
-/// Opens the camera scan sheet and returns the raw scanned code, or null if the technician backed
-/// out. Swappable in tests, where there is no camera.
-typedef BarcodeScanner = Future<String?> Function(BuildContext context);
-
 Future<String?> _openCameraScanner(BuildContext context) =>
     openBarcodeScanSheet(context, title: 'Scansiona materiale');
 
@@ -126,7 +124,27 @@ class TicketMaterialiEditorState extends ConsumerState<TicketMaterialiEditor> {
     _rows = widget.initialRows.map(MaterialeEditRow.fromDto).toList();
   }
 
-  void _addRow() => setState(() => _rows.add(MaterialeEditRow()));
+  Future<void> _addMateriale() async {
+    final result = await showMaterialePickerDialog(
+      context,
+      showSource: false,
+      showFabbisognoSuggestions: false,
+      scanner: widget.scanner,
+    );
+    if (result == null || !mounted) return;
+    setState(
+      () => _rows.add(
+        MaterialeEditRow(
+          materialeId: result.materialeId,
+          freeTextName: result.materialeId == null ? result.freeTextName : null,
+          quantity: result.quantity,
+          unitOfMeasure: result.unitOfMeasure,
+          initialArticleName: result.materialeNome,
+          initialArticleCode: result.materialeCodice,
+        ),
+      ),
+    );
+  }
 
   Future<MaterialeMatch?> _resolveCode(String code) async {
     try {
@@ -230,7 +248,7 @@ class TicketMaterialiEditorState extends ConsumerState<TicketMaterialiEditor> {
         AppButton.secondary(
           label: 'Aggiungi materiale',
           icon: const Icon(LucideIcons.plus, size: 18),
-          onPressed: _addRow,
+          onPressed: _isSaving ? null : _addMateriale,
         ),
         const SizedBox(height: AppSpacing.lg),
         Row(

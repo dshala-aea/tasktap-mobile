@@ -709,6 +709,70 @@ void main() {
         await tester.pumpAndSettle();
       },
     );
+
+    testWidgets('the chosen giacenza magazzino is stored on the report material row', (
+      tester,
+    ) async {
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              code: 'ART-001',
+              name: 'Vite',
+              unitOfMeasure: const Value('pz'),
+            ),
+          );
+
+      final dio = MockDio();
+      when(
+        () => dio.get<Map<String, dynamic>>(
+          '/api/app/magazzino/giacenze',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse<Map<String, dynamic>>({
+          'elementi': [
+            {
+              'id': 'g1',
+              'magazzinoId': 'm1',
+              'magazzinoNome': 'Furgone Mario',
+              'materialeId': 'mat-1',
+              'quantita': 3,
+              'sottoScorta': false,
+              'unitOfMeasure': 'pz',
+            },
+          ],
+          'pagina': 1,
+          'dimensionePagina': 100,
+          'totaleElementi': 1,
+          'totalePagine': 1,
+        }, '/api/app/magazzino/giacenze'),
+      );
+
+      final container = _buildContainer(db: db, dio: dio, ticketId: null);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(TextFormField).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Vite').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aggiungi').last);
+      await tester.pumpAndSettle();
+
+      final rows = container.read(reportEditorProvider(_reportId)).materialeRows;
+      expect(rows.single.materialeId, 'mat-1');
+      expect(rows.single.magazzinoId, 'm1');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 
   // Item 7 of the admin-form audit: image_picker alone (Galleria/Fotocamera) can never return a
