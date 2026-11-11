@@ -67,6 +67,47 @@ workflows:
             --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
             --dart-define=API_BASE_URL="$API_BASE_URL" \
             --dart-define=SENTRY_DSN="$SENTRY_DSN"
+      - name: Verify the push entitlement in the signed IPA
+        script: |
+          # A build whose signed app carries no `aps-environment`, or a non-production one, can
+          # never register with APNs: firebase_messaging then throws
+          # `[firebase_messaging/apns-token-not-set]` on every handset (Sentry: PushFailure,
+          # push.stage:fcm-token, push.apns_token:absent). That fault is invisible at build time,
+          # so fail the build here instead of shipping it to TestFlight.
+          #
+          # The usual cause is a provisioning profile created before Push Notifications was
+          # enabled on the App ID: Codemagic reuses an existing profile for the bundle id. Fix =
+          # enable the capability on the App ID, delete the profile in the Apple Developer portal,
+          # and rebuild so Codemagic creates a fresh one.
+          set -euo pipefail
+
+          IPA=$(ls build/ios/ipa/*.ipa | head -n 1)
+          WORK=$(mktemp -d)
+          unzip -q "$IPA" -d "$WORK"
+          APP=$(ls -d "$WORK"/Payload/*.app | head -n 1)
+
+          # What the signature actually embeds (the authoritative value).
+          codesign -d --entitlements - --xml "$APP" > "$WORK/app-entitlements.plist" 2>/dev/null || \
+            codesign -d --entitlements :- "$APP" > "$WORK/app-entitlements.plist"
+          # What the provisioning profile grants (diagnostic: tells a stale profile from a bad export).
+          security cms -D -i "$APP/embedded.mobileprovision" > "$WORK/profile.plist"
+
+          APP_APS=$(/usr/libexec/PlistBuddy -c "Print :aps-environment" "$WORK/app-entitlements.plist" 2>/dev/null || echo "MISSING")
+          PROFILE_APS=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:aps-environment" "$WORK/profile.plist" 2>/dev/null || echo "MISSING")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$WORK/profile.plist" 2>/dev/null || echo "unknown")
+
+          echo "Provisioning profile : $PROFILE_NAME"
+          echo "Profile aps-environment : $PROFILE_APS"
+          echo "App aps-environment     : $APP_APS"
+
+          if [ "$APP_APS" != "production" ]; then
+            echo "ERROR: the signed app's aps-environment is '$APP_APS', expected 'production'." >&2
+            if [ "$PROFILE_APS" = "MISSING" ]; then
+              echo "The provisioning profile '$PROFILE_NAME' has no Push Notifications entitlement." >&2
+              echo "Enable Push Notifications on the App ID, delete this profile in the Apple Developer portal, and rebuild." >&2
+            fi
+            exit 1
+          fi
     artifacts:
       - build/ios/ipa/*.ipa
       - build/ios/archive/**/*.xcarchive
