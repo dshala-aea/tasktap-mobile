@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_messaging/firebase_messaging.dart' show AuthorizationStatus;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -134,7 +135,7 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   ImpostazioniNotifier(this._authRepo, this._api)
     : super(const ImpostazioniState()) {
     _loadFromPrefs()
-        .then((_) => _reconcilePushWithOs())
+        .then((_) => reconcilePushWithOs())
         .then((_) => unawaited(reconcileWithServer()));
   }
 
@@ -180,13 +181,22 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   ///
   /// Never forces the switch *on*. Holding the OS permission is not the same as wanting push, and
   /// a setting that turned itself back on would be worse than one that lags.
-  Future<void> _reconcilePushWithOs() async {
+  ///
+  /// Skipped while the OS has never been asked: the launch-time system dialog
+  /// (`PushLaunchPermission`) decides that, and it calls this again once answered. Without the
+  /// skip a fresh install would persist "off" before the dialog was ever shown, and the in-app
+  /// choice would then veto the ask.
+  Future<void> reconcilePushWithOs() async {
     if (!state.pushAbilitate) return;
     // Firebase absent (init failed, no Play Services, every widget test) — nothing to reconcile
     // against, and touching `instance` here would throw `[core/no-app]`.
     if (!NotificationService.isAvailable) return;
 
     if (await NotificationService.instance.hasPermission()) return;
+    if (await NotificationService.instance.authorizationStatus() ==
+        AuthorizationStatus.notDetermined) {
+      return;
+    }
 
     state = state.copyWith(pushAbilitate: false);
     await _persist('pushAbilitate', false);
