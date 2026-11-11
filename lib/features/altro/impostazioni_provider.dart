@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/notifications/notification_service.dart';
+import '../../core/notifications/push_resume_recheck.dart';
 import '../../data/settings/notification_settings_api_client.dart';
 import '../../domain/auth/i_auth_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
@@ -12,7 +13,7 @@ import '../../presentation/providers/auth_providers.dart';
 // SharedPreferences keys
 // ══════════════════════════════════════════════════════════════════════════════
 
-const _kPushAbilitate = 'settings.push_abilitate';
+const _kPushAbilitate = kPushPreferenceKey;
 const _kNotificheEmail = 'settings.notifiche_email';
 const _kNotificheInApp = 'settings.notifiche_in_app';
 const _kNotificheInterventi = 'settings.notifiche_interventi';

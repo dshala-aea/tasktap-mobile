@@ -8,7 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/env.dart';
 import '../router/app_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'push_reporting.dart';
+import 'push_resume_recheck.dart';
 
 /// Background message handler — must be a top-level function, registered by main.dart via
 /// `FirebaseMessaging.onBackgroundMessage` before `runApp`.
@@ -361,6 +364,27 @@ class NotificationService {
       );
     }
   }
+
+  /// Foreground re-check, called by the home shell on `AppLifecycleState.resumed`. Registers the
+  /// device when permission was granted outside the app (iOS Settings) or the APNs token only
+  /// arrived after the first attempt. Never prompts, and the in-app switch wins. See
+  /// [PushResumeRecheck].
+  Future<void> onAppResumed() => (_resumeRecheck ??= PushResumeRecheck(
+    accessToken: () => _lastAccessToken,
+    pushPreferenceEnabled: () async {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(kPushPreferenceKey) ?? true;
+    },
+    permissionGranted: hasPermission,
+    hasToken: () => _currentToken != null,
+    fetchToken: () async {
+      _currentToken ??= await _tryGetToken();
+      return _currentToken != null;
+    },
+    register: registerDeviceToken,
+  )).onResumed();
+
+  PushResumeRecheck? _resumeRecheck;
 
   /// Handle a foreground notification — show an in-app banner or update state.
   void _handleForegroundMessage(RemoteMessage message) {
