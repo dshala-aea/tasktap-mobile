@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+
+import 'local_database_encryption.dart';
+import 'local_database_key_store.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -2852,6 +2855,17 @@ LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'tasktap.db'));
-    return NativeDatabase.createInBackground(file);
+    final plan = await LocalDatabaseEncryption(
+      keyStore: SecureLocalDatabaseKeyStore(),
+    ).prepare(file);
+
+    return NativeDatabase.createInBackground(
+      file,
+      // Null only in the plaintext fallback (key store unavailable or migration failed); the
+      // encryption plan reports those to Sentry and retries on the next launch.
+      setup: plan.keyHex == null
+          ? null
+          : (db) => db.execute("PRAGMA key = \"x'${plan.keyHex}'\";"),
+    );
   });
 }

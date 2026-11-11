@@ -22,8 +22,6 @@ dependencies:
 
   # Local DB (offline-first)
   drift: ^2.22.1
-  sqlite3_flutter_libs: ^0.5.24
-
   # Auth & backend
   flutter_appauth: ^8.0.3
   dio: ^5.8.0+1
@@ -113,6 +111,8 @@ dependencies:
   # Keeps the screen awake while the worker badge QR is on screen (lib/features/badge) so the
   # code does not dim out in front of the scanner. Enabled on mount, released on dispose.
   wakelock_plus: ^1.3.2
+  sqlcipher_flutter_libs: ^0.6.8
+  sqlite3: ^2.9.4
 
 dev_dependencies:
   flutter_test:
