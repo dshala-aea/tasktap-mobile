@@ -17,6 +17,7 @@ import 'core/time/business_time.dart';
 import 'core/crash_reporting/sentry_crash_reporter.dart';
 import 'core/notifications/deep_link_drainer.dart';
 import 'core/notifications/notification_service.dart';
+import 'core/notifications/push_launch_permission.dart';
 import 'core/notifications/push_reporting.dart';
 import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
@@ -236,6 +237,20 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // Cold start: the tap may have been stored before this widget existed. Wait for the first
     // frame so the router is mounted; if auth is still loading, the auth listener drains later.
     WidgetsBinding.instance.addPostFrameCallback((_) => _deepLinks?.drain());
+    // System notification dialog, once per install, after the first frame (never blocks bootstrap).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _askPushPermissionAtLaunch());
+  }
+
+  Future<void> _askPushPermissionAtLaunch() async {
+    final service = NotificationService.instance;
+    await PushLaunchPermission(
+      status: service.authorizationStatus,
+      ask: service.ensurePermission,
+      // A refusal must turn the in-app switch off (it defaults to on); a grant leaves it alone.
+      onDone: (_) async {
+        if (mounted) await ref.read(impostazioniProvider.notifier).reconcilePushWithOs();
+      },
+    ).run();
   }
 
   @override

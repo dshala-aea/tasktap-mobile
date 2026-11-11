@@ -748,7 +748,8 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     // Asked before the spinner goes up, not underneath it: a system dialog appearing over a
     // half-started clock-in reads as the app malfunctioning, and the technician cannot tell whether
     // their timbratura went through while they decide.
-    if (!await confirmGpsPurpose(context, ref)) return;
+    await requestGpsPermission(ref);
+    if (!mounted) return;
 
     setState(() {
       _isLoading = true;
@@ -881,7 +882,8 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       setState(() => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
       return;
     }
-    if (!await confirmGpsPurpose(context, ref)) return;
+    await requestGpsPermission(ref);
+    if (!mounted) return;
 
     setState(() {
       _isLoading = true;
@@ -1052,32 +1054,15 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 // neither screen has to reimplement the GPS-purpose gating, offline-fallback detection, or error
 // humanising the check-in side already had right.
 
-/// States what the coordinates are for, before the OS asks for them.
+/// Raises the system location dialog now, if it would appear at all, before the spinner goes up.
 ///
-/// Returns false only when the technician declines the *explanation*. Declining here cancels the
-/// timbratura rather than clocking in without a position, because on a cantiere the arrival and
-/// departure coordinates are the point: a site presence record with no location is not the same
-/// record, and silently downgrading it would hide that from both the technician and the office.
-///
-/// Returns true when no dialog would appear at all — permission already held, already refused
-/// permanently, or the setting turned off. In those cases the existing null-position path is the
-/// honest one and there is nothing to explain.
-Future<bool> confirmGpsPurpose(BuildContext context, WidgetRef ref) async {
-  if (!await ref.read(locationServiceProvider).willPromptForPermission()) return true;
-  if (!context.mounted) return false;
-
-  return askPermissionPurpose(
-    context,
-    icon: LucideIcons.mapPin,
-    titolo: 'Timbratura di cantiere',
-    motivo:
-        'Registriamo dove sei quando entri e quando esci dal cantiere. Serve a dimostrare la '
-        'tua presenza in cantiere, per la sicurezza e per le ore. Due punti, non un percorso.',
-    senzaDiEsso:
-        'Senza posizione la timbratura di cantiere non viene registrata. La timbratura normale '
-        'della giornata, nella scheda Timbra, funziona senza GPS.',
-    cta: 'Consenti la posizione',
-  );
+/// The OS dialog is the only ask — there is no in-app explanation first. Whatever the answer, the
+/// flow continues: a refusal leaves the existing null-position path to handle it, exactly as for a
+/// permission that was already refused permanently or a setting turned off.
+Future<void> requestGpsPermission(WidgetRef ref) async {
+  final service = ref.read(locationServiceProvider);
+  if (!await service.willPromptForPermission()) return;
+  await service.requestPermission();
 }
 
 /// A network error the device cannot reach the server to answer — as opposed to one the server

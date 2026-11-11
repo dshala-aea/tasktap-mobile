@@ -49,14 +49,16 @@ abstract class ILocationService {
 
   /// Whether calling [getCurrentPosition] would put an OS permission dialog on screen.
   ///
-  /// Exists so the UI can state the purpose *before* the system asks. The prompt used to appear
-  /// inside an "Acquisisci" button with nothing saying what the coordinate was for or what happened
-  /// if they refused — and on iOS the dialog cannot be shown again, so the first ask is the only
-  /// one there is.
+  /// Lets a caller raise the prompt at a moment of its choosing (before a spinner) via
+  /// [requestPermission], instead of having it appear underneath [getCurrentPosition].
   ///
   /// Concrete rather than abstract so the test fakes and [DisabledLocationService] inherit the
   /// honest answer (they never prompt) instead of each having to restate it.
   Future<bool> willPromptForPermission() async => false;
+
+  /// Raises the OS permission dialog now (only `denied` produces one), without reading a position.
+  /// Concrete no-op so fakes and [DisabledLocationService] need not restate it. Never throws.
+  Future<void> requestPermission() async {}
 
   /// See [GpsPermissionStatus]. Concrete so every fake and [DisabledLocationService] gets the
   /// honest "never asked" answer without restating it.
@@ -78,6 +80,18 @@ class LocationService extends ILocationService {
       return await Geolocator.checkPermission() == LocationPermission.denied;
     } catch (_) {
       return false;
+    }
+  }
+
+  @override
+  Future<void> requestPermission() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      if (await Geolocator.checkPermission() == LocationPermission.denied) {
+        await Geolocator.requestPermission();
+      }
+    } catch (_) {
+      // The follow-up getCurrentPosition() reports the outcome as null.
     }
   }
 

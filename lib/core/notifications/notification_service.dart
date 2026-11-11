@@ -77,8 +77,9 @@ class NotificationService {
   /// That is a transparency failure and, in practice, the surest way to be denied: an unexplained
   /// prompt is the one people refuse, and on iOS it cannot be shown a second time.
   ///
-  /// The ask now lives behind the "Notifiche push" setting, where [ensurePermission] is called
-  /// after a sheet has stated the purpose. Everything here is listeners and token plumbing, none of
+  /// The ask is raised separately, once per install right after the first frame
+  /// (`PushLaunchPermission`), and again by the "Notifiche push" setting; both call
+  /// [ensurePermission] directly (system dialog only). Everything here is listeners and token plumbing, none of
   /// which prompts; the token is fetched only if permission is *already* held from a previous run.
   Future<void> initialize() async {
     if (_initialized) return;
@@ -193,11 +194,10 @@ class NotificationService {
     return settings.authorizationStatus;
   }
 
-  /// Asks the OS, once the caller has already explained why.
+  /// Raises the OS notification permission dialog — the only ask; there is no in-app explanation.
   ///
-  /// Returns whether notifications can now be delivered. **Do not call this without showing
-  /// `askPermissionPurpose` first** — that is the whole point of it being separate from
-  /// [initialize].
+  /// Returns whether notifications can now be delivered. Kept separate from [initialize] so that
+  /// bootstrap itself never prompts.
   Future<bool> ensurePermission() async {
     final settings = await _messaging.requestPermission(
       alert: true,

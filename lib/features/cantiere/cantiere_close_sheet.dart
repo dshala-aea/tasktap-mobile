@@ -25,7 +25,7 @@ import '../timbra/cantiere_timbra_screen.dart'
         TimbraErrorBanner,
         activeCantiereLogProvider,
         cantiereNetworkErrorMessage,
-        confirmGpsPurpose,
+        requestGpsPermission,
         isOfflineFailure;
 import '../timbra/gps_status_indicator.dart';
 import 'cantiere_day.dart';
@@ -88,7 +88,8 @@ class _CantiereCloseSheetState extends ConsumerState<CantiereCloseSheet> {
   String? _blankToNull(String v) => v.trim().isEmpty ? null : v.trim();
 
   Future<void> _confirm({bool skipNotes = false}) async {
-    if (!await confirmGpsPurpose(context, ref)) return;
+    await requestGpsPermission(ref);
+    if (!mounted) return;
 
     setState(() {
       if (skipNotes) {
