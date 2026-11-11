@@ -131,6 +131,33 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('dashboard quick actions clear the floating nav when scrolled to the end', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.viewPadding = const FakeViewPadding(bottom: 34);
+      tester.view.padding = const FakeViewPadding(bottom: 34);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(_buildAuthenticatedApp(repo, db, mockDio));
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -2000));
+      await tester.pumpAndSettle();
+
+      final quickRect = tester.getRect(find.byType(QuickAction).last);
+      final navRect = tester.getRect(find.byType(AppBottomNav));
+      expect(
+        quickRect.bottom,
+        lessThanOrEqualTo(navRect.top),
+        reason: 'dashboard buttons must scroll clear of the floating nav',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('tapping Reports tab opens the report list', (tester) async {
       await tester.pumpWidget(_buildAuthenticatedApp(repo, db, mockDio));
       await tester.pumpAndSettle(const Duration(seconds: 2));
