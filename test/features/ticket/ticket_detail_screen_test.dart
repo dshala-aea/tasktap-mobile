@@ -414,11 +414,11 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Crea rapportino and AI Copilot move into the hero', (tester) async {
+    testWidgets('Crea report and AI Copilot move into the hero', (tester) async {
       await seedBase(db);
       await pump(tester);
       final hero = find.byType(DetailHero);
-      expect(find.descendant(of: hero, matching: find.text('Crea rapportino')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Crea report')), findsOneWidget);
       expect(find.descendant(of: hero, matching: find.text('AI Copilot')), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -463,7 +463,7 @@ void main() {
       // seat has no use for them.
       expect(find.bySemanticsLabel('Modifica'), findsNothing);
       expect(find.bySemanticsLabel('Assegna'), findsNothing);
-      expect(find.text('Crea rapportino'), findsNothing);
+      expect(find.text('Crea report'), findsNothing);
       expect(find.text('AI Copilot'), findsNothing);
 
       // The status stays on screen — it is also how the ticket is read — but is no longer a
@@ -974,7 +974,7 @@ void main() {
       await seedBase(db);
       await pump(tester);
 
-      expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('Crea report'), findsOneWidget);
       expect(find.text('AI Copilot'), findsOneWidget);
       expect(find.text('Timbra cantiere'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1006,7 +1006,7 @@ void main() {
 
       await pump(tester);
 
-      expect(find.text('Crea rapportino'), findsNothing);
+      expect(find.text('Crea report'), findsNothing);
       expect(find.text('AI Copilot'), findsNothing);
       // The hero explains why the timer cannot start, not just hiding the action.
       expect(
