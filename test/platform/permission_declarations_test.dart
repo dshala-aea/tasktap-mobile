@@ -115,49 +115,29 @@ void main() {
   /// Store Connect and stays undeliverable to testers until someone fills the questionnaire in by
   /// hand — a step that is easy to miss precisely because the build itself succeeded.
   group('App Store export compliance', () {
-    test('the export-compliance answer ships inside the bundle', () {
+    test('the non-exempt encryption answer ships inside the bundle', () {
       expect(
         plist,
-        matches(RegExp(r'<key>ITSAppUsesNonExemptEncryption</key>\s*<false/>')),
+        matches(RegExp(r'<key>ITSAppUsesNonExemptEncryption</key>\s*<true/>')),
         reason:
-            'ios/Runner/Info.plist must declare ITSAppUsesNonExemptEncryption. A build without it '
-            'is not rejected, it is simply stuck at Missing Compliance and never reaches testers.',
+            'SQLCipher encrypts the offline database at rest, which is non-exempt encryption. '
+            'The App Store export-compliance answer must say so.',
       );
     });
 
-    test('no app-level crypto dependency makes that "false" answer wrong', () {
-      // "false" says the app only hashes and speaks TLS, both exempt. A library that encrypts
-      // data itself (or a local database declared encrypted, below) would make it false in the
-      // other sense of the word, and the honest answer becomes a self-classification someone has
-      // to do deliberately. Fail here instead of at App Review.
+    test('the database encryption and its dependency are deliberate', () {
       final pubspec = File('pubspec.yaml').readAsStringSync();
-      const appLevelCrypto = [
-        'encrypt:',
-        'pointycastle:',
-        'cryptography:',
-        'cryptography_flutter:',
-        'openpgp:',
-        'sodium:',
-      ];
-
-      for (final dep in appLevelCrypto) {
-        final declared = RegExp('^\\s*$dep', multiLine: true).hasMatch(pubspec);
-        expect(
-          declared,
-          isFalse,
-          reason:
-              'pubspec.yaml now depends on $dep, so the app encrypts data itself. Revisit '
-              'ITSAppUsesNonExemptEncryption in ios/Runner/Info.plist before shipping.',
-        );
-      }
+      expect(
+        RegExp(r'^\s*sqlcipher_flutter_libs:', multiLine: true).hasMatch(pubspec),
+        isTrue,
+        reason: 'the offline database is encrypted at rest with SQLCipher',
+      );
 
       final db = File('lib/data/local/app_database.dart').readAsStringSync();
       expect(
         RegExp(r'passphrase|PRAGMA key|sqlcipher', caseSensitive: false).hasMatch(db),
-        isFalse,
-        reason:
-            'the offline database is now encrypted at rest, which is non-exempt encryption. '
-            'ITSAppUsesNonExemptEncryption must be revisited.',
+        isTrue,
+        reason: 'app_database.dart must apply the SQLCipher key through Drift setup',
       );
     });
   });

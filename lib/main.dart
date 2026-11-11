@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
+import 'package:sqlite3/open.dart';
 
 import 'core/config/env.dart';
 import 'core/crash_reporting/crash_reporter.dart';
@@ -32,6 +34,11 @@ import 'features/altro/impostazioni_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Android resolves package:sqlite3 to libsqlite3.so unless told otherwise; point it at the
+  // SQLCipher library shipped by sqlcipher_flutter_libs before anything opens the DB. iOS links
+  // SQLCipher through its pod, so no override is needed there.
+  open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
 
   // ── Crash reporting (Sentry) ────────────────────────────────────────────────
   //
