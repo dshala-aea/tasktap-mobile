@@ -81,9 +81,9 @@
 			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>TaskTap utilizza la posizione per registrare l'ubicazione dei cantieri durante timbrate e interventi.</string>
+		<string>TaskTap registra la tua posizione solo mentre l'app e' aperta: un punto quando entri ed esci da un cantiere e uno quando acquisisci la posizione su un rapporto di intervento, come prova di dove hai lavorato. Non ti seguiamo in background e puoi usare l'app anche senza.</string>
 		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-		<string>TaskTap utilizza la posizione per registrare l'ubicazione dei cantieri durante timbrate e interventi.</string>
+		<string>TaskTap registra la tua posizione solo mentre l'app e' aperta: un punto quando entri ed esci da un cantiere e uno quando acquisisci la posizione su un rapporto di intervento, come prova di dove hai lavorato. Non ti seguiamo in background e puoi usare l'app anche senza.</string>
 		<key>NSFaceIDUsageDescription</key>
 		<string>TaskTap usa Face ID per proteggere l'accesso ai dati di clienti e interventi su questo dispositivo.</string>
 		<key>NSMicrophoneUsageDescription</key>

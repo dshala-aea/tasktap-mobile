@@ -356,23 +356,9 @@ class ImpostazioniScreen extends ConsumerWidget {
 
     final service = NotificationService.instance;
 
-    // Already granted in a previous run: no purpose sheet, no OS dialog, just honour the switch.
+    // Already granted in a previous run: no OS dialog, just honour the switch. Otherwise the
+    // system permission dialog is the only ask (no in-app pre-prompt).
     if (!await service.hasPermission()) {
-      if (!context.mounted) return;
-      final wants = await askPermissionPurpose(
-        context,
-        icon: LucideIcons.bell,
-        titolo: 'Avvisi sul lavoro',
-        motivo:
-            'Ti avvisiamo quando ti viene assegnato un intervento, quando cambia un appuntamento '
-            'e quando un rapporto di intervento ha bisogno di te. Nient\'altro.',
-        senzaDiEsso:
-            'Senza notifiche l\'app funziona lo stesso: trovi tutto in Dashboard e in Calendario, '
-            'ma lo scopri quando apri l\'app.',
-        cta: 'Attiva le notifiche',
-      );
-      if (!wants) return;
-
       if (!await service.ensurePermission()) {
         if (!context.mounted) return;
         showAppToast(

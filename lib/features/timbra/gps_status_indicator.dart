@@ -4,7 +4,7 @@
 //
 // A small, passive "did we get a position" row for the cantiere timbratura flow. GPS capture on
 // this flow has always been fully automatic — see cantiere_timbra_screen.dart's own header
-// comment and `_confirmGpsPurpose()` — there is no button here and this widget adds none; it only
+// comment and `requestGpsPermission()` — there is no button here and this widget adds none; it only
 // tells the technician a position was (or wasn't) picked up, near the arrival/departure action.
 //
 // [ILocationService] exposes no observable "do we currently have a fix" state (see
@@ -12,7 +12,7 @@
 // This widget deliberately does NOT call `getCurrentPosition()` when permission hasn't been
 // decided yet (`willPromptForPermission()` true): doing so would silently trigger the OS
 // permission dialog the moment this indicator mounts, with no purpose explanation shown first —
-// exactly what `_confirmGpsPurpose()` exists to prevent for the real start/end actions. Once
+// exactly what `requestGpsPermission()` is called to prevent for the real start/end actions. Once
 // permission is already decided one way or another (granted, permanently denied, or the app
 // setting is off), `getCurrentPosition()` cannot show any OS UI on its own, so it's safe to call
 // here purely to report the outcome.

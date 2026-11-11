@@ -16,7 +16,7 @@
 // *values* moved (from that screen's own `_closingDescription`/`_safetyNotes` state to this
 // screen's own text controllers) — the GPS-purpose gating, offline-fallback detection, and error
 // humanising themselves are the exact same shared top-level functions
-// (`confirmGpsPurpose`/`isOfflineFailure`/`cantiereNetworkErrorMessage`) cantiere_timbra_screen.dart
+// (`requestGpsPermission`/`isOfflineFailure`/`cantiereNetworkErrorMessage`) cantiere_timbra_screen.dart
 // exports for this reason. Do not reimplement that logic differently here.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -45,7 +45,7 @@ import 'cantiere_timbra_screen.dart'
         activeCantiereLogProvider,
         cantiereNetworkErrorMessage,
         clampedElapsedSinceMidnight,
-        confirmGpsPurpose,
+        requestGpsPermission,
         formatHoursMinutes,
         isOfflineFailure;
 import 'gps_status_indicator.dart';
@@ -99,7 +99,8 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
   /// than just happening to submit it empty, a deliberate fast path distinct from "Conferma
   /// uscita" with blank fields.
   Future<void> _confirm({bool skipNotes = false}) async {
-    if (!await confirmGpsPurpose(context, ref)) return;
+    await requestGpsPermission(ref);
+    if (!mounted) return;
 
     setState(() {
       if (skipNotes) {
