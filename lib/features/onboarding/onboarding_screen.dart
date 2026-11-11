@@ -62,7 +62,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         _notificationsGranted = switch (status) {
           AuthorizationStatus.authorized ||
           AuthorizationStatus.provisional => true,
-          AuthorizationStatus.denied => false,
+          // firebase_messaging 16 adds `deniedPermanently` (Android 13+ only); for the
+          // onboarding ask it is the same outcome as `denied`.
+          AuthorizationStatus.denied || AuthorizationStatus.deniedPermanently => false,
           AuthorizationStatus.notDetermined => null,
         };
       });
