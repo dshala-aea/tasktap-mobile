@@ -408,4 +408,41 @@ void main() {
     expect(queue.fatto, isEmpty);
     expect(queue.absences.map((s) => s.id), ['s-ferie-live', 's-ferie-fatto']);
   });
+
+  test('pastSchedulesProvider returns past schedules newest first, excluding today', () async {
+    Future<void> insert(String id, DateTime date) => db
+        .into(db.schedules)
+        .insert(
+          SchedulesCompanion.insert(
+            id: id,
+            tenantId: 't1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            activityDate: date,
+            timeStartMinutes: 480,
+            timeEndMinutes: 540,
+            userId: 'u1',
+            statusId: 5,
+            locationId: 'l1',
+            title: id,
+            description: '',
+          ),
+        );
+
+    await insert('yesterday', today.subtract(const Duration(days: 1)));
+    await insert('lastWeek', today.subtract(const Duration(days: 7)));
+    await insert('today', today);
+    await insert('tomorrow', tomorrow);
+
+    final result = await container.read(pastSchedulesProvider.future);
+    expect(result.map((s) => s.id), ['yesterday', 'lastWeek']);
+  });
+
+  test('dashboardStatsProvider excludes cancelled schedules from upcomingCount', () async {
+    await seedSchedule(id: 'cancelled', ticketId: null, day: tomorrow, statusId: _annullato);
+    await seedSchedule(id: 'open', ticketId: null, day: tomorrow);
+
+    await container.read(upcomingSchedulesProvider.future);
+    final stats = container.read(dashboardStatsProvider);
+    expect(stats.upcomingCount, 1);
+  });
 }

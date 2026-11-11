@@ -49,10 +49,15 @@ Widget _buildDashboard({required AppDatabase db, required MockAuthRepository rep
 /// Builds the Dashboard behind a real [GoRouter] with marker screens at the standalone Timbra
 /// route and the (distinct) cantiere-timbra route, so a test can assert *which* route a tile
 /// actually pushes rather than only checking that some text containing "Timbra" is on screen.
-GoRouter _makeQuickActionRouter() => GoRouter(
+GoRouter _makeQuickActionRouter({bool storicoMarker = false}) => GoRouter(
   initialLocation: '/dashboard',
   routes: [
     GoRoute(path: '/dashboard', builder: (_, _) => const DashboardScreen()),
+    if (storicoMarker)
+      GoRoute(
+        path: AppRoutes.storico,
+        builder: (_, _) => const Scaffold(body: Center(child: Text('STORICO-SCREEN-MARKER'))),
+      ),
     GoRoute(
       path: AppRoutes.timbra,
       builder: (_, _) => const Scaffold(body: Center(child: Text('TIMBRA-SCREEN-MARKER'))),
@@ -603,5 +608,62 @@ void main() {
         }
       },
     );
+
+    testWidgets('shows the next-7-days counter with a self-explanatory label', (tester) async {
+      await pumpDashboard(tester);
+      expect(find.text('PROSSIMI 7 GIORNI'), findsOneWidget);
+      expect(find.text('0'), findsWidgets);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('tapping Storico pushes AppRoutes.storico', (tester) async {
+      final router = _makeQuickActionRouter(storicoMarker: true);
+      await tester.pumpWidget(_buildDashboardWithRouter(db: db, repo: repo, router: router));
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      await tester.tap(find.text('Storico'));
+      await tester.pumpAndSettle();
+      expect(find.text('STORICO-SCREEN-MARKER'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('hero readouts wrap instead of overflowing at 1.3x on a narrow phone', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(720, 1440);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(360, 800),
+              textScaler: TextScaler.linear(1.3),
+            ),
+            child: const Scaffold(
+              body: IdPlateHeroComp(
+                userName: 'Tecnico',
+                todayCount: 3,
+                completedCount: 1,
+                upcomingCount: 5,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), equals(null));
+      expect(find.text('PROSSIMI 7 GIORNI'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 }

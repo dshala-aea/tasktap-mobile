@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -67,6 +68,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Intervento tutto il giorno'), findsOneWidget);
+      expect(find.textContaining('Tutto il giorno'), findsOneWidget);
       expect(find.textContaining('00:00'), findsNothing);
 
       // Same unmount-before-teardown convention dashboard_screen_test.dart's own tests use —
@@ -120,7 +122,80 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Intervento tutto il giorno'), findsOneWidget);
+      expect(find.textContaining('Tutto il giorno'), findsOneWidget);
       expect(find.textContaining('00:00'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a future all-day schedule names its day', (tester) async {
+      final today = _today();
+      final future = today.add(const Duration(days: 2));
+
+      await db.into(db.schedules).insert(
+        SchedulesCompanion.insert(
+          id: 'sched-future-allday',
+          tenantId: 'tenant-1',
+          createdAt: today,
+          activityDate: future,
+          timeStartMinutes: 0,
+          timeEndMinutes: 0,
+          userId: 'u1',
+          statusId: 1,
+          locationId: 'loc-1',
+          allDay: const Value(true),
+          title: 'Blocco futuro',
+          description: '',
+        ),
+      );
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      final day = DateFormat('EEE d', 'it').format(future);
+      final label = '${day[0].toUpperCase()}${day.substring(1)}';
+      expect(find.textContaining('$label · Tutto il giorno'), findsOneWidget);
+      expect(find.textContaining('00:00'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('consecutive multi-day all-day rows show distinct days', (tester) async {
+      final today = _today();
+      final first = today.add(const Duration(days: 1));
+      final second = today.add(const Duration(days: 2));
+
+      for (final (id, day) in [('day-1', first), ('day-2', second)]) {
+        await db.into(db.schedules).insert(
+          SchedulesCompanion.insert(
+            id: id,
+            tenantId: 'tenant-1',
+            createdAt: today,
+            activityDate: day,
+            timeStartMinutes: 0,
+            timeEndMinutes: 0,
+            userId: 'u1',
+            statusId: 1,
+            locationId: 'loc-1',
+            allDay: const Value(true),
+            title: 'Cantiere multi-giorno',
+            description: '',
+          ),
+        );
+      }
+
+      await tester.pumpWidget(_buildSection(db: db));
+      await tester.pumpAndSettle();
+
+      String label(DateTime d) {
+        final s = DateFormat('EEE d', 'it').format(d);
+        return '${s[0].toUpperCase()}${s.substring(1)}';
+      }
+
+      expect(find.textContaining('${label(first)} · Tutto il giorno'), findsOneWidget);
+      expect(find.textContaining('${label(second)} · Tutto il giorno'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

@@ -40,6 +40,7 @@ import 'package:tasktap_mobile/features/admin/magazzini/admin_magazzino_list_scr
 import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_form_screen.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_list_screen.dart';
 import 'package:tasktap_mobile/features/altro/forbidden_screen.dart';
+import 'package:tasktap_mobile/features/dashboard/storico_screen.dart';
 import 'package:tasktap_mobile/features/approvazioni/approvazioni_screen.dart';
 import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
 import 'package:tasktap_mobile/features/rapportino/ai_copilot_screen.dart';
@@ -931,6 +932,30 @@ void main() {
 
     expect(find.byType(ForbiddenScreen), findsOneWidget);
     expect(find.byType(TicketListScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('/storico renders StoricoScreen without module gating', (tester) async {
+    final cached = Entitlement(
+      features: const {},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 11),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/storico');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(StoricoScreen), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

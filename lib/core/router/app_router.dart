@@ -12,6 +12,7 @@ import '../../features/altro/notification_preferences_screen.dart';
 import '../../features/badge/badge_scan_screen.dart';
 import '../../features/badge/my_badge_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
+import '../../features/dashboard/storico_screen.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
 import '../../features/ticket/new_ticket_form_screen.dart';
@@ -161,6 +162,10 @@ abstract final class AppRoutes {
       ticketId == null ? '/cantieri/$id' : '/cantieri/$id?ticketId=$ticketId';
 
   static const String calendario = '/calendario';
+
+  /// Full-screen past-schedules history reached from the Dashboard. Deliberately ungated,
+  /// like [calendario]: both expose the same local schedule mirror.
+  static const String storico = '/storico';
   static const String altro = '/altro';
   static const String altroRapportini = '/altro/rapportini';
   static const String altroImpostazioni = '/altro/impostazioni';
@@ -674,6 +679,12 @@ GoRouter buildRouter(WidgetRef ref) {
             ],
           ),
         ],
+      ),
+
+      // ── Past schedules (pushed from the Dashboard's "Storico" action) ──────
+      GoRoute(
+        path: AppRoutes.storico,
+        builder: (context, state) => const StoricoScreen(),
       ),
 
       // ── Forbidden (route-requirement guard's redirect target) ────────────
