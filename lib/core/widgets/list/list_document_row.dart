@@ -56,6 +56,10 @@ class ListDocumentRow extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (data.badge != null) ...[
+                      const SizedBox(width: 6),
+                      data.badge!,
+                    ],
                     if (data.status != null) ...[
                       const SizedBox(width: 8),
                       StatusStamp(

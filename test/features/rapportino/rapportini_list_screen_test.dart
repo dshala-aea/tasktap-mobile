@@ -34,6 +34,7 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart'
     show ConnectivityNotifier, connectivityProvider;
 import 'package:tasktap_mobile/data/sync/pending_sync_count_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/features/rapportino/ai_assisted_badge.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportini_list_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
     show internalUserIdProvider;
@@ -139,6 +140,7 @@ Future<void> _seedDraft(
   int? customerSignatureAbsenceReason,
   DateTime? updatedAt,
   DateTime? createdAt,
+  bool isAiAssisted = false,
 }) async {
   await db
       .into(db.draftReports)
@@ -159,6 +161,7 @@ Future<void> _seedDraft(
           technicianSignatureAllegatoId: Value(technicianSignatureId),
           customerSignatureAllegatoId: Value(customerSignatureId),
           customerSignatureAbsenceReason: Value(customerSignatureAbsenceReason),
+          isAiAssisted: Value(isAiAssisted),
         ),
       );
 }
@@ -1483,4 +1486,19 @@ void main() {
       await tester.pumpAndSettle();
     });
   });
+
+    testWidgets('an AI-assisted row carries the AI badge, a normal row does not', (tester) async {
+      final db = await _makeDb();
+      addTearDown(db.close);
+      await _seedDraft(db, id: 'r-ai', title: 'Bozza AI', isAiAssisted: true);
+      await _seedDraft(db, id: 'r-manual', title: 'Bozza manuale');
+
+      await tester.pumpWidget(_buildRouted(db: db, api: _FakeServerApi()));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AiAssistedBadge), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
 }
