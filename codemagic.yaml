@@ -56,6 +56,10 @@ workflows:
           # rather than a single ever-increasing track counter, so this hasn't shown the same
           # failure — left as-is for now rather than changed speculatively.
           echo "BUILD_NUMBER=$(git rev-list --count HEAD)" >> $CM_ENV
+      - name: Print toolchain versions
+        script: |
+          flutter --version
+          xcodebuild -version
       - name: Build iOS (release)
         script: |
           flutter build ipa \
