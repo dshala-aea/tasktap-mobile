@@ -29,7 +29,7 @@ dependencies:
   passkeys: ^2.24.1
 
   # Secure storage
-  flutter_secure_storage: ^10.3.4
+  flutter_secure_storage: ^11.2.0
 
   # Push notifications
   firebase_core: ^5.1.0
@@ -52,7 +52,7 @@ dependencies:
   # only ever offers camera/gallery, which can't return a PDF at all.
   file_picker: ^12.0.0-beta.7
   local_auth: ^3.0.2
-  geolocator: ^14.0.2
+  geolocator: ^14.1.2
 
   # Opens the device's own maps app for turn-by-turn directions — no in-app map SDK, no API key.
   url_launcher: ^6.3.3
@@ -110,9 +110,9 @@ dependencies:
 
   # Keeps the screen awake while the worker badge QR is on screen (lib/features/badge) so the
   # code does not dim out in front of the scanner. Enabled on mount, released on dispose.
-  wakelock_plus: ^1.7.0
+  wakelock_plus: ^1.8.0
   sqlcipher_flutter_libs: ^0.7.0+eol
-  sqlite3: ^3.5.2
+  sqlite3: ^3.9.1
 
 dev_dependencies:
   flutter_test:
