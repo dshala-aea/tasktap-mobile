@@ -311,7 +311,7 @@ class _TicketDetailBody extends ConsumerWidget {
               onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
             ),
             DetailAction(
-              label: 'AI Copilot',
+              label: 'Assistente AI',
               onPressed: () => context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
             ),
           ],

@@ -133,7 +133,7 @@ void main() {
                   onPressed: _noop,
                 ),
                 secondaryActions: const [
-                  DetailAction(label: 'AI Copilot', onPressed: _noop),
+                  DetailAction(label: 'Assistente AI', onPressed: _noop),
                   DetailAction(label: 'Crea rapportino', onPressed: _noop),
                 ],
               ),
@@ -146,7 +146,7 @@ void main() {
       expect(tester.getSize(find.byType(DetailHero)).width, 320);
       expect(find.textContaining('Perdita acqua sotto'), findsOneWidget);
       expect(find.text('Avvia intervento'), findsOneWidget);
-      expect(find.text('AI Copilot'), findsOneWidget);
+      expect(find.text('Assistente AI'), findsOneWidget);
       expect(find.text('Crea rapportino'), findsOneWidget);
     },
   );
@@ -167,7 +167,7 @@ void main() {
                 onPressed: _noop,
               ),
               secondaryActions: const [
-                DetailAction(label: 'AI Copilot', onPressed: _noop),
+                DetailAction(label: 'Assistente AI', onPressed: _noop),
                 DetailAction(label: 'Crea rapportino', onPressed: _noop),
               ],
             ),

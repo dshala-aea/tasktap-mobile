@@ -414,12 +414,12 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Crea report and AI Copilot move into the hero', (tester) async {
+    testWidgets('Crea report and Assistente AI move into the hero', (tester) async {
       await seedBase(db);
       await pump(tester);
       final hero = find.byType(DetailHero);
       expect(find.descendant(of: hero, matching: find.text('Crea report')), findsOneWidget);
-      expect(find.descendant(of: hero, matching: find.text('AI Copilot')), findsOneWidget);
+      expect(find.descendant(of: hero, matching: find.text('Assistente AI')), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -464,7 +464,7 @@ void main() {
       expect(find.bySemanticsLabel('Modifica'), findsNothing);
       expect(find.bySemanticsLabel('Assegna'), findsNothing);
       expect(find.text('Crea report'), findsNothing);
-      expect(find.text('AI Copilot'), findsNothing);
+      expect(find.text('Assistente AI'), findsNothing);
 
       // The status stays on screen — it is also how the ticket is read — but is no longer a
       // control, and the reason is stated rather than left to an opaque refusal.
@@ -975,7 +975,7 @@ void main() {
       await pump(tester);
 
       expect(find.text('Crea report'), findsOneWidget);
-      expect(find.text('AI Copilot'), findsOneWidget);
+      expect(find.text('Assistente AI'), findsOneWidget);
       expect(find.text('Timbra cantiere'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1007,7 +1007,7 @@ void main() {
       await pump(tester);
 
       expect(find.text('Crea report'), findsNothing);
-      expect(find.text('AI Copilot'), findsNothing);
+      expect(find.text('Assistente AI'), findsNothing);
       // The hero explains why the timer cannot start, not just hiding the action.
       expect(
         find.text('Intervento chiuso: riaprilo dallo stato qui sopra.'),
