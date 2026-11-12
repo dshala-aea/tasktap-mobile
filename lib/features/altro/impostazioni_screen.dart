@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/config/app_info_provider.dart';
+import '../../core/location/location_service.dart';
 import '../../core/dictation/dictation_service.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/router/app_router.dart';
@@ -35,6 +36,7 @@ class ImpostazioniScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final settings = ref.watch(impostazioniProvider);
     final notifier = ref.read(impostazioniProvider.notifier);
+    final tenantGpsEnabled = ref.watch(tenantGpsEnabledProvider);
     final appInfoAsync = ref.watch(appInfoProvider);
 
     final displayName = user?.displayName ?? user?.email ?? '';
@@ -190,8 +192,11 @@ class ImpostazioniScreen extends ConsumerWidget {
                   _ToggleRow(
                     icon: LucideIcons.mapPin,
                     title: 'Geolocalizzazione',
-                    subtitle: 'Registra la posizione a inizio e fine cantiere',
-                    value: settings.geoLocazione,
+                    subtitle: tenantGpsEnabled
+                        ? 'Registra la posizione a inizio e fine cantiere'
+                        : "Disattivata dall'azienda",
+                    value: tenantGpsEnabled && settings.geoLocazione,
+                    enabled: tenantGpsEnabled,
                     onChanged: (_) => notifier.toggle(key: 'geoLocazione'),
                   ),
                   _ToggleRow(
@@ -205,6 +210,8 @@ class ImpostazioniScreen extends ConsumerWidget {
                 ],
               ),
             ),
+
+            const SliverToBoxAdapter(child: _GpsNotice()),
 
             // ── Account ───────────────────────────────────────────────────
             const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Account')),
@@ -517,6 +524,7 @@ class _ToggleRow extends StatelessWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
+    this.enabled = true,
     this.showDivider = true,
   });
 
@@ -525,6 +533,7 @@ class _ToggleRow extends StatelessWidget {
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
+  final bool enabled;
   final bool showDivider;
 
   @override
@@ -781,6 +790,44 @@ class _DictationLine extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// One-line employee information notice for the GPS control. The legal information-notice template
+/// and the tenant/admin switch are handed off; this states the behaviour in the app itself.
+class _GpsNotice extends StatelessWidget {
+  const _GpsNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        0,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.mapPin, size: 14, color: context.colors.inkMuted),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'La posizione viene registrata solo in momenti puntuali (timbratura, rapportino, '
+              "caricamento). Non c'è tracciamento continuo in background. Il titolare può "
+              "disattivare la geolocalizzazione per tutta l'azienda.",
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.35,
+                color: context.colors.inkMuted,
+              ),
             ),
           ),
         ],

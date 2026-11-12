@@ -170,6 +170,13 @@ class DisabledLocationService extends ILocationService {
 /// before the setting was honoured.
 final gpsPreferenceProvider = Provider<bool>((ref) => true);
 
+/// The tenant-level switch. Defaults to true until the server setting is wired in from the
+/// authenticated config; when it is false the device-local toggle cannot re-enable capture.
+///
+/// This is the mobile half of the employee-monitoring control: the tenant decides whether the
+/// company records position at all, the technician decides whether this device contributes.
+final tenantGpsEnabledProvider = Provider<bool>((ref) => true);
+
 /// Provides the [ILocationService]. Override in tests with a fake.
 ///
 /// The gate lives here rather than at the call sites. "Geolocalizzazione — Posizione GPS per i
@@ -178,7 +185,7 @@ final gpsPreferenceProvider = Provider<bool>((ref) => true);
 /// that reports a choice it does not enforce is worse than no toggle, and under a consent audit it
 /// is worse still.
 final locationServiceProvider = Provider<ILocationService>((ref) {
-  return ref.watch(gpsPreferenceProvider)
-      ? const LocationService()
-      : const DisabledLocationService();
+  final allowed =
+      ref.watch(tenantGpsEnabledProvider) && ref.watch(gpsPreferenceProvider);
+  return allowed ? const LocationService() : const DisabledLocationService();
 });
