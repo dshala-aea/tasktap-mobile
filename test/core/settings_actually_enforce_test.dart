@@ -124,6 +124,18 @@ void main() {
       expect(serviceWith(true), isA<LocationService>());
     });
 
+    test('a tenant-wide off wins even when the device toggle is on', () {
+      final container = ProviderContainer(
+        overrides: [
+          gpsPreferenceProvider.overrideWithValue(true),
+          tenantGpsEnabledProvider.overrideWithValue(false),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      expect(container.read(locationServiceProvider), isA<DisabledLocationService>());
+    });
+
     test('the gate is a single choke point, not a per-call-site check', () {
       // The defect was that honouring the setting depended on every call site remembering it.
       // Resolving the service through the provider is what makes a future call site gated by

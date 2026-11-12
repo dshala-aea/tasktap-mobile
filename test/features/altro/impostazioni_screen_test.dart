@@ -21,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/auth/session_recovery_providers.dart';
 import 'package:tasktap_mobile/data/auth/unsent_work_counter.dart';
@@ -45,9 +46,10 @@ AuthUser _fakeUser({String? displayName}) => AuthUser(
   expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
 );
 
-Widget _buildScreen(MockAuthRepository repo, AppDatabase db) {
+Widget _buildScreen(MockAuthRepository repo, AppDatabase db, {bool tenantGpsEnabled = true}) {
   return ProviderScope(
     overrides: [
+      tenantGpsEnabledProvider.overrideWithValue(tenantGpsEnabled),
       authRepositoryProvider.overrideWithValue(repo),
       // The logout row now counts unsent work before it shows any dialog; an in-memory DB keeps
       // the widget test off the real app database file.
@@ -85,8 +87,8 @@ void main() {
     await authStream.close();
   });
 
-  Future<void> pump(WidgetTester tester, {AuthUser? user}) async {
-    await tester.pumpWidget(_buildScreen(repo, db));
+  Future<void> pump(WidgetTester tester, {AuthUser? user, bool tenantGpsEnabled = true}) async {
+    await tester.pumpWidget(_buildScreen(repo, db, tenantGpsEnabled: tenantGpsEnabled));
     await tester.pump();
     authStream.add(user);
     await tester.pump();
@@ -113,6 +115,29 @@ void main() {
     await pump(tester, user: user);
 
     expect(find.text('mario@tasktap.io'), findsAtLeast(1));
+    await drain(tester);
+  });
+
+  testWidgets('GPS row is disabled and explained when the tenant turns it off', (tester) async {
+    await pump(tester, tenantGpsEnabled: false);
+
+    final scroller = find.byType(CustomScrollView);
+    await tester.dragUntilVisible(
+      find.text('Geolocalizzazione'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
+    expect(find.text("Disattivata dall'azienda"), findsOneWidget);
+
+    await tester.dragUntilVisible(
+      find.textContaining('tracciamento continuo'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
+    expect(find.textContaining('tracciamento continuo'), findsOneWidget);
+
     await drain(tester);
   });
 
