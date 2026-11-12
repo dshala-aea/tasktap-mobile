@@ -112,6 +112,7 @@ dependencies:
   # code does not dim out in front of the scanner. Enabled on mount, released on dispose.
   wakelock_plus: ^1.8.0
   sqlcipher_flutter_libs: ^0.7.0+eol
+  flutter_tts: ^4.2.5
   sqlite3: ^3.9.1
 
 dev_dependencies:

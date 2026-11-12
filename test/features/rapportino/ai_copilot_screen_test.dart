@@ -282,6 +282,10 @@ Widget _wrap(AiApiClient client, {String? ticketId, String? cantiereId, AppDatab
   );
 }
 
+/// The step's own list, not the assistant reply's small scroll view above it.
+Finder _contentScrollable() =>
+    find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
+
 /// Tear the tree down and let drift's stream-cleanup timers fire before the test ends.
 Future<void> _unmount(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
@@ -302,7 +306,7 @@ Future<void> _describeAndGenerate(
   if (toggle.evaluate().isEmpty) {
     await tester.dragUntilVisible(
       toggle,
-      find.byType(Scrollable).first,
+      _contentScrollable(),
       const Offset(0, -120),
     );
     await tester.pumpAndSettle();
@@ -374,7 +378,7 @@ void main() {
     if (fieldFinder.evaluate().isEmpty) {
       await tester.dragUntilVisible(
         fieldFinder,
-        find.byType(Scrollable).first,
+        _contentScrollable(),
         const Offset(0, -120),
       );
       await tester.pumpAndSettle();

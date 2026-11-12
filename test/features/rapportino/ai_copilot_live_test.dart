@@ -479,7 +479,8 @@ Future<void> _reveal(WidgetTester tester, Finder finder, {bool settle = true}) a
   if (finder.evaluate().isEmpty) {
     await tester.dragUntilVisible(
       finder,
-      find.byType(Scrollable).first,
+      // The step's own list, not the assistant reply's small scroll view above it.
+      find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first,
       const Offset(0, -120),
     );
   }

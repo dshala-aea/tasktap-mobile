@@ -480,6 +480,16 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData volume2 = IconData(
+    0xf585,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData volumeX = IconData(
+    0xf586,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData warehouse = IconData(
     0xf58e,
     fontFamily: 'Lucide',
