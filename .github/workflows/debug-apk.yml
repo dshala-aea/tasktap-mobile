@@ -23,7 +23,7 @@ jobs:
       API_BASE_URL: https://api.tasktap.it
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: subosito/flutter-action@v2
         with:
@@ -46,7 +46,7 @@ jobs:
             --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
             --dart-define=API_BASE_URL="$API_BASE_URL"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tasktap-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
