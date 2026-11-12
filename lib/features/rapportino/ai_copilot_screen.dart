@@ -8,11 +8,13 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/audio/pending_recording_store.dart';
+import '../../core/audio/speech_output.dart';
 import '../../core/audio/voice_capture_controller.dart';
 import '../../core/audio/voice_capture_provider.dart';
 import '../../core/audio/voice_consent.dart';
 import '../../core/crash_reporting/crash_reporter.dart';
 
+import '../../core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
@@ -56,16 +58,10 @@ import 'draft_for_ticket.dart';
 // deletes the draft: it is durable and is resumed; only "Abbandona bozza" deletes it.
 // ══════════════════════════════════════════════════════════════════════════════
 
-
 /// One turn on its way to the server, kept whole until it succeeds so a retry re-sends exactly the
 /// same thing under exactly the same Idempotency-Key.
 class _Outgoing {
-  _Outgoing({
-    required this.key,
-    this.recording,
-    this.voice,
-    this.text,
-  });
+  _Outgoing({required this.key, this.recording, this.voice, this.text});
 
   /// Generated once. For a recording it derives from the recording's own persisted key, so it is
   /// stable across restarts of the upload.
@@ -223,11 +219,22 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   /// Set when leaving the app stopped a recording; told to the technician on return.
   String? _backgroundNote;
 
+  /// Optional device TTS for the last assistant reply. Text is always shown; speech is an extra
+  /// the technician opts into per device, and never starts without a tap.
+  SpeechOutput? _speech;
+  bool _speechEnabled = false;
+  bool _speakingReply = false;
+
+  /// The current turn's assistant reply as text. Empty until a turn in this visit returns one:
+  /// a resumed conversation's older replies are not replayed as this visit's message.
+  String _assistantReply = '';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     unawaited(_loadTicketNumber());
+    unawaited(_loadSpeech());
     _start();
   }
 
@@ -251,26 +258,21 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
       final numero = row.numero?.trim() ?? '';
       final title = row.title.trim();
-      final cliente =
-          await (db.select(db.customers)..where((c) => c.id.equals(row.customerId))).getSingleOrNull();
-      final sede =
-          await (db.select(db.locations)..where((l) => l.id.equals(row.locationId))).getSingleOrNull();
+      final cliente = await (db.select(
+        db.customers,
+      )..where((c) => c.id.equals(row.customerId))).getSingleOrNull();
+      final sede = await (db.select(
+        db.locations,
+      )..where((l) => l.id.equals(row.locationId))).getSingleOrNull();
 
-      final label = [
-        if (numero.isNotEmpty) numero,
-        if (title.isNotEmpty) title,
-      ].join(' · ');
+      final label = [if (numero.isNotEmpty) numero, if (title.isNotEmpty) title].join(' · ');
 
       if (!mounted) return;
       setState(() {
         _ticketNumber = numero.isEmpty ? null : numero;
         _reportContext = label.isEmpty
             ? null
-            : AiReportContext(
-                ticketLabel: label,
-                cliente: cliente?.companyName,
-                sede: sede?.name,
-              );
+            : AiReportContext(ticketLabel: label, cliente: cliente?.companyName, sede: sede?.name);
       });
     } catch (_) {
       // A missing or unreadable row costs the subtitle and the context card, nothing else.
@@ -282,6 +284,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   /// Nothing is uploaded until the technician is back and chooses to send it.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _stopSpeech();
+      if (_speakingReply && mounted) setState(() => _speakingReply = false);
+    }
     if ((state == AppLifecycleState.paused || state == AppLifecycleState.inactive) && _recording) {
       _backgroundNote = widget.ticketId != null
           ? 'La registrazione è stata fermata quando hai lasciato l\'app ed è salvata sul telefono: '
@@ -302,11 +308,82 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _stopSpeech();
     _releaseMicrophone();
     _cancelThinkingTimers();
     _interruptSub?.cancel();
     _inputCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSpeech() async {
+    try {
+      final speech = await ref.read(speechOutputProvider.future);
+      if (!mounted) return;
+      setState(() {
+        _speech = speech;
+        _speechEnabled = speech.enabled;
+      });
+    } catch (e) {
+      // No TTS on this device/build: replies stay readable, the speaker action stays quiet.
+      debugPrint('Speech output unavailable: $e');
+    }
+  }
+
+  Future<SpeechOutput?> _ensureSpeech() async {
+    final current = _speech;
+    if (current != null) return current;
+    try {
+      final speech = await ref.read(speechOutputProvider.future);
+      if (!mounted) return null;
+      setState(() {
+        _speech = speech;
+        _speechEnabled = speech.enabled;
+      });
+      return speech;
+    } catch (e) {
+      debugPrint('Speech output unavailable: $e');
+      return null;
+    }
+  }
+
+  void _stopSpeech() {
+    final speech = _speech;
+    if (speech != null) unawaited(speech.stop());
+  }
+
+  Future<void> _toggleSpeech() async {
+    final speech = await _ensureSpeech();
+    if (speech == null || !mounted) return;
+    final next = !speech.enabled;
+    await speech.setEnabled(next);
+    if (!mounted) return;
+    setState(() {
+      _speechEnabled = next;
+      if (!next) _speakingReply = false;
+    });
+  }
+
+  Future<void> _speakReply() async {
+    final text = _assistantReply.trim();
+    if (text.isEmpty) return;
+    final speech = await _ensureSpeech();
+    if (speech == null || !mounted) return;
+
+    if (_speakingReply) {
+      await speech.stop();
+      if (mounted) setState(() => _speakingReply = false);
+      return;
+    }
+
+    // The tap is the opt-in: no reply is ever spoken by an autoplay path.
+    if (!speech.enabled) {
+      await speech.setEnabled(true);
+      if (!mounted) return;
+      setState(() => _speechEnabled = true);
+    }
+    await speech.speak(text);
+    if (mounted) setState(() => _speakingReply = true);
   }
 
   void _cancelThinkingTimers() {
@@ -335,9 +412,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   /// Either way the draft (seeded from the ticket on a new session) and the earlier turns are read
   /// back with GET so the technician sees them immediately.
   Future<void> _start() async {
+    _stopSpeech();
     setState(() {
       _starting = true;
       _startError = null;
+      _assistantReply = '';
+      _speakingReply = false;
     });
     final client = ref.read(aiApiClientProvider);
     try {
@@ -632,12 +712,16 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   Future<void> _run(_Outgoing o) async {
     final sessionId = _sessionId;
     if (sessionId == null || _sending) return;
+    _stopSpeech();
     setState(() {
       _sending = true;
       _failed = null;
       _failureMessage = null;
       // A new turn moves the draft's Version on — any pending confirm key is now stale.
       _confirmKey = null;
+      // The previous reply belongs to the previous turn; the transcript is not a chat log here.
+      _assistantReply = '';
+      _speakingReply = false;
     });
     _startThinkingTimers();
 
@@ -679,11 +763,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         unawaited(_discardRecording(o));
         _finishRun();
         if (mounted) {
-          showAppToast(
-            context,
-            message: 'Non c\'è niente da inviare.',
-            tone: ToastTone.warning,
-          );
+          showAppToast(context, message: 'Non c\'è niente da inviare.', tone: ToastTone.warning);
         }
         return;
       }
@@ -711,6 +791,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         if (o.recording != null) _pendingRecs.removeWhere((r) => r.id == o.recording!.id);
         _draft = result.draft;
         _sending = false;
+        _assistantReply = result.assistantReplyText.trim();
         // A turn that compiled something takes the technician to the result. A turn that only asked
         // a question leaves the draft empty and must not: there is nothing to check yet, and the
         // description the technician just gave is still on screen to refine.
@@ -1012,7 +1093,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       case RecordingStartResult.consentRequired:
         break;
       case RecordingStartResult.notSignedIn:
-        showAppToast(context, message: 'Accedi per registrare un aggiornamento.', tone: ToastTone.warning);
+        showAppToast(
+          context,
+          message: 'Accedi per registrare un aggiornamento.',
+          tone: ToastTone.warning,
+        );
       case RecordingStartResult.permissionDenied:
       case RecordingStartResult.permissionPermanentlyDenied:
         // Not a toast: the message has to outlive the moment of the tap, and it carries the one
@@ -1037,11 +1122,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       unawaited(CrashReporter.instance.captureException(e, hint: 'voice start'));
       if (mounted) {
         setState(() => _recording = false);
-        showAppToast(
-          context,
-          message: 'Il microfono non è partito: $e',
-          tone: ToastTone.error,
-        );
+        showAppToast(context, message: 'Il microfono non è partito: $e', tone: ToastTone.error);
       }
       return null;
     }
@@ -1267,7 +1348,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         if (mounted) {
           showAppToast(
             context,
-            message: 'Non sono riuscito ad abbandonare la bozza. Controlla la connessione e riprova.',
+            message:
+                'Non sono riuscito ad abbandonare la bozza. Controlla la connessione e riprova.',
             tone: ToastTone.error,
           );
         }
@@ -1325,14 +1407,18 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     if (ticketId != null) {
       try {
         final db = ref.read(appDatabaseProvider);
-        ticket = await (db.select(db.tickets)..where((t) => t.id.equals(ticketId))).getSingleOrNull();
+        ticket = await (db.select(
+          db.tickets,
+        )..where((t) => t.id.equals(ticketId))).getSingleOrNull();
       } catch (_) {
         ticket = null; // an unreadable mirror just means no prefill
       }
     }
     final id = await createLocalDraft(
       ref,
-      title: ticket != null ? 'Rapporto di intervento — ${ticket.title}' : 'Nuovo rapporto di intervento',
+      title: ticket != null
+          ? 'Rapporto di intervento — ${ticket.title}'
+          : 'Nuovo rapporto di intervento',
       locationId: ticket?.locationId ?? '',
       ticketId: ticketId,
       cantiereId: widget.cantiereId,
@@ -1352,6 +1438,13 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
   @override
   Widget build(BuildContext context) {
+    final replyBubble = _assistantReply.isEmpty
+        ? null
+        : _AssistantReplyBubble(
+            text: _assistantReply,
+            speaking: _speakingReply,
+            onSpeak: _speakReply,
+          );
     return PopScope(
       canPop: !_needsLeaveConfirm,
       onPopInvokedWithResult: (didPop, _) {
@@ -1362,70 +1455,79 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         }
       },
       child: Scaffold(
-      backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: Column(
-          children: [
-            ScreenHeader(
-              title: 'Rapporto di intervento',
-              subtitle: _ticketNumber,
-              showBack: true,
-              onBack: _leave,
-            ),
-            const AiTransparencyNotice(),
-            if (_starting) const Expanded(child: Center(child: CircularProgressIndicator())),
-            if (_startError != null)
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_startError!, textAlign: TextAlign.center),
-                        const SizedBox(height: 12),
-                        if (!_aiBlocked) AppButton.secondary(label: 'Riprova', onPressed: _start),
-                        if (!_aiBlocked) const SizedBox(height: 8),
-                        AppButton(label: 'Continua senza AI', onPressed: _continueWithoutAi),
-                      ],
+        backgroundColor: context.colors.bg2,
+        body: SafeArea(
+          child: Column(
+            children: [
+              ScreenHeader(
+                title: 'Rapporto di intervento',
+                subtitle: _ticketNumber,
+                showBack: true,
+                onBack: _leave,
+                actions: [
+                  HeaderIconBtn(
+                    key: const ValueKey('ai-tts-toggle'),
+                    icon: _speechEnabled ? LucideIcons.volume2 : LucideIcons.volumeX,
+                    label: _speechEnabled ? 'Disattiva lettura vocale' : 'Attiva lettura vocale',
+                    onTap: _toggleSpeech,
+                  ),
+                ],
+              ),
+              const AiTransparencyNotice(),
+              if (_starting) const Expanded(child: Center(child: CircularProgressIndicator())),
+              if (_startError != null)
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_startError!, textAlign: TextAlign.center),
+                          const SizedBox(height: 12),
+                          if (!_aiBlocked) AppButton.secondary(label: 'Riprova', onPressed: _start),
+                          if (!_aiBlocked) const SizedBox(height: 8),
+                          AppButton(label: 'Continua senza AI', onPressed: _continueWithoutAi),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            if (!_starting && _startError == null) ...[
-              ..._buildBanners(context),
-              Expanded(
-                child: _step == _AiStep.review
-                    ? AiReviewStep(
-                        draft: _draft,
-                        reportContext: _reportContext,
-                        busy: _sending || _editing || _applying || _confirming,
-                        onAccept: _accept,
-                        onResolveHeld: (item, {required bool reAdd}) =>
-                            _resolveHeld(item, reAdd: reAdd),
-                      )
-                    : AiDescribeStep(
-                        recording: _recording,
-                        busy: _sending,
-                        thinkingLabel: _thinkingStageMessages[_thinkingStage],
-                        voiceDisabled: _voiceDisabled,
-                        // Credits are gone for the month: the orb goes dim rather than accepting a
-                        // tap whose upload the server will refuse again. A failed turn is NOT in
-                        // this list on purpose — connectivity comes back, and speaking again is a
-                        // legitimate retry.
-                        micEnabled: _micBlockedMessage == null,
-                        controller: _inputCtrl,
-                        writing: _writing,
-                        onToggleWriting: () => setState(() => _writing = !_writing),
-                        onMic: _toggleMic,
-                        onTextChanged: () => setState(() {}),
-                      ),
-              ),
-              _buildFooter(context),
+              if (!_starting && _startError == null) ...[
+                ..._buildBanners(context),
+                if (_step == _AiStep.describe && replyBubble != null) replyBubble,
+                Expanded(
+                  child: _step == _AiStep.review
+                      ? AiReviewStep(
+                          draft: _draft,
+                          reportContext: _reportContext,
+                          busy: _sending || _editing || _applying || _confirming,
+                          onAccept: _accept,
+                          onResolveHeld: (item, {required bool reAdd}) =>
+                              _resolveHeld(item, reAdd: reAdd),
+                        )
+                      : AiDescribeStep(
+                          recording: _recording,
+                          busy: _sending,
+                          thinkingLabel: _thinkingStageMessages[_thinkingStage],
+                          voiceDisabled: _voiceDisabled,
+                          // Credits are gone for the month: the orb goes dim rather than accepting a
+                          // tap whose upload the server will refuse again. A failed turn is NOT in
+                          // this list on purpose — connectivity comes back, and speaking again is a
+                          // legitimate retry.
+                          micEnabled: _micBlockedMessage == null,
+                          controller: _inputCtrl,
+                          writing: _writing,
+                          onToggleWriting: () => setState(() => _writing = !_writing),
+                          onMic: _toggleMic,
+                          onTextChanged: () => setState(() {}),
+                        ),
+                ),
+                _buildFooter(context),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -1473,7 +1575,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
               style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
               child: Text(
                 'Descrivi di nuovo',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.colors.red),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: context.colors.red,
+                ),
               ),
             ),
             const SizedBox(height: 4),
@@ -1507,7 +1613,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                     child: AppButton(
                       label: _confirming ? 'Preparo il rapporto…' : 'Conferma',
                       isLoading: _confirming,
-                      onPressed: _sessionId == null ||
+                      onPressed:
+                          _sessionId == null ||
                               _draft.hasBlockingOpenItems ||
                               _confirming ||
                               _sending ||
@@ -1547,7 +1654,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
             ? 'Genera di nuovo il rapporto'
             : 'Genera il rapporto',
         isLoading: _sending,
-        onPressed: _sessionId == null ||
+        onPressed:
+            _sessionId == null ||
                 !hasText ||
                 _sending ||
                 _recording ||
@@ -1641,7 +1749,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
               ? 'Hai 1 registrazione non inviata'
               : 'Hai ${_pendingRecs.length} registrazioni non inviate',
           [
-            TextButton(onPressed: _sending || _recording ? null : _sendPending, child: const Text('Invia')),
+            TextButton(
+              onPressed: _sending || _recording ? null : _sendPending,
+              child: const Text('Invia'),
+            ),
             TextButton(onPressed: _sending ? null : _discardPending, child: const Text('Scarta')),
           ],
         ),
@@ -1652,6 +1763,65 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     final e = _expiresAt!.toLocal();
     final d = '${e.day.toString().padLeft(2, '0')}/${e.month.toString().padLeft(2, '0')}';
     return 'Questa bozza scade il $d se non la riprendi. Puoi continuarla o abbandonarla.';
+  }
+}
+
+/// The assistant's last reply, always visible as text, with the one action that may speak it.
+///
+/// Deliberately not a chat log: the wizard shows the current turn's reply above Descrivi, where a
+/// question needs an answer. Controlla shows the compiled draft instead. The speaker button is an
+/// explicit tap; nothing on this widget starts playback on its own.
+class _AssistantReplyBubble extends StatelessWidget {
+  const _AssistantReplyBubble({required this.text, required this.speaking, required this.onSpeak});
+
+  final String text;
+  final bool speaking;
+  final VoidCallback onSpeak;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('ai-assistant-reply'),
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 2, AppSpacing.pagePadding, 2),
+      padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.colors.borderLight),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 96),
+              child: SingleChildScrollView(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 14,
+                    height: 1.35,
+                    color: context.colors.ink,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('ai-speak-reply'),
+            tooltip: speaking ? 'Interrompi la lettura' : 'Ascolta la risposta',
+            onPressed: onSpeak,
+            icon: Icon(
+              speaking ? LucideIcons.square : LucideIcons.volume2,
+              size: 20,
+              color: context.colors.red,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1691,10 +1861,7 @@ class _CorrectionDialogState extends State<_CorrectionDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annulla')),
-        TextButton(
-          onPressed: () => Navigator.pop(context, _ctrl.text),
-          child: Text(widget.action),
-        ),
+        TextButton(onPressed: () => Navigator.pop(context, _ctrl.text), child: Text(widget.action)),
       ],
     );
   }
