@@ -340,6 +340,42 @@ void main() {
     expect(savedRows!.single.magazzinoId, isNull);
   });
 
+  testWidgets('an existing catalogue row with no source auto-selects a single giacenza', (
+    tester,
+  ) async {
+    List<TicketMaterialeWriteRow>? savedRows;
+    _stubGiacenze(mockDio, [_giacenza('mag-1', 'Furgone Mario', 3)]);
+
+    await tester.pumpWidget(
+      _wrap(
+        TicketMaterialiEditor(
+          initialRows: const [
+            TicketMaterialeDto(
+              id: 'row-1',
+              materialeId: 'mat-1',
+              nome: 'Valvola',
+              quantita: 2,
+              disponibile: true,
+            ),
+          ],
+          onSave: (rows) async => savedRows = rows,
+          onCancel: () {},
+        ),
+        dio: mockDio,
+        db: basicDb,
+        online: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Da: Furgone Mario'), findsOneWidget);
+
+    await tester.tap(find.text('Salva'));
+    await tester.pumpAndSettle();
+
+    expect(savedRows!.single.magazzinoId, 'mag-1');
+  });
+
   testWidgets('editing preserves an existing source warehouse and shows its name', (
     tester,
   ) async {

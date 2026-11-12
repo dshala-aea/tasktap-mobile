@@ -93,7 +93,10 @@ class MaterialeEditRow {
     notes: dto.note,
     magazzinoId: dto.magazzinoId,
     magazzinoNome: dto.magazzinoNome,
-    sourceResolved: true,
+    // A saved source is authoritative and must survive editing untouched. A catalogue row with no
+    // source is resolved on mount, so a single giacenza still auto-selects after the office's
+    // planned line lands on the phone.
+    sourceResolved: dto.magazzinoId != null,
     initialArticleName: dto.materialeId != null ? dto.nome : null,
     initialArticleCode: dto.materialeId != null ? dto.codice : null,
   );
