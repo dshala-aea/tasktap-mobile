@@ -24,7 +24,7 @@ final voiceCaptureControllerProvider = FutureProvider<VoiceCaptureController>((r
     recorder: recorder,
     permissions: const PermissionHandlerMicPermissionService(),
     store: store,
-    consentAccepted: voiceConsentAccepted,
+    consentAccepted: () => voiceConsentAcceptedFor(ref.read(currentUserProvider)?.id),
     currentUserId: () => ref.read(currentUserProvider)?.id,
     upload: (file, key) => client.uploadVoiceCapture(file, idempotencyKey: key),
   );

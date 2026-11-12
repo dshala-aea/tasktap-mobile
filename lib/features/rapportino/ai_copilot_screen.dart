@@ -20,6 +20,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/ai/ai_api_client.dart';
 import '../../data/local/app_database.dart' show Ticket;
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
+import '../../presentation/providers/auth_providers.dart' show currentUserProvider;
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider, reportEditorProvider;
 import 'ai_draft_feed.dart';
@@ -974,7 +975,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         ),
       );
       if (accepted != true || !mounted) return;
-      await acceptVoiceConsent();
+      await acceptVoiceConsent(ref.read(currentUserProvider)?.id);
       final second = await _startVoice(voice);
       if (!mounted) {
         if (second != null) _releaseOrphanedStart(voice, second);

@@ -247,18 +247,50 @@ void main() {
   });
 
   test('Recording_is_refused_until_consent_is_accepted', () async {
-    expect(await voiceConsentAccepted(), isFalse);
-    final c = controller(consent: voiceConsentAccepted);
+    expect(await voiceConsentAcceptedFor('userA'), isFalse);
+    final c = controller(consent: () => voiceConsentAcceptedFor('userA'));
 
     expect(await c.start(ticketId: 'T1'), RecordingStartResult.consentRequired);
     expect(recorder.started, isFalse);
     expect(perms.asked, 0);
 
-    await acceptVoiceConsent();
-    expect(await voiceConsentAccepted(), isTrue);
+    await acceptVoiceConsent('userA');
+    expect(await voiceConsentAcceptedFor('userA'), isTrue);
+    expect(await voiceConsentAcceptedFor('userB'), isFalse);
     expect(await c.start(ticketId: 'T1'), RecordingStartResult.started);
     expect(recorder.started, isTrue);
     expect(voiceConsentText, isNotEmpty);
+
+    final history = await voiceConsentHistory();
+    expect(history, hasLength(1));
+    expect(history.single.actorId, 'userA');
+    expect(history.single.version, voiceConsentVersion);
+    expect(history.single.textHash, voiceConsentTextHash);
+    expect(history.single.acceptedAtUtc.isUtc, isTrue);
+  });
+
+  test('Accepting twice appends a second record; history is never overwritten', () async {
+    await acceptVoiceConsent('userA');
+    await acceptVoiceConsent('userA');
+
+    final history = await voiceConsentHistory();
+    expect(history, hasLength(2));
+    expect(history.every((r) => r.actorId == 'userA'), isTrue);
+  });
+
+  test('A record for different wording does not count as consent', () async {
+    SharedPreferences.setMockInitialValues({
+      voiceConsentStorageKey: jsonEncode([
+        {
+          'version': voiceConsentVersion,
+          'textHash': 'old-wording-hash',
+          'acceptedAtUtc': '2026-01-01T00:00:00Z',
+          'actorId': 'userA',
+        },
+      ]),
+    });
+
+    expect(await voiceConsentAcceptedFor('userA'), isFalse);
   });
 
   test('Permission_denied_is_reported_not_crashed', () async {
