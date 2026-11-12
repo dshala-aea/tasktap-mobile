@@ -29744,6 +29744,14 @@
               "null",
               "string"
             ]
+          },
+          "magazzinoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional source warehouse for this planned line. Fabbisogno is planning only: this does\nnot consume stock and creates no movement. Null means no source; the id, when present,\nmust belong to the caller\u0027s tenant.",
+            "format": "uuid"
           }
         }
       },
@@ -43057,7 +43065,9 @@
           "quantita",
           "unitaMisura",
           "note",
-          "disponibile"
+          "disponibile",
+          "magazzinoId",
+          "magazzinoNome"
         ],
         "type": "object",
         "properties": {
@@ -43106,6 +43116,19 @@
           },
           "disponibile": {
             "type": "boolean"
+          },
+          "magazzinoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "magazzinoNome": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "One planned material on a ticket, resolved against the catalogue where it has one."

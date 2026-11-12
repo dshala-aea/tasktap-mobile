@@ -550,6 +550,17 @@ final ticketMaterialiProvider = StreamProvider.autoDispose
               )..where((m) => m.id.isIn(materialeIds))).get();
         final catalogById = {for (final c in catalog) c.id: c};
 
+        final magazzinoIds = rows
+            .where((r) => r.magazzinoId != null)
+            .map((r) => r.magazzinoId!)
+            .toSet();
+        final magazzini = magazzinoIds.isEmpty
+            ? const <MagazziniData>[]
+            : await (db.select(
+                db.magazzini,
+              )..where((m) => m.id.isIn(magazzinoIds))).get();
+        final magazzinoById = {for (final m in magazzini) m.id: m};
+
         return [
           for (final r in rows)
             TicketMaterialeDto(
@@ -568,6 +579,10 @@ final ticketMaterialiProvider = StreamProvider.autoDispose
                   r.unitOfMeasure ?? catalogById[r.materialeId]?.unitOfMeasure,
               note: r.notes,
               disponibile: r.isAvailable,
+              magazzinoId: r.magazzinoId,
+              magazzinoNome: r.magazzinoId != null
+                  ? magazzinoById[r.magazzinoId]?.nome
+                  : null,
             ),
         ];
       });

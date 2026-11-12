@@ -199,6 +199,10 @@ void main() {
         // this fixture did when the column landed. Today's DDL declares the column, so the guard
         // skips the add; migration_v58_test.dart covers the add path itself.
         'schedules',
+        // `ticket_materiali` too: schema 63 adds its `magazzino_id`, and every v33 device has
+        // carried that table since schema 24. Without it here the step crashes with
+        // `no such table`; today's DDL already declares the column, so the guard skips the add.
+        'ticket_materiali',
       ]);
     });
 

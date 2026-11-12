@@ -536,8 +536,12 @@ void main() {
     contractTest('replacing the ticket materiali (fabbisogno) matches the server', () {
       final client = TicketDetailApiClient(dio);
       return capture(
-        () => client.setMateriali(_id(62), const [
-          TicketMaterialeWriteRow(materialeId: null, freeTextName: 'Guarnizione', quantity: 1),
+        () => client.setMateriali(_id(62), [
+          TicketMaterialeWriteRow(
+            materialeId: _id(63),
+            quantity: 1,
+            magazzinoId: _id(64),
+          ),
         ]),
       );
     });

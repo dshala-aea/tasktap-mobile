@@ -27,7 +27,12 @@ Map<String, dynamic> ticketJson(String id) => {
   'typeId': 1,
 };
 
-Map<String, dynamic> materialeJson(String id, String ticketId, {double quantity = 1}) => {
+Map<String, dynamic> materialeJson(
+  String id,
+  String ticketId, {
+  double quantity = 1,
+  String? magazzinoId,
+}) => {
   'id': id,
   'tenantId': 'tenant-1',
   'createdAt': '2026-01-01T00:00:00Z',
@@ -39,6 +44,7 @@ Map<String, dynamic> materialeJson(String id, String ticketId, {double quantity 
   'unitOfMeasure': 'pz',
   'notes': null,
   'isAvailable': false,
+  'magazzinoId': magazzinoId,
 };
 
 /// Absent entirely when the caller passes none, which is how an older backend's payload looks.
@@ -122,6 +128,29 @@ void main() {
   /// A fabbisogno emptied in the office sends no material rows at all. Replacing against the
   /// tickets in the payload — not against the tickets that have rows — is what lets the stale
   /// rows go: there is no incoming row to delete anything by.
+  test('keeps the planned source warehouse, including null for no source', () async {
+    respondWith(
+      base(
+        tickets: [ticketJson('ticket-1')],
+        materiali: [
+          materialeJson('m-with-source', 'ticket-1', magazzinoId: 'mag-1'),
+          materialeJson('m-without-source', 'ticket-1'),
+        ],
+      ),
+    );
+    await SyncService(db: db, dio: dio).sync();
+
+    final rows = await db.select(db.ticketMateriali).get();
+    expect(
+      rows.firstWhere((r) => r.id == 'm-with-source').magazzinoId,
+      'mag-1',
+    );
+    expect(
+      rows.firstWhere((r) => r.id == 'm-without-source').magazzinoId,
+      isNull,
+    );
+  });
+
   test('a fabbisogno cleared in the office empties the mirror for that ticket', () async {
     respondWith(
       base(

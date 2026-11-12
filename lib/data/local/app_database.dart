@@ -705,6 +705,10 @@ class TicketMateriali extends Table {
   TextColumn get notes => text().nullable()();
   BoolColumn get isAvailable => boolean().withDefault(const Constant(false))();
 
+  /// Optional source warehouse for this planned line. Planning only — no stock movement is ever
+  /// booked from fabbisogno. Resolved to a name through the locally mirrored [Magazzini].
+  TextColumn get magazzinoId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1762,7 +1766,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 62;
+  int get schemaVersion => 63;
 
   @override
   MigrationStrategy get migration {
@@ -2557,6 +2561,18 @@ class AppDatabase extends _$AppDatabase {
           }
           if (!await _columnExists(m.database, 'schedules', 'absence_request_id')) {
             await m.addColumn(schedules, schedules.absenceRequestId);
+          }
+        }
+        if (from < 63) {
+          // Fabbisogno now records the source warehouse it is planned to be taken from. No
+          // `syncCursorGeneration` bump: unlike schedules, ticket materials are re-sent whole on
+          // every sync (no delta cutoff), so the next sync backfills this column for every device.
+          //
+          // Guarded like 59-62: the older-schema fixtures rewind `user_version` on the CURRENT
+          // schema, which already declares the column, and an unconditional add would die on
+          // `duplicate column name` before the app opened.
+          if (!await _columnExists(m.database, 'ticket_materiali', 'magazzino_id')) {
+            await m.addColumn(ticketMateriali, ticketMateriali.magazzinoId);
           }
         }
       },

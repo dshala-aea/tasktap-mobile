@@ -273,6 +273,33 @@ void main() {
       expect(dto.nome, 'Guarnizione generica');
       expect(dto.disponibile, isFalse);
     });
+
+    test('parses the optional source warehouse and its name', () {
+      final dto = TicketMaterialeDto.fromJson({
+        'id': 'm1',
+        'materialeId': 'mat-1',
+        'nome': 'Valvola',
+        'quantita': 1,
+        'disponibile': true,
+        'magazzinoId': 'mag-1',
+        'magazzinoNome': 'Furgone Mario',
+      });
+
+      expect(dto.magazzinoId, 'mag-1');
+      expect(dto.magazzinoNome, 'Furgone Mario');
+    });
+
+    test('a row without a source parses both source fields as null', () {
+      final dto = TicketMaterialeDto.fromJson({
+        'id': 'm1',
+        'nome': 'Guarnizione generica',
+        'quantita': 1,
+        'disponibile': true,
+      });
+
+      expect(dto.magazzinoId, isNull);
+      expect(dto.magazzinoNome, isNull);
+    });
   });
 
   group('TicketDetailApiClient.setMateriali', () {
@@ -297,7 +324,12 @@ void main() {
       ).thenAnswer((_) async => _okResponse<dynamic>(null, '/api/Tickets/tick-1/materiali'));
 
       await client.setMateriali('tick-1', const [
-        TicketMaterialeWriteRow(materialeId: 'mat-1', quantity: 2, unitOfMeasure: 'pz'),
+        TicketMaterialeWriteRow(
+          materialeId: 'mat-1',
+          quantity: 2,
+          unitOfMeasure: 'pz',
+          magazzinoId: 'mag-1',
+        ),
         TicketMaterialeWriteRow(freeTextName: 'Guarnizione generica', quantity: 1, notes: 'usata'),
       ]);
 
@@ -315,6 +347,7 @@ void main() {
           'quantity': 2.0,
           'unitOfMeasure': 'pz',
           'notes': null,
+          'magazzinoId': 'mag-1',
         },
         {
           'materialeId': null,
@@ -322,6 +355,7 @@ void main() {
           'quantity': 1.0,
           'unitOfMeasure': null,
           'notes': 'usata',
+          'magazzinoId': null,
         },
       ]);
     });

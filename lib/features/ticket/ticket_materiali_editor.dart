@@ -53,6 +53,9 @@ class MaterialeEditRow {
     this.quantity = 1,
     this.unitOfMeasure,
     this.notes,
+    this.magazzinoId,
+    this.magazzinoNome,
+    this.sourceResolved = false,
     this.initialArticleName,
     this.initialArticleCode,
   });
@@ -62,6 +65,16 @@ class MaterialeEditRow {
   double quantity;
   String? unitOfMeasure;
   String? notes;
+
+  /// Optional source warehouse for this planned line. Planning provenance only: saving
+  /// fabbisogno never creates a stock movement. Null means no source.
+  String? magazzinoId;
+  String? magazzinoNome;
+
+  /// True when [magazzinoId] came from a read model or the picker (including a legitimate null
+  /// "no source"), so the editor must not re-resolve and guess again on open. A scanned row has
+  /// no source yet and resolves on mount.
+  bool sourceResolved;
 
   /// Display-only — the resolved article's name/code when this row started as a catalogue
   /// reference, so [AppLookupField] has something to show before any search runs. Never sent to
@@ -78,6 +91,12 @@ class MaterialeEditRow {
     quantity: dto.quantita,
     unitOfMeasure: dto.unitaMisura,
     notes: dto.note,
+    magazzinoId: dto.magazzinoId,
+    magazzinoNome: dto.magazzinoNome,
+    // A saved source is authoritative and must survive editing untouched. A catalogue row with no
+    // source is resolved on mount, so a single giacenza still auto-selects after the office's
+    // planned line lands on the phone.
+    sourceResolved: dto.magazzinoId != null,
     initialArticleName: dto.materialeId != null ? dto.nome : null,
     initialArticleCode: dto.materialeId != null ? dto.codice : null,
   );
@@ -88,6 +107,7 @@ class MaterialeEditRow {
     quantity: quantity,
     unitOfMeasure: unitOfMeasure,
     notes: notes,
+    magazzinoId: magazzinoId,
   );
 }
 
@@ -127,7 +147,7 @@ class TicketMaterialiEditorState extends ConsumerState<TicketMaterialiEditor> {
   Future<void> _addMateriale() async {
     final result = await showMaterialePickerDialog(
       context,
-      showSource: false,
+      showSource: true,
       showFabbisognoSuggestions: false,
       scanner: widget.scanner,
     );
@@ -139,6 +159,9 @@ class TicketMaterialiEditorState extends ConsumerState<TicketMaterialiEditor> {
           freeTextName: result.materialeId == null ? result.freeTextName : null,
           quantity: result.quantity,
           unitOfMeasure: result.unitOfMeasure,
+          magazzinoId: result.magazzinoId,
+          magazzinoNome: result.magazzinoNome,
+          sourceResolved: true,
           initialArticleName: result.materialeNome,
           initialArticleCode: result.materialeCodice,
         ),
@@ -293,6 +316,7 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
   late final TextEditingController _quantityCtrl;
   late final TextEditingController _unitCtrl;
   late final TextEditingController _notesCtrl;
+  late final MaterialeSourceResolver _source;
 
   Timer? _debounce;
   late List<LookupItem> _articleOptions;
@@ -301,6 +325,7 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
   @override
   void initState() {
     super.initState();
+    _source = MaterialeSourceResolver(ref)..addListener(_onSourceChanged);
     _quantityCtrl = TextEditingController(text: _formatQuantity(widget.row.quantity));
     _unitCtrl = TextEditingController(text: widget.row.unitOfMeasure ?? '');
     _notesCtrl = TextEditingController(text: widget.row.notes ?? '');
@@ -316,6 +341,16 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
             ),
           ]
         : const [];
+    // A scanned catalogue row reaches the editor with no source yet: resolve it here so it gets
+    // the same single/multiple/none behaviour as an article chosen in the picker. Rows from the
+    // server or the picker already carry an authoritative source (even null) and are left alone.
+    if (widget.row.materialeId != null && !widget.row.sourceResolved) {
+      _source.resolve(
+        id: widget.row.materialeId!,
+        name: widget.row.initialArticleName ?? '',
+        code: widget.row.initialArticleCode ?? '',
+      );
+    }
   }
 
   @override
@@ -332,10 +367,27 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _source
+      ..removeListener(_onSourceChanged)
+      ..dispose();
     _quantityCtrl.dispose();
     _unitCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
+  }
+
+  /// The shared resolver owns the giacenza/mirror state; this row owns the persisted choice.
+  /// Existing rows keep their source untouched until the article itself changes; a new article
+  /// clears it and re-resolves (single auto-select, multiple picker, none null).
+  void _onSourceChanged() {
+    if (!mounted) return;
+    final id = _source.magazzinoId;
+    final nome = _source.magazzinoNome;
+    final changed = widget.row.magazzinoId != id || widget.row.magazzinoNome != nome;
+    widget.row.magazzinoId = id;
+    widget.row.magazzinoNome = nome;
+    setState(() {});
+    if (changed) widget.onChanged();
   }
 
   static String _formatQuantity(double q) =>
@@ -407,21 +459,39 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
   }
 
   void _onArticleSelected(String id) {
+    final picked = _resultCache[id];
+    final sameArticle = widget.row.materialeId == id;
     widget.row.materialeId = id;
     widget.row.freeTextName = null;
     // Convenience auto-fill, same as web's TicketMaterialiEditor: a starting value only, still
     // fully editable afterward — never overwrites a unit the technician already typed.
-    final picked = _resultCache[id];
     if (picked?.unitOfMeasure != null && _unitCtrl.text.trim().isEmpty) {
       _unitCtrl.text = picked!.unitOfMeasure!;
       widget.row.unitOfMeasure = picked.unitOfMeasure;
     }
+
+    if (sameArticle && widget.row.magazzinoId != null) {
+      // Re-picking the row's own article must not drop the source the office already chose.
+      widget.onChanged();
+      return;
+    }
+
+    widget.row.magazzinoId = null;
+    widget.row.magazzinoNome = null;
     widget.onChanged();
+    _source.resolve(
+      id: id,
+      name: picked?.name ?? widget.row.initialArticleName ?? '',
+      code: picked?.code ?? widget.row.initialArticleCode ?? '',
+    );
   }
 
   void _onArticleFreeText(String text) {
     widget.row.freeTextName = text.isEmpty ? null : text;
     widget.row.materialeId = null;
+    widget.row.magazzinoId = null;
+    widget.row.magazzinoNome = null;
+    _source.clear();
     widget.onChanged();
   }
 
@@ -485,6 +555,31 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
               ),
             ],
           ),
+          if (widget.row.materialeId != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            if (_source.loading ||
+                _source.error != null ||
+                _source.giacenze != null ||
+                _source.offlineMagazzini != null)
+              MaterialeSourceSection(
+                loading: _source.loading,
+                error: _source.error,
+                giacenze: _source.giacenze,
+                offlineMagazzini: _source.offlineMagazzini,
+                selectedMagazzinoId: widget.row.magazzinoId,
+                onChanged: (id, nome) {
+                  widget.row.magazzinoId = id;
+                  widget.row.magazzinoNome = nome;
+                  setState(() {});
+                  widget.onChanged();
+                },
+              )
+            else if (widget.row.magazzinoId != null)
+              Text(
+                'Da: ${widget.row.magazzinoNome ?? widget.row.magazzinoId}',
+                style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+              ),
+          ],
           const SizedBox(height: AppSpacing.sm),
           AppTextField(
             label: 'Note',

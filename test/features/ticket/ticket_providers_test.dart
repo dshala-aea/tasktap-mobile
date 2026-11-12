@@ -262,6 +262,38 @@ void main() {
       expect(result.single.disponibile, isTrue);
     });
 
+    test('resolves the planned source warehouse name from the mirrored Magazzini', () async {
+      await db
+          .into(db.magazzini)
+          .insert(
+            MagazziniCompanion.insert(
+              id: 'mag-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              nome: 'Furgone Mario',
+              tipo: 'Furgone',
+            ),
+          );
+      await db
+          .into(db.ticketMateriali)
+          .insert(
+            TicketMaterialiCompanion.insert(
+              id: 'tm-source',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: 'ticket-1',
+              freeTextName: const Value('Guarnizione'),
+              quantity: 1,
+              magazzinoId: const Value('mag-1'),
+            ),
+          );
+
+      final result = await container.read(ticketMaterialiProvider('ticket-1').future);
+
+      expect(result.single.magazzinoId, 'mag-1');
+      expect(result.single.magazzinoNome, 'Furgone Mario');
+    });
+
     test('a free-text item (no materialeId) uses its own name, no catalog lookup', () async {
       await db
           .into(db.ticketMateriali)

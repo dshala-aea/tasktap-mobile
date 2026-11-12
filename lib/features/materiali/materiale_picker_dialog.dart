@@ -23,7 +23,7 @@ import 'materiale_qty_field.dart';
 
 /// What the shared material picker returns. The caller decides how to store it: the rapportino
 /// maps it to a [MaterialeRow] (including `magazzinoId`, which books the scarico), the ticket
-/// fabbisogno maps it to an editable row.
+/// fabbisogno maps it to an editable row (where `magazzinoId` is planning provenance only).
 class MaterialePickerResult {
   const MaterialePickerResult({
     this.materialeId,
@@ -60,12 +60,142 @@ class _PickedMateriale {
   final String? unitOfMeasure;
 }
 
+/// Resolves a catalogue article's source warehouses and exposes the selected one.
+///
+/// Shared by the rapportino picker and the ticket Fabbisogno editor so both get the same
+/// single/multiple/none behaviour: exactly one giacenza is selected automatically, several are
+/// offered as a dropdown (largest first), none leaves the source null, and offline falls back to
+/// the mirrored warehouse list with an honest warning. Fabbisogno only stores the choice — it
+/// never books a stock movement through this class.
+class MaterialeSourceResolver extends ChangeNotifier {
+  MaterialeSourceResolver(this._ref);
+
+  final WidgetRef _ref;
+
+  bool loading = false;
+  String? error;
+  List<GiacenzaDto>? giacenze;
+  List<MagazzinoDto>? offlineMagazzini;
+  String? magazzinoId;
+  String? magazzinoNome;
+
+  int _generation = 0;
+  bool _disposed = false;
+
+  void clear() {
+    _generation++;
+    loading = false;
+    error = null;
+    giacenze = null;
+    offlineMagazzini = null;
+    magazzinoId = null;
+    magazzinoNome = null;
+    _notify();
+  }
+
+  void select(String? id, String? nome) {
+    if (magazzinoId == id && magazzinoNome == nome) return;
+    magazzinoId = id;
+    magazzinoNome = nome;
+    _notify();
+  }
+
+  Future<void> resolve({
+    required String id,
+    required String name,
+    required String code,
+    String? preferredMagazzinoId,
+  }) async {
+    final generation = ++_generation;
+    loading = true;
+    error = null;
+    giacenze = null;
+    offlineMagazzini = null;
+    magazzinoId = null;
+    magazzinoNome = null;
+    _notify();
+
+    bool stale() => _disposed || generation != _generation;
+
+    Future<List<GiacenzaDto>> query(String q) async {
+      final page = await _ref
+          .read(magazzinoApiClientProvider)
+          .getGiacenze(q: q, pageSize: 100);
+      return page.elementi.where((g) => g.materialeId == id).toList()
+        ..sort((a, b) => b.quantita.compareTo(a.quantita));
+    }
+
+    Future<List<MagazzinoDto>> mirror() async {
+      try {
+        return await _ref.read(magazziniProvider.future);
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    if (!_ref.read(isOnlineProvider)) {
+      final list = await mirror();
+      if (stale()) return;
+      offlineMagazzini = list;
+      loading = false;
+      error = 'Disponibilità non verificabile offline';
+      _notify();
+      return;
+    }
+
+    try {
+      // Name first, code as a fallback: the giacenze `q` is a general search and the code may
+      // not be indexed by it.
+      var matches = await query(name.isNotEmpty ? name : code);
+      if (matches.isEmpty && code.isNotEmpty && name.isNotEmpty) {
+        matches = await query(code);
+      }
+      if (stale()) return;
+      giacenze = matches;
+      loading = false;
+      if (matches.isNotEmpty) {
+        final preferred = preferredMagazzinoId == null
+            ? null
+            : matches.where((g) => g.magazzinoId == preferredMagazzinoId).firstOrNull;
+        final selected = preferred ?? matches.first;
+        magazzinoId = selected.magazzinoId;
+        magazzinoNome = selected.magazzinoNome;
+      }
+      _notify();
+    } catch (e) {
+      if (!isTransportOrServerFault(e)) {
+        if (stale()) return;
+        loading = false;
+        error = humanErrorMessage(e, azione: 'verificare le giacenze');
+        _notify();
+        return;
+      }
+      final list = await mirror();
+      if (stale()) return;
+      offlineMagazzini = list;
+      loading = false;
+      error = 'Disponibilità non verificabile offline';
+      _notify();
+    }
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+}
+
 /// The one add-material modal used by the rapportino and the ticket fabbisogno.
 ///
 /// Search or free text, barcode, a decimal numeric-pad quantity, unit, and — when [showSource] is
-/// true (the rapportino/report path, where the line can book a stock scarico) — the source
-/// warehouse resolved from the article's giacenze. Ticket fabbisogno passes `showSource: false`
-/// because its API has no `magazzinoId` yet (see `docs/handoffs`).
+/// true — the source warehouse resolved from the article's giacenze. The rapportino books a stock
+/// scarico from that choice; ticket fabbisogno records it as planning provenance only (no stock
+/// movement is ever created from a ticket's planned materials).
 Future<MaterialePickerResult?> showMaterialePickerDialog(
   BuildContext context, {
   String? ticketId,
@@ -104,47 +234,44 @@ class MaterialePickerDialog extends ConsumerStatefulWidget {
 
 class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
   final _qtyCtrl = TextEditingController(text: '1');
+  late final MaterialeSourceResolver _source;
 
   String? _materialeId;
   String? _freeTextName;
   String? _uom;
   _PickedMateriale? _picked;
   int _lookupGeneration = 0;
-  int _sourceGeneration = 0;
   bool _showAdvanced = false;
-
-  bool _sourceLoading = false;
-  String? _sourceError;
-  List<GiacenzaDto>? _giacenze;
-  List<MagazzinoDto>? _offlineMagazzini;
-  String? _magazzinoId;
-  String? _magazzinoNome;
 
   double get _qty => parseMaterialeQty(_qtyCtrl.text) ?? 0;
 
   bool get _canAdd {
     final identified = _materialeId != null || (_freeTextName?.trim().isNotEmpty ?? false);
-    final sourcePending = widget.showSource && _picked != null && _sourceLoading;
+    final sourcePending = widget.showSource && _picked != null && _source.loading;
     return identified && _qty > 0 && !sourcePending;
   }
 
   @override
+  void initState() {
+    super.initState();
+    _source = MaterialeSourceResolver(ref)..addListener(_onSourceChanged);
+  }
+
+  void _onSourceChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _source
+      ..removeListener(_onSourceChanged)
+      ..dispose();
     _qtyCtrl.dispose();
     super.dispose();
   }
 
-  void _clearSource() {
-    _sourceGeneration++;
-    _sourceLoading = false;
-    _sourceError = null;
-    _giacenze = null;
-    _offlineMagazzini = null;
-    _magazzinoId = null;
-    _magazzinoNome = null;
-  }
-
   void _onMaterialeSelected(MaterialiData m) {
+    _source.clear();
     setState(() {
       _materialeId = m.id;
       _freeTextName = null;
@@ -155,17 +282,16 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
         name: m.name,
         unitOfMeasure: m.unitOfMeasure,
       );
-      _clearSource();
     });
-    if (widget.showSource) _loadSources(_picked!);
+    if (widget.showSource) _resolveSources(_picked!);
   }
 
   void _onFreeText(String text) {
+    _source.clear();
     setState(() {
       _materialeId = null;
       _freeTextName = text;
       _picked = null;
-      _clearSource();
     });
   }
 
@@ -176,6 +302,7 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
     final match = await lookupMaterialeByBarcode(ref, code);
     if (!mounted) return;
 
+    _source.clear();
     setState(() {
       _lookupGeneration++;
       if (match != null) {
@@ -188,91 +315,20 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
           name: match.name,
           unitOfMeasure: match.unitOfMeasure,
         );
-        _clearSource();
       } else {
         _materialeId = null;
         _freeTextName = code;
         _picked = null;
-        _clearSource();
       }
     });
-    if (match != null && widget.showSource) _loadSources(_picked!);
+    if (match != null && widget.showSource) _resolveSources(_picked!);
   }
 
-  Future<void> _loadSources(_PickedMateriale m) async {
-    final generation = ++_sourceGeneration;
-    setState(() {
-      _sourceLoading = true;
-      _sourceError = null;
-      _giacenze = null;
-      _offlineMagazzini = null;
-      _magazzinoId = null;
-      _magazzinoNome = null;
-    });
-
-    bool stale() => !mounted || generation != _sourceGeneration || _picked?.id != m.id;
-
-    Future<List<GiacenzaDto>> query(String q) async {
-      final page = await ref
-          .read(magazzinoApiClientProvider)
-          .getGiacenze(q: q, pageSize: 100);
-      return page.elementi.where((g) => g.materialeId == m.id).toList()
-        ..sort((a, b) => b.quantita.compareTo(a.quantita));
-    }
-
-    if (!ref.read(isOnlineProvider)) {
-      final list = await _mirrorMagazzini();
-      if (stale()) return;
-      setState(() {
-        _offlineMagazzini = list;
-        _sourceLoading = false;
-        _sourceError = 'Disponibilità non verificabile offline';
-      });
-      return;
-    }
-
-    try {
-      // Name first, code as a fallback: the giacenze `q` is a general search and the code may
-      // not be indexed by it.
-      var matches = await query(m.name.isNotEmpty ? m.name : m.code);
-      if (matches.isEmpty && m.code.isNotEmpty && m.name.isNotEmpty) {
-        matches = await query(m.code);
-      }
-      if (stale()) return;
-      setState(() {
-        _giacenze = matches;
-        _sourceLoading = false;
-        if (matches.isNotEmpty) {
-          _magazzinoId = matches.first.magazzinoId;
-          _magazzinoNome = matches.first.magazzinoNome;
-        }
-      });
-    } catch (e) {
-      if (!isTransportOrServerFault(e)) {
-        if (stale()) return;
-        setState(() {
-          _sourceLoading = false;
-          _sourceError = humanErrorMessage(e, azione: 'verificare le giacenze');
-        });
-        return;
-      }
-      final list = await _mirrorMagazzini();
-      if (stale()) return;
-      setState(() {
-        _offlineMagazzini = list;
-        _sourceLoading = false;
-        _sourceError = 'Disponibilità non verificabile offline';
-      });
-    }
-  }
-
-  Future<List<MagazzinoDto>> _mirrorMagazzini() async {
-    try {
-      return await ref.read(magazziniProvider.future);
-    } catch (_) {
-      return const [];
-    }
-  }
+  Future<void> _resolveSources(_PickedMateriale m) => _source.resolve(
+    id: m.id,
+    name: m.name,
+    code: m.code,
+  );
 
   void _bumpQty(double delta) {
     final next = (_qty + delta).clamp(1, 999999).toDouble();
@@ -290,8 +346,8 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
         freeTextName: _materialeId == null ? (typed?.isEmpty ?? true ? null : typed) : null,
         quantity: _qty,
         unitOfMeasure: _uom,
-        magazzinoId: _magazzinoId,
-        magazzinoNome: _magazzinoNome,
+        magazzinoId: _source.magazzinoId,
+        magazzinoNome: _source.magazzinoNome,
         materialeNome: _picked?.name,
         materialeCodice: _picked?.code,
       ),
@@ -328,6 +384,7 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
                       _FabbisognoSuggestions(
                         ticketId: widget.ticketId!,
                         onPicked: (m) {
+                          _source.clear();
                           setState(() {
                             _materialeId = m.materialeId;
                             _freeTextName = m.materialeId == null ? m.nome : null;
@@ -342,10 +399,9 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
                                     unitOfMeasure: m.unitaMisura,
                                   );
                             _lookupGeneration++;
-                            _clearSource();
                           });
                           if (m.materialeId != null && widget.showSource) {
-                            _loadSources(_picked!);
+                            _resolveSources(_picked!);
                           }
                         },
                       ),
@@ -374,16 +430,13 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
                     ),
                     if (widget.showSource && _picked != null) ...[
                       const SizedBox(height: 10),
-                      _SourceSection(
-                        loading: _sourceLoading,
-                        error: _sourceError,
-                        giacenze: _giacenze,
-                        offlineMagazzini: _offlineMagazzini,
-                        selectedMagazzinoId: _magazzinoId,
-                        onChanged: (id, nome) => setState(() {
-                          _magazzinoId = id;
-                          _magazzinoNome = nome;
-                        }),
+                      MaterialeSourceSection(
+                        loading: _source.loading,
+                        error: _source.error,
+                        giacenze: _source.giacenze,
+                        offlineMagazzini: _source.offlineMagazzini,
+                        selectedMagazzinoId: _source.magazzinoId,
+                        onChanged: _source.select,
                       ),
                     ],
                     if (widget.showSource &&
@@ -480,8 +533,11 @@ Future<String?> _openCameraScanner(BuildContext context) =>
 
 // ── Source magazzino ──────────────────────────────────────────────────────────
 
-class _SourceSection extends StatelessWidget {
-  const _SourceSection({
+/// The shared source-warehouse control: auto-selected single giacenza, dropdown for several,
+/// honest notices for none/offline. Used by the report picker and the ticket Fabbisogno editor.
+class MaterialeSourceSection extends StatelessWidget {
+  const MaterialeSourceSection({
+    super.key,
     required this.loading,
     required this.error,
     required this.giacenze,

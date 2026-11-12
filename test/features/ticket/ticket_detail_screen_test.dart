@@ -2461,6 +2461,7 @@ void main() {
           'quantity': 5.0,
           'unitOfMeasure': null,
           'notes': null,
+          'magazzinoId': null,
         });
 
         // Back to the read view, showing both rows — proof the local Drift mirror was updated
