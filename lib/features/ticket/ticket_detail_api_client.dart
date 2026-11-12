@@ -317,6 +317,7 @@ class TicketMaterialeWriteRow {
     required this.quantity,
     this.unitOfMeasure,
     this.notes,
+    this.magazzinoId,
   });
 
   final String? materialeId;
@@ -325,12 +326,17 @@ class TicketMaterialeWriteRow {
   final String? unitOfMeasure;
   final String? notes;
 
+  /// Optional source warehouse for a planned line. Fabbisogno is planning only, so this never
+  /// books a stock movement; null means "no source" and is valid.
+  final String? magazzinoId;
+
   Map<String, dynamic> toJson() => {
     'materialeId': materialeId,
     'freeTextName': freeTextName,
     'quantity': quantity,
     'unitOfMeasure': unitOfMeasure,
     'notes': notes,
+    'magazzinoId': magazzinoId,
   };
 }
 
@@ -369,6 +375,8 @@ class TicketMaterialeDto {
     this.unitaMisura,
     this.note,
     required this.disponibile,
+    this.magazzinoId,
+    this.magazzinoNome,
   });
 
   final String id;
@@ -380,6 +388,13 @@ class TicketMaterialeDto {
   final String? note;
   final bool disponibile;
 
+  /// Optional source warehouse for this planned line. Null means no source; fabbisogno never
+  /// consumes stock, so this is provenance for planning and display only.
+  final String? magazzinoId;
+
+  /// The source warehouse's name, resolved by the server (or by the local mirror offline).
+  final String? magazzinoNome;
+
   factory TicketMaterialeDto.fromJson(Map<String, dynamic> json) {
     return TicketMaterialeDto(
       id: json['id'] as String,
@@ -390,6 +405,8 @@ class TicketMaterialeDto {
       unitaMisura: json['unitaMisura'] as String?,
       note: json['note'] as String?,
       disponibile: json['disponibile'] as bool? ?? true,
+      magazzinoId: json['magazzinoId'] as String?,
+      magazzinoNome: json['magazzinoNome'] as String?,
     );
   }
 }

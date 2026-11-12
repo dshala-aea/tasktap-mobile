@@ -760,6 +760,7 @@ class SyncService {
                   unitOfMeasure: Value(m.unitOfMeasure),
                   notes: Value(m.notes),
                   isAvailable: Value(m.isAvailable),
+                  magazzinoId: Value(m.magazzinoId),
                 ),
               ),
         ),

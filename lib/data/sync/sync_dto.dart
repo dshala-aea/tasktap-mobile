@@ -994,6 +994,7 @@ class SyncTicketMaterialeDto {
   final String? unitOfMeasure;
   final String? notes;
   final bool isAvailable;
+  final String? magazzinoId;
 
   const SyncTicketMaterialeDto({
     required this.id,
@@ -1007,6 +1008,7 @@ class SyncTicketMaterialeDto {
     this.unitOfMeasure,
     this.notes,
     this.isAvailable = false,
+    this.magazzinoId,
   });
 
   factory SyncTicketMaterialeDto.fromJson(Map<String, dynamic> j) =>
@@ -1022,6 +1024,7 @@ class SyncTicketMaterialeDto {
         unitOfMeasure: j['unitOfMeasure'] as String?,
         notes: j['notes'] as String?,
         isAvailable: j['isAvailable'] as bool? ?? false,
+        magazzinoId: j['magazzinoId'] as String?,
       );
 }
 

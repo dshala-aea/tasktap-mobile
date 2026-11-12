@@ -1747,6 +1747,7 @@ class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
                 quantity: row.quantity,
                 unitOfMeasure: Value(row.unitOfMeasure),
                 notes: Value(row.notes),
+                magazzinoId: Value(row.magazzinoId),
                 // Not knowable locally without a server round trip — the next sync corrects this
                 // if a catalogue article has actually gone unavailable; same "cosmetic, self-
                 // corrects on next sync" tolerance as the row's own client-generated id.

@@ -118,6 +118,7 @@ void main() {
         'quantity': 2.5,
         'unitOfMeasure': 'pz',
         'isAvailable': true,
+        'magazzinoId': 'mag1',
       };
 
       final dto = SyncTicketMaterialeDto.fromJson(json);
@@ -126,6 +127,7 @@ void main() {
       expect(dto.materialeId, 'mat1');
       expect(dto.quantity, 2.5);
       expect(dto.isAvailable, isTrue);
+      expect(dto.magazzinoId, 'mag1');
     });
 
     test('parses a free-text item and tolerates missing optional fields', () {
@@ -143,6 +145,7 @@ void main() {
       expect(dto.materialeId, isNull);
       expect(dto.freeTextName, 'Guarnizione generica');
       expect(dto.isAvailable, isFalse);
+      expect(dto.magazzinoId, isNull);
     });
   });
 
