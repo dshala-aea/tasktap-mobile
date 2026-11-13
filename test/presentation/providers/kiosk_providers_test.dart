@@ -5,6 +5,7 @@
 // here touches real secure storage, network, or platform channels.
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -33,20 +34,24 @@ void main() {
   KioskModeNotifier build() => KioskModeNotifier(store, api, lock);
 
   group('_init (constructor)', () {
-    test('no stored credentials → inactive, never touches the lock service', () async {
-      when(() => store.read()).thenAnswer((_) async => null);
+    test(
+      'no stored credentials → inactive, never touches the lock service',
+      () async {
+        when(() => store.read()).thenAnswer((_) async => null);
 
-      final notifier = build();
-      await Future<void>.delayed(Duration.zero); // let _init's awaits settle
+        final notifier = build();
+        await Future<void>.delayed(Duration.zero); // let _init's awaits settle
 
-      expect(notifier.state.loading, isFalse);
-      expect(notifier.state.active, isFalse);
-      verifyNever(() => lock.start());
-    });
+        expect(notifier.state.loading, isFalse);
+        expect(notifier.state.active, isFalse);
+        verifyNever(() => lock.start());
+      },
+    );
 
     test('stored credentials → re-locks immediately on cold start', () async {
       when(() => store.read()).thenAnswer(
-        (_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: 'Totem A'),
+        (_) async =>
+            const KioskCredentials(rawKey: 'sp_x', deviceLabel: 'Totem A'),
       );
       when(() => lock.start()).thenAnswer((_) async => KioskLockOutcome.locked);
 
@@ -76,8 +81,11 @@ void main() {
       verifyNever(() => lock.start());
     });
 
-    testWidgets('store.read never completes -> settles inactive after 5s', (tester) async {
-      when(() => store.read()).thenAnswer((_) => Completer<KioskCredentials?>().future);
+    testWidgets('store.read never completes -> settles inactive after 5s', (
+      tester,
+    ) async {
+      when(() => store.read())
+          .thenAnswer((_) => Completer<KioskCredentials?>().future);
 
       final notifier = build();
       await tester.pump(const Duration(seconds: 4));
@@ -88,67 +96,99 @@ void main() {
       expect(notifier.state.active, isFalse);
     });
 
-    testWidgets('credentials exist but lock.start throws -> active, outcome failed', (
-      tester,
-    ) async {
-      when(() => store.read()).thenAnswer((_) async => creds);
-      when(() => lock.start()).thenThrow(Exception('channel exploded'));
+    testWidgets(
+      'credentials exist but lock.start throws -> active, outcome failed',
+      (tester) async {
+        when(() => store.read()).thenAnswer((_) async => creds);
+        when(() => lock.start()).thenThrow(Exception('channel exploded'));
 
-      final notifier = build();
-      await tester.pump(Duration.zero);
+        final notifier = build();
+        await tester.pump(Duration.zero);
 
-      expect(notifier.state.loading, isFalse);
-      expect(notifier.state.active, isTrue);
-      expect(notifier.state.deviceLabel, 'Totem A');
-      expect(notifier.state.lockOutcome, KioskLockOutcome.failed);
-    });
+        expect(notifier.state.loading, isFalse);
+        expect(notifier.state.active, isTrue);
+        expect(notifier.state.deviceLabel, 'Totem A');
+        expect(notifier.state.lockOutcome, KioskLockOutcome.failed);
+      },
+    );
 
-    testWidgets('credentials exist but lock.start never completes -> active, failed after 5s', (
-      tester,
-    ) async {
-      when(() => store.read()).thenAnswer((_) async => creds);
-      when(() => lock.start()).thenAnswer((_) => Completer<KioskLockOutcome>().future);
+    testWidgets(
+      'credentials exist but lock.start never completes -> active, failed after 5s',
+      (tester) async {
+        when(() => store.read()).thenAnswer((_) async => creds);
+        when(() => lock.start())
+            .thenAnswer((_) => Completer<KioskLockOutcome>().future);
 
-      final notifier = build();
-      await tester.pump(const Duration(seconds: 4));
-      expect(notifier.state.loading, isTrue);
+        final notifier = build();
+        await tester.pump(const Duration(seconds: 4));
+        expect(notifier.state.loading, isTrue);
 
-      await tester.pump(const Duration(seconds: 2));
-      expect(notifier.state.loading, isFalse);
-      expect(notifier.state.active, isTrue);
-      expect(notifier.state.lockOutcome, KioskLockOutcome.failed);
-    });
+        await tester.pump(const Duration(seconds: 2));
+        expect(notifier.state.loading, isFalse);
+        expect(notifier.state.active, isTrue);
+        expect(notifier.state.lockOutcome, KioskLockOutcome.failed);
+      },
+    );
   });
 
   group('activate', () {
-    test('validates against the backend, persists, locks, and flips active', () async {
-      when(() => store.read()).thenAnswer((_) async => null);
-      when(
-        () => api.fetchQr('sp_new'),
-      ).thenAnswer((_) async => const KioskQrToken(token: 't', expiresInSeconds: 60));
-      when(
-        () => store.save(rawKey: any(named: 'rawKey'), deviceLabel: any(named: 'deviceLabel'), exitPin: any(named: 'exitPin')),
-      ).thenAnswer((_) async {});
-      when(() => lock.start()).thenAnswer((_) async => KioskLockOutcome.locked);
+    test(
+      'validates against the backend, persists, locks, and flips active',
+      () async {
+        when(() => store.read()).thenAnswer((_) async => null);
+        when(() => api.provision('sp_new')).thenAnswer(
+          (_) async => KioskProvisioning(
+            deviceId: 'abcdef01-1111-1111-1111-111111111111',
+            signingKey: base64.encode(List<int>.filled(32, 1)),
+            expiresInSeconds: 300,
+            serverTimeUtc: DateTime.utc(2026, 11, 13, 12),
+          ),
+        );
+        when(
+          () => store.save(
+            rawKey: any(named: 'rawKey'),
+            deviceLabel: any(named: 'deviceLabel'),
+            exitPin: any(named: 'exitPin'),
+            deviceId: any(named: 'deviceId'),
+            signingKey: any(named: 'signingKey'),
+            serverTimeOffsetSeconds: any(named: 'serverTimeOffsetSeconds'),
+            expiresInSeconds: any(named: 'expiresInSeconds'),
+          ),
+        ).thenAnswer((_) async {});
+        when(() => lock.start())
+            .thenAnswer((_) async => KioskLockOutcome.locked);
 
-      final notifier = build();
-      await Future<void>.delayed(Duration.zero);
+        final notifier = build();
+        await Future<void>.delayed(Duration.zero);
 
-      await notifier.activate(rawKey: 'sp_new', deviceLabel: 'Totem B', exitPin: '1234');
+        await notifier.activate(
+          rawKey: 'sp_new',
+          deviceLabel: 'Totem B',
+          exitPin: '1234',
+        );
 
-      expect(notifier.state.active, isTrue);
-      expect(notifier.state.deviceLabel, 'Totem B');
-      verify(
-        () => store.save(rawKey: 'sp_new', deviceLabel: 'Totem B', exitPin: '1234'),
-      ).called(1);
-      verify(() => lock.start()).called(1);
-    });
+        expect(notifier.state.active, isTrue);
+        expect(notifier.state.deviceLabel, 'Totem B');
+        verify(
+          () => store.save(
+            rawKey: 'sp_new',
+            deviceLabel: 'Totem B',
+            exitPin: '1234',
+            deviceId: 'abcdef01-1111-1111-1111-111111111111',
+            signingKey: any(named: 'signingKey'),
+            serverTimeOffsetSeconds: any(named: 'serverTimeOffsetSeconds'),
+            expiresInSeconds: 300,
+          ),
+        ).called(1);
+        verify(() => lock.start()).called(1);
+      },
+    );
 
     test('an invalid/revoked key throws and persists/locks nothing', () async {
       when(() => store.read()).thenAnswer((_) async => null);
-      when(
-        () => api.fetchQr('sp_bad'),
-      ).thenThrow(const KioskApiException(KioskApiFailureReason.invalidOrRevoked));
+      when(() => api.provision('sp_bad')).thenThrow(
+        const KioskApiException(KioskApiFailureReason.invalidOrRevoked),
+      );
 
       final notifier = build();
       await Future<void>.delayed(Duration.zero);
@@ -160,74 +200,136 @@ void main() {
 
       expect(notifier.state.active, isFalse);
       verifyNever(
-        () => store.save(rawKey: any(named: 'rawKey'), deviceLabel: any(named: 'deviceLabel'), exitPin: any(named: 'exitPin')),
+        () => store.save(
+          rawKey: any(named: 'rawKey'),
+          deviceLabel: any(named: 'deviceLabel'),
+          exitPin: any(named: 'exitPin'),
+        ),
       );
       verifyNever(() => lock.start());
     });
   });
 
   group('refreshQr', () {
-    test('returns the token on success', () async {
-      when(
-        () => store.read(),
-      ).thenAnswer((_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''));
+    test('generates a v3 token locally when already provisioned', () async {
+      when(() => store.read()).thenAnswer(
+        (_) async => KioskCredentials(
+          rawKey: 'sp_x',
+          deviceLabel: '',
+          deviceId: 'abcdef01-1111-1111-1111-111111111111',
+          signingKey: base64.encode(List<int>.filled(32, 1)),
+          serverTimeOffsetSeconds: 0,
+          expiresInSeconds: 300,
+        ),
+      );
       when(() => lock.start()).thenAnswer((_) async => KioskLockOutcome.locked);
-      when(
-        () => api.fetchQr('sp_x'),
-      ).thenAnswer((_) async => const KioskQrToken(token: 'abc', expiresInSeconds: 45));
 
       final notifier = build();
       await Future<void>.delayed(Duration.zero);
 
       final token = await notifier.refreshQr();
 
-      expect(token.token, 'abc');
+      expect(
+        token.token,
+        startsWith('v3:abcdef01-1111-1111-1111-111111111111:'),
+      );
+      expect(token.expiresInSeconds, 300);
+      verifyNever(() => api.provision(any()));
     });
 
-    test('invalidOrRevoked auto-deactivates: unlocks, clears storage, flips inactive', () async {
-      when(
-        () => store.read(),
-      ).thenAnswer((_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''));
+    test('provisions first, then generates when the key is missing', () async {
+      when(() => store.read()).thenAnswer(
+        (_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''),
+      );
       when(() => lock.start()).thenAnswer((_) async => KioskLockOutcome.locked);
-      when(() => lock.stop()).thenAnswer((_) async {});
-      when(() => store.clear()).thenAnswer((_) async {});
+      when(() => api.provision('sp_x')).thenAnswer(
+        (_) async => KioskProvisioning(
+          deviceId: 'abcdef01-1111-1111-1111-111111111111',
+          signingKey: base64.encode(List<int>.filled(32, 1)),
+          expiresInSeconds: 300,
+          serverTimeUtc: DateTime.utc(2026, 11, 13, 12),
+        ),
+      );
       when(
-        () => api.fetchQr('sp_x'),
-      ).thenThrow(const KioskApiException(KioskApiFailureReason.invalidOrRevoked));
+        () => store.saveProvisioning(
+          deviceId: any(named: 'deviceId'),
+          signingKey: any(named: 'signingKey'),
+          serverTimeOffsetSeconds: any(named: 'serverTimeOffsetSeconds'),
+          expiresInSeconds: any(named: 'expiresInSeconds'),
+        ),
+      ).thenAnswer((_) async {});
 
       final notifier = build();
       await Future<void>.delayed(Duration.zero);
 
-      await expectLater(notifier.refreshQr(), throwsA(isA<KioskApiException>()));
+      final token = await notifier.refreshQr();
+
+      expect(token.token, startsWith('v3:'));
+      verify(
+        () => store.saveProvisioning(
+          deviceId: 'abcdef01-1111-1111-1111-111111111111',
+          signingKey: any(named: 'signingKey'),
+          serverTimeOffsetSeconds: any(named: 'serverTimeOffsetSeconds'),
+          expiresInSeconds: 300,
+        ),
+      ).called(1);
+    });
+
+    test('invalidOrRevoked auto-deactivates: unlocks, clears storage, flips inactive', () async {
+      when(() => store.read()).thenAnswer(
+        (_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''),
+      );
+      when(() => lock.start()).thenAnswer((_) async => KioskLockOutcome.locked);
+      when(() => lock.stop()).thenAnswer((_) async {});
+      when(() => store.clear()).thenAnswer((_) async {});
+      when(() => api.provision('sp_x')).thenThrow(
+        const KioskApiException(KioskApiFailureReason.invalidOrRevoked),
+      );
+
+      final notifier = build();
+      await Future<void>.delayed(Duration.zero);
+
+      await expectLater(
+        notifier.refreshQr(),
+        throwsA(isA<KioskApiException>()),
+      );
 
       expect(notifier.state.active, isFalse);
       verify(() => lock.stop()).called(1);
       verify(() => store.clear()).called(1);
     });
 
-    test('a transient network failure does NOT deactivate — device stays pinned', () async {
-      when(
-        () => store.read(),
-      ).thenAnswer((_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''));
-      when(() => lock.start()).thenAnswer((_) async => KioskLockOutcome.locked);
-      when(() => api.fetchQr('sp_x')).thenThrow(const KioskApiException(KioskApiFailureReason.network));
+    test(
+      'a transient network failure does NOT deactivate — device stays pinned',
+      () async {
+        when(() => store.read()).thenAnswer(
+          (_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''),
+        );
+        when(() => lock.start())
+            .thenAnswer((_) async => KioskLockOutcome.locked);
+        when(() => api.provision('sp_x'))
+            .thenThrow(const KioskApiException(KioskApiFailureReason.network));
 
-      final notifier = build();
-      await Future<void>.delayed(Duration.zero);
+        final notifier = build();
+        await Future<void>.delayed(Duration.zero);
 
-      await expectLater(notifier.refreshQr(), throwsA(isA<KioskApiException>()));
+        await expectLater(
+          notifier.refreshQr(),
+          throwsA(isA<KioskApiException>()),
+        );
 
-      expect(notifier.state.active, isTrue);
-      verifyNever(() => lock.stop());
-      verifyNever(() => store.clear());
-    });
+        expect(notifier.state.active, isTrue);
+        verifyNever(() => lock.stop());
+        verifyNever(() => store.clear());
+      },
+    );
   });
 
   group('deactivate', () {
     test('wrong PIN leaves kiosk mode active', () async {
-      when(
-        () => store.read(),
-      ).thenAnswer((_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''));
+      when(() => store.read()).thenAnswer(
+        (_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''),
+      );
       when(() => lock.start()).thenAnswer((_) async => KioskLockOutcome.locked);
       when(() => store.verifyExitPin('0000')).thenAnswer((_) async => false);
 
@@ -242,9 +344,9 @@ void main() {
     });
 
     test('correct PIN unlocks, clears storage, flips inactive', () async {
-      when(
-        () => store.read(),
-      ).thenAnswer((_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''));
+      when(() => store.read()).thenAnswer(
+        (_) async => const KioskCredentials(rawKey: 'sp_x', deviceLabel: ''),
+      );
       when(() => lock.start()).thenAnswer((_) async => KioskLockOutcome.locked);
       when(() => store.verifyExitPin('1234')).thenAnswer((_) async => true);
       when(() => lock.stop()).thenAnswer((_) async {});
