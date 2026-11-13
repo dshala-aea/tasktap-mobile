@@ -102,7 +102,7 @@ void main() {
     bool settle = true,
   }) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: overrides,
         child: const MaterialApp(home: Scaffold(body: _TimerHarness())),
       ),
@@ -172,7 +172,7 @@ void main() {
 
     late DetailAction action;
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
@@ -233,7 +233,7 @@ void main() {
   ) async {
     late DetailAction action;
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           internalUserIdProvider.overrideWith((ref) async => 'u2'),
           isOnlineProvider.overrideWithValue(true),
@@ -260,7 +260,7 @@ void main() {
   ) async {
     late DetailAction action;
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           isOnlineProvider.overrideWithValue(true),
           ticketWorklogsProvider('t1')
@@ -292,7 +292,7 @@ void main() {
   ) async {
     late DetailAction action;
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           internalUserIdProvider.overrideWith((ref) async => 'u1'),
           isOnlineProvider.overrideWithValue(true),

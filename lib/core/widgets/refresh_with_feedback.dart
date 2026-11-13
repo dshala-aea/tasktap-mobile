@@ -20,10 +20,6 @@ Future<void> refreshWithFeedback(BuildContext context, WidgetRef ref) async {
   await ref.read(syncProvider.notifier).performSync();
   if (!context.mounted) return;
   if (ref.read(syncProvider).status == SyncStatus.error) {
-    showAppToast(
-      context,
-      message: 'Aggiornamento non riuscito. Riprova.',
-      tone: ToastTone.error,
-    );
+    showAppToast(context, message: 'Aggiornamento non riuscito. Riprova.', tone: ToastTone.error);
   }
 }

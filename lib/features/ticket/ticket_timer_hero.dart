@@ -1,7 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -175,7 +174,7 @@ Future<void> _toggle(BuildContext context, WidgetRef ref, String ticketId, bool 
     }
     ref.invalidate(ticketWorklogsProvider(ticketId));
     try {
-      await ref.readFuture(ticketWorklogsProvider(ticketId).future);
+      await ref.read(ticketWorklogsProvider(ticketId).future);
     } on TicketDetailOfflineException {
       // The write landed; only the re-read had nothing to say (offline, empty mirror).
     }

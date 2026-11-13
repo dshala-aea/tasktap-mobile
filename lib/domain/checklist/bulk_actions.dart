@@ -54,8 +54,7 @@ class BulkPlan {
     this.rejected = false,
   });
 
-  factory BulkPlan.rejected(BulkProblem problem) =>
-      BulkPlan(problems: [problem], rejected: true);
+  factory BulkPlan.rejected(BulkProblem problem) => BulkPlan(problems: [problem], rejected: true);
 
   final List<BulkChange> changes;
   final int skippedNonBoolean;
@@ -124,7 +123,9 @@ BulkPlan planBulk({
       if (note != null) {
         final combined = nextNote == null ? note : '$nextNote\n$note';
         if (combined.length > kBulkNoteMax) {
-          problems.add(BulkProblem(code: BulkProblemCode.noteTooLong, assetId: assetId, lineageId: lineage));
+          problems.add(
+            BulkProblem(code: BulkProblemCode.noteTooLong, assetId: assetId, lineageId: lineage),
+          );
           continue;
         }
         nextNote = combined;

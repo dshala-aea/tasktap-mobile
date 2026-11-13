@@ -23,7 +23,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 
 import '../../core/scanner/barcode_scan_sheet.dart';
 import '../../core/theme/app_palette.dart';
@@ -154,7 +153,7 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
 
     final String? userId;
     try {
-      userId = _userId ?? await ref.readFuture(internalUserIdProvider.future);
+      userId = _userId ?? await ref.read(internalUserIdProvider.future);
     } catch (_) {
       // The one await in here that is not already guarded, and `_begin` turned the spinner on
       // before it: a failed session read has to land in the same error state as everything else,

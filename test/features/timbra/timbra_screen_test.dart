@@ -120,7 +120,7 @@ Widget _buildApp(
   ILocationService? locationService,
   List<Override> extraOverrides = const [],
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       timbraSyncServiceProvider.overrideWithValue(_makeNoopSyncService()),

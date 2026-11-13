@@ -1,6 +1,5 @@
 // dart format width=100
-import 'package:firebase_messaging/firebase_messaging.dart'
-    show AuthorizationStatus;
+import 'package:firebase_messaging/firebase_messaging.dart' show AuthorizationStatus;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart' show openAppSettings;
@@ -38,9 +37,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _complete() async {
     if (_completing) return;
     _completing = true;
-    await ref
-        .read(onboardingCompletedProvider(widget.userId).notifier)
-        .markCompleted();
+    await ref.read(onboardingCompletedProvider(widget.userId).notifier).markCompleted();
     // The router's redirect takes it from here.
   }
 
@@ -60,8 +57,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       if (!mounted) return;
       setState(() {
         _notificationsGranted = switch (status) {
-          AuthorizationStatus.authorized ||
-          AuthorizationStatus.provisional => true,
+          AuthorizationStatus.authorized || AuthorizationStatus.provisional => true,
           // firebase_messaging 16 adds `deniedPermanently` (Android 13+ only); for the
           // onboarding ask it is the same outcome as `denied`.
           AuthorizationStatus.denied || AuthorizationStatus.deniedPermanently => false,
@@ -129,13 +125,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   Text(
                     'Non disponibile su questo dispositivo.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 14,
+                      color: context.colors.inkMuted,
+                    ),
                   )
                 else if (_notificationsGranted == true)
                   Text(
                     'Notifiche attive.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 14,
+                      color: context.colors.inkMuted,
+                    ),
                   )
                 else if (_notificationsGranted == false)
                   Column(
@@ -151,23 +155,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
-                      AppButton.secondary(
-                        label: 'Apri Impostazioni',
-                        onPressed: openAppSettings,
-                      ),
+                      AppButton.secondary(label: 'Apri Impostazioni', onPressed: openAppSettings),
                     ],
                   )
                 else
-                  AppButton.secondary(
-                    label: 'Attiva le notifiche',
-                    onPressed: _askNotifications,
-                  ),
+                  AppButton.secondary(label: 'Attiva le notifiche', onPressed: _askNotifications),
                 if (_notificationRequestFailed) ...[
                   const SizedBox(height: AppSpacing.sm),
                   Text(
                     'Non è stato possibile attivare le notifiche. Riprova.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 14,
+                      color: context.colors.inkMuted,
+                    ),
                   ),
                 ],
                 const SizedBox(height: AppSpacing.xl),

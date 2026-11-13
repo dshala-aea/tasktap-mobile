@@ -127,7 +127,7 @@ Widget _buildHarness(
     ],
   );
 
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       smartWorkingRequestApiClientProvider.overrideWithValue(fake),
       isOnlineProvider.overrideWithValue(online),

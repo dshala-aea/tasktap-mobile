@@ -62,7 +62,7 @@ Widget _buildScreen({
     ],
   );
 
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [appDatabaseProvider.overrideWithValue(db)],
     child: MaterialApp.router(routerConfig: router),
   );

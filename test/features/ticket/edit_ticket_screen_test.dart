@@ -173,7 +173,7 @@ void main() {
   // new_ticket_form_test.dart's identical reasoning): EditTicketScreen calls Navigator.pop() on
   // save, and popping MaterialApp's lone root route is not what production ever does.
   Widget buildLauncher() {
-    return ProviderScope(
+    return ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),

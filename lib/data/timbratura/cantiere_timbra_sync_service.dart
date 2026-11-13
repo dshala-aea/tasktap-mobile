@@ -122,9 +122,7 @@ class CantiereTimbraSyncService {
       if (manual) await _clearSyncErrors();
       final allEvents = await _openUploadQueue();
       // Resurrection guard — see class doc comment above.
-      final events = allEvents
-          .where((e) => e.notes != cantiereReconciledOrphanMarker)
-          .toList();
+      final events = allEvents.where((e) => e.notes != cantiereReconciledOrphanMarker).toList();
       if (events.isEmpty) return;
 
       for (final day in _byBusinessDay(events)) {
@@ -264,10 +262,7 @@ class CantiereTimbraSyncService {
       // The orphan closes are excluded: they were marked by [_pushOrphanClose] when their own
       // call landed, and the in-memory rows still read `isPendingSync`.
       await _repo.markSynced(
-        day
-            .where((e) => e.isPendingSync && !orphanIds.contains(e.id))
-            .map((e) => e.id)
-            .toList(),
+        day.where((e) => e.isPendingSync && !orphanIds.contains(e.id)).map((e) => e.id).toList(),
       );
     }
 
@@ -382,8 +377,7 @@ class CantiereTimbraSyncService {
   /// response. Anything with no response at all (radio down, timeout, a programming error) is not
   /// permanent — nothing was decided server-side, and marking the technician's punch refused on the
   /// strength of it would be a lie. Mirrors timbra_sync_service.dart's `_handleRefusedBatch` gate.
-  static bool _isPermanent(Object e) =>
-      e is DioException && e.response != null && !_isTransient(e);
+  static bool _isPermanent(Object e) => e is DioException && e.response != null && !_isTransient(e);
 
   /// Whether retrying the same request unattended could plausibly succeed: no response at all
   /// (radio/timeout), a server fault (5xx), or explicit back-pressure (408/429). 401 counts too:

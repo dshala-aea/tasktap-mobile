@@ -22,7 +22,10 @@ class RowIconTile extends StatelessWidget {
     this.radius,
     this.color,
     this.circle = false,
-  }) : assert(icon != null || child != null, 'RowIconTile needs an icon or a child');
+  }) : assert(
+         icon != null || child != null,
+         'RowIconTile needs an icon or a child',
+       );
 
   final IconData? icon;
 
@@ -55,7 +58,9 @@ class RowIconTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: resolvedColor.withAlpha(31),
         shape: circle ? BoxShape.circle : BoxShape.rectangle,
-        borderRadius: circle ? null : BorderRadius.circular(radius ?? AppRack.insetRadius),
+        borderRadius: circle
+            ? null
+            : BorderRadius.circular(radius ?? AppRack.insetRadius),
       ),
       child: child ?? Icon(icon, size: iconSize, color: resolvedColor),
     );

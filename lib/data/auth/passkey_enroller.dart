@@ -32,14 +32,21 @@ class PasskeyEnroller {
   ///
   /// A dismissed platform sheet is not an error: it returns
   /// `(ok: false, failure: null)` so the caller can stay silent.
-  Future<({bool ok, AuthFailure? failure})> enrol({required String name}) async {
+  Future<({bool ok, AuthFailure? failure})> enrol({
+    required String name,
+  }) async {
     final String passkeyId;
     final RegisterRequestType request;
     try {
-      final response = await _dio.post<dynamic>(_startPath, data: const <String, dynamic>{});
+      final response = await _dio.post<dynamic>(
+        _startPath,
+        data: const <String, dynamic>{},
+      );
       final data = response.data;
       final rawId = data is Map ? data['passkeyId'] : null;
-      final rawOptions = data is Map ? data['publicKeyCredentialCreationOptions'] : null;
+      final rawOptions = data is Map
+          ? data['publicKeyCredentialCreationOptions']
+          : null;
       // Wrapped, unwrapped, or JSON-encoded by the gateway — see passkey_options.dart.
       final publicKey = passkeyOptionsMap(
         rawOptions,
@@ -47,7 +54,10 @@ class PasskeyEnroller {
         requiredKey: 'challenge',
       );
       if (rawId is! String || rawId.isEmpty || publicKey == null) {
-        return (ok: false, failure: const UnknownAuthError('Malformed passkey start response'));
+        return (
+          ok: false,
+          failure: const UnknownAuthError('Malformed passkey start response'),
+        );
       }
       passkeyId = rawId;
       request = RegisterRequestType.fromJson(publicKey);
@@ -56,7 +66,10 @@ class PasskeyEnroller {
     } catch (_) {
       // A publicKey shape the package rejects must surface as a typed failure,
       // never escape as a raw FormatException/TypeError.
-      return (ok: false, failure: const UnknownAuthError('Malformed passkey start response'));
+      return (
+        ok: false,
+        failure: const UnknownAuthError('Malformed passkey start response'),
+      );
     }
 
     final RegisterResponseType credential;
@@ -116,14 +129,20 @@ class PasskeyEnroller {
         items: [
           for (final row in data.whereType<Map>())
             if (row['id'] is String && (row['id'] as String).isNotEmpty)
-              (id: row['id'] as String, name: row['name'] is String ? row['name'] as String : ''),
+              (
+                id: row['id'] as String,
+                name: row['name'] is String ? row['name'] as String : '',
+              ),
         ],
         failure: null,
       );
     } on DioException catch (e) {
       return (items: const <PasskeySummary>[], failure: _mapListDioError(e));
     } catch (e) {
-      return (items: const <PasskeySummary>[], failure: UnknownAuthError(e.toString()));
+      return (
+        items: const <PasskeySummary>[],
+        failure: UnknownAuthError(e.toString()),
+      );
     }
   }
 
@@ -147,7 +166,9 @@ class PasskeyEnroller {
   /// Transport failures keep [NetworkError] so the retry advice stays accurate.
   AuthFailure _mapListDioError(DioException e) {
     final data = e.response?.data;
-    final code = data is Map && data['code'] is String ? data['code'] as String : null;
+    final code = data is Map && data['code'] is String
+        ? data['code'] as String
+        : null;
     final status = e.response?.statusCode;
     if (code == 'passkey_registration_failed' ||
         (status != null && status >= 400 && status < 500)) {
@@ -163,7 +184,9 @@ class PasskeyEnroller {
   /// [UnknownAuthError] rather than lost.
   AuthFailure _mapDioError(DioException e) {
     final data = e.response?.data;
-    final code = data is Map && data['code'] is String ? data['code'] as String : null;
+    final code = data is Map && data['code'] is String
+        ? data['code'] as String
+        : null;
     if (code == 'passkey_registration_failed') {
       return const PasskeyRegistrationFailed();
     }

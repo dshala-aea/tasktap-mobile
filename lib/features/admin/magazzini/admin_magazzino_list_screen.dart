@@ -1,7 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -111,7 +110,7 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
   Future<void> _refresh() async {
     ref.invalidate(magazziniProvider);
     try {
-      await ref.readFuture(magazziniProvider.future);
+      await ref.read(magazziniProvider.future);
     } catch (_) {
       // A failed refresh after the first load keeps the rows the technician can already read.
       // `build` surfaces that as a stale-data banner; letting the error escape would instead be an

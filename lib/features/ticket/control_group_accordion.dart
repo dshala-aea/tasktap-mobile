@@ -73,8 +73,14 @@ class _ControlGroupAccordionState extends State<ControlGroupAccordion> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(onPressed: () => _setAll(true), child: const Text('Espandi tutto')),
-              TextButton(onPressed: () => _setAll(false), child: const Text('Comprimi tutto')),
+              TextButton(
+                onPressed: () => _setAll(true),
+                child: const Text('Espandi tutto'),
+              ),
+              TextButton(
+                onPressed: () => _setAll(false),
+                child: const Text('Comprimi tutto'),
+              ),
             ],
           ),
         for (final g in widget.groups) _group(context, g, '', 0, colors),
@@ -91,11 +97,16 @@ class _ControlGroupAccordionState extends State<ControlGroupAccordion> {
   ) {
     final all = _controlsOf(group);
     if (all.isEmpty) return const SizedBox.shrink();
-    final path = parentPath.isEmpty ? group.name : '$parentPath › ${group.name}';
+    final path = parentPath.isEmpty
+        ? group.name
+        : '$parentPath › ${group.name}';
     final open = _isOpen(group.id);
     final summary = widget.summaryFor?.call(all);
     return Padding(
-      padding: EdgeInsets.only(left: depth > 0 ? AppSpacing.md : 0, bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(
+        left: depth > 0 ? AppSpacing.md : 0,
+        bottom: AppSpacing.sm,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -126,7 +137,10 @@ class _ControlGroupAccordionState extends State<ControlGroupAccordion> {
                       ),
                     ),
                     if (summary != null)
-                      Text(summary, style: TextStyle(color: colors.inkMuted, fontSize: 12)),
+                      Text(
+                        summary,
+                        style: TextStyle(color: colors.inkMuted, fontSize: 12),
+                      ),
                   ],
                 ),
               ),
@@ -141,9 +155,12 @@ class _ControlGroupAccordionState extends State<ControlGroupAccordion> {
                 for (final c in group.controls)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: widget.controlBuilder(FlatTicketControl(groupPath: path, control: c)),
+                    child: widget.controlBuilder(
+                      FlatTicketControl(groupPath: path, control: c),
+                    ),
                   ),
-                for (final s in group.subgroups) _group(context, s, path, depth + 1, colors),
+                for (final s in group.subgroups)
+                  _group(context, s, path, depth + 1, colors),
               ],
             ),
           ),

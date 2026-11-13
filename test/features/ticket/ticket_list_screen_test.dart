@@ -49,7 +49,7 @@ Widget _buildList({
   String? myId = 'u1',
   Entitlement? entitlement,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),

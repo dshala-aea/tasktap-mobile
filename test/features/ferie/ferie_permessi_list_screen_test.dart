@@ -128,7 +128,7 @@ Widget _buildScreen(
   bool online = true,
   List<Override> extraOverrides = const [],
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       absenceRequestApiClientProvider.overrideWithValue(fake),
       appDatabaseProvider.overrideWithValue(db),

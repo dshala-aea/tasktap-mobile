@@ -36,7 +36,7 @@ class _FakeApi implements NotificationPreferencesApiClient {
   }
 }
 
-Widget _host(_FakeApi api, {bool online = true}) => ProviderScope(
+Widget _host(_FakeApi api, {bool online = true}) => ProviderScope(retry: (_, _) => null, 
   overrides: [
     notificationPreferencesApiClientProvider.overrideWithValue(api),
     isOnlineProvider.overrideWithValue(online),

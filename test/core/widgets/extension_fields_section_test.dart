@@ -62,7 +62,7 @@ ExtensionFieldDefinitionDto _def({
 );
 
 Widget _wrap(ExtensionFieldsApiClient client) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       isOnlineProvider.overrideWithValue(true),
       extensionFieldsApiClientProvider.overrideWithValue(client),
@@ -176,7 +176,7 @@ void main() {
           ),
         );
 
-    Widget wrapOffline(String entityType) => ProviderScope(
+    Widget wrapOffline(String entityType) => ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(false),

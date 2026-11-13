@@ -116,7 +116,8 @@ BadgeScanPresentation presentBadgeScan(BadgeScanEntry entry) {
         BadgeScanTone.error,
       );
     }
-    final gateway = e.statusCode == 502 || e.statusCode == 503 || e.statusCode == 504;
+    final gateway =
+        e.statusCode == 502 || e.statusCode == 503 || e.statusCode == 504;
     if (e.isOffline || gateway) {
       return const BadgeScanPresentation(
         'Nessuna connessione — riprova',
@@ -133,7 +134,11 @@ BadgeScanPresentation presentBadgeScan(BadgeScanEntry entry) {
 }
 
 class BadgeScanResultCard extends StatelessWidget {
-  const BadgeScanResultCard({super.key, required this.entry, this.prominent = false});
+  const BadgeScanResultCard({
+    super.key,
+    required this.entry,
+    this.prominent = false,
+  });
 
   final BadgeScanEntry entry;
 
@@ -150,10 +155,9 @@ class BadgeScanResultCard extends StatelessWidget {
       BadgeScanTone.error => c.red,
     };
     final worker = entry.outcome?.worker;
-    final textStyle = (prominent ? AppTextStyles.titleLarge : AppTextStyles.titleMedium).copyWith(
-      color: c.ink,
-      fontWeight: FontWeight.w700,
-    );
+    final textStyle =
+        (prominent ? AppTextStyles.titleLarge : AppTextStyles.titleMedium)
+            .copyWith(color: c.ink, fontWeight: FontWeight.w700);
     return Container(
       key: ValueKey('badge-scan-card-${p.tone.name}'),
       constraints: BoxConstraints(minHeight: prominent ? 88 : 64),

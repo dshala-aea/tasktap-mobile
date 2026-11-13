@@ -164,7 +164,7 @@ Widget _buildScreen({
   bool isOnline = true,
   Set<String> capabilities = const {'cantieri.cantiere.write', 'rapportini.report.write'},
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       adminApiClientProvider.overrideWithValue(api),

@@ -18,7 +18,7 @@ class _Fake extends WorkLogRefreshCoordinator {
   Future<void> refreshNow({bool sync = true}) async => immediate++;
 }
 
-Widget _host(_Fake fake, {bool offlineMode = false, bool visible = true}) => ProviderScope(
+Widget _host(_Fake fake, {bool offlineMode = false, bool visible = true}) => ProviderScope(retry: (_, _) => null, 
   overrides: [
     workLogRefreshCoordinatorProvider.overrideWithValue(fake),
     offlineModeProvider.overrideWithValue(offlineMode),

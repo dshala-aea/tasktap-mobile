@@ -83,7 +83,7 @@ void main() {
 
   /// A bare host for the action itself — the two screens below are the real call sites, but this
   /// keeps the dialog assertions independent of either screen's layout.
-  Widget host() => ProviderScope(
+  Widget host() => ProviderScope(retry: (_, _) => null, 
     overrides: overrides(),
     child: MaterialApp(
       home: Scaffold(
@@ -163,7 +163,7 @@ void main() {
 
   Future<void> pumpAuthed(WidgetTester tester, Widget screen) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: overrides(),
         child: MaterialApp(home: screen),
       ),

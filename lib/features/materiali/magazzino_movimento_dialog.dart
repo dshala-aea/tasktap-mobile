@@ -78,8 +78,10 @@ class _MagazzinoMovimentoDialogState extends ConsumerState<MagazzinoMovimentoDia
   }
 
   Future<void> _onScanPressed() async {
-    final code = await (widget.scanner ??
-        (ctx) => openBarcodeScanSheet(ctx, title: 'Scansiona materiale'))(context);
+    final code =
+        await (widget.scanner ?? (ctx) => openBarcodeScanSheet(ctx, title: 'Scansiona materiale'))(
+          context,
+        );
     if (code == null || !mounted) return;
     final match = await lookupMaterialeByBarcode(ref, code);
     if (!mounted) return;
@@ -330,10 +332,7 @@ class _WarehouseDropdown extends StatelessWidget {
             hint: const Text('Scegli un magazzino'),
             items: [
               for (final m in items)
-                DropdownMenuItem<String?>(
-                  value: m.id,
-                  child: Text('${m.nome} · ${m.tipo}'),
-                ),
+                DropdownMenuItem<String?>(value: m.id, child: Text('${m.nome} · ${m.tipo}')),
             ],
             onChanged: onChanged,
           ),

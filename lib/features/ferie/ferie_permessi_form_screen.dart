@@ -9,6 +9,7 @@ import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ferie/absence_request_api_client.dart';
 import '../admin/admin_widgets.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -237,7 +238,11 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
             else
               Text(
                 _noteRequiredMessage,
-                style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 12,
+                  color: context.colors.inkMuted,
+                ),
               ),
           ],
           const SizedBox(height: 32),

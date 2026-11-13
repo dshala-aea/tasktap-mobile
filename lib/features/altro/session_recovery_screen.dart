@@ -25,7 +25,8 @@ class SessionRecoveryScreen extends ConsumerStatefulWidget {
   const SessionRecoveryScreen({super.key});
 
   @override
-  ConsumerState<SessionRecoveryScreen> createState() => _SessionRecoveryScreenState();
+  ConsumerState<SessionRecoveryScreen> createState() =>
+      _SessionRecoveryScreenState();
 }
 
 class _SessionRecoveryScreenState extends ConsumerState<SessionRecoveryScreen> {
@@ -72,7 +73,8 @@ class _SessionRecoveryScreenState extends ConsumerState<SessionRecoveryScreen> {
             Expanded(
               child: UnavailableState(
                 icon: LucideIcons.alertTriangle,
-                titolo: 'Questo dispositivo contiene i dati di un altro account',
+                titolo:
+                    'Questo dispositivo contiene i dati di un altro account',
                 motivo: unsent == 0
                     ? 'Un accesso precedente è scaduto e i dati locali non sono stati cancellati. '
                           'Per continuare vanno eliminati.'

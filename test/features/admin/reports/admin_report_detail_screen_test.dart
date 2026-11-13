@@ -55,7 +55,7 @@ void main() {
     final api = _FakeAdminApiClient();
 
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           adminApiClientProvider.overrideWithValue(api),
           cachedEntitlementProvider.overrideWith((ref) async => _officeWrite),
@@ -111,7 +111,7 @@ void main() {
     // previous routes alive), so a small stand-in watcher, mounted alongside the detail screen
     // the same way, is what actually proves invalidate() forces a re-run — not the pop by itself.
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           adminApiClientProvider.overrideWithValue(api),
           cachedEntitlementProvider.overrideWith((ref) async => _officeWrite),
@@ -165,7 +165,7 @@ void main() {
     final api = _FakeAdminApiClient();
 
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           adminApiClientProvider.overrideWithValue(api),
           cachedEntitlementProvider.overrideWith((ref) async => _officeWrite),
@@ -299,7 +299,7 @@ void main() {
     expect(row['soluzione'], 'Sostituita la guarnizione');
 
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: overrides,
         child: MaterialApp(home: AdminReportDetailScreen(report: row)),
       ),
@@ -340,7 +340,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: overrides,
         child: MaterialApp(home: AdminReportDetailScreen(report: serverRow)),
       ),
@@ -365,7 +365,7 @@ void main() {
     }) async {
       final api = _FakeAdminApiClient();
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             adminApiClientProvider.overrideWithValue(api),
             cachedEntitlementProvider.overrideWith((ref) async => entitlement),

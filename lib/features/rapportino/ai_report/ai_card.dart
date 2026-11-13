@@ -72,10 +72,7 @@ class AiCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       child: todo
-          ? CustomPaint(
-              painter: _DashedBorderPainter(context.colors.borderStrong),
-              child: inner,
-            )
+          ? CustomPaint(painter: _DashedBorderPainter(context.colors.borderStrong), child: inner)
           : inner,
     );
   }
@@ -154,7 +151,9 @@ class AiKvRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 7),
       decoration: first
           ? null
-          : BoxDecoration(border: Border(top: BorderSide(color: context.colors.divider))),
+          : BoxDecoration(
+              border: Border(top: BorderSide(color: context.colors.divider)),
+            ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

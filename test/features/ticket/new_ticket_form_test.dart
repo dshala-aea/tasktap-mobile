@@ -247,7 +247,7 @@ void main() {
     });
 
     Widget buildScreen() {
-      return ProviderScope(
+      return ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(mockDio),
@@ -337,7 +337,7 @@ void main() {
         );
 
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               dioProvider.overrideWithValue(mockDio),
@@ -456,7 +456,7 @@ void main() {
     // push) so a successful pop(true) is observable, instead of popping the
     // MaterialApp's lone root route.
     Widget buildLauncher({required bool isOnline}) {
-      return ProviderScope(
+      return ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(mockDio),
@@ -838,7 +838,7 @@ void main() {
         );
 
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               dioProvider.overrideWithValue(mockDio),
@@ -945,7 +945,7 @@ void main() {
         );
 
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               dioProvider.overrideWithValue(mockDio),
@@ -989,7 +989,7 @@ void main() {
         final rejected = await seedRepairRow();
 
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               dioProvider.overrideWithValue(mockDio),

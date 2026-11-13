@@ -19,7 +19,7 @@ class _FakeBiometricService implements IBiometricService {
 }
 
 Widget _wrap(Widget child, {required IBiometricService biometrics}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [biometricServiceProvider.overrideWithValue(biometrics)],
     child: MaterialApp(home: Scaffold(body: child)),
   );

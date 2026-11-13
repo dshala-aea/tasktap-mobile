@@ -54,7 +54,12 @@ AssetProgress progressOf(
     if (!done && c.isRequired) missing++;
     if (isException(c, a)) exceptions++;
   }
-  return AssetProgress(total: total, answered: answered, requiredMissing: missing, exceptions: exceptions);
+  return AssetProgress(
+    total: total,
+    answered: answered,
+    requiredMissing: missing,
+    exceptions: exceptions,
+  );
 }
 
 /// A short human value of [a] for [c], or null when that type's column is empty.

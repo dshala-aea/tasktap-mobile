@@ -96,7 +96,7 @@ Widget _wrap(AppDatabase db, AiApiClient ai, SpeechOutput speech) {
       ),
     ],
   );
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       aiApiClientProvider.overrideWithValue(ai),
       speechOutputProvider.overrideWith((ref) async => speech),

@@ -3,7 +3,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -391,7 +390,7 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
   Future<void> _refresh() async {
     ref.invalidate(adminProdottiAssistenzaProvider);
     try {
-      await ref.readFuture(adminProdottiAssistenzaProvider.future);
+      await ref.read(adminProdottiAssistenzaProvider.future);
     } catch (_) {
       // The provider's error is already rendered by the unavailable/error branch. A refresh
       // future that completes with an error would be reported by RefreshIndicator as an

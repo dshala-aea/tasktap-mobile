@@ -227,10 +227,7 @@ class _StrumentoCardState extends State<_StrumentoCard> {
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: c.ink),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      item.matricola,
-                      style: TextStyle(fontSize: 12, color: c.inkMuted),
-                    ),
+                    Text(item.matricola, style: TextStyle(fontSize: 12, color: c.inkMuted)),
                     // A selected instrument that is not the technician's own: say whose it is, on
                     // the rapportino itself and not only in the picker, because the card is what
                     // he reads back before sending.
@@ -254,8 +251,7 @@ class _StrumentoCardState extends State<_StrumentoCard> {
                   ],
                 ),
               ),
-              if (item.expired)
-                AppBadge(label: 'Scaduto', outlined: true, fgColor: c.red),
+              if (item.expired) AppBadge(label: 'Scaduto', outlined: true, fgColor: c.red),
               IconButton(
                 tooltip: 'Rimuovi ${item.name}',
                 // 48dp target.

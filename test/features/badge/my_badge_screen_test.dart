@@ -77,7 +77,7 @@ void main() {
 
   Future<void> pumpScreen(WidgetTester tester, _FakeBadgeApi api) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           badgeApiClientProvider.overrideWithValue(api),
           badgeWakelockProvider.overrideWithValue(wake),
@@ -120,7 +120,7 @@ void main() {
 
   testWidgets('shows_photo_name_employer_and_qr_when_ready', (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           badgeApiClientProvider.overrideWithValue(
             _FakeBadgeApi([_card('tok-1', photoUrl: 'https://example.test/p.jpg')]),
@@ -401,7 +401,7 @@ void main() {
       ],
     );
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           unsentWorkCounterProvider.overrideWithValue(counter),
           unsentWorkFlusherProvider.overrideWithValue(flusher),

@@ -28,6 +28,13 @@ import 'package:tasktap_mobile/features/rapportino/rapportino_form_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
+/// These widget tests do not assert semantics; Flutter 3.47's semantics tree asserts during
+/// pumpAndSettle on these screens. Semantics-specific tests keep using testWidgets directly.
+void testWidgetsNoSemantics(
+  String description,
+  WidgetTesterCallback callback,
+) => testWidgets(description, callback, semanticsEnabled: false);
+
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 class MockSubmissionQueue extends Mock implements SubmissionQueue {}
@@ -75,7 +82,7 @@ Widget _buildForm({
   SubmissionQueue? fakeQueue,
   String? internalUserId = _testInternalUserId,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       if (fakeQueue != null) realSubmissionQueueProvider.overrideWithValue(fakeQueue),
@@ -110,7 +117,7 @@ void main() {
   const reportId = 'draft-test-1';
 
   group('RapportinoFormScreen — checklist grid layout', () {
-    testWidgets('checklist grid lays out 2-per-row on a phone-width screen', (tester) async {
+    testWidgetsNoSemantics('checklist grid lays out 2-per-row on a phone-width screen', (tester) async {
       tester.view.physicalSize = const Size(
         960,
         1920,
@@ -130,7 +137,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('checklist grid widens to 4-per-row on a tablet/wide screen', (tester) async {
+    testWidgetsNoSemantics('checklist grid widens to 4-per-row on a tablet/wide screen', (tester) async {
       tester.view.physicalSize = const Size(1600, 2400); // 800dp logical width
       tester.view.devicePixelRatio = 2.0;
       addTearDown(tester.view.reset);
@@ -149,7 +156,7 @@ void main() {
   });
 
   group('RapportinoFormScreen — checklist tiles', () {
-    testWidgets('renders all three tiles + the review-and-send completion card', (tester) async {
+    testWidgetsNoSemantics('renders all three tiles + the review-and-send completion card', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
@@ -163,7 +170,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Dettagli tile opens a sheet with the titolo field', (tester) async {
+    testWidgetsNoSemantics('Dettagli tile opens a sheet with the titolo field', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
@@ -178,7 +185,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Ore tile opens a sheet with staff-related content', (tester) async {
+    testWidgetsNoSemantics('Ore tile opens a sheet with staff-related content', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
@@ -191,7 +198,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Materiali tile opens a sheet with Aggiungi materiale button', (tester) async {
+    testWidgetsNoSemantics('Materiali tile opens a sheet with Aggiungi materiale button', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
@@ -204,7 +211,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('completion card opens Riepilogo with firma blocks + validation panel', (
+    testWidgetsNoSemantics('completion card opens Riepilogo with firma blocks + validation panel', (
       tester,
     ) async {
       await _seedDraft(db, reportId);
@@ -224,7 +231,7 @@ void main() {
   });
 
   group('RapportinoFormScreen — submit flow', () {
-    testWidgets('Invia rapportino button is disabled when validation not satisfied', (
+    testWidgetsNoSemantics('Invia rapportino button is disabled when validation not satisfied', (
       tester,
     ) async {
       await _seedDraft(db, reportId);
@@ -249,7 +256,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('submit calls queue.enqueue + processAll when draft is valid', (tester) async {
+    testWidgetsNoSemantics('submit calls queue.enqueue + processAll when draft is valid', (tester) async {
       await _seedDraft(db, reportId);
       final fakeQueue = MockSubmissionQueue();
       when(() => fakeQueue.enqueue(any())).thenAnswer((_) async {});
@@ -299,7 +306,7 @@ void main() {
           );
 
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             realSubmissionQueueProvider.overrideWithValue(fakeQueue),
@@ -363,7 +370,7 @@ void main() {
     // never fires and the technician never taps the Dettagli tile in this test — so a coordinate
     // landing on the draft anyway proves the capture is reachable independently of Dettagli, not
     // just that the notifier method works in isolation.
-    testWidgets(
+    testWidgetsNoSemantics(
       'captures GPS silently on screen load for a title-prefilled draft, with no tap at all',
       (tester) async {
         await _seedDraft(db, reportId);
@@ -396,7 +403,7 @@ void main() {
       },
     );
 
-    testWidgets('does not capture GPS when the draft already has a coordinate (rework)', (
+    testWidgetsNoSemantics('does not capture GPS when the draft already has a coordinate (rework)', (
       tester,
     ) async {
       // Pre-fills editor state directly with an existing coordinate, same override pattern as the

@@ -235,7 +235,8 @@ class _HomeShellState extends ConsumerState<HomeShell>
     // A tap on a shift started elsewhere was dropped/refused by the background sync (see
     // timbra_sync_service.dart): the technician must be told, not left guessing.
     ref.listen<TimbraNotice?>(timbraNoticeProvider, (prev, next) {
-      if (next != null) showAppToast(context, message: next.message, tone: ToastTone.error);
+      if (next != null)
+        showAppToast(context, message: next.message, tone: ToastTone.error);
     });
 
     // Rack is a passthrough now (see its own doc comment) — kept only so this one call site

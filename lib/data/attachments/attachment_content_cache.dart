@@ -40,12 +40,7 @@ abstract final class AllegatoEntityType {
 
 /// What identifies one cached file. A record, so providers can use it as a family key with
 /// structural equality rather than an identity-based class.
-typedef AttachmentRef = ({
-  String allegatoId,
-  String? contentHash,
-  int sizeBytes,
-  String url,
-});
+typedef AttachmentRef = ({String allegatoId, String? contentHash, int sizeBytes, String url});
 
 class AttachmentContentCache {
   AttachmentContentCache({
@@ -119,7 +114,9 @@ class AttachmentContentCache {
     }
 
     final dir = await _dir();
-    final target = File(p.join(dir.path, _fileName(ref.allegatoId, ref.contentHash, ref.sizeBytes)));
+    final target = File(
+      p.join(dir.path, _fileName(ref.allegatoId, ref.contentHash, ref.sizeBytes)),
+    );
     // Write-then-rename: a half-written file must never be served as the photo it is named after.
     final tmp = File('${target.path}.part');
     await tmp.writeAsBytes(bytes, flush: true);
@@ -273,8 +270,7 @@ final attachmentPrefetcherProvider = Provider<AttachmentPrefetcher>((ref) {
   return AttachmentPrefetcher(
     db: ref.watch(appDatabaseProvider),
     cache: ref.watch(attachmentContentCacheProvider),
-    canPrefetch: () async =>
-        !ref.read(offlineModeProvider) && await onUnmeteredWifi(),
+    canPrefetch: () async => !ref.read(offlineModeProvider) && await onUnmeteredWifi(),
   );
 });
 
@@ -283,15 +279,17 @@ final attachmentPrefetcherProvider = Provider<AttachmentPrefetcher>((ref) {
 ///
 /// Null rather than an error on the offline miss: a thumbnail with no bytes yet is a normal state
 /// on a phone that has not synced over Wi-Fi, and every caller already has a placeholder for it.
-final attachmentFileProvider = FutureProvider.autoDispose
-    .family<File?, AttachmentRef>((ref, attachment) async {
-      final cache = ref.watch(attachmentContentCacheProvider);
-      final cached = await cache.lookup(
-        allegatoId: attachment.allegatoId,
-        contentHash: attachment.contentHash,
-        sizeBytes: attachment.sizeBytes,
-      );
-      if (cached != null) return cached;
-      if (!ref.watch(isOnlineProvider)) return null;
-      return cache.ensure(attachment);
-    });
+final attachmentFileProvider = FutureProvider.autoDispose.family<File?, AttachmentRef>((
+  ref,
+  attachment,
+) async {
+  final cache = ref.watch(attachmentContentCacheProvider);
+  final cached = await cache.lookup(
+    allegatoId: attachment.allegatoId,
+    contentHash: attachment.contentHash,
+    sizeBytes: attachment.sizeBytes,
+  );
+  if (cached != null) return cached;
+  if (!ref.watch(isOnlineProvider)) return null;
+  return cache.ensure(attachment);
+});

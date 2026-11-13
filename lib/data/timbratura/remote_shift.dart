@@ -52,7 +52,11 @@ class OfflineRemoteShiftException implements Exception {
 
 /// One of this device's own taps on a remote-origin shift, waiting to be executed.
 class RemoteCommand {
-  const RemoteCommand({required this.event, required this.openerTime, required this.assumesOnBreak});
+  const RemoteCommand({
+    required this.event,
+    required this.openerTime,
+    required this.assumesOnBreak,
+  });
 
   final WorkSession event;
 
@@ -107,9 +111,7 @@ RemoteShiftAnalysis analyseRemoteShifts(List<WorkSession> sessions) {
         if (remote) {
           ids.add(s.id);
           if (s.isPendingSync && s.notes != reconciledOrphanMarker) {
-            commands.add(
-              RemoteCommand(event: s, openerTime: opener!, assumesOnBreak: paused),
-            );
+            commands.add(RemoteCommand(event: s, openerTime: opener!, assumesOnBreak: paused));
           }
         }
         if (s.eventType == 'pausa') paused = true;

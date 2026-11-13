@@ -205,14 +205,14 @@ List<ChecklistListItem> _byControl(
       labels.putIfAbsent(c.lineageId, () => c.label);
     }
   }
-  final lineages = byLineage.keys.toList()
-    ..sort((x, y) => naturalCompare(labels[x]!, labels[y]!));
+  final lineages = byLineage.keys.toList()..sort((x, y) => naturalCompare(labels[x]!, labels[y]!));
 
   final items = <ChecklistListItem>[];
   for (final l in lineages) {
     final label = labels[l]!;
     final entries = byLineage[l]!.where((e) {
-      final textOk = text.isEmpty ||
+      final textOk =
+          text.isEmpty ||
           label.toLowerCase().contains(text) ||
           l.toLowerCase().contains(text) ||
           e.$1.name.toLowerCase().contains(text);

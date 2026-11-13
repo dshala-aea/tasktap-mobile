@@ -79,16 +79,13 @@ class _RejectReasonSheetState extends State<_RejectReasonSheet> {
         children: [
           Text(
             widget.title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: context.colors.ink),
+            style: Theme.of(context).textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700, color: context.colors.ink),
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Il motivo è obbligatorio.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: context.colors.inkMuted),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.inkMuted),
           ),
           const SizedBox(height: AppSpacing.sm),
           AppTextField.multiline(
@@ -103,9 +100,7 @@ class _RejectReasonSheetState extends State<_RejectReasonSheet> {
             const SizedBox(height: AppSpacing.xs),
             Text(
               _error!,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: context.colors.red),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.red),
             ),
           ],
           const SizedBox(height: AppSpacing.md),

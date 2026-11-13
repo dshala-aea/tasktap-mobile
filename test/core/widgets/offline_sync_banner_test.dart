@@ -10,7 +10,7 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/pending_sync_count_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show lastSyncProvider;
 
-Widget _wrap(List<Override> overrides) => ProviderScope(
+Widget _wrap(List<Override> overrides) => ProviderScope(retry: (_, _) => null, 
   overrides: overrides,
   child: const MaterialApp(home: Scaffold(body: OfflineSyncBanner())),
 );

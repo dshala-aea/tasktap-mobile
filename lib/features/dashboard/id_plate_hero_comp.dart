@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_palette.dart';
+
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// The dashboard hero — flat Documento direction.
@@ -110,7 +111,11 @@ class IdPlateHeroComp extends StatelessWidget {
                 spacing: 28,
                 runSpacing: 8,
                 children: [
-                  _Readout(value: '$todayCount', label: 'INTERVENTI OGGI', accent: false),
+                  _Readout(
+                    value: '$todayCount',
+                    label: 'INTERVENTI OGGI',
+                    accent: false,
+                  ),
                   _Readout(
                     value: '$remaining',
                     label: 'DA FARE',

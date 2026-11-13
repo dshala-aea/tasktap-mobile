@@ -7,7 +7,6 @@ import '../../core/widgets/widgets.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -82,7 +81,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     final state = ref.read(reportEditorProvider(reportId));
 
     if (state.staffRows.isEmpty) {
-      final internalUserId = await ref.readFuture(internalUserIdProvider.future);
+      final internalUserId = await ref.read(internalUserIdProvider.future);
       // Silently skip the seed (never blocks opening Ore) when the internal id hasn't resolved
       // yet — the technician can still add themselves manually via "Aggiungi tecnico", the same
       // picker every other staff row already goes through.

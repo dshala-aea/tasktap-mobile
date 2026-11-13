@@ -78,7 +78,7 @@ Widget _buildConfirmScreen({
   String token = 'device-1:100:hmac',
   String? userId = 'user-1',
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       worklogApiClientProvider.overrideWithValue(client),
       internalUserIdProvider.overrideWith((ref) async => userId),
@@ -166,7 +166,7 @@ void main() {
         result: const KioskScanResult(action: 'in', workLogId: 'wl-1'),
       );
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             worklogApiClientProvider.overrideWithValue(client),
             internalUserIdProvider.overrideWith((ref) async => 'user-1'),

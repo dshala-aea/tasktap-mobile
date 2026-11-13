@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/widgets/widgets.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +11,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../features/altro/logout_action.dart';
 import '../../providers/auth_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// User profile screen — shows user info and logout action.
@@ -62,7 +65,10 @@ class ProfiloScreen extends ConsumerWidget {
                           const SizedBox(height: AppSpacing.base),
 
                           if (user.displayName != null) ...[
-                            Text(user.displayName!, style: AppTextStyles.titleMedium),
+                            Text(
+                              user.displayName!,
+                              style: AppTextStyles.titleMedium,
+                            ),
                             const SizedBox(height: AppSpacing.xs),
                           ],
 
@@ -107,7 +113,9 @@ class ProfiloScreen extends ConsumerWidget {
   }
 
   String _initials(String nameOrEmail) {
-    final parts = nameOrEmail.split(RegExp(r'[\s@]+')).where((p) => p.isNotEmpty);
+    final parts = nameOrEmail
+        .split(RegExp(r'[\s@]+'))
+        .where((p) => p.isNotEmpty);
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first[0].toUpperCase();
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();

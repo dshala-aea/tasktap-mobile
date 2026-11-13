@@ -10,7 +10,6 @@ import '../../materiali/materiale_qty_field.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -216,7 +215,7 @@ class StepMaterialiFold extends ConsumerWidget {
       // in purgeable temp storage, and a purge between now and submit is a rapportino that can
       // never be sent (audit F6). A copy failure throws into the catch below, so a temp path is
       // never what the draft ends up holding.
-      final captured = await (await ref.readFuture(captureStoreProvider.future)).save(
+      final captured = await (await ref.read(captureStoreProvider.future)).save(
         xfile.path,
         fileName: xfile.name,
         // The plugin re-encodes a picked image to JPEG (imageQuality is set), so an unknown
@@ -262,7 +261,7 @@ class StepMaterialiFold extends ConsumerWidget {
       if (picked.path == null) return;
       // Same durable-copy rule as the photo picker above (audit F6): the picked document is
       // copied into `captures/` now, and only that path is stored on the draft.
-      final captured = await (await ref.readFuture(captureStoreProvider.future)).save(
+      final captured = await (await ref.read(captureStoreProvider.future)).save(
         picked.path!,
         fileName: picked.name,
         contentType: contentTypeForFileName(picked.name, fallback: 'application/pdf'),

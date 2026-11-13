@@ -394,16 +394,18 @@ class ZitadelAuthRepository implements IAuthRepository {
     }
 
     try {
-      final result = await _appAuth.token(
-        TokenRequest(
-          Env.oidcClientId,
-          Env.oidcRedirectUri,
-          issuer: Env.oidcIssuer,
-          refreshToken: refreshToken,
-          scopes: _scopes,
-          grantType: 'refresh_token',
-        ),
-      ).timeout(_refreshTimeout);
+      final result = await _appAuth
+          .token(
+            TokenRequest(
+              Env.oidcClientId,
+              Env.oidcRedirectUri,
+              issuer: Env.oidcIssuer,
+              refreshToken: refreshToken,
+              scopes: _scopes,
+              grantType: 'refresh_token',
+            ),
+          )
+          .timeout(_refreshTimeout);
       final fresh = _fromTokens(
         accessToken: result.accessToken,
         // Zitadel may rotate the refresh token; fall back to the one we sent.
@@ -593,13 +595,18 @@ class ZitadelAuthRepository implements IAuthRepository {
     try {
       await _restoreUnguarded();
     } catch (e, st) {
-      reportStartupFailure('Auth session restore failed (signing out locally)', e, st);
+      reportStartupFailure(
+        'Auth session restore failed (signing out locally)',
+        e,
+        st,
+      );
       // Nothing was emitted yet (every emit below returns right after) -> unblock the router.
       if (_current == null) _emit(null);
     }
   }
 
   static const _storageTimeout = Duration(seconds: 5);
+
   /// ONE bound for "a refresh must finish": used on the native `_appAuth.token` call and as the
   /// restore backstop.
   static const _refreshTimeout = Duration(seconds: 12);

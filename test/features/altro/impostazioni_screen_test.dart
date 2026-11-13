@@ -47,7 +47,7 @@ AuthUser _fakeUser({String? displayName}) => AuthUser(
 );
 
 Widget _buildScreen(MockAuthRepository repo, AppDatabase db, {bool tenantGpsEnabled = true}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       tenantGpsEnabledProvider.overrideWithValue(tenantGpsEnabled),
       authRepositoryProvider.overrideWithValue(repo),

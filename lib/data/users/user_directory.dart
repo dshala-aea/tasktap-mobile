@@ -27,11 +27,13 @@ String userDisplayName(Map<String, dynamic> user) {
 ///
 /// Shared by the squadra screens (which count active members) and the approval queues (which must
 /// still name a requester who has since left). One bulk fetch per call; the API paginates.
-final allUsersProvider =
-    FutureProvider.family.autoDispose<List<Map<String, dynamic>>, bool>((ref, activeOnly) {
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchAllUsersWithSquadraInfo(activeOnly: activeOnly);
-    });
+final allUsersProvider = FutureProvider.family.autoDispose<List<Map<String, dynamic>>, bool>((
+  ref,
+  activeOnly,
+) {
+  final api = ref.watch(adminApiClientProvider);
+  return api.fetchAllUsersWithSquadraInfo(activeOnly: activeOnly);
+});
 
 /// Id → display name for the approval queues.
 ///

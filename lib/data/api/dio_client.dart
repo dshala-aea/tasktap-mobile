@@ -38,7 +38,8 @@ final dioProvider = Provider<Dio>((ref) {
   // one teardown class. `ref.read`, not `watch`: this runs long after the Dio instance was built,
   // and re-creating the client's interceptor on a dependency change is not something this
   // provider should do.
-  interceptor.onForcedSignOut = () => ref.read(sessionEnderProvider).endForced();
+  interceptor.onForcedSignOut = () =>
+      ref.read(sessionEnderProvider).endForced();
   dio.interceptors.add(interceptor);
 
   // What the network actually did, in debug builds only.

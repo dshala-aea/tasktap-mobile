@@ -156,6 +156,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -208,6 +209,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -244,6 +246,7 @@ void main() {
       final router = _makeTimbraForwardingRouter(cantiereId: 'c1', ticketId: 'ticket-9');
       await tester.pumpWidget(
         ProviderScope(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -281,6 +284,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -322,6 +326,7 @@ void main() {
 
         await tester.pumpWidget(
           ProviderScope(
+            retry: (_, _) => null,
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -337,13 +342,16 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        await tester.ensureVisible(find.text('Crea rapportino'));
         await tester.tap(find.text('Crea rapportino'));
-        await tester.pumpAndSettle();
+        for (var i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 250));
+        }
 
         expect(fakeApi.calledWithCantiereId, 'c1');
         expect(find.text('RAPPORTINI-EDITOR-MARKER:report-xyz'), findsOneWidget);
-
-        await db.close();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(seconds: 5));
       },
     );
 
@@ -366,6 +374,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -415,6 +424,7 @@ void main() {
 
         await tester.pumpWidget(
           ProviderScope(
+            retry: (_, _) => null,
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -430,8 +440,11 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        await tester.ensureVisible(find.text('Crea rapportino'));
         await tester.tap(find.text('Crea rapportino'));
-        await tester.pumpAndSettle();
+        for (var i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 250));
+        }
 
         expect(fakeApi.calledWithCantiereId, 'c1');
         // P2-6: a transport failure no longer dead-ends in a toast. `createCantiereReportDraft`
@@ -495,6 +508,7 @@ void main() {
       final client = _FakeCantiereWorklogApiClient()..throwsIfCalled = true;
       await tester.pumpWidget(
         ProviderScope(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -575,6 +589,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -633,6 +648,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -677,6 +693,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
@@ -700,6 +717,7 @@ void main() {
     Future<void> pumpOffline(WidgetTester tester, AppDatabase db) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),

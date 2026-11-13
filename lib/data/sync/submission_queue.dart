@@ -378,8 +378,7 @@ class SubmissionQueue {
   /// A failure with no HTTP response at all: the request never reached a server that answered.
   /// That covers connectionError, connection/send/receive timeouts and a cancelled request — the
   /// shapes a device with no usable network produces.
-  static bool _hasNoResponse(Object e) =>
-      e is DioException && e.response?.statusCode == null;
+  static bool _hasNoResponse(Object e) => e is DioException && e.response?.statusCode == null;
 
   /// A transient the SERVER answered: a fault (5xx), back-pressure (408/429), or a 401 whose
   /// silent refresh may not have taken. This is the only class that spends the retry budget —
@@ -499,38 +498,35 @@ class SubmissionQueue {
       richiedeSecondoIntervento: draft.richiedeSecondoIntervento,
       photoAllegatoIds: photoIds,
       strumenti: strumenti,
-      staff: staff
-          .map((s) {
-            final segmentsForRow =
-                segmentsByUser[s.userId] ?? const <ReportStaffSegment>[];
-            return SubmitReportStaffDto(
-              userId: s.userId,
-              hoursWorked: s.hoursWorked,
-              kmTraveled: s.kmTraveled,
-              vehicle: s.vehicle,
-              costPerKm: s.costPerKm,
-              notes: s.notes,
-              startTime: s.startTime,
-              endTime: s.endTime,
-              // The intervals are authoritative: the server ignores `pauseMinutes` beside them and
-              // logs a warning when it sees both, so send a pause only when there is no interval
-              // for it to contradict. The phone has no pause editor, so a pause on a timer row can
-              // only have come down from the server — never something the technician chose.
-              pauseMinutes: segmentsForRow.isEmpty ? s.pauseMinutes : 0,
-              // The intervals this technician's hours came from. `clientId` is the phone's own id
-              // for each tap, passed verbatim: it is what lets a replayed submit collapse onto
-              // the rows it already wrote instead of counting the hours twice.
-              segments: [
-                for (final g in segmentsForRow)
-                  SubmitReportSegmentDto(
-                    startTime: g.startUtc,
-                    endTime: g.endUtc,
-                    clientId: g.clientId,
-                  ),
-              ],
-            );
-          })
-          .toList(),
+      staff: staff.map((s) {
+        final segmentsForRow = segmentsByUser[s.userId] ?? const <ReportStaffSegment>[];
+        return SubmitReportStaffDto(
+          userId: s.userId,
+          hoursWorked: s.hoursWorked,
+          kmTraveled: s.kmTraveled,
+          vehicle: s.vehicle,
+          costPerKm: s.costPerKm,
+          notes: s.notes,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          // The intervals are authoritative: the server ignores `pauseMinutes` beside them and
+          // logs a warning when it sees both, so send a pause only when there is no interval
+          // for it to contradict. The phone has no pause editor, so a pause on a timer row can
+          // only have come down from the server — never something the technician chose.
+          pauseMinutes: segmentsForRow.isEmpty ? s.pauseMinutes : 0,
+          // The intervals this technician's hours came from. `clientId` is the phone's own id
+          // for each tap, passed verbatim: it is what lets a replayed submit collapse onto
+          // the rows it already wrote instead of counting the hours twice.
+          segments: [
+            for (final g in segmentsForRow)
+              SubmitReportSegmentDto(
+                startTime: g.startUtc,
+                endTime: g.endUtc,
+                clientId: g.clientId,
+              ),
+          ],
+        );
+      }).toList(),
       materiali: materiali
           .map(
             (m) => SubmitReportMaterialeDto(

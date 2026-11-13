@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -624,7 +623,7 @@ class _RapportinoRow extends ConsumerWidget {
           // import below reads `isOnlineProvider`. Without a settled connectivity answer that
           // convenience bool is false while the notifier is still loading, which would send an
           // online phone down the mirror-only path. Wait for the real verdict first.
-          await ref.readFuture(connectivityProvider.future);
+          await ref.read(connectivityProvider.future);
           await importServerReportForEditing(ref, reportId: draft.id);
         } on ServerReportNotEditableException {
           if (!context.mounted) return;

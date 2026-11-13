@@ -119,16 +119,22 @@ final furgoneDiUserProvider = FutureProvider.autoDispose
       Future<MagazzinoDto?> fromMirror() async {
         final db = ref.watch(appDatabaseProvider);
         final row =
-            await (db.select(db.magazzini)..where(
-                  (w) => w.tipo.equals('Furgone') & w.assegnatoUserId.equals(userId),
-                )..limit(1))
+            await (db.select(db.magazzini)
+                  ..where(
+                    (w) =>
+                        w.tipo.equals('Furgone') &
+                        w.assegnatoUserId.equals(userId),
+                  )
+                  ..limit(1))
                 .getSingleOrNull();
         return row == null ? null : _fromMirror(row);
       }
 
       if (ref.watch(isOnlineProvider)) {
         try {
-          return await ref.watch(magazzinoApiClientProvider).getFurgoneByUser(userId);
+          return await ref
+              .watch(magazzinoApiClientProvider)
+              .getFurgoneByUser(userId);
         } catch (e) {
           if (!isTransportOrServerFault(e)) rethrow;
         }
@@ -155,10 +161,9 @@ final magazziniProvider = FutureProvider.autoDispose<List<MagazzinoDto>>((
 ) async {
   Future<List<MagazzinoDto>> fromMirror() async {
     final db = ref.watch(appDatabaseProvider);
-    final rows =
-        await (db.select(
-          db.magazzini,
-        )..orderBy([(w) => OrderingTerm.asc(w.nome)])).get();
+    final rows = await (db.select(
+      db.magazzini,
+    )..orderBy([(w) => OrderingTerm.asc(w.nome)])).get();
     if (rows.isEmpty && await db.getLastSync() == null) {
       throw const MagazziniOfflineException();
     }
@@ -185,7 +190,8 @@ class MagazzinoOfflineException implements Exception {
   const MagazzinoOfflineException();
 
   @override
-  String toString() => 'Magazzino offline: giacenze e movimenti si leggono solo online.';
+  String toString() =>
+      'Magazzino offline: giacenze e movimenti si leggono solo online.';
 }
 
 /// The warehouses live on the server but this device has never downloaded them.

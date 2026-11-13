@@ -199,7 +199,7 @@ void main() {
         );
   }
 
-  Widget buildScreen(String customerId, {bool online = true}) => ProviderScope(
+  Widget buildScreen(String customerId, {bool online = true}) => ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(mockDio),

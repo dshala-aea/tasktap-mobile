@@ -2,7 +2,6 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -1656,7 +1655,7 @@ class _AttachmentUploadButtonsState
       // in the offline outbox for days, and image_picker's path is in purgeable temp storage — a
       // purge in between turns the queued photo into a permanent "non trovato" (audit F6). A copy
       // failure throws into the catch below, so the queue never receives a temp path.
-      final store = await ref.readFuture(captureStoreProvider.future);
+      final store = await ref.read(captureStoreProvider.future);
       final captured = await store.save(
         xfile.path,
         fileName: xfile.name,
@@ -1856,9 +1855,7 @@ class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
     final api = ref.read(ticketDetailApiClientProvider);
     await api.setMateriali(widget.ticketId, rows);
 
-    final ticket = await ref.readFuture(
-      ticketByIdProvider(widget.ticketId).future,
-    );
+    final ticket = await ref.read(ticketByIdProvider(widget.ticketId).future);
     if (ticket == null) {
       if (mounted) setState(() => _editing = false);
       return;
@@ -2142,7 +2139,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
       // The shared provider, not a direct call: online it is the live list, offline (or when the
       // call fails) the synced colleagues mirror, so assigning a ticket with the radio off offers
       // the same technicians instead of an empty dropdown.
-      final techs = await ref.readFuture(techniciansProvider.future);
+      final techs = await ref.read(techniciansProvider.future);
       if (mounted) {
         setState(() {
           _technicians = techs;
@@ -2383,7 +2380,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     // list is unavailable on a device that has it.
     final List<TicketStatuse> statuses;
     try {
-      statuses = await ref.readFuture(ticketStatusesProvider.future);
+      statuses = await ref.read(ticketStatusesProvider.future);
     } catch (_) {
       _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
       return;
@@ -2407,9 +2404,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     // would read as "no capability" even for an office user and hide the statuses they may use.
     bool canConfigureStatuses;
     try {
-      final entitlement = await ref.readFuture(
-        cachedEntitlementProvider.future,
-      );
+      final entitlement = await ref.read(cachedEntitlementProvider.future);
       canConfigureStatuses =
           entitlement?.capabilities.contains('interventi.ticket.configure') ??
           false;

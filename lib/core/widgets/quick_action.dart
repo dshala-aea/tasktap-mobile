@@ -11,7 +11,12 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// QuickAction(icon: LucideIcons.plus, label: 'Nuovo', onTap: () {});
 /// ```
 class QuickAction extends StatelessWidget {
-  const QuickAction({super.key, required this.icon, required this.label, this.onTap});
+  const QuickAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.onTap,
+  });
 
   final IconData icon;
   final String label;
@@ -26,7 +31,10 @@ class QuickAction extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs, horizontal: 2),
+          padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.xs,
+            horizontal: 2,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

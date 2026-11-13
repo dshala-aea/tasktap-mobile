@@ -3,7 +3,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
@@ -319,7 +318,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
   Future<void> _loadSpeech() async {
     try {
-      final speech = await ref.readFuture(speechOutputProvider.future);
+      final speech = await ref.read(speechOutputProvider.future);
       if (!mounted) return;
       setState(() {
         _speech = speech;
@@ -335,7 +334,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     final current = _speech;
     if (current != null) return current;
     try {
-      final speech = await ref.readFuture(speechOutputProvider.future);
+      final speech = await ref.read(speechOutputProvider.future);
       if (!mounted) return null;
       setState(() {
         _speech = speech;
@@ -900,7 +899,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     final ticketId = widget.ticketId;
     if (ticketId == null) return;
     try {
-      final voice = await ref.readFuture(voiceCaptureControllerProvider.future);
+      final voice = await ref.read(voiceCaptureControllerProvider.future);
       final all = await voice.pendingForCurrentUser();
       if (!mounted) return;
       setState(() {
@@ -1019,7 +1018,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     if (_sending) return;
     VoiceCaptureController voice;
     try {
-      voice = await ref.readFuture(voiceCaptureControllerProvider.future);
+      voice = await ref.read(voiceCaptureControllerProvider.future);
     } catch (_) {
       if (mounted) {
         showAppToast(

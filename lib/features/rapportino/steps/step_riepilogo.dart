@@ -11,7 +11,6 @@ import '../../../core/widgets/widgets.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
@@ -1049,7 +1048,7 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
 /// failed). Top-level because both the step and the signature block need it.
 Future<String?> _internalUserId(WidgetRef ref) async {
   try {
-    return await ref.readFuture(internalUserIdProvider.future);
+    return await ref.read(internalUserIdProvider.future);
   } catch (_) {
     return null;
   }

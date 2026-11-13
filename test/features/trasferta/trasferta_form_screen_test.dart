@@ -85,7 +85,7 @@ Widget _harness(
       ),
     ],
   );
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       trasfertaRequestApiClientProvider.overrideWithValue(fake),
       isOnlineProvider.overrideWithValue(online),

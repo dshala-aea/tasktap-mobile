@@ -299,8 +299,9 @@ class CantiereWorkLogDto {
     duration: json['durationHours'] == null
         ? null
         : Duration(
-            milliseconds: (((json['durationHours'] as num).toDouble()) * Duration.millisecondsPerHour)
-                .round(),
+            milliseconds:
+                (((json['durationHours'] as num).toDouble()) * Duration.millisecondsPerHour)
+                    .round(),
           ),
   );
 }
@@ -441,8 +442,10 @@ class CantiereWorklogApiClient {
   /// Closes the current user's open cantiere session.
   /// Throws [DioException] on error (404 = no active session).
   Future<int?> endCantiere([EndCantiereRequest? request]) async {
-    final response =
-        await _dio.post<dynamic>('/api/cantiereworklog/end', data: request?.toJson() ?? {});
+    final response = await _dio.post<dynamic>(
+      '/api/cantiereworklog/end',
+      data: request?.toJson() ?? {},
+    );
     return _clockDisagreementEcho(response.data);
   }
 

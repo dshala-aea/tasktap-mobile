@@ -76,9 +76,7 @@ final ticketStatusMapProvider = StreamProvider.autoDispose<Map<int, String>>((
 /// `isClosed` or a stable display order is needed (unlike `ticketStatusMapProvider`,
 /// whose `Map&lt;int, String&gt;` shape discards both columns and whose iteration
 /// order is whatever SQLite happens to return, not a meaningful sequence).
-final ticketStatusesProvider = StreamProvider.autoDispose<List<TicketStatuse>>((
-  ref,
-) {
+final ticketStatusesProvider = StreamProvider<List<TicketStatuse>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(
     db.ticketStatuses,

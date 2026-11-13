@@ -52,9 +52,8 @@ class ApprovalRequestCard extends StatelessWidget {
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: context.colors.ink),
+              style: Theme.of(context).textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700, color: context.colors.ink),
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(subtitle, style: muted),

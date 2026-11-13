@@ -189,6 +189,7 @@ Future<void> runTaskTapApp() async {
 
   runApp(
     ProviderScope(
+      retry: (_, _) => null,
       overrides: [
         // Bind the core GPS gate to the Impostazioni setting. Declared in core so
         // core/location does not import a feature; bound here, once, so no call site has to

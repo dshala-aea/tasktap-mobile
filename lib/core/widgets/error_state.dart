@@ -52,11 +52,18 @@ class ErrorState extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 40),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: 40,
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
           child: VetroStateCard(
-            iconBadge: VetroStateIconBadge(icon: icon, tint: v.statusBad, tintBg: v.statusBadBg),
+            iconBadge: VetroStateIconBadge(
+              icon: icon,
+              tint: v.statusBad,
+              tintBg: v.statusBadBg,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

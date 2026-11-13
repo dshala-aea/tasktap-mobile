@@ -145,7 +145,7 @@ void main() {
       addTearDown(controller.dispose);
 
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [dictationServiceProvider.overrideWithValue(fake)],
           child: MaterialApp(
             home: Scaffold(
@@ -207,7 +207,7 @@ void main() {
       String? reported;
 
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [dictationServiceProvider.overrideWithValue(fake)],
           child: MaterialApp(
             home: Scaffold(
@@ -235,7 +235,7 @@ void main() {
     // and afterwards it is how a technician who cannot find the microphone gets told why.
     Future<void> pumpDiagnostics(WidgetTester tester, DictationCapability capability) async {
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [dictationServiceProvider.overrideWithValue(_FakeDictation(capability))],
           child: MaterialApp(home: Scaffold(body: Consumer(builder: (context, ref, _) {
             final c = ref.watch(dictationCapabilityProvider);

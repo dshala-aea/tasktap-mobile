@@ -207,7 +207,7 @@ void main() {
       final fake = _FakeBiometrics(succeeds: succeeds);
       final store = _FakeStore(lastActiveAt);
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             biometricServiceProvider.overrideWithValue(fake),
             authRepositoryProvider.overrideWithValue(_FakeAuth()),
@@ -301,7 +301,7 @@ void main() {
     }) async {
       final fake = _FakeBiometrics();
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             biometricServiceProvider.overrideWithValue(fake),
             authRepositoryProvider.overrideWithValue(auth ?? _FakeAuth()),
@@ -418,7 +418,7 @@ void main() {
       final auth = _FakeAuth();
       final fake = _FakeBiometrics();
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             biometricServiceProvider.overrideWithValue(fake),
             authRepositoryProvider.overrideWithValue(auth),
@@ -444,7 +444,7 @@ void main() {
       // Skipping the prompt must not mean skipping the session. This is the path most opens take.
       final auth = _FakeAuth();
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             biometricServiceProvider.overrideWithValue(_FakeBiometrics()),
             authRepositoryProvider.overrideWithValue(auth),
@@ -472,7 +472,7 @@ void main() {
       // the interceptor and the reconnect watcher both retry later.
       final auth = _FakeAuth(throws: true);
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             biometricServiceProvider.overrideWithValue(_FakeBiometrics()),
             authRepositoryProvider.overrideWithValue(auth),

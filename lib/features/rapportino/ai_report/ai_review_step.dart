@@ -102,14 +102,20 @@ class AiReviewStep extends StatelessWidget {
               children: [
                 const AiLabel('Lavoro svolto'),
                 const SizedBox(height: 4),
-                AiValue(activityText, muted: draft.activities.every((a) => isUnconfirmedProposal(a.source, a.state))),
+                AiValue(
+                  activityText,
+                  muted: draft.activities.every((a) => isUnconfirmedProposal(a.source, a.state)),
+                ),
                 if (draft.activities.any((a) => a.hours != null))
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: AiHelper(
                       draft.activities
                           .where((a) => a.hours != null)
-                          .map((a) => '${a.description.isEmpty ? '—' : a.description} · ${_hours(a.hours!)}')
+                          .map(
+                            (a) =>
+                                '${a.description.isEmpty ? '—' : a.description} · ${_hours(a.hours!)}',
+                          )
                           .join(' · '),
                     ),
                   ),
@@ -162,11 +168,7 @@ class AiReviewStep extends StatelessWidget {
             todo: true,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                AiLabel('Ore'),
-                SizedBox(height: 4),
-                AiHelper('Da completare'),
-              ],
+              children: const [AiLabel('Ore'), SizedBox(height: 4), AiHelper('Da completare')],
             ),
           ),
         const AiCardGap(dense: true),
@@ -239,9 +241,7 @@ class AiReviewStep extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 AiLabel(
-                  draft.hasBlockingOpenItems
-                      ? 'Da chiarire prima di confermare'
-                      : 'Da chiarire',
+                  draft.hasBlockingOpenItems ? 'Da chiarire prima di confermare' : 'Da chiarire',
                   color: draft.hasBlockingOpenItems ? context.colors.red : null,
                 ),
                 for (final item in draft.openItems) ...[
@@ -264,17 +264,13 @@ class AiReviewStep extends StatelessWidget {
                       children: [
                         if (AiEditSyncer.heldRemovalEdit(item, reAdd: true) != null)
                           TextButton(
-                            onPressed: busy
-                                ? null
-                                : () => onResolveHeld(item, reAdd: true),
+                            onPressed: busy ? null : () => onResolveHeld(item, reAdd: true),
                             style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
                             child: const Text('Reinserisci'),
                           ),
                         if (AiEditSyncer.heldRemovalEdit(item, reAdd: false) != null)
                           TextButton(
-                            onPressed: busy
-                                ? null
-                                : () => onResolveHeld(item, reAdd: false),
+                            onPressed: busy ? null : () => onResolveHeld(item, reAdd: false),
                             style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
                             child: const Text('Mantieni rimosso'),
                           ),
@@ -307,9 +303,7 @@ class AiReviewStep extends StatelessWidget {
               style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
               child: const Text('Accetta'),
             )
-          : (unconfirmed
-                ? DraftProvenanceBadge(source: m.source, state: m.state)
-                : null),
+          : (unconfirmed ? DraftProvenanceBadge(source: m.source, state: m.state) : null),
     );
   }
 }

@@ -18,7 +18,7 @@ import 'package:tasktap_mobile/features/admin/locations/admin_location_list_scre
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
-Widget _buildScreen(AppDatabase db, {Entitlement? entitlement}) => ProviderScope(
+Widget _buildScreen(AppDatabase db, {Entitlement? entitlement}) => ProviderScope(retry: (_, _) => null, 
   overrides: [
     appDatabaseProvider.overrideWithValue(db),
     businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),

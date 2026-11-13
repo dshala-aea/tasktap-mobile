@@ -132,7 +132,7 @@ void main() {
   }) async {
     late WidgetRef ref;
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           businessTimeProvider.overrideWithValue(BusinessTime.fallback()),

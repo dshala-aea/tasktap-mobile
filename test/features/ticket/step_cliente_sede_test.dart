@@ -176,7 +176,7 @@ void main() {
   }) async {
     final key = GlobalKey<_ClienteSedeHarnessState>();
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(mockDio),

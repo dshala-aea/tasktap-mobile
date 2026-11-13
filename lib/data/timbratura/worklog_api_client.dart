@@ -277,7 +277,10 @@ class DayWorkLogEntry {
   /// Test seam for the mapping above.
   static String? sorgenteOfForTest(Object? raw) => _sorgenteOf(raw);
 
-  factory DayWorkLogEntry.fromJson(Map<String, dynamic> json, {required BusinessTime businessTime}) {
+  factory DayWorkLogEntry.fromJson(
+    Map<String, dynamic> json, {
+    required BusinessTime businessTime,
+  }) {
     final workDate = parseDateOnlyOrThrow(json['workDate']);
 
     DateTime instant(Object? utcRaw, Object? spanRaw) {

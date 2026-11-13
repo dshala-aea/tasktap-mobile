@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:drift/drift.dart';
+
 import '../local/app_database.dart';
 import '../sync/draft_submission_state.dart';
 
@@ -92,9 +93,9 @@ class DraftReportRepository {
 
   /// The instruments the server holds for [reportId] (synced down, isLocal false).
   Future<List<ReportStrumentoRow>> getServerStrumenti(String reportId) {
-    return (_db.select(_db.reportStrumenti)
-          ..where((s) => s.reportId.equals(reportId) & s.isLocal.equals(false)))
-        .get();
+    return (_db.select(
+      _db.reportStrumenti,
+    )..where((s) => s.reportId.equals(reportId) & s.isLocal.equals(false))).get();
   }
 
   /// The local instrument catalogue (every active tenant instrument the last sync delivered).

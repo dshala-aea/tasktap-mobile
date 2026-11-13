@@ -335,7 +335,7 @@ void main() {
       await _seedDraft(db);
       await _seedCatalogue(db);
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [appDatabaseProvider.overrideWithValue(db)],
           child: const MaterialApp(
             home: Scaffold(
@@ -371,7 +371,7 @@ void main() {
         await _seedDraft(db, prefilled: true);
         await _seedCatalogue(db);
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [appDatabaseProvider.overrideWithValue(db)],
             child: const MaterialApp(
               home: Scaffold(
@@ -404,7 +404,7 @@ void main() {
         await _seedDraft(db);
         await _seedCatalogue(db);
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [appDatabaseProvider.overrideWithValue(db)],
             child: const MaterialApp(
               home: Scaffold(

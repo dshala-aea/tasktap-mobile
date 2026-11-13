@@ -24,6 +24,13 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/steps/step_ore.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
+/// These widget tests do not assert semantics; Flutter 3.47's semantics tree asserts during
+/// pumpAndSettle on these screens. Semantics-specific tests keep using testWidgets directly.
+void testWidgetsNoSemantics(
+  String description,
+  WidgetTesterCallback callback,
+) => testWidgets(description, callback, semanticsEnabled: false);
+
 const _reportId = 'draft-1';
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
@@ -64,7 +71,7 @@ void main() {
   tearDown(() async => db.close());
 
   group('StepOre — staff tile name resolution', () {
-    testWidgets('a staff row known to the colleagues mirror shows the resolved name, not the id', (
+    testWidgetsNoSemantics('a staff row known to the colleagues mirror shows the resolved name, not the id', (
       tester,
     ) async {
       await db
@@ -84,7 +91,7 @@ void main() {
       expect(find.text('user-1'), findsNothing);
     });
 
-    testWidgets(
+    testWidgetsNoSemantics(
       'a staff row unknown to the colleagues mirror falls back to a placeholder, never the raw id',
       (tester) async {
         final container = _buildContainer(

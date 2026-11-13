@@ -145,5 +145,4 @@ Future<void> writeAiStrumenti(
 }
 
 /// The line's text, unless it says nothing — then what the row already holds.
-String? _preferLine(String? line, String? stored) =>
-    (line ?? '').trim().isEmpty ? stored : line;
+String? _preferLine(String? line, String? stored) => (line ?? '').trim().isEmpty ? stored : line;

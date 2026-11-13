@@ -327,10 +327,7 @@ class _MicOrbState extends State<_MicOrb> with SingleTickerProviderStateMixin {
                 final t = reduceMotion ? 0.5 : 0.5 + _pulse.value * 0.5;
                 return Stack(
                   alignment: Alignment.center,
-                  children: [
-                    _halo(context, 156, 0.08 * t),
-                    _halo(context, 136, 0.14 * t),
-                  ],
+                  children: [_halo(context, 156, 0.08 * t), _halo(context, 136, 0.14 * t)],
                 );
               },
             ),

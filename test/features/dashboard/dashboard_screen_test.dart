@@ -37,7 +37,7 @@ Widget _buildDashboard({
   required AppDatabase db,
   required MockAuthRepository repo,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
@@ -96,7 +96,7 @@ Widget _buildDashboardWithRouter({
   required GoRouter router,
   List<Override> extraOverrides = const [],
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),

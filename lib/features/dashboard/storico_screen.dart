@@ -31,7 +31,8 @@ class StoricoScreen extends ConsumerWidget {
               child: past.when(
                 data: (schedules) => ListaView(
                   schedules: schedules,
-                  onTapTicket: (id) => context.push(AppRoutes.ticketDetailPath(id)),
+                  onTapTicket: (id) =>
+                      context.push(AppRoutes.ticketDetailPath(id)),
                   reverseDays: true,
                   emptyTitle: 'Nessuno storico',
                   emptyBody: 'Gli interventi passati appariranno qui.',

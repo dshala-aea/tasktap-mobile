@@ -126,9 +126,7 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
 
   @override
   Widget build(BuildContext context) {
-    final existing = ref.watch(
-      controlAnswersProvider(widget.reportId).select((m) => m[_c.id]),
-    );
+    final existing = ref.watch(controlAnswersProvider(widget.reportId).select((m) => m[_c.id]));
     final shown = existing ?? _c.stored;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -216,7 +214,9 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
         final value = shown.dateValue;
         return AdminDateField(
           label: 'Valore',
-          value: value != null ? DateFormat('dd/MM/yyyy').format(value.toLocal()) : 'Seleziona data',
+          value: value != null
+              ? DateFormat('dd/MM/yyyy').format(value.toLocal())
+              : 'Seleziona data',
           onTap: () async {
             final picked = await showDatePicker(
               context: context,

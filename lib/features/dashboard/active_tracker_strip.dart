@@ -3,7 +3,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:uuid/uuid.dart';
@@ -153,7 +152,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
           // Awaited rather than read: Drift answers on a microtask, so a synchronous read here
           // would sample the provider before its first emission and decide "nothing local" — the
           // one decision that must not be wrong.
-          final local = await ref.readFuture(localCantiereTimersProvider.future);
+          final local = await ref.read(localCantiereTimersProvider.future);
           if (local.any((l) => l.entityId == t.entityId)) {
             await ref
                 .read(cantiereSessionRepositoryProvider)

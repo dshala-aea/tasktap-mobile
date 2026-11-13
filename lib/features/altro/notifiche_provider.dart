@@ -155,7 +155,7 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
   ///
   /// Read from the same SharedPreferences key `internalUserIdProvider` reads
   /// ([internalUserIdPrefsKey], persisted by `EntitlementService.refresh` from `/api/Auth/me`).
-  /// Deliberately not `ref.readFuture(internalUserIdProvider.future)`: that FutureProvider caches its
+  /// Deliberately not `ref.read(internalUserIdProvider.future)`: that FutureProvider caches its
   /// first value for the container's lifetime, and on a shared device the key can change under it
   /// (forced sign-out keeps prefs; the next account's `/me` rewrites the key). The key stays the
   /// single source of truth — this just reads it fresh.
@@ -475,7 +475,7 @@ final notificheUnreadCountProvider = Provider<int>((ref) {
 final notificheHasErrorProvider = StateProvider<bool>((ref) => false);
 
 /// Provider that triggers a refresh of notifications from the backend.
-/// Call `ref.readFuture(notificationRefreshProvider.future)` to refresh.
+/// Call `ref.read(notificationRefreshProvider.future)` to refresh.
 final notificationRefreshProvider = FutureProvider<void>((ref) async {
   final notifier = ref.read(notificheProvider.notifier);
   await notifier.refresh();

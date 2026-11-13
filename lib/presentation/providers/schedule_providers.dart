@@ -116,8 +116,13 @@ final locationGeocodedLocationProvider = FutureProvider.autoDispose
       final point = await ref.read(geocodingServiceProvider).geocode(address);
       if (point == null) return null;
 
-      await (db.update(db.locations)..where((l) => l.id.equals(locationId))).write(
-        LocationsCompanion(latitude: Value(point.lat), longitude: Value(point.lng)),
+      await (db.update(
+        db.locations,
+      )..where((l) => l.id.equals(locationId))).write(
+        LocationsCompanion(
+          latitude: Value(point.lat),
+          longitude: Value(point.lng),
+        ),
       );
       return point;
     });

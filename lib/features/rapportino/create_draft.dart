@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/error_message.dart' show isTransportOrServerFault;
@@ -70,7 +69,7 @@ Future<String?> createLocalDraft(
   String? tenantId,
   String? workAddress,
 }) async {
-  final internalUserId = await ref.readFuture(internalUserIdProvider.future);
+  final internalUserId = await ref.read(internalUserIdProvider.future);
   if (internalUserId == null) return null;
 
   // A caller creating the draft against a known entity already holds that entity's tenant, which
@@ -159,7 +158,7 @@ Future<String> resolveDeviceTenantId(AppDatabase db) async {
 /// attest to a specific version of the report the office already rejected, and must be recaptured
 /// for the reworked one.
 Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
-  final internalUserId = await ref.readFuture(internalUserIdProvider.future);
+  final internalUserId = await ref.read(internalUserIdProvider.future);
   if (internalUserId == null) return null;
 
   final repo = ref.read(draftReportRepositoryProvider);
@@ -341,7 +340,7 @@ Future<String?> createCantiereReportDraft(
   String? tenantId,
   String? workAddress,
 }) async {
-  final internalUserId = await ref.readFuture(internalUserIdProvider.future);
+  final internalUserId = await ref.read(internalUserIdProvider.future);
   if (internalUserId == null) return null;
 
   final api = ref.read(cantiereReportApiClientProvider);

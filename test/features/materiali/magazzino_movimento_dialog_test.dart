@@ -29,7 +29,7 @@ Widget _build({
   required bool online,
   BarcodeScanner? scanner,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(dio),

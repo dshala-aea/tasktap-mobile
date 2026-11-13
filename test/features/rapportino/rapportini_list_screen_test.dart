@@ -91,7 +91,7 @@ Widget _buildRouted({
       ),
     ],
   );
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       cachedEntitlementProvider.overrideWith((ref) async => entitlement ?? _writeReportEntitlement),
@@ -227,7 +227,7 @@ Future<void> _seedHours(AppDatabase db, {required String reportId, required doub
 }
 
 Widget _buildList({required AppDatabase db, Entitlement? entitlement}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       cachedEntitlementProvider.overrideWith(
@@ -1151,7 +1151,7 @@ void main() {
       );
     });
 
-    Widget buildWithDio({required AppDatabase db}) => ProviderScope(
+    Widget buildWithDio({required AppDatabase db}) => ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         cachedEntitlementProvider.overrideWith((ref) async => _writeReportEntitlement),
@@ -1389,7 +1389,7 @@ void main() {
       await _seedDraft(db, id: 'srv-1', title: 'Da eliminare', isLocalOnly: false);
 
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             cachedEntitlementProvider.overrideWith((ref) async => _writeReportEntitlement),
@@ -1424,7 +1424,7 @@ void main() {
       await _seedDraft(db, id: 'srv-1', title: 'Da eliminare', isLocalOnly: false);
 
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             cachedEntitlementProvider.overrideWith((ref) async => _writeReportEntitlement),

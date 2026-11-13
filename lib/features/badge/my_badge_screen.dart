@@ -65,7 +65,10 @@ class _MyBadgeScreenState extends ConsumerState<MyBadgeScreen> {
                   AppSpacing.xxl,
                 ),
                 child: switch (state) {
-                  BadgeReady(:final card) => _ReadyView(card: card, maxQr: _maxQr),
+                  BadgeReady(:final card) => _ReadyView(
+                    card: card,
+                    maxQr: _maxQr,
+                  ),
                   BadgeLoading() => const _MessageView(
                     message: 'Aggiornamento del badge…',
                     loading: true,
@@ -78,11 +81,13 @@ class _MyBadgeScreenState extends ConsumerState<MyBadgeScreen> {
                   ),
                   BadgeOffline() => _MessageView(
                     message: 'Nessuna connessione — il badge richiede il segnale. Riprova',
-                    onRetry: () => ref.read(badgeControllerProvider.notifier).refresh(),
+                    onRetry: () =>
+                        ref.read(badgeControllerProvider.notifier).refresh(),
                   ),
                   BadgeError() => _MessageView(
                     message: 'Impossibile aggiornare il badge. Riprova.',
-                    onRetry: () => ref.read(badgeControllerProvider.notifier).refresh(),
+                    onRetry: () =>
+                        ref.read(badgeControllerProvider.notifier).refresh(),
                   ),
                 },
               ),
@@ -98,7 +103,8 @@ class _MyBadgeScreenState extends ConsumerState<MyBadgeScreen> {
 /// text is hidden rather than leaking an English word. Add new members here.
 const _statusLabels = <String, String>{'active': 'Attivo'};
 
-String? statusLabel(String status) => _statusLabels[status.trim().toLowerCase()];
+String? statusLabel(String status) =>
+    _statusLabels[status.trim().toLowerCase()];
 
 bool isActiveStatus(String status) => status.trim().toLowerCase() == 'active';
 
@@ -131,7 +137,10 @@ class _ReadyView extends StatelessWidget {
           builder: (context, constraints) {
             // The white card's own padding comes off the width so the code itself is as large
             // as the screen allows, capped for tablets.
-            final side = math.min(constraints.maxWidth - 2 * AppSpacing.base, maxQr);
+            final side = math.min(
+              constraints.maxWidth - 2 * AppSpacing.base,
+              maxQr,
+            );
             return Center(
               child: Container(
                 padding: const EdgeInsets.all(AppSpacing.base),
@@ -170,7 +179,11 @@ class _ReadyView extends StatelessWidget {
 }
 
 class _MessageView extends StatelessWidget {
-  const _MessageView({required this.message, this.loading = false, this.onRetry});
+  const _MessageView({
+    required this.message,
+    this.loading = false,
+    this.onRetry,
+  });
 
   final String message;
   final bool loading;
@@ -191,7 +204,9 @@ class _MessageView extends StatelessWidget {
             container: true,
             child: Text(
               message,
-              style: AppTextStyles.bodyLarge.copyWith(color: context.colors.ink),
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: context.colors.ink,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -207,7 +222,12 @@ class _MessageView extends StatelessWidget {
 
 /// Round worker photo with an initials fallback. Public so the leader's scan result cards reuse it.
 class BadgeAvatar extends StatelessWidget {
-  const BadgeAvatar({super.key, required this.name, required this.photoUrl, this.size = 96});
+  const BadgeAvatar({
+    super.key,
+    required this.name,
+    required this.photoUrl,
+    this.size = 96,
+  });
 
   final double size;
 
@@ -226,8 +246,11 @@ class BadgeAvatar extends StatelessWidget {
       color: context.colors.bg3,
       child: Text(
         _initials(name),
-        style: (_size >= 64 ? AppTextStyles.headlineLarge : AppTextStyles.titleMedium)
-            .copyWith(color: context.colors.ink),
+        style:
+            (_size >= 64
+                    ? AppTextStyles.headlineLarge
+                    : AppTextStyles.titleMedium)
+                .copyWith(color: context.colors.ink),
       ),
     );
     final url = photoUrl;
@@ -248,7 +271,11 @@ class BadgeAvatar extends StatelessWidget {
   }
 
   static String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return '?';
     final first = parts.first.characters.first;
     final second = parts.length > 1 ? parts.last.characters.first : '';
@@ -272,7 +299,10 @@ class BadgeQrCode extends StatelessWidget {
       version: QrVersions.auto,
       errorCorrectionLevel: QrErrorCorrectLevel.M,
       backgroundColor: Colors.white,
-      eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+      eyeStyle: const QrEyeStyle(
+        eyeShape: QrEyeShape.square,
+        color: Colors.black,
+      ),
       dataModuleStyle: const QrDataModuleStyle(
         dataModuleShape: QrDataModuleShape.square,
         color: Colors.black,

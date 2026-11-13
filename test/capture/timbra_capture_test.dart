@@ -207,7 +207,7 @@ Future<void> _render(
   addTearDown(tester.view.reset);
 
   await tester.pumpWidget(
-    ProviderScope(
+    ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         workSessionRepositoryProvider.overrideWithValue(_FakeRepo(sessions)),

@@ -124,7 +124,7 @@ void main() {
       ],
     );
 
-    return ProviderScope(
+    return ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),

@@ -16,7 +16,7 @@ import 'package:tasktap_mobile/presentation/providers/report_editor_providers.da
 
 import '../../support/checklist_fixtures.dart';
 
-Widget host(AppDatabase db, {ChecklistFilter filter = ChecklistFilter.all}) => ProviderScope(
+Widget host(AppDatabase db, {ChecklistFilter filter = ChecklistFilter.all}) => ProviderScope(retry: (_, _) => null, 
   overrides: [
     appDatabaseProvider.overrideWithValue(db),
     isOnlineProvider.overrideWithValue(true),
@@ -109,7 +109,7 @@ void main() {
 
   testWidgets('a rapportino without a ticket explains instead of showing an empty list', (tester) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           isOnlineProvider.overrideWithValue(true),

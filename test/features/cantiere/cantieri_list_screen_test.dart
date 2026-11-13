@@ -15,7 +15,7 @@ Future<void> _pumpScreen(
   List<Override> extraOverrides = const [],
 }) async {
   await tester.pumpWidget(
-    ProviderScope(
+    ProviderScope(retry: (_, _) => null, 
       overrides: [appDatabaseProvider.overrideWithValue(db), ...extraOverrides],
       child: const MaterialApp(home: CantieriListScreen()),
     ),

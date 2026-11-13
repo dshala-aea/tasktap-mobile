@@ -317,7 +317,8 @@ class TimbraSyncService {
         unawaited(
           CrashReporter.instance.captureException(
             e,
-            hint: 'timbra sync: non-HTTP failure pushing a day '
+            hint:
+                'timbra sync: non-HTTP failure pushing a day '
                 '(events=${day.where((s) => s.isPendingSync).length})',
           ),
         );

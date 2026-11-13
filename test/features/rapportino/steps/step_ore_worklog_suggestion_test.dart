@@ -37,6 +37,13 @@ import 'package:tasktap_mobile/features/ticket/ticket_providers.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_workflow_api_client.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
+/// These widget tests do not assert semantics; Flutter 3.47's semantics tree asserts during
+/// pumpAndSettle on these screens. Semantics-specific tests keep using testWidgets directly.
+void testWidgetsNoSemantics(
+  String description,
+  WidgetTesterCallback callback,
+) => testWidgets(description, callback, semanticsEnabled: false);
+
 const _reportId = 'draft-1';
 const _ticketId = 'ticket-1';
 
@@ -140,7 +147,7 @@ void main() {
   tearDown(() async => db.close());
 
   group('StepOre — worklog hours suggestion', () {
-    testWidgets('a single completed session suggests the precise range, applying writes it', (
+    testWidgetsNoSemantics('a single completed session suggests the precise range, applying writes it', (
       tester,
     ) async {
       final workDate = DateTime.utc(2026, 8, 31);
@@ -176,7 +183,7 @@ void main() {
       expect(row.hoursWorked, closeTo(3.75, 0.01));
     });
 
-    testWidgets(
+    testWidgetsNoSemantics(
       'multiple completed sessions for the same user sum to hours only, no fabricated range',
       (tester) async {
         final workDate = DateTime.utc(2026, 8, 31);
@@ -225,7 +232,7 @@ void main() {
     // calendar day as start) and separately hand-subtract endTime-startTime for the multi-session
     // sum — both gave a negative duration. Now both branches use TicketWorkLogDto.duration (the
     // backend-computed value) instead of re-deriving it.
-    testWidgets('an overnight session suggests the correct positive duration, not a negative one', (
+    testWidgetsNoSemantics('an overnight session suggests the correct positive duration, not a negative one', (
       tester,
     ) async {
       final workDate = DateTime.utc(2026, 8, 31);
@@ -264,7 +271,7 @@ void main() {
     // save writes that derived total back over anything typed. A suggestion applied on top of it
     // therefore has to replace the evidence, not sit beside it: the intervals go, the Ore field
     // comes back editable, and the row ends up with exactly one total.
-    testWidgets('applying a suggestion over recorded intervals replaces them in the same gesture', (
+    testWidgetsNoSemantics('applying a suggestion over recorded intervals replaces them in the same gesture', (
       tester,
     ) async {
       final repo = DraftReportRepository(db);
@@ -344,7 +351,7 @@ void main() {
       expect(find.textContaining('Calcolate dal timer'), findsNothing);
     });
 
-    testWidgets('cancelling the confirmation leaves the timer and the row untouched', (
+    testWidgetsNoSemantics('cancelling the confirmation leaves the timer and the row untouched', (
       tester,
     ) async {
       final repo = DraftReportRepository(db);
@@ -434,7 +441,7 @@ void main() {
       timerStartedAt: timerRunning ? DateTime.utc(2026, 8, 31, 6) : null,
     );
 
-    testWidgets('a running timer withholds the worklog chip', (tester) async {
+    testWidgetsNoSemantics('a running timer withholds the worklog chip', (tester) async {
       final container = _buildContainer(
         db: db,
         staffRows: [timedRow(timerRunning: true)],
@@ -459,7 +466,7 @@ void main() {
 
     // The other half: the predicate has to be the timer, not the suggestion disappearing for
     // everyone. The same row, stopped, still gets its chip.
-    testWidgets('the same row shows the chip once its timer is stopped', (tester) async {
+    testWidgetsNoSemantics('the same row shows the chip once its timer is stopped', (tester) async {
       final container = _buildContainer(
         db: db,
         staffRows: [timedRow(timerRunning: false)],
@@ -477,7 +484,7 @@ void main() {
     // A row the office sent carries a span but no intervals. A two-session suggestion keeps no
     // range, so it erases "Inizio/Fine" — as destructive as deleting intervals, and just as
     // invisible afterwards.
-    testWidgets('a span-only row asks before a range-less suggestion drops its Inizio/Fine', (
+    testWidgetsNoSemantics('a span-only row asks before a range-less suggestion drops its Inizio/Fine', (
       tester,
     ) async {
       final workDate = DateTime.utc(2026, 8, 31);
@@ -534,7 +541,7 @@ void main() {
 
     // The sum of several sessions describes no single start→end. Now that the apply path can
     // clear a span, the row does not have to keep a range it cannot explain — it drops it.
-    testWidgets(
+    testWidgetsNoSemantics(
       'a multi-session sum applies to a timed row and clears the span it cannot explain',
       (tester) async {
         final workDate = DateTime.utc(2026, 8, 31);
@@ -592,7 +599,7 @@ void main() {
       },
     );
 
-    testWidgets('a still-running session is never suggested', (tester) async {
+    testWidgetsNoSemantics('a still-running session is never suggested', (tester) async {
       final container = _buildContainer(
         db: db,
         staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
@@ -612,7 +619,7 @@ void main() {
       expect(find.textContaining('Da worklog:'), findsNothing);
     });
 
-    testWidgets('no chip when the session belongs to a different user', (tester) async {
+    testWidgetsNoSemantics('no chip when the session belongs to a different user', (tester) async {
       final container = _buildContainer(
         db: db,
         staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
@@ -633,7 +640,7 @@ void main() {
       expect(find.textContaining('Da worklog:'), findsNothing);
     });
 
-    testWidgets('no chip when the report has no ticketId', (tester) async {
+    testWidgetsNoSemantics('no chip when the report has no ticketId', (tester) async {
       final container = ProviderContainer(
         retry: (_, _) => null,
         overrides: [
@@ -659,7 +666,7 @@ void main() {
       expect(find.textContaining('Da worklog:'), findsNothing);
     });
 
-    testWidgets('no chip (and no crash) when the worklog fetch fails — offline is not an error', (
+    testWidgetsNoSemantics('no chip (and no crash) when the worklog fetch fails — offline is not an error', (
       tester,
     ) async {
       final container = ProviderContainer(
@@ -725,7 +732,7 @@ void main() {
       );
     }
 
-    testWidgets(
+    testWidgetsNoSemantics(
       'an open punch suggests its start instant and the injected clock as the end; applying '
       'writes exactly that',
       (tester) async {
@@ -759,7 +766,7 @@ void main() {
       },
     );
 
-    testWidgets(
+    testWidgetsNoSemantics(
       'a closed session in the last 30 days is never suggested — no more "last closed worklog"',
       (tester) async {
         final container = buildNoTicketContainer(
@@ -784,7 +791,7 @@ void main() {
       },
     );
 
-    testWidgets('no chip when the open punch belongs to a different user', (tester) async {
+    testWidgetsNoSemantics('no chip when the open punch belongs to a different user', (tester) async {
       final container = buildNoTicketContainer(
         staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
         recentEntries: [
@@ -810,7 +817,7 @@ void main() {
       endTime: DateTime.utc(2026, 7, 10, 14, 30),
     );
 
-    testWidgets('Rome tenant: Inizio 08:00 / Fine 16:30 for an imported UTC instant', (
+    testWidgetsNoSemantics('Rome tenant: Inizio 08:00 / Fine 16:30 for an imported UTC instant', (
       tester,
     ) async {
       final container = _buildContainer(
@@ -827,7 +834,7 @@ void main() {
       expect(find.textContaining('Fine: 16:30'), findsOneWidget);
     });
 
-    testWidgets('New York tenant: the same instants read 02:00 / 10:30', (tester) async {
+    testWidgetsNoSemantics('New York tenant: the same instants read 02:00 / 10:30', (tester) async {
       final container = _buildContainer(
         db: db,
         staffRows: [imported],
@@ -842,7 +849,7 @@ void main() {
       expect(find.textContaining('Fine: 10:30'), findsOneWidget);
     });
 
-    testWidgets('the suggestion chip reads 08:00–16:30 (Rome), never the UTC hour', (tester) async {
+    testWidgetsNoSemantics('the suggestion chip reads 08:00–16:30 (Rome), never the UTC hour', (tester) async {
       final container = _buildContainer(
         db: db,
         staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],

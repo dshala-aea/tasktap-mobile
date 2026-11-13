@@ -1,6 +1,7 @@
 // Dart DTOs for the MobileUserSyncResult payload.
 // These mirror the C# entities serialised as JSON from GET /api/sync/mobile.
-import '../../core/time/business_time.dart' show parseDateOnly, parseDateOnlyOrThrow;
+import '../../core/time/business_time.dart'
+    show parseDateOnly, parseDateOnlyOrThrow;
 import '../../core/time/work_time.dart' show parseTimeSpan;
 import 'checklist_sync_dto.dart';
 
@@ -173,6 +174,7 @@ class SyncResultDto {
   /// Without it an older backend would look like "every ticket's planned materials were cleared"
   /// and the per-ticket replace would empty the Fabbisogno tab.
   final bool carriesTicketMateriali;
+
   /// False when the payload came from a backend that predates the cantiere-crew member. Without it
   /// an older backend would look like "every crew is empty" and the per-cantiere replace would wipe
   /// the mirror — the same trap [carriesMaintenanceTemplates] closes for the template catalogue.
@@ -386,18 +388,9 @@ class SyncResultDto {
         SyncReportControlloDto.fromJson,
       ),
       allegati: _list(j['allegati'], SyncReportAllegatoDto.fromJson),
-      reportVersions: _list(
-        j['reportVersions'],
-        SyncReportVersionDto.fromJson,
-      ),
-      ticketWorkLogs: _list(
-        j['ticketWorkLogs'],
-        SyncTicketWorkLogDto.fromJson,
-      ),
-      ticketHistory: _list(
-        j['ticketHistory'],
-        SyncTicketHistoryDto.fromJson,
-      ),
+      reportVersions: _list(j['reportVersions'], SyncReportVersionDto.fromJson),
+      ticketWorkLogs: _list(j['ticketWorkLogs'], SyncTicketWorkLogDto.fromJson),
+      ticketHistory: _list(j['ticketHistory'], SyncTicketHistoryDto.fromJson),
       cantiereWorkLogs: _list(
         j['cantiereWorkLogs'],
         SyncCantiereWorkLogDto.fromJson,
@@ -425,7 +418,9 @@ class SyncResultDto {
       carriesCantiereWorkLogs: j.containsKey('cantiereWorkLogs'),
       carriesAbsenceRequests: j.containsKey('absenceRequests'),
       carriesMagazzini: j.containsKey('magazzini'),
-      carriesExtensionFieldDefinitions: j.containsKey('extensionFieldDefinitions'),
+      carriesExtensionFieldDefinitions: j.containsKey(
+        'extensionFieldDefinitions',
+      ),
       carriesContacts: j.containsKey('contacts'),
       scope: j['scope'] == null
           ? null
@@ -586,19 +581,20 @@ class CustomerContactDto {
     this.notes,
   });
 
-  factory CustomerContactDto.fromJson(Map<String, dynamic> j) => CustomerContactDto(
-    id: j['id'] as String,
-    tenantId: j['tenantId'] as String?,
-    createdAt: _dt(j['createdAt']),
-    updatedAt: _dt(j['updatedAt']),
-    updatedByUserId: j['updatedByUserId'] as String?,
-    customerId: j['customerId'] as String,
-    name: j['name'] as String? ?? '',
-    role: j['role'] as String?,
-    phone: j['phone'] as String?,
-    email: j['email'] as String?,
-    notes: j['notes'] as String?,
-  );
+  factory CustomerContactDto.fromJson(Map<String, dynamic> j) =>
+      CustomerContactDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String?,
+        createdAt: _dt(j['createdAt']),
+        updatedAt: _dt(j['updatedAt']),
+        updatedByUserId: j['updatedByUserId'] as String?,
+        customerId: j['customerId'] as String,
+        name: j['name'] as String? ?? '',
+        role: j['role'] as String?,
+        phone: j['phone'] as String?,
+        email: j['email'] as String?,
+        notes: j['notes'] as String?,
+      );
 
   /// The exact keys [fromJson] reads, for the inbound contract gate — see
   /// `test/contract/sync_inbound_contract_test.dart`.
@@ -2139,17 +2135,18 @@ class SyncReportSegmentDto {
     this.clientId,
   });
 
-  factory SyncReportSegmentDto.fromJson(Map<String, dynamic> j) => SyncReportSegmentDto(
-    id: j['id'] as String,
-    tenantId: j['tenantId'] as String,
-    createdAt: DateTime.parse(j['createdAt'] as String),
-    updatedAt: _dt(j['updatedAt']),
-    reportId: j['reportId'] as String,
-    userId: j['userId'] as String,
-    startUtc: DateTime.parse(j['startUtc'] as String),
-    endUtc: DateTime.parse(j['endUtc'] as String),
-    clientId: j['clientId'] as String?,
-  );
+  factory SyncReportSegmentDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportSegmentDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        reportId: j['reportId'] as String,
+        userId: j['userId'] as String,
+        startUtc: DateTime.parse(j['startUtc'] as String),
+        endUtc: DateTime.parse(j['endUtc'] as String),
+        clientId: j['clientId'] as String?,
+      );
 }
 
 /// One material used on a report — either a catalogue reference or free text.
@@ -2519,24 +2516,25 @@ class SyncCantiereWorkLogDto {
     this.updatedAt,
   });
 
-  factory SyncCantiereWorkLogDto.fromJson(Map<String, dynamic> j) => SyncCantiereWorkLogDto(
-    id: j['id'] as String,
-    tenantId: j['tenantId'] as String,
-    cantiereId: j['cantiereId'] as String,
-    userId: j['userId'] as String,
-    ticketId: j['ticketId'] as String?,
-    workDate: parseDateOnlyOrThrow(j['workDate']),
-    startTime: parseTimeSpan(j['startTime']) ?? Duration.zero,
-    endTime: j['endTime'] == null ? null : parseTimeSpan(j['endTime']),
-    startUtc: _dt(j['startUtc']),
-    endUtc: _dt(j['endUtc']),
-    workLogType: _intOrNull(j['workLogType']) ?? 0,
-    approvalStatus: _intOrNull(j['approvalStatus']) ?? 0,
-    description: j['description'] as String?,
-    clientId: j['clientId'] as String?,
-    createdAt: DateTime.parse(j['createdAt'] as String),
-    updatedAt: _dt(j['updatedAt']),
-  );
+  factory SyncCantiereWorkLogDto.fromJson(Map<String, dynamic> j) =>
+      SyncCantiereWorkLogDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        cantiereId: j['cantiereId'] as String,
+        userId: j['userId'] as String,
+        ticketId: j['ticketId'] as String?,
+        workDate: parseDateOnlyOrThrow(j['workDate']),
+        startTime: parseTimeSpan(j['startTime']) ?? Duration.zero,
+        endTime: j['endTime'] == null ? null : parseTimeSpan(j['endTime']),
+        startUtc: _dt(j['startUtc']),
+        endUtc: _dt(j['endUtc']),
+        workLogType: _intOrNull(j['workLogType']) ?? 0,
+        approvalStatus: _intOrNull(j['approvalStatus']) ?? 0,
+        description: j['description'] as String?,
+        clientId: j['clientId'] as String?,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+      );
 }
 
 /// One ferie / permesso / malattia request the signed-in technician filed for themselves.
@@ -2606,24 +2604,25 @@ class SyncAbsenceRequestDto {
     this.updatedAt,
   });
 
-  factory SyncAbsenceRequestDto.fromJson(Map<String, dynamic> j) => SyncAbsenceRequestDto(
-    id: j['id'] as String,
-    tenantId: j['tenantId'] as String,
-    requestedByUserId: j['requestedByUserId'] as String,
-    createdByUserId: j['createdByUserId'] as String,
-    type: _intOrNull(j['type']) ?? 0,
-    startDate: parseDateOnlyOrThrow(j['startDate']),
-    endDate: parseDateOnlyOrThrow(j['endDate']),
-    startTime: j['startTime'] as String?,
-    endTime: j['endTime'] as String?,
-    reason: j['reason'] as String?,
-    status: _intOrNull(j['status']) ?? 0,
-    decidedByUserId: j['decidedByUserId'] as String?,
-    decidedAt: _dt(j['decidedAt']),
-    decisionReason: j['decisionReason'] as String?,
-    createdAt: DateTime.parse(j['createdAt'] as String),
-    updatedAt: _dt(j['updatedAt']),
-  );
+  factory SyncAbsenceRequestDto.fromJson(Map<String, dynamic> j) =>
+      SyncAbsenceRequestDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        requestedByUserId: j['requestedByUserId'] as String,
+        createdByUserId: j['createdByUserId'] as String,
+        type: _intOrNull(j['type']) ?? 0,
+        startDate: parseDateOnlyOrThrow(j['startDate']),
+        endDate: parseDateOnlyOrThrow(j['endDate']),
+        startTime: j['startTime'] as String?,
+        endTime: j['endTime'] as String?,
+        reason: j['reason'] as String?,
+        status: _intOrNull(j['status']) ?? 0,
+        decidedByUserId: j['decidedByUserId'] as String?,
+        decidedAt: _dt(j['decidedAt']),
+        decisionReason: j['decisionReason'] as String?,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+      );
 }
 
 /// One recorded change of one ticket, as the server holds it.

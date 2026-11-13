@@ -94,7 +94,8 @@ class TicketAttachmentUploadQueue {
       await _repo.updateState(
         id: a.id,
         state: PendingTicketAttachmentState.failed,
-        error: 'Caricamento interrotto. Verifica che l\'allegato non sia già presente, poi riprova.',
+        error:
+            'Caricamento interrotto. Verifica che l\'allegato non sia già presente, poi riprova.',
       );
     }
     return interrupted.length;

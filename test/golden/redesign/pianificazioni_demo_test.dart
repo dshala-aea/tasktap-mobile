@@ -226,7 +226,7 @@ Future<void> _captureElenco(WidgetTester tester, AppDatabase db) async {
 
   const key = ValueKey<String>('pianificazioni-list-capture');
   await tester.pumpWidget(
-    ProviderScope(
+    ProviderScope(retry: (_, _) => null, 
       overrides: _overrides(db),
       child: RepaintBoundary(
         key: key,

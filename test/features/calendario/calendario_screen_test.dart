@@ -36,7 +36,7 @@ Widget _buildScreen({
   CalendarioView? initialView,
   DateTime? initialDate,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),

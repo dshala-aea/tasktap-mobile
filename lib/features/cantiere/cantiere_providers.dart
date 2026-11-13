@@ -45,8 +45,8 @@ final cantiereByIdProvider = StreamProvider.autoDispose.family<CantieriData?, St
 ///
 /// Only this technician's rows are stored, so "empty" here always means "this device has none of
 /// your shifts for this site", never "your colleagues did not work" — the screen says the former.
-final cantiereWorkLogMirrorProvider =
-    StreamProvider.autoDispose.family<List<CantiereWorkLog>, String>((ref, cantiereId) {
+final cantiereWorkLogMirrorProvider = StreamProvider.autoDispose
+    .family<List<CantiereWorkLog>, String>((ref, cantiereId) {
       final db = ref.watch(appDatabaseProvider);
       return (db.select(db.cantiereWorkLogs)
             ..where((w) => w.cantiereId.equals(cantiereId))
@@ -147,11 +147,9 @@ final cantiereWorklogsProvider = FutureProvider.autoDispose
         final businessTime = ref.watch(businessTimeProvider);
         final db = ref.watch(appDatabaseProvider);
 
-        final mirrored =
-            await (db.select(db.cantiereWorkLogs)..where(
-                  (w) => w.cantiereId.equals(key.cantiereId) & w.userId.equals(key.userId),
-                ))
-                .get();
+        final mirrored = await (db.select(
+          db.cantiereWorkLogs,
+        )..where((w) => w.cantiereId.equals(key.cantiereId) & w.userId.equals(key.userId))).get();
         final knownClientIds = {
           for (final w in mirrored)
             if (w.clientId != null) w.clientId!,

@@ -41,7 +41,7 @@ void main() {
 
   Future<void> pumpAndRefresh(WidgetTester tester, SyncStatus outcome) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           syncProvider.overrideWith(

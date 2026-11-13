@@ -82,7 +82,7 @@ Widget _screen(
   MagazzinoApiClient? api,
   bool online = true,
   Entitlement? entitlement,
-}) => ProviderScope(
+}) => ProviderScope(retry: (_, _) => null, 
   overrides: [
     appDatabaseProvider.overrideWithValue(db),
     isOnlineProvider.overrideWithValue(online),

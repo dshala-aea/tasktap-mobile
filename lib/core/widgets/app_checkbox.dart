@@ -42,7 +42,9 @@ class AppCheckbox extends StatelessWidget {
     return Semantics(
       checked: value,
       enabled: enabled,
-      label: label == null ? null : (isRequired ? '$label (obbligatorio)' : label),
+      label: label == null
+          ? null
+          : (isRequired ? '$label (obbligatorio)' : label),
       // The tick is drawn, not text, so nothing below would contribute a name of its own; this
       // keeps the announced node to the one the caller names.
       excludeSemantics: true,
@@ -65,7 +67,10 @@ class AppCheckbox extends StatelessWidget {
                   height: _box,
                   decoration: BoxDecoration(
                     color: value ? c.blue.withAlpha(30) : Colors.transparent,
-                    border: Border.all(color: value ? c.blue : c.borderMedium, width: 1.5),
+                    border: Border.all(
+                      color: value ? c.blue : c.borderMedium,
+                      width: 1.5,
+                    ),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: value
@@ -89,7 +94,10 @@ class AppCheckbox extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 4, top: 12),
                     child: Text(
                       '*',
-                      style: TextStyle(color: c.red, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: c.red,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
               ],

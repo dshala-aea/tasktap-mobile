@@ -6,7 +6,13 @@ import 'control_type.dart';
 /// The value columns of one answer plus its note. Which column matters is decided by the control's
 /// type (hand-off 2.2: clients write only the matching column).
 class ChecklistAnswer {
-  const ChecklistAnswer({this.stringValue, this.boolValue, this.dateValue, this.numberValue, this.note});
+  const ChecklistAnswer({
+    this.stringValue,
+    this.boolValue,
+    this.dateValue,
+    this.numberValue,
+    this.note,
+  });
 
   final String? stringValue;
   final bool? boolValue;

@@ -264,8 +264,7 @@ final absenceRequestApiClientProvider = Provider<AbsenceRequestApiClient>((ref) 
 typedef MyAbsenceRequests = ({List<AbsenceRequestDto> items, bool fromDevice});
 
 final myAbsenceRequestsProvider = FutureProvider.autoDispose<MyAbsenceRequests>((ref) async {
-  Future<MyAbsenceRequests> fromDevice() async =>
-      (items: await _readMirror(ref), fromDevice: true);
+  Future<MyAbsenceRequests> fromDevice() async => (items: await _readMirror(ref), fromDevice: true);
 
   if (!ref.watch(isOnlineProvider)) return fromDevice();
 
@@ -314,11 +313,9 @@ Future<String?> _currentUserId() async {
 /// starts a day early is exactly the mistake this screen cannot afford.
 Future<List<AbsenceRequestDto>> _readMirror(Ref ref) async {
   final db = ref.watch(appDatabaseProvider);
-  final rows = await (db.select(db.absenceRequests)..orderBy([
-        (r) => OrderingTerm.desc(r.createdAt),
-        (r) => OrderingTerm.asc(r.id),
-      ]))
-      .get();
+  final rows = await (db.select(
+    db.absenceRequests,
+  )..orderBy([(r) => OrderingTerm.desc(r.createdAt), (r) => OrderingTerm.asc(r.id)])).get();
 
   return [
     for (final r in rows)

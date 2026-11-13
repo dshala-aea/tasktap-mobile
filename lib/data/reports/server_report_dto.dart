@@ -107,14 +107,13 @@ class ServerReportObservationDto {
   final DateTime? dateValue;
   final double? numberValue;
 
-  factory ServerReportObservationDto.fromJson(Map<String, dynamic> j) =>
-      ServerReportObservationDto(
-        ticketControlId: j['ticketControlId'] as String,
-        stringValue: j['stringValue'] as String?,
-        boolValue: j['boolValue'] as bool?,
-        dateValue: _dt(j['dateValue']),
-        numberValue: _num(j['numberValue']),
-      );
+  factory ServerReportObservationDto.fromJson(Map<String, dynamic> j) => ServerReportObservationDto(
+    ticketControlId: j['ticketControlId'] as String,
+    stringValue: j['stringValue'] as String?,
+    boolValue: j['boolValue'] as bool?,
+    dateValue: _dt(j['dateValue']),
+    numberValue: _num(j['numberValue']),
+  );
 }
 
 class ServerReportDto {

@@ -67,13 +67,22 @@ class ChecklistReadRepository {
     final controls = (_db.select(
       _db.ticketControls,
     )..where((c) => c.ticketId.equals(ticketId))).watch();
-    final coverage = (_db.select(_db.ticketAssets)..where((a) => a.ticketId.equals(ticketId))).watch();
+    final coverage = (_db.select(
+      _db.ticketAssets,
+    )..where((a) => a.ticketId.equals(ticketId))).watch();
     final assets = _db.select(_db.assets).watch();
     final groups = _db.select(_db.controlGroups).watch();
-    final omitted =
-        (_db.select(_db.checklistOmittedTickets)..where((o) => o.ticketId.equals(ticketId))).watch();
-    return Rx.combineLatest5<List<TicketControlRow>, List<TicketAssetRow>, List<AssetRow>,
-        List<ControlGroupRow>, List<ChecklistOmittedTicketRow>, TicketChecklist>(
+    final omitted = (_db.select(
+      _db.checklistOmittedTickets,
+    )..where((o) => o.ticketId.equals(ticketId))).watch();
+    return Rx.combineLatest5<
+      List<TicketControlRow>,
+      List<TicketAssetRow>,
+      List<AssetRow>,
+      List<ControlGroupRow>,
+      List<ChecklistOmittedTicketRow>,
+      TicketChecklist
+    >(
       controls,
       coverage,
       assets,
@@ -231,7 +240,9 @@ class ChecklistReadRepository {
     for (final id in needed) {
       final g = groupById[id]!;
       // A parent that never arrived makes its child a root rather than losing it.
-      final parent = g.parentGroupId != null && groupById.containsKey(g.parentGroupId) ? g.parentGroupId : null;
+      final parent = g.parentGroupId != null && groupById.containsKey(g.parentGroupId)
+          ? g.parentGroupId
+          : null;
       (children[parent] ??= []).add(g);
     }
     ChecklistGroup node(ControlGroupRow g) => ChecklistGroup(

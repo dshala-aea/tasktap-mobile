@@ -98,10 +98,7 @@ class TicketWorkflowApiClient {
     final response = await _run(
       () => _dio.post<dynamic>(
         '/api/tickets/$ticketId/worklogs/start',
-        queryParameters: {
-          'clientId': ?clientId,
-          ...?_deviceQuery(deviceUtc),
-        },
+        queryParameters: {'clientId': ?clientId, ...?_deviceQuery(deviceUtc)},
       ),
       fallback: 'Impossibile avviare il timer.',
     );
@@ -124,14 +121,15 @@ class TicketWorkflowApiClient {
   /// device clock and an older backend all answer the same way. The response carries the *merged*
   /// value — a phone corrected between the two taps still hears about the skew it started with —
   /// and the phone only relays it; it never compares the clocks itself.
-  Future<int?> stopTimer(String ticketId, {String? clientId, DateTime? deviceUtc}) async {
+  Future<int?> stopTimer(
+    String ticketId, {
+    String? clientId,
+    DateTime? deviceUtc,
+  }) async {
     final response = await _run(
       () => _dio.post<dynamic>(
         '/api/tickets/$ticketId/worklogs/stop',
-        queryParameters: {
-          'clientId': ?clientId,
-          ...?_deviceQuery(deviceUtc),
-        },
+        queryParameters: {'clientId': ?clientId, ...?_deviceQuery(deviceUtc)},
       ),
       fallback: 'Impossibile fermare il timer.',
     );
@@ -144,7 +142,9 @@ class TicketWorkflowApiClient {
   /// The endpoints bind `deviceUtc` from the query string, not a body: a null value must send no
   /// key at all, so the server stamps its own clock exactly as it did before this field existed.
   static Map<String, dynamic>? _deviceQuery(DateTime? deviceUtc) =>
-      deviceUtc == null ? null : {'deviceUtc': deviceUtc.toUtc().toIso8601String()};
+      deviceUtc == null
+      ? null
+      : {'deviceUtc': deviceUtc.toUtc().toIso8601String()};
 
   /// POST /api/tickets/{ticketId}/worklogs/manual
   ///
@@ -328,11 +328,13 @@ class TicketTimerStart {
   /// A server that does not know the `clientId` key yet answers with a bare `{id}`, and a row that
   /// call just created is running — so the absent flag defaults to true rather than to a stopped
   /// timer that never started.
-  factory TicketTimerStart.fromJson(Map<String, dynamic> json) => TicketTimerStart(
-    id: json['id'] as String,
-    isActive: json['isActive'] as bool? ?? true,
-    clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)?.toInt(),
-  );
+  factory TicketTimerStart.fromJson(Map<String, dynamic> json) =>
+      TicketTimerStart(
+        id: json['id'] as String,
+        isActive: json['isActive'] as bool? ?? true,
+        clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)
+            ?.toInt(),
+      );
 }
 
 /// One entry booked against a ticket.

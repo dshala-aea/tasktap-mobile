@@ -208,10 +208,7 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
   @override
   Stream<CantierePunche?> watchLatestPunch() =>
       (_db.select(_db.cantierePunches)
-            ..where(
-              (t) =>
-                  t.notes.isNull() | t.notes.equals(cantiereReconciledOrphanMarker).not(),
-            )
+            ..where((t) => t.notes.isNull() | t.notes.equals(cantiereReconciledOrphanMarker).not())
             ..orderBy([
               (t) => OrderingTerm.desc(t.eventTime),
               // Two punches can share an instant (a rapid ingresso→uscita correction recorded in
@@ -241,10 +238,9 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
     // Every local event: 'uscita' rows carry no cantiereId of their own, so the pairing (and the
     // filtering by cantiere) has to happen in the assembler, which is also the one definition of
     // how events fold into intervals.
-    final events =
-        await (_db.select(_db.cantierePunches)
-              ..orderBy([(t) => OrderingTerm.asc(t.eventTime)]))
-            .get();
+    final events = await (_db.select(
+      _db.cantierePunches,
+    )..orderBy([(t) => OrderingTerm.asc(t.eventTime)])).get();
     final intervals = assembleCantiereIntervals(
       events,
       businessDateOf: _businessTime.businessDateOf,
@@ -276,8 +272,9 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
   }
 
   @override
-  Future<List<String>> getClosedIntervalClientIds(String cantiereId) async =>
-      [for (final i in await getClosedIntervalsFor(cantiereId)) i.clientId];
+  Future<List<String>> getClosedIntervalClientIds(String cantiereId) async => [
+    for (final i in await getClosedIntervalsFor(cantiereId)) i.clientId,
+  ];
 
   @override
   Future<int> getPendingCount() async {

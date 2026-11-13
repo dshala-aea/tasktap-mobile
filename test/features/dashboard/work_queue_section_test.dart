@@ -12,7 +12,7 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/dashboard/work_queue_section.dart';
 
 Widget _buildSection({required AppDatabase db, DateTime Function()? clock}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       if (clock != null) clockProvider.overrideWithValue(clock),

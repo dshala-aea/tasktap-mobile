@@ -18,7 +18,7 @@ Widget host(
   // Null leaves the real provider in place, which reads the `tickets` mirror. The empty-state test
   // needs to say "this device has never seen this ticket" without inventing a fixture for it.
   bool? ticketMirrorKnown,
-}) => ProviderScope(
+}) => ProviderScope(retry: (_, _) => null, 
   overrides: [
     appDatabaseProvider.overrideWithValue(db),
     isOnlineProvider.overrideWithValue(online),

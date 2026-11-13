@@ -208,7 +208,7 @@ Widget _buildScreen({
   // When set, the screen is mounted under this router so `context.push` works.
   GoRouter? router,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       cantiereWorklogApiClientProvider.overrideWithValue(apiClient),
@@ -621,7 +621,7 @@ void main() {
 
         final api = _FakeApiClient();
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               cantiereWorklogApiClientProvider.overrideWithValue(api),

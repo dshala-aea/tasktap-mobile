@@ -25,7 +25,7 @@ Response<T> _okResponse<T>(T data, String path) =>
     Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
 
 Widget _wrap(Widget child, {required Dio dio, AppDatabase? db, bool? online}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       dioProvider.overrideWithValue(dio),
       if (db != null) appDatabaseProvider.overrideWithValue(db),
@@ -666,7 +666,7 @@ void main() {
     Widget wrapScan(
       TicketMaterialiEditor editor,
     ) {
-      return ProviderScope(
+      return ProviderScope(retry: (_, _) => null, 
         overrides: [
           dioProvider.overrideWithValue(mockDio),
           appDatabaseProvider.overrideWithValue(db),
@@ -821,7 +821,7 @@ void main() {
     /// threw out of the debounce timer and silently offered nothing. MockDio has no stub here, so
     /// a live call would fail the test as well as the verifyNever below.
     Widget wrapSearch({Future<void> Function(List<TicketMaterialeWriteRow>)? onSave}) =>
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             dioProvider.overrideWithValue(mockDio),
             appDatabaseProvider.overrideWithValue(db),

@@ -94,7 +94,7 @@ Widget _buildScreen({
   required AdminApiClient api,
   required bool isOnline,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: _overrides(db: db, api: api, isOnline: isOnline),
     child: const MaterialApp(home: AdminReportListScreen()),
   );

@@ -117,7 +117,7 @@ Widget _buildHarness({
   String? ticketId,
   DateTime? startTime,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       cantiereWorklogApiClientProvider.overrideWithValue(apiClient),

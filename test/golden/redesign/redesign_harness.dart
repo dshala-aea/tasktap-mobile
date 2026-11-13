@@ -95,7 +95,7 @@ Future<void> captureRedesign(
   final captureKey = ValueKey<String>('redesign-capture-$screenName');
 
   await tester.pumpWidget(
-    ProviderScope(
+    ProviderScope(retry: (_, _) => null, 
       overrides: overrides,
       child: RepaintBoundary(
         key: captureKey,

@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 
 import 'local_database_encryption.dart';
 import 'local_database_key_store.dart';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -261,6 +262,7 @@ class Tickets extends Table {
   TextColumn get technicianNotes => text().nullable()();
   TextColumn get internalNotes => text().nullable()();
   TextColumn get contractId => text().nullable()();
+
   /// Legacy, and deliberately kept rather than dropped: the singular asset a ticket covered.
   ///
   /// The server's ticket carries `ProdottoAssistenzaIds` — a LIST, filled from the
@@ -2620,11 +2622,7 @@ class AppDatabase extends _$AppDatabase {
   /// already on any device the re-creation ran for. `Migrator.addColumn` does not emit
   /// `IF NOT EXISTS` — it dies on `duplicate column name` — so the only correct answer is to look.
   /// Used by the schema-40 step for `pending_tickets.maintenance_template_id`.
-  static Future<bool> _columnExists(
-    DatabaseConnectionUser db,
-    String table,
-    String column,
-  ) async {
+  static Future<bool> _columnExists(DatabaseConnectionUser db, String table, String column) async {
     final rows = await db.customSelect('PRAGMA table_info($table)').get();
     return rows.any((r) => r.read<String>('name') == column);
   }
@@ -2814,7 +2812,8 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<void> _createCustomerContactIndexes() async {    await customStatement(
+  Future<void> _createCustomerContactIndexes() async {
+    await customStatement(
       'CREATE INDEX IF NOT EXISTS customer_contacts_customer '
       'ON customer_contacts (customer_id)',
     );
@@ -2871,17 +2870,14 @@ LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'tasktap.db'));
-    final plan = await LocalDatabaseEncryption(
-      keyStore: SecureLocalDatabaseKeyStore(),
-    ).prepare(file);
+    final plan = await LocalDatabaseEncryption(keyStore: SecureLocalDatabaseKeyStore())
+        .prepare(file);
 
     return NativeDatabase.createInBackground(
       file,
       // Null only in the plaintext fallback (key store unavailable or migration failed); the
       // encryption plan reports those to Sentry and retries on the next launch.
-      setup: plan.keyHex == null
-          ? null
-          : (db) => db.execute("PRAGMA key = \"x'${plan.keyHex}'\";"),
+      setup: plan.keyHex == null ? null : (db) => db.execute("PRAGMA key = \"x'${plan.keyHex}'\";"),
     );
   });
 }

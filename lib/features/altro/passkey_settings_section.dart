@@ -1,7 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 
 import '../../core/icons/app_lucide_icons.dart';
 import '../../core/security/passkey_support.dart';
@@ -143,7 +142,7 @@ class _PasskeyListBodyState extends ConsumerState<_PasskeyListBody> {
     ref.invalidate(passkeyListProvider);
     var refreshed = false;
     try {
-      await ref.readFuture(passkeyListProvider.future);
+      await ref.read(passkeyListProvider.future);
       refreshed = true;
     } catch (error) {
       debugPrint('Passkey list refresh failed after enrolment: $error');

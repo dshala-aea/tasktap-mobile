@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_tappable.dart';
+
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
@@ -74,7 +75,13 @@ class AppBadge extends StatelessWidget {
 /// AppChip(label: 'Settimana', onTap: () {});
 /// ```
 class AppChip extends StatelessWidget {
-  const AppChip({super.key, required this.label, this.active = false, this.onTap, this.icon});
+  const AppChip({
+    super.key,
+    required this.label,
+    this.active = false,
+    this.onTap,
+    this.icon,
+  });
 
   final String label;
   final bool active;

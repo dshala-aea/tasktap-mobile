@@ -84,7 +84,7 @@ Widget _buildScreen({
   String query = '',
   Entitlement? entitlement,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       adminApiClientProvider.overrideWithValue(api),

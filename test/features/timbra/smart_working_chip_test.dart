@@ -118,7 +118,7 @@ Widget _buildApp(
   bool? smartWorking,
   ProviderListenable<bool?>? liveFlag,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       timbraSyncServiceProvider.overrideWithValue(_makeNoopSyncService()),

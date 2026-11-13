@@ -39,7 +39,7 @@ Widget _buildLoginScreen(
   final client = _FakeAccountMethodsApiClient(
     methods ?? (_) async => const AccountMethods(hasPasskey: true, hasPassword: true),
   );
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       passkeySupportedProvider.overrideWith((ref) async => passkeySupported),

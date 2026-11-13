@@ -36,13 +36,7 @@ class HealthEndpointProbe implements ReachabilityProbe {
     : _baseUrl = baseUrl ?? Env.apiBaseUrl,
       _dio =
           dio ??
-          Dio(
-            BaseOptions(
-              connectTimeout: timeout,
-              receiveTimeout: timeout,
-              sendTimeout: timeout,
-            ),
-          );
+          Dio(BaseOptions(connectTimeout: timeout, receiveTimeout: timeout, sendTimeout: timeout));
 
   final Dio _dio;
   final String _baseUrl;

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+
 import 'app_tappable.dart';
+
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 /// Key–value display row / column.
@@ -59,7 +61,8 @@ class KeyVal extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         content,
-        if (showDivider) Divider(height: 1, thickness: 1, color: context.colors.borderLight),
+        if (showDivider)
+          Divider(height: 1, thickness: 1, color: context.colors.borderLight),
       ],
     );
   }
@@ -87,7 +90,11 @@ class KeyVal extends StatelessWidget {
           ),
           if (onTap != null) ...[
             const SizedBox(width: 4),
-            Icon(LucideIcons.chevronRight, size: 14, color: context.colors.inkMuted),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 14,
+              color: context.colors.inkMuted,
+            ),
           ],
         ],
       ),

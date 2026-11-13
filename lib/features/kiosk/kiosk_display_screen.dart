@@ -136,7 +136,9 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Inserisci il PIN di uscita impostato all\'attivazione.'),
+                  const Text(
+                    'Inserisci il PIN di uscita impostato all\'attivazione.',
+                  ),
                   const SizedBox(height: AppSpacing.base),
                   AppTextField(
                     label: 'PIN',
@@ -147,7 +149,10 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                   ),
                   if (wrongPin) ...[
                     const SizedBox(height: AppSpacing.xs),
-                    Text('PIN errato.', style: TextStyle(color: dialogContext.colors.red)),
+                    Text(
+                      'PIN errato.',
+                      style: TextStyle(color: dialogContext.colors.red),
+                    ),
                   ],
                 ],
               ),
@@ -160,9 +165,12 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                   label: 'Disattiva',
                   size: AppButtonSize.sm,
                   onPressed: () async {
-                    final ok = await ref.read(kioskModeProvider.notifier).deactivate(pinCtrl.text);
+                    final ok = await ref
+                        .read(kioskModeProvider.notifier)
+                        .deactivate(pinCtrl.text);
                     if (ok) {
-                      if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+                      if (dialogContext.mounted)
+                        Navigator.of(dialogContext).pop(true);
                     } else {
                       setDialogState(() => wrongPin = true);
                     }
@@ -195,68 +203,81 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
                 child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    kioskState.deviceLabel?.isNotEmpty == true
-                        ? kioskState.deviceLabel!
-                        : 'Totem presenze TaskTap',
-                    style: AppTextStyles.headlineMedium.copyWith(color: Colors.white),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    DateFormat('EEEE d MMMM · HH:mm:ss', 'it').format(_now),
-                    style: AppTextStyles.bodyMedium.copyWith(color: Colors.white70),
-                  ),
-                  const SizedBox(height: AppSpacing.xxl),
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.xl),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: _loading || _token == null
-                        ? const SizedBox(
-                            width: 260,
-                            height: 260,
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        : QrImageView(
-                            data: _token!.token,
-                            size: 260,
-                            version: QrVersions.auto,
-                            backgroundColor: Colors.white,
-                          ),
-                  ),
-                  const SizedBox(height: AppSpacing.xxl),
-                  Text(
-                    'Inquadra il codice con la tua app TaskTap per timbrare',
-                    style: AppTextStyles.bodyMedium.copyWith(color: Colors.white70),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: AppSpacing.base),
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
                     Text(
-                      _error!,
-                      style: AppTextStyles.bodySmall.copyWith(color: Colors.orangeAccent),
+                      kioskState.deviceLabel?.isNotEmpty == true
+                          ? kioskState.deviceLabel!
+                          : 'Totem presenze TaskTap',
+                      style: AppTextStyles.headlineMedium.copyWith(
+                        color: Colors.white,
+                      ),
                       textAlign: TextAlign.center,
                     ),
-                  ],
-                  if (kioskState.lockOutcome == KioskLockOutcome.unsupportedPlatform) ...[
-                    const SizedBox(height: AppSpacing.base),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
-                      child: Text(
-                        'Blocco schermo non disponibile su questo dispositivo: abilita '
-                        'manualmente "Accesso guidato" (iOS) per impedire l\'uscita '
-                        'dall\'app.',
-                        style: AppTextStyles.bodySmall.copyWith(color: Colors.amber),
-                        textAlign: TextAlign.center,
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      DateFormat('EEEE d MMMM · HH:mm:ss', 'it').format(_now),
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: Colors.white70,
                       ),
                     ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.xl),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: _loading || _token == null
+                          ? const SizedBox(
+                              width: 260,
+                              height: 260,
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          : QrImageView(
+                              data: _token!.token,
+                              size: 260,
+                              version: QrVersions.auto,
+                              backgroundColor: Colors.white,
+                            ),
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    Text(
+                      'Inquadra il codice con la tua app TaskTap per timbrare',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: Colors.white70,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: AppSpacing.base),
+                      Text(
+                        _error!,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.orangeAccent,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    if (kioskState.lockOutcome ==
+                        KioskLockOutcome.unsupportedPlatform) ...[
+                      const SizedBox(height: AppSpacing.base),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xxl,
+                        ),
+                        child: Text(
+                          'Blocco schermo non disponibile su questo dispositivo: abilita '
+                          'manualmente "Accesso guidato" (iOS) per impedire l\'uscita '
+                          'dall\'app.',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: Colors.amber,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
                 ),
               ),
             ),
