@@ -31,6 +31,7 @@ import '../../../presentation/providers/report_editor_providers.dart';
 import '../absence/customer_absence.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../../core/router/app_router.dart';
+import '../report_submission_destination.dart';
 import '../../../domain/checklist/checklist_items.dart' show ChecklistFilter;
 import '../../checklist/checklist_warning_panel.dart';
 import 'package:go_router/go_router.dart';
@@ -81,6 +82,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   // during the widget tree's build phase, which Flutter disallows.
   StreamSubscription<DraftReport?>? _submitCompletionSub;
   bool _hasHandledSubmitSuccess = false;
+  bool _hasNavigated = false;
   bool _sawNonSubmittedState = false;
 
   /// The customer's signoff text ("Osservazioni cliente"). Seeded from the hydrated editor state:
@@ -142,13 +144,36 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     _hasHandledSubmitSuccess = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showAppToast(
-        context,
-        message: 'Rapporto di intervento inviato con successo',
-        tone: ToastTone.success,
-      );
-      Navigator.of(context).pop();
+      _navigateAfterSave();
     });
+  }
+
+  /// Leave the wizard for the job it belongs to: ticket detail when the ticket is still open,
+  /// cantiere detail when the report belongs to a site, home otherwise. The sheet is popped and
+  /// the route replaced, so Back never reopens a report that has already been sent.
+  void _navigateAfterSave() {
+    if (_hasNavigated) return;
+    _hasNavigated = true;
+
+    final state = ref.read(reportEditorProvider(widget.reportId));
+    final tickets = ref.read(allTicketsProvider).valueOrNull ?? const <Ticket>[];
+    final ticket = state.ticketId == null
+        ? null
+        : tickets.where((t) => t.id == state.ticketId).firstOrNull;
+    final target = reportSubmissionDestination(
+      ticketId: state.ticketId,
+      cantiereId: state.cantiereId,
+      ticketIsClosed: ticket?.closedAt != null,
+    );
+
+    final router = GoRouter.maybeOf(context);
+    showAppToast(
+      context,
+      message: 'Rapporto di intervento inviato con successo',
+      tone: ToastTone.success,
+    );
+    Navigator.of(context).pop();
+    router?.go(target);
   }
 
   /// Pre-fills "Firma tecnico" from the technician's own saved signature (see
@@ -434,7 +459,8 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           AppTextField.multiline(
             controller: _signoffCtrl,
             label: 'Osservazioni cliente',
-            hint: 'Confermo l\'esecuzione dei lavori e la presa visione del rapporto di intervento.',
+            hint:
+                'Confermo l\'esecuzione dei lavori e la presa visione del rapporto di intervento.',
             maxLines: 3,
             suffixIcon: DictateButton(
               controller: _signoffCtrl,
@@ -442,9 +468,8 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   .read(reportEditorProvider(widget.reportId).notifier)
                   .setCustomerSignoffText(v),
             ),
-            onChanged: (v) => ref
-                .read(reportEditorProvider(widget.reportId).notifier)
-                .setCustomerSignoffText(v),
+            onChanged: (v) =>
+                ref.read(reportEditorProvider(widget.reportId).notifier).setCustomerSignoffText(v),
           ),
           const SizedBox(height: 20),
 
