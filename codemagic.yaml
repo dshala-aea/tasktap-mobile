@@ -18,7 +18,7 @@ workflows:
       app_store_connect: gradertcg_ios_app
     environment:
       # Keep in lockstep with FLUTTER_VERSION in .github/workflows/ci.yml (and android-release.yml).
-      flutter: 3.44.4
+      flutter: 3.47.9
       groups:
         - tasktap_dartDefines
       ios_signing:
@@ -137,7 +137,7 @@ workflows:
     integrations:
       app_store_connect: gradertcg_ios_app
     environment:
-      flutter: 3.44.4
+      flutter: 3.47.9
     scripts:
       - name: Download latest TestFlight build info
         script: |

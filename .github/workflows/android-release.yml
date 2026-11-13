@@ -68,7 +68,7 @@ jobs:
         with:
           # Keep in lockstep with ci.yml and debug-apk.yml: a floating version previously hit an
           # analyzer/Dart-SDK skew crash inside build_runner.
-          flutter-version: '3.44.4'
+          flutter-version: '3.47.9'
           channel: stable
           cache: true
 

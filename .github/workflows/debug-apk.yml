@@ -31,7 +31,7 @@ jobs:
           # hit an analyzer/Dart-SDK version-skew crash (visitDotShorthandPropertyAccess)
           # inside build_runner. Bump deliberately, together with ci.yml's pin, not
           # independently.
-          flutter-version: '3.44.4'
+          flutter-version: '3.47.9'
           channel: stable
           cache: true
 

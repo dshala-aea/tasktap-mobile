@@ -30,9 +30,9 @@ env:
   # '3.x' range let CI silently pick up a Flutter/Dart patch release with an
   # analyzer/language-feature version skew (a "Missing implementation of
   # visitDotShorthandPropertyAccess" crash in analyzer's internal linker,
-  # not reproducible locally on 3.44.4). Bump deliberately, not implicitly.
+  # not reproducible locally on 3.47.9). Bump deliberately, not implicitly.
   # MUST match `flutter:` in codemagic.yaml and the pin in android-release.yml / debug-apk.yml.
-  FLUTTER_VERSION: '3.44.4'
+  FLUTTER_VERSION: '3.47.9'
 
 jobs:
   analyze:
