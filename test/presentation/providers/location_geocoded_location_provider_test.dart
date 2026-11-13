@@ -45,6 +45,7 @@ void main() {
     db = AppDatabase(NativeDatabase.memory());
     fakeGeocoder = _FakeGeocodingService();
     container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         geocodingServiceProvider.overrideWithValue(fakeGeocoder),
@@ -74,6 +75,7 @@ void main() {
             ),
           );
 
+      container.listen(locationGeocodedLocationProvider('l-cached'), (_, _) {});
       final result = await container.read(locationGeocodedLocationProvider('l-cached').future);
 
       expect(result, (lat: 41.9, lng: 12.5));
@@ -97,6 +99,7 @@ void main() {
           );
       fakeGeocoder.pointToReturn = (lat: 45.4642, lng: 9.19);
 
+      container.listen(locationGeocodedLocationProvider('l-new'), (_, _) {});
       final result = await container.read(locationGeocodedLocationProvider('l-new').future);
 
       expect(result, (lat: 45.4642, lng: 9.19));
@@ -120,6 +123,7 @@ void main() {
             ),
           );
 
+      container.listen(locationGeocodedLocationProvider('l-no-address'), (_, _) {});
       final result = await container.read(locationGeocodedLocationProvider('l-no-address').future);
 
       expect(result, isNull);
@@ -141,7 +145,10 @@ void main() {
           );
       fakeGeocoder.pointToReturn = null;
 
-      final result = await container.read(locationGeocodedLocationProvider('l-unresolvable').future);
+      container.listen(locationGeocodedLocationProvider('l-unresolvable'), (_, _) {});
+      final result = await container.read(
+        locationGeocodedLocationProvider('l-unresolvable').future,
+      );
 
       expect(result, isNull);
       final row = await (db.select(
@@ -152,6 +159,7 @@ void main() {
     });
 
     test('returns null when the location is not synced locally', () async {
+      container.listen(locationGeocodedLocationProvider('missing'), (_, _) {});
       final result = await container.read(locationGeocodedLocationProvider('missing').future);
 
       expect(result, isNull);

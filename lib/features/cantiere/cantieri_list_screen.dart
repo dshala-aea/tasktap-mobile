@@ -169,10 +169,10 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
   @override
   Widget build(BuildContext context) {
     final cantieriAsync = ref.watch(allCantieriProvider);
-    final allCantieri = cantieriAsync.valueOrNull ?? const [];
-    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const [];
+    final allCantieri = cantieriAsync.value ?? const [];
+    final customers = ref.watch(allCustomersProvider).value ?? const [];
     final customersById = {for (final c in customers) c.id: c};
-    final crewCounts = ref.watch(_cantiereCrewCountsProvider).valueOrNull ?? const {};
+    final crewCounts = ref.watch(_cantiereCrewCountsProvider).value ?? const {};
     final businessTime = ref.watch(businessTimeProvider);
     final activeSession = ref.watch(cantiereActiveSessionProvider);
     final activeCantiereId = activeSession?.cantiereId;
@@ -180,7 +180,7 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
     // Today's punches already come from one local stream. Pair them ingresso→uscita sequentially
     // (exactly like `cantiereTodayHoursProvider`) so multiple visits to the same cantiere stay
     // separate intervals; a min-start/max-end envelope would include time spent elsewhere.
-    final todayEvents = ref.watch(todayCantiereEventsProvider).valueOrNull ?? const [];
+    final todayEvents = ref.watch(todayCantiereEventsProvider).value ?? const [];
     final todayIntervals = <String, List<({DateTime start, DateTime end})>>{};
     final todayHoursById = <String, Duration>{};
     CantierePunche? opener;
@@ -382,7 +382,7 @@ class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
       _ => (activeCount, activeCount == 1 ? 'cantiere attivo' : 'cantieri attivi'),
     };
 
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     final isLoading = cantieriAsync.isLoading && !cantieriAsync.hasValue && !cantieriAsync.hasError;
     final state = cantieriAsync.hasError
@@ -521,9 +521,8 @@ class _CantiereFilterSheetState extends State<_CantiereFilterSheet> {
             const SizedBox(height: 4),
             Text(
               'Restringi per stato, cliente, sede e periodo.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: context.colors.inkMuted),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: context.colors.inkMuted),
             ),
             const SizedBox(height: 16),
             AppFieldShell(
@@ -685,9 +684,8 @@ class _DateField extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted),
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(color: context.colors.inkMuted),
                   ),
                   Text(
                     value,

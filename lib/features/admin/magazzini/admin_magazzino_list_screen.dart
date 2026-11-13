@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -110,7 +111,7 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
   Future<void> _refresh() async {
     ref.invalidate(magazziniProvider);
     try {
-      await ref.read(magazziniProvider.future);
+      await ref.readFuture(magazziniProvider.future);
     } catch (_) {
       // A failed refresh after the first load keeps the rows the technician can already read.
       // `build` surfaces that as a stale-data banner; letting the error escape would instead be an
@@ -121,9 +122,9 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
   @override
   Widget build(BuildContext context) {
     final magazziniAsync = ref.watch(magazziniProvider);
-    final allMagazzini = magazziniAsync.valueOrNull ?? const <MagazzinoDto>[];
+    final allMagazzini = magazziniAsync.value ?? const <MagazzinoDto>[];
     final colleaguesById = {
-      for (final c in ref.watch(allColleaguesProvider).valueOrNull ?? const <Colleague>[])
+      for (final c in ref.watch(allColleaguesProvider).value ?? const <Colleague>[])
         c.id: c.displayName,
     };
 
@@ -244,8 +245,7 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
                   child: Padding(
                     padding: const EdgeInsets.only(top: AppSpacing.sm),
                     child: const InlineAlert(
-                      message:
-                          'Impossibile aggiornare. I dati mostrati potrebbero non essere aggiornati.',
+                      message: 'Impossibile aggiornare. I dati mostrati potrebbero non essere aggiornati.',
                       icon: LucideIcons.alertCircle,
                     ),
                   ),

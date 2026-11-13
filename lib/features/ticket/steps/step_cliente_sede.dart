@@ -21,6 +21,7 @@ import '../reference_picker.dart';
 import '../reference_providers.dart';
 import 'blamed_field_notice.dart';
 import 'read_only_caption.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -170,8 +171,8 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
     final customerId = widget.state.customerId;
     if (customerId == null) return const SizedBox.shrink();
     final search = ref.read(referenceSearchClientProvider);
-    final contracts = ref.watch(localContractsProvider(customerId)).valueOrNull ?? const [];
-    final commesse = ref.watch(localCommesseProvider(customerId)).valueOrNull ?? const [];
+    final contracts = ref.watch(localContractsProvider(customerId)).value ?? const [];
+    final commesse = ref.watch(localCommesseProvider(customerId)).value ?? const [];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -294,10 +295,10 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
   /// cannot see, and never invents a label.
   String? _agentToPrefill(String? customerId) {
     if (!widget.prefillAgentFromCustomer || customerId == null) return null;
-    final customers = ref.read(allCustomersProvider).valueOrNull ?? const <Customer>[];
+    final customers = ref.read(allCustomersProvider).value ?? const <Customer>[];
     final agentId = customers.where((c) => c.id == customerId).firstOrNull?.agentId;
     if (agentId == null) return null;
-    final agents = ref.read(localAgentsProvider('')).valueOrNull ?? const <ReferenceOption>[];
+    final agents = ref.read(localAgentsProvider('')).value ?? const <ReferenceOption>[];
     return agents.any((a) => a.id == agentId) ? agentId : null;
   }
 
@@ -336,13 +337,13 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
   @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(allCustomersProvider);
-    final customers = customersAsync.valueOrNull ?? [];
+    final customers = customersAsync.value ?? [];
     // Held loaded so `_agentToPrefill` can read it synchronously at the moment of the pick.
     if (widget.prefillAgentFromCustomer) ref.watch(localAgentsProvider(''));
 
     // Filter locations by selected customer.
     final allLocationsAsync = ref.watch(allLocationsProvider);
-    final allLocations = allLocationsAsync.valueOrNull ?? [];
+    final allLocations = allLocationsAsync.value ?? [];
     final locations = widget.state.customerId != null
         ? allLocations.where((l) => l.customerId == widget.state.customerId).toList()
         : <Location>[];

@@ -52,7 +52,9 @@ class _WouldPromptLocationService extends ILocationService {
 
   @override
   Future<GpsCoords?> getCurrentPosition() async {
-    throw StateError('must not be called when willPromptForPermission() is true');
+    throw StateError(
+      'must not be called when willPromptForPermission() is true',
+    );
   }
 }
 
@@ -152,41 +154,47 @@ void main() {
       expect(draft!.title, 'Manutenzione pompa');
     });
 
-    test('setDetails persists details to Drift verbatim (not the metadata blob)', () async {
-      await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = await _makeEditor(db);
+    test(
+      'setDetails persists details to Drift verbatim (not the metadata blob)',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.setDetails('Intervento ordinario');
+        await notifier.setDetails('Intervento ordinario');
 
-      expect(notifier.state.details, 'Intervento ordinario');
-      // Regression: the persisted `details` column used to be overwritten by
-      // `_buildMetadataJson()` (GPS/free-text metadata) on every autosave, never the text actually
-      // typed here. See the "rapportino data-loss regression" group below.
-      final draft = await repo.getDraft('draft-1');
-      expect(draft!.details, 'Intervento ordinario');
-    });
+        expect(notifier.state.details, 'Intervento ordinario');
+        // Regression: the persisted `details` column used to be overwritten by
+        // `_buildMetadataJson()` (GPS/free-text metadata) on every autosave, never the text actually
+        // typed here. See the "rapportino data-loss regression" group below.
+        final draft = await repo.getDraft('draft-1');
+        expect(draft!.details, 'Intervento ordinario');
+      },
+    );
 
-    test('setDiagnosi/setSoluzione persist verbatim; untouched stays null', () async {
-      await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = await _makeEditor(db);
+    test(
+      'setDiagnosi/setSoluzione persist verbatim; untouched stays null',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(db);
 
-      // Untouched: another autosave must not turn null into '' (null = keep the server value).
-      await notifier.setTitle('Titolo');
-      var draft = await repo.getDraft('draft-1');
-      expect(draft!.diagnosi, isNull);
-      expect(draft.soluzione, isNull);
+        // Untouched: another autosave must not turn null into '' (null = keep the server value).
+        await notifier.setTitle('Titolo');
+        var draft = await repo.getDraft('draft-1');
+        expect(draft!.diagnosi, isNull);
+        expect(draft.soluzione, isNull);
 
-      await notifier.setDiagnosi('Pompa bloccata');
-      await notifier.setSoluzione('Sostituita');
-      draft = await repo.getDraft('draft-1');
-      expect(draft!.diagnosi, 'Pompa bloccata');
-      expect(draft.soluzione, 'Sostituita');
+        await notifier.setDiagnosi('Pompa bloccata');
+        await notifier.setSoluzione('Sostituita');
+        draft = await repo.getDraft('draft-1');
+        expect(draft!.diagnosi, 'Pompa bloccata');
+        expect(draft.soluzione, 'Sostituita');
 
-      // Clearing is an explicit empty string, not null.
-      await notifier.setDiagnosi('');
-      draft = await repo.getDraft('draft-1');
-      expect(draft!.diagnosi, '');
-    });
+        // Clearing is an explicit empty string, not null.
+        await notifier.setDiagnosi('');
+        draft = await repo.getDraft('draft-1');
+        expect(draft!.diagnosi, '');
+      },
+    );
 
     test('hydrates diagnosi/soluzione from the stored draft', () async {
       await db
@@ -208,25 +216,30 @@ void main() {
       expect(notifier.state.soluzione, 'S');
     });
 
-    test('setCustomerSignoffText persists verbatim; untouched stays null', () async {
-      await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = await _makeEditor(db);
+    test(
+      'setCustomerSignoffText persists verbatim; untouched stays null',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(db);
 
-      // Untouched: an unrelated autosave must leave null as null (null = the submit body omits the
-      // field, so a server-side acceptance text is not wiped by a phone that never edited it).
-      await notifier.setTitle('Titolo');
-      var draft = await repo.getDraft('draft-1');
-      expect(draft!.customerSignoffText, isNull);
+        // Untouched: an unrelated autosave must leave null as null (null = the submit body omits the
+        // field, so a server-side acceptance text is not wiped by a phone that never edited it).
+        await notifier.setTitle('Titolo');
+        var draft = await repo.getDraft('draft-1');
+        expect(draft!.customerSignoffText, isNull);
 
-      await notifier.setCustomerSignoffText('Confermo l\'esecuzione dei lavori');
-      draft = await repo.getDraft('draft-1');
-      expect(draft!.customerSignoffText, 'Confermo l\'esecuzione dei lavori');
+        await notifier.setCustomerSignoffText(
+          'Confermo l\'esecuzione dei lavori',
+        );
+        draft = await repo.getDraft('draft-1');
+        expect(draft!.customerSignoffText, 'Confermo l\'esecuzione dei lavori');
 
-      // Clearing is an explicit empty string, not null.
-      await notifier.setCustomerSignoffText('');
-      draft = await repo.getDraft('draft-1');
-      expect(draft!.customerSignoffText, '');
-    });
+        // Clearing is an explicit empty string, not null.
+        await notifier.setCustomerSignoffText('');
+        draft = await repo.getDraft('draft-1');
+        expect(draft!.customerSignoffText, '');
+      },
+    );
 
     test('hydrates customerSignoffText from the stored draft', () async {
       // The text an AI-confirmed report resolved server-side, or one typed and saved on an earlier
@@ -245,7 +258,10 @@ void main() {
             ),
           );
       final (notifier, repo) = await _makeEditor(db);
-      expect(notifier.state.customerSignoffText, 'Il cliente accetta il lavoro.');
+      expect(
+        notifier.state.customerSignoffText,
+        'Il cliente accetta il lavoro.',
+      );
 
       await notifier.setTitle('Ritoccato');
       final draft = await repo.getDraft('draft-1');
@@ -345,7 +361,12 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      const original = StaffRow(id: 's-1', userId: 'user-2', hoursWorked: 4.0, kmTraveled: 40.0);
+      const original = StaffRow(
+        id: 's-1',
+        userId: 'user-2',
+        hoursWorked: 4.0,
+        kmTraveled: 40.0,
+      );
       await notifier.addStaff(original);
       await notifier.updateStaff(original.copyWith(hoursWorked: 8.0));
 
@@ -360,7 +381,9 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0),
+      );
       await notifier.removeStaff('s-1');
 
       expect(notifier.state.staffRows, isEmpty);
@@ -371,9 +394,15 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
-      await notifier.addStaff(const StaffRow(id: 's-2', userId: 'u-2', hoursWorked: 6.0));
-      await notifier.addStaff(const StaffRow(id: 's-3', userId: 'u-3', hoursWorked: 8.0));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0),
+      );
+      await notifier.addStaff(
+        const StaffRow(id: 's-2', userId: 'u-2', hoursWorked: 6.0),
+      );
+      await notifier.addStaff(
+        const StaffRow(id: 's-3', userId: 'u-3', hoursWorked: 8.0),
+      );
 
       expect(notifier.state.staffRows.length, 3);
       expect((await repo.getStaff('draft-1')).length, 3);
@@ -404,26 +433,24 @@ void main() {
       expect(row.effectiveHours, 5.5);
     });
 
-    test(
-      'effectiveHours prefers hoursWorked over the startTime/endTime span once both are set '
-      '(a resumed timer\'s span includes the idle gap between stop and restart, but hoursWorked '
-      'is accumulated per-segment by stopTimer and must win — same reason a manual "Ore" edit '
-      'after using the timer must not be silently overridden by the stale span)',
-      () {
-        final start = DateTime.utc(2026, 6, 21, 8, 0);
-        final end = DateTime.utc(2026, 6, 21, 16, 0); // 8h span if taken naively
+    test('effectiveHours prefers hoursWorked over the startTime/endTime span once both are set '
+        '(a resumed timer\'s span includes the idle gap between stop and restart, but hoursWorked '
+        'is accumulated per-segment by stopTimer and must win — same reason a manual "Ore" edit '
+        'after using the timer must not be silently overridden by the stale span)', () {
+      final start = DateTime.utc(2026, 6, 21, 8, 0);
+      final end = DateTime.utc(2026, 6, 21, 16, 0); // 8h span if taken naively
 
-        final row = StaffRow(
-          id: 's-1',
-          userId: 'u-1',
-          startTime: start,
-          endTime: end,
-          hoursWorked: 3.0, // the actually-accumulated (or manually corrected) value
-        );
+      final row = StaffRow(
+        id: 's-1',
+        userId: 'u-1',
+        startTime: start,
+        endTime: end,
+        hoursWorked:
+            3.0, // the actually-accumulated (or manually corrected) value
+      );
 
-        expect(row.effectiveHours, 3.0);
-      },
-    );
+      expect(row.effectiveHours, 3.0);
+    });
 
     test('effectiveHours returns 0 when neither timer nor hoursWorked set', () {
       const row = StaffRow(id: 's-1', userId: 'u-1');
@@ -435,7 +462,9 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0),
+      );
       await notifier.startTimer('s-1');
 
       final row = notifier.state.staffRows.first;
@@ -444,22 +473,27 @@ void main() {
       expect(row.timerStartedAt, isNotNull);
     });
 
-    test('starting the timer clears a typed total no interval will explain', () async {
-      // The server recomputes HoursWorked from the intervals on submit, so a total typed before
-      // the first run cannot survive it. Clearing it at the start — while the box is still on
-      // screen — is the only moment the technician watches the number go, instead of finding it
-      // gone after the save.
-      await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = await _makeEditor(db);
+    test(
+      'starting the timer clears a typed total no interval will explain',
+      () async {
+        // The server recomputes HoursWorked from the intervals on submit, so a total typed before
+        // the first run cannot survive it. Clearing it at the start — while the box is still on
+        // screen — is the only moment the technician watches the number go, instead of finding it
+        // gone after the save.
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 3.0));
-      expect(notifier.state.staffRows.first.hoursWorked, 3.0);
+        await notifier.addStaff(
+          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 3.0),
+        );
+        expect(notifier.state.staffRows.first.hoursWorked, 3.0);
 
-      await notifier.startTimer('s-1');
+        await notifier.startTimer('s-1');
 
-      expect(notifier.state.staffRows.first.hoursWorked, isNull);
-      expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
-    });
+        expect(notifier.state.staffRows.first.hoursWorked, isNull);
+        expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
+      },
+    );
 
     test('starting the timer on a re-imported row also drops the span its stale end would revive', () async {
       // The shape `import_server_report.dart` stores: the office's 3 h, an 08:00→16:00 range, and
@@ -495,40 +529,45 @@ void main() {
       expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
     });
 
-    test('starting the timer drops a span whose row carries no total at all', () async {
-      // Same defect, one shape further out: with `hoursWorked` already null, a row that still has
-      // start/end takes its hours from the span (`effectiveHours`), so the span is the number the
-      // start is discarding — not a detail the predicate can key on the total alone.
-      await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = await _makeEditor(db);
+    test(
+      'starting the timer drops a span whose row carries no total at all',
+      () async {
+        // Same defect, one shape further out: with `hoursWorked` already null, a row that still has
+        // start/end takes its hours from the span (`effectiveHours`), so the span is the number the
+        // start is discarding — not a detail the predicate can key on the total alone.
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(db);
 
-      final earlierStart = DateTime.utc(2026, 6, 21, 8);
-      final earlierEnd = DateTime.utc(2026, 6, 21, 12);
-      await notifier.addStaff(
-        StaffRow(
-          id: 's-1',
-          userId: 'u-1',
-          startTime: earlierStart,
-          endTime: earlierEnd,
-          segments: const [],
-        ),
-      );
+        final earlierStart = DateTime.utc(2026, 6, 21, 8);
+        final earlierEnd = DateTime.utc(2026, 6, 21, 12);
+        await notifier.addStaff(
+          StaffRow(
+            id: 's-1',
+            userId: 'u-1',
+            startTime: earlierStart,
+            endTime: earlierEnd,
+            segments: const [],
+          ),
+        );
 
-      await notifier.startTimer('s-1');
+        await notifier.startTimer('s-1');
 
-      final row = notifier.state.staffRows.first;
-      expect(row.endTime, isNull);
-      expect(row.startTime, isNot(earlierStart));
-      expect(row.timerRunning, isTrue);
-      // The value, not just the column: the 4 h span is what a surviving `endTime` would persist.
-      expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
-    });
+        final row = notifier.state.staffRows.first;
+        expect(row.endTime, isNull);
+        expect(row.startTime, isNot(earlierStart));
+        expect(row.timerRunning, isTrue);
+        // The value, not just the column: the 4 h span is what a surviving `endTime` would persist.
+        expect((await repo.getStaff('draft-1')).single.hoursWorked, isNull);
+      },
+    );
 
     test('stopTimer sets timerRunning=false and endTime', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0),
+      );
       await notifier.startTimer('s-1');
       await notifier.stopTimer('s-1');
 
@@ -571,29 +610,34 @@ void main() {
       );
     });
 
-    test('a run stopped inside the second it started records nothing', () async {
-      // The other side of the same rule: a double tap is not a measured run. Drift keeps whole
-      // seconds, so a segment whose two ends share one arrives at the server as `start == end`,
-      // which it rejects as `report_segment_out_of_order` — a permanent 400 with no affordance on
-      // the row to clear it. Dropping it here costs a zero-length run nobody worked; recording it
-      // costs the whole rapportino.
-      await _seedDraft(db, 'draft-1');
-      final frozen = DateTime.utc(2026, 6, 21, 9);
-      final (notifier, repo) = await _makeEditor(db, clock: () => frozen);
+    test(
+      'a run stopped inside the second it started records nothing',
+      () async {
+        // The other side of the same rule: a double tap is not a measured run. Drift keeps whole
+        // seconds, so a segment whose two ends share one arrives at the server as `start == end`,
+        // which it rejects as `report_segment_out_of_order` — a permanent 400 with no affordance on
+        // the row to clear it. Dropping it here costs a zero-length run nobody worked; recording it
+        // costs the whole rapportino.
+        await _seedDraft(db, 'draft-1');
+        final frozen = DateTime.utc(2026, 6, 21, 9);
+        final (notifier, repo) = await _makeEditor(db, clock: () => frozen);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
-      await notifier.startTimer('s-1');
-      await notifier.stopTimer('s-1');
+        await notifier.addStaff(
+          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0),
+        );
+        await notifier.startTimer('s-1');
+        await notifier.stopTimer('s-1');
 
-      expect(await repo.getSegments('draft-1'), isEmpty);
-      final row = notifier.state.staffRows.first;
-      expect(row.timerRunning, isFalse);
-      expect(
-        row.hoursWorked,
-        isNull,
-        reason: 'nothing was measured, so no total may be invented for it',
-      );
-    });
+        expect(await repo.getSegments('draft-1'), isEmpty);
+        final row = notifier.state.staffRows.first;
+        expect(row.timerRunning, isFalse);
+        expect(
+          row.hoursWorked,
+          isNull,
+          reason: 'nothing was measured, so no total may be invented for it',
+        );
+      },
+    );
 
     test('two runs record two intervals, not one span', () async {
       // start/stop, start/stop — the gap between them is not worked time, so the second interval
@@ -632,97 +676,110 @@ void main() {
       expect(stored[1].startUtc.isBefore(stored[0].endUtc), isFalse);
     });
 
-    test('a stop does not rewrite an interval that came down from the server', () async {
-      // Sync writes a server interval's `clientId` from the payload — a different uuid from its
-      // `id`, and null for one recorded by an older client. Re-upserting that row on the next stop
-      // would overwrite the claim with our own id and reset `createdAt`: the device would then
-      // assert a client id it never sent, and the server's replay key would stop matching.
-      await _seedDraft(db, 'draft-1');
-      await db
-          .into(db.reportStaffTable)
-          .insert(
-            ReportStaffTableCompanion.insert(
-              id: 's-1',
-              tenantId: 'tenant-1',
-              createdAt: DateTime.utc(2026, 6, 21, 7),
-              reportId: 'draft-1',
-              userId: 'u-1',
-              hoursWorked: const Value(1.0),
-            ),
-          );
-      await db
-          .into(db.reportStaffSegments)
-          .insert(
-            ReportStaffSegmentsCompanion.insert(
-              id: 'server-seg-1',
-              tenantId: 'tenant-1',
-              createdAt: DateTime.utc(2026, 6, 21, 7),
-              reportId: 'draft-1',
-              userId: 'u-1',
-              startUtc: DateTime.utc(2026, 6, 21, 7),
-              endUtc: DateTime.utc(2026, 6, 21, 8),
-              clientId: const Value('a-different-uuid'),
-            ),
-          );
-      final (notifier, repo) = await _makeEditor(db);
+    test(
+      'a stop does not rewrite an interval that came down from the server',
+      () async {
+        // Sync writes a server interval's `clientId` from the payload — a different uuid from its
+        // `id`, and null for one recorded by an older client. Re-upserting that row on the next stop
+        // would overwrite the claim with our own id and reset `createdAt`: the device would then
+        // assert a client id it never sent, and the server's replay key would stop matching.
+        await _seedDraft(db, 'draft-1');
+        await db
+            .into(db.reportStaffTable)
+            .insert(
+              ReportStaffTableCompanion.insert(
+                id: 's-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 21, 7),
+                reportId: 'draft-1',
+                userId: 'u-1',
+                hoursWorked: const Value(1.0),
+              ),
+            );
+        await db
+            .into(db.reportStaffSegments)
+            .insert(
+              ReportStaffSegmentsCompanion.insert(
+                id: 'server-seg-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 21, 7),
+                reportId: 'draft-1',
+                userId: 'u-1',
+                startUtc: DateTime.utc(2026, 6, 21, 7),
+                endUtc: DateTime.utc(2026, 6, 21, 8),
+                clientId: const Value('a-different-uuid'),
+              ),
+            );
+        final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.startTimer('s-1');
-      await notifier.stopTimer('s-1');
+        await notifier.startTimer('s-1');
+        await notifier.stopTimer('s-1');
 
-      final stored = await repo.getSegments('draft-1');
-      expect(stored, hasLength(2));
-      final serverRow = stored.firstWhere((s) => s.id == 'server-seg-1');
-      expect(serverRow.clientId, 'a-different-uuid');
-      // `.toUtc()` on the value: `dateTime()` decodes local-kinded (same shape as migration_v60).
-      expect(serverRow.createdAt.toUtc(), DateTime.utc(2026, 6, 21, 7));
-    });
+        final stored = await repo.getSegments('draft-1');
+        expect(stored, hasLength(2));
+        final serverRow = stored.firstWhere((s) => s.id == 'server-seg-1');
+        expect(serverRow.clientId, 'a-different-uuid');
+        // `.toUtc()` on the value: `dateTime()` decodes local-kinded (same shape as migration_v60).
+        expect(serverRow.createdAt.toUtc(), DateTime.utc(2026, 6, 21, 7));
+      },
+    );
 
-    test('stopTimer still writes the interval-derived total onto hoursWorked', () async {
-      // The office web and every older client read this column and nothing else, so after a stop
-      // it must hold the intervals' own sum rather than survive as whatever was there before —
-      // leaving it stale is exactly what made the two sides disagree.
-      await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = await _makeEditor(db);
+    test(
+      'stopTimer still writes the interval-derived total onto hoursWorked',
+      () async {
+        // The office web and every older client read this column and nothing else, so after a stop
+        // it must hold the intervals' own sum rather than survive as whatever was there before —
+        // leaving it stale is exactly what made the two sides disagree.
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 5.0));
-      await notifier.startTimer('s-1');
-      await notifier.stopTimer('s-1');
-      await notifier.startTimer('s-1');
-      await notifier.stopTimer('s-1');
+        await notifier.addStaff(
+          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 5.0),
+        );
+        await notifier.startTimer('s-1');
+        await notifier.stopTimer('s-1');
+        await notifier.startTimer('s-1');
+        await notifier.stopTimer('s-1');
 
-      final stored = await repo.getSegments('draft-1');
-      final intervalHours =
-          stored.fold<int>(
-            0,
-            (sum, s) => sum + s.endUtc.difference(s.startUtc).inMilliseconds,
-          ) /
-          3600000.0;
+        final stored = await repo.getSegments('draft-1');
+        final intervalHours =
+            stored.fold<int>(
+              0,
+              (sum, s) => sum + s.endUtc.difference(s.startUtc).inMilliseconds,
+            ) /
+            3600000.0;
 
-      final staffRow = (await repo.getStaff('draft-1')).single;
-      expect(staffRow.hoursWorked, closeTo(intervalHours, 0.01));
-      expect(staffRow.hoursWorked, isNot(closeTo(5.0, 0.01)));
-    });
+        final staffRow = (await repo.getStaff('draft-1')).single;
+        expect(staffRow.hoursWorked, closeTo(intervalHours, 0.01));
+        expect(staffRow.hoursWorked, isNot(closeTo(5.0, 0.01)));
+      },
+    );
 
-    test('a recorded interval claims the same id as its wire clientId', () async {
-      // The server binds both as a Guid and the phone's id is what a replayed submit collapses
-      // onto; a readable `seg-<epoch>` would 400 the whole rapportino.
-      await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = await _makeEditor(db);
+    test(
+      'a recorded interval claims the same id as its wire clientId',
+      () async {
+        // The server binds both as a Guid and the phone's id is what a replayed submit collapses
+        // onto; a readable `seg-<epoch>` would 400 the whole rapportino.
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
-      await notifier.startTimer('s-1');
-      await notifier.stopTimer('s-1');
+        await notifier.addStaff(
+          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0),
+        );
+        await notifier.startTimer('s-1');
+        await notifier.stopTimer('s-1');
 
-      final stored = await repo.getSegments('draft-1');
-      expect(stored.single.clientId, stored.single.id);
-      expect(
-        RegExp(
-          r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-        ).hasMatch(stored.single.id),
-        isTrue,
-        reason: 'the server deserializes this as a Guid; anything else 400s the submit',
-      );
-    });
+        final stored = await repo.getSegments('draft-1');
+        expect(stored.single.clientId, stored.single.id);
+        expect(
+          RegExp(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          ).hasMatch(stored.single.id),
+          isTrue,
+          reason: 'the server deserializes this as a Guid; anything else 400s the submit',
+        );
+      },
+    );
 
     test('effectiveHours prefers the interval sum over hoursWorked', () {
       final start = DateTime.utc(2026, 6, 21, 8, 0);
@@ -754,7 +811,9 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0),
+      );
       await notifier.startTimer('s-1');
       await notifier.stopTimer('s-1');
       expect(await repo.getSegments('draft-1'), hasLength(1));
@@ -768,7 +827,9 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0),
+      );
       await notifier.startTimer('s-1');
       await notifier.stopTimer('s-1');
       expect(await repo.getSegments('draft-1'), hasLength(1));
@@ -786,11 +847,15 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', notes: 'prima'));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', notes: 'prima'),
+      );
       final stale = notifier.state.staffRows.first;
 
       // What a hydrate/sync does while the dialog is open.
-      await notifier.updateStaff(stale.copyWith(notes: 'dal server', kmTraveled: 42));
+      await notifier.updateStaff(
+        stale.copyWith(notes: 'dal server', kmTraveled: 42),
+      );
 
       await notifier.overrideStaffHours(stale, hoursWorked: 3.5);
 
@@ -834,7 +899,12 @@ void main() {
       final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addMateriale(
-        const MaterialeRow(id: 'm-2', reportId: 'draft-1', materialeId: 'mat-42', quantity: 2.0),
+        const MaterialeRow(
+          id: 'm-2',
+          reportId: 'draft-1',
+          materialeId: 'mat-42',
+          quantity: 2.0,
+        ),
       );
 
       final dbRows = await repo.getMateriali('draft-1');
@@ -867,7 +937,12 @@ void main() {
       final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addMateriale(
-        const MaterialeRow(id: 'm-4', reportId: 'draft-1', materialeId: 'mat-1', quantity: 1.0),
+        const MaterialeRow(
+          id: 'm-4',
+          reportId: 'draft-1',
+          materialeId: 'mat-1',
+          quantity: 1.0,
+        ),
       );
 
       final dbRows = await repo.getMateriali('draft-1');
@@ -900,7 +975,12 @@ void main() {
       final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addMateriale(
-        const MaterialeRow(id: 'm-1', reportId: 'draft-1', freeTextName: 'Test', quantity: 1.0),
+        const MaterialeRow(
+          id: 'm-1',
+          reportId: 'draft-1',
+          freeTextName: 'Test',
+          quantity: 1.0,
+        ),
       );
       await notifier.removeMateriale('m-1');
 
@@ -989,7 +1069,10 @@ void main() {
 
     test('leaves gps unset in state when no position is available', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = await _makeEditor(db, locationService: const _FakeLocationService(null));
+      final (notifier, _) = await _makeEditor(
+        db,
+        locationService: const _FakeLocationService(null),
+      );
 
       final result = await notifier.captureGpsSilently();
 
@@ -1017,202 +1100,199 @@ void main() {
   });
 
   group('signature attachment', () {
-    test('saveCustomerSignature sets customerSignatureAllegatoId in state', () async {
-      await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = await _makeEditor(db);
-      final bytes = Uint8List.fromList([0, 1, 2, 3]);
+    test(
+      'saveCustomerSignature sets customerSignatureAllegatoId in state',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(db);
+        final bytes = Uint8List.fromList([0, 1, 2, 3]);
 
-      await notifier.saveCustomerSignature(
-        allegatoId: 'sig-cust-1',
-        bytes: bytes,
-        localPath: '/tmp/sig-cust-1.png',
+        await notifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-1',
+          bytes: bytes,
+          localPath: '/tmp/sig-cust-1.png',
+        );
+
+        expect(notifier.state.customerSignatureAllegatoId, 'sig-cust-1');
+        expect(
+          notifier.state.customerSignatureLocalPath,
+          '/tmp/sig-cust-1.png',
+        );
+
+        // Persisted to Drift
+        final draft = await repo.getDraft('draft-1');
+        expect(draft?.customerSignatureAllegatoId, 'sig-cust-1');
+
+        final allegati = await repo.getAllegati('draft-1');
+        expect(allegati.any((a) => a.id == 'sig-cust-1'), isTrue);
+      },
+    );
+
+    test(
+      'saveTechnicianSignature sets technicianSignatureAllegatoId in state',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(db);
+        final bytes = Uint8List.fromList([10, 20, 30]);
+
+        await notifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-1',
+          bytes: bytes,
+          localPath: '/tmp/sig-tech-1.png',
+        );
+
+        expect(notifier.state.technicianSignatureAllegatoId, 'sig-tech-1');
+        final draft = await repo.getDraft('draft-1');
+        expect(draft?.technicianSignatureAllegatoId, 'sig-tech-1');
+      },
+    );
+
+    test('saveCustomerSignature persists the device GPS position and a capture timestamp', () async {
+      await _seedDraft(db, 'draft-1');
+      const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
+      final (notifier, repo) = await _makeEditor(
+        db,
+        locationService: const _FakeLocationService(coords),
       );
 
-      expect(notifier.state.customerSignatureAllegatoId, 'sig-cust-1');
-      expect(notifier.state.customerSignatureLocalPath, '/tmp/sig-cust-1.png');
-
-      // Persisted to Drift
-      final draft = await repo.getDraft('draft-1');
-      expect(draft?.customerSignatureAllegatoId, 'sig-cust-1');
+      final before = DateTime.now().toUtc();
+      await notifier.saveCustomerSignature(
+        allegatoId: 'sig-cust-gps',
+        bytes: Uint8List.fromList([0, 1, 2, 3]),
+        localPath: '/tmp/sig-cust-gps.png',
+      );
+      final after = DateTime.now().toUtc();
 
       final allegati = await repo.getAllegati('draft-1');
-      expect(allegati.any((a) => a.id == 'sig-cust-1'), isTrue);
+      final row = allegati.firstWhere((a) => a.id == 'sig-cust-gps');
+      expect(row.capturedLatitude, 45.4642);
+      expect(row.capturedLongitude, 9.19);
+      expect(row.capturedAt, isNotNull);
+      // 1s slack: drift's default DateTime storage has whole-second precision (truncates
+      // toward the epoch), so a capture within the same wall-clock second as `before` can
+      // legitimately round-trip to a value a few hundred ms earlier than `before` itself.
+      expect(
+        row.capturedAt!.isBefore(before.subtract(const Duration(seconds: 1))),
+        isFalse,
+      );
+      expect(
+        row.capturedAt!.isAfter(after.add(const Duration(seconds: 1))),
+        isFalse,
+      );
     });
 
-    test('saveTechnicianSignature sets technicianSignatureAllegatoId in state', () async {
+    test('saveTechnicianSignature persists the device GPS position and a capture timestamp', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = await _makeEditor(db);
-      final bytes = Uint8List.fromList([10, 20, 30]);
-
-      await notifier.saveTechnicianSignature(
-        allegatoId: 'sig-tech-1',
-        bytes: bytes,
-        localPath: '/tmp/sig-tech-1.png',
+      const coords = (lat: 41.9, lng: 12.5, accuracy: 8.0);
+      final (notifier, repo) = await _makeEditor(
+        db,
+        locationService: const _FakeLocationService(coords),
       );
 
-      expect(notifier.state.technicianSignatureAllegatoId, 'sig-tech-1');
-      final draft = await repo.getDraft('draft-1');
-      expect(draft?.technicianSignatureAllegatoId, 'sig-tech-1');
+      await notifier.saveTechnicianSignature(
+        allegatoId: 'sig-tech-gps',
+        bytes: Uint8List.fromList([10, 20, 30]),
+        localPath: '/tmp/sig-tech-gps.png',
+      );
+
+      final allegati = await repo.getAllegati('draft-1');
+      final row = allegati.firstWhere((a) => a.id == 'sig-tech-gps');
+      expect(row.capturedLatitude, 41.9);
+      expect(row.capturedLongitude, 12.5);
+      expect(row.capturedAt, isNotNull);
     });
 
-    test(
-      'saveCustomerSignature persists the device GPS position and a capture timestamp',
-      () async {
-        await _seedDraft(db, 'draft-1');
-        const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
-        final (notifier, repo) = await _makeEditor(
-          db,
-          locationService: const _FakeLocationService(coords),
-        );
+    test('saveCustomerSignature saves a null position (never blocks) when GPS is unavailable, '
+        'but still stamps a capture timestamp', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(
+        db,
+        locationService: const _FakeLocationService(null),
+      );
 
-        final before = DateTime.now().toUtc();
-        await notifier.saveCustomerSignature(
-          allegatoId: 'sig-cust-gps',
-          bytes: Uint8List.fromList([0, 1, 2, 3]),
-          localPath: '/tmp/sig-cust-gps.png',
-        );
-        final after = DateTime.now().toUtc();
+      await notifier.saveCustomerSignature(
+        allegatoId: 'sig-cust-no-gps',
+        bytes: Uint8List.fromList([1]),
+        localPath: '/tmp/sig-cust-no-gps.png',
+      );
 
-        final allegati = await repo.getAllegati('draft-1');
-        final row = allegati.firstWhere((a) => a.id == 'sig-cust-gps');
-        expect(row.capturedLatitude, 45.4642);
-        expect(row.capturedLongitude, 9.19);
-        expect(row.capturedAt, isNotNull);
-        // 1s slack: drift's default DateTime storage has whole-second precision (truncates
-        // toward the epoch), so a capture within the same wall-clock second as `before` can
-        // legitimately round-trip to a value a few hundred ms earlier than `before` itself.
-        expect(row.capturedAt!.isBefore(before.subtract(const Duration(seconds: 1))), isFalse);
-        expect(row.capturedAt!.isAfter(after.add(const Duration(seconds: 1))), isFalse);
-      },
-    );
+      final allegati = await repo.getAllegati('draft-1');
+      final row = allegati.firstWhere((a) => a.id == 'sig-cust-no-gps');
+      expect(row.capturedLatitude, isNull);
+      expect(row.capturedLongitude, isNull);
+      expect(row.capturedAt, isNotNull);
+    });
 
-    test(
-      'saveTechnicianSignature persists the device GPS position and a capture timestamp',
-      () async {
-        await _seedDraft(db, 'draft-1');
-        const coords = (lat: 41.9, lng: 12.5, accuracy: 8.0);
-        final (notifier, repo) = await _makeEditor(
-          db,
-          locationService: const _FakeLocationService(coords),
-        );
+    test('saveCustomerSignature never prompts for location permission mid-signature', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(
+        db,
+        locationService: const _WouldPromptLocationService(),
+      );
 
-        await notifier.saveTechnicianSignature(
-          allegatoId: 'sig-tech-gps',
-          bytes: Uint8List.fromList([10, 20, 30]),
-          localPath: '/tmp/sig-tech-gps.png',
-        );
+      // _WouldPromptLocationService.getCurrentPosition() throws if ever called — reaching past
+      // this call without throwing is the assertion that _captureGpsSilently short-circuited on
+      // willPromptForPermission() instead of prompting.
+      await notifier.saveCustomerSignature(
+        allegatoId: 'sig-cust-would-prompt',
+        bytes: Uint8List.fromList([1]),
+        localPath: '/tmp/sig-cust-would-prompt.png',
+      );
 
-        final allegati = await repo.getAllegati('draft-1');
-        final row = allegati.firstWhere((a) => a.id == 'sig-tech-gps');
-        expect(row.capturedLatitude, 41.9);
-        expect(row.capturedLongitude, 12.5);
-        expect(row.capturedAt, isNotNull);
-      },
-    );
+      final allegati = await repo.getAllegati('draft-1');
+      final row = allegati.firstWhere((a) => a.id == 'sig-cust-would-prompt');
+      expect(row.capturedLatitude, isNull);
+      expect(row.capturedLongitude, isNull);
+      expect(row.capturedAt, isNotNull);
+    });
 
-    test(
-      'saveCustomerSignature saves a null position (never blocks) when GPS is unavailable, '
-      'but still stamps a capture timestamp',
-      () async {
-        await _seedDraft(db, 'draft-1');
-        final (notifier, repo) = await _makeEditor(
-          db,
-          locationService: const _FakeLocationService(null),
-        );
+    test('saveTechnicianSignature with stampCapture:false records no GPS position or capture '
+        'timestamp, even when a real position is available — this is what the technician-signature '
+        'pre-fill uses, since nothing was actually just signed', () async {
+      await _seedDraft(db, 'draft-1');
+      const coords = (lat: 41.9, lng: 12.5, accuracy: 8.0);
+      final (notifier, repo) = await _makeEditor(
+        db,
+        locationService: const _FakeLocationService(coords),
+      );
 
-        await notifier.saveCustomerSignature(
-          allegatoId: 'sig-cust-no-gps',
-          bytes: Uint8List.fromList([1]),
-          localPath: '/tmp/sig-cust-no-gps.png',
-        );
+      await notifier.saveTechnicianSignature(
+        allegatoId: 'sig-tech-prefill',
+        bytes: Uint8List.fromList([1]),
+        localPath: '/tmp/sig-tech-prefill.png',
+        stampCapture: false,
+      );
 
-        final allegati = await repo.getAllegati('draft-1');
-        final row = allegati.firstWhere((a) => a.id == 'sig-cust-no-gps');
-        expect(row.capturedLatitude, isNull);
-        expect(row.capturedLongitude, isNull);
-        expect(row.capturedAt, isNotNull);
-      },
-    );
+      expect(notifier.state.technicianSignatureAllegatoId, 'sig-tech-prefill');
+      final allegati = await repo.getAllegati('draft-1');
+      final row = allegati.firstWhere((a) => a.id == 'sig-tech-prefill');
+      expect(row.capturedLatitude, isNull);
+      expect(row.capturedLongitude, isNull);
+      expect(row.capturedAt, isNull);
+    });
 
-    test(
-      'saveCustomerSignature never prompts for location permission mid-signature',
-      () async {
-        await _seedDraft(db, 'draft-1');
-        final (notifier, repo) = await _makeEditor(
-          db,
-          locationService: const _WouldPromptLocationService(),
-        );
+    test('saveCustomerSignature with stampCapture:false records no GPS position or capture '
+        'timestamp', () async {
+      await _seedDraft(db, 'draft-1');
+      const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
+      final (notifier, repo) = await _makeEditor(
+        db,
+        locationService: const _FakeLocationService(coords),
+      );
 
-        // _WouldPromptLocationService.getCurrentPosition() throws if ever called — reaching past
-        // this call without throwing is the assertion that _captureGpsSilently short-circuited on
-        // willPromptForPermission() instead of prompting.
-        await notifier.saveCustomerSignature(
-          allegatoId: 'sig-cust-would-prompt',
-          bytes: Uint8List.fromList([1]),
-          localPath: '/tmp/sig-cust-would-prompt.png',
-        );
+      await notifier.saveCustomerSignature(
+        allegatoId: 'sig-cust-prefill',
+        bytes: Uint8List.fromList([1]),
+        localPath: '/tmp/sig-cust-prefill.png',
+        stampCapture: false,
+      );
 
-        final allegati = await repo.getAllegati('draft-1');
-        final row = allegati.firstWhere((a) => a.id == 'sig-cust-would-prompt');
-        expect(row.capturedLatitude, isNull);
-        expect(row.capturedLongitude, isNull);
-        expect(row.capturedAt, isNotNull);
-      },
-    );
-
-    test(
-      'saveTechnicianSignature with stampCapture:false records no GPS position or capture '
-      'timestamp, even when a real position is available — this is what the technician-signature '
-      'pre-fill uses, since nothing was actually just signed',
-      () async {
-        await _seedDraft(db, 'draft-1');
-        const coords = (lat: 41.9, lng: 12.5, accuracy: 8.0);
-        final (notifier, repo) = await _makeEditor(
-          db,
-          locationService: const _FakeLocationService(coords),
-        );
-
-        await notifier.saveTechnicianSignature(
-          allegatoId: 'sig-tech-prefill',
-          bytes: Uint8List.fromList([1]),
-          localPath: '/tmp/sig-tech-prefill.png',
-          stampCapture: false,
-        );
-
-        expect(notifier.state.technicianSignatureAllegatoId, 'sig-tech-prefill');
-        final allegati = await repo.getAllegati('draft-1');
-        final row = allegati.firstWhere((a) => a.id == 'sig-tech-prefill');
-        expect(row.capturedLatitude, isNull);
-        expect(row.capturedLongitude, isNull);
-        expect(row.capturedAt, isNull);
-      },
-    );
-
-    test(
-      'saveCustomerSignature with stampCapture:false records no GPS position or capture '
-      'timestamp',
-      () async {
-        await _seedDraft(db, 'draft-1');
-        const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
-        final (notifier, repo) = await _makeEditor(
-          db,
-          locationService: const _FakeLocationService(coords),
-        );
-
-        await notifier.saveCustomerSignature(
-          allegatoId: 'sig-cust-prefill',
-          bytes: Uint8List.fromList([1]),
-          localPath: '/tmp/sig-cust-prefill.png',
-          stampCapture: false,
-        );
-
-        final allegati = await repo.getAllegati('draft-1');
-        final row = allegati.firstWhere((a) => a.id == 'sig-cust-prefill');
-        expect(row.capturedLatitude, isNull);
-        expect(row.capturedLongitude, isNull);
-        expect(row.capturedAt, isNull);
-      },
-    );
+      final allegati = await repo.getAllegati('draft-1');
+      final row = allegati.firstWhere((a) => a.id == 'sig-cust-prefill');
+      expect(row.capturedLatitude, isNull);
+      expect(row.capturedLongitude, isNull);
+      expect(row.capturedAt, isNull);
+    });
 
     test('clearCustomerSignature removes allegatoId from state', () async {
       await _seedDraft(db, 'draft-1');
@@ -1229,93 +1309,94 @@ void main() {
       expect(notifier.state.customerSignatureAllegatoId, isNull);
     });
 
-    test(
-      'reopening the editor (a fresh notifier against the same draft) restores both '
-      'signature local paths, not just their allegatoIds',
-      () async {
-        await _seedDraft(db, 'draft-1');
-        final (firstNotifier, _) = await _makeEditor(db);
+    test('reopening the editor (a fresh notifier against the same draft) restores both '
+        'signature local paths, not just their allegatoIds', () async {
+      await _seedDraft(db, 'draft-1');
+      final (firstNotifier, _) = await _makeEditor(db);
 
-        await firstNotifier.saveCustomerSignature(
-          allegatoId: 'sig-cust-1',
-          bytes: Uint8List.fromList([0, 1, 2]),
-          localPath: '/tmp/sig-cust-1.png',
-        );
-        await firstNotifier.saveTechnicianSignature(
-          allegatoId: 'sig-tech-1',
-          bytes: Uint8List.fromList([3, 4, 5]),
-          localPath: '/tmp/sig-tech-1.png',
-        );
+      await firstNotifier.saveCustomerSignature(
+        allegatoId: 'sig-cust-1',
+        bytes: Uint8List.fromList([0, 1, 2]),
+        localPath: '/tmp/sig-cust-1.png',
+      );
+      await firstNotifier.saveTechnicianSignature(
+        allegatoId: 'sig-tech-1',
+        bytes: Uint8List.fromList([3, 4, 5]),
+        localPath: '/tmp/sig-tech-1.png',
+      );
 
-        // Simulates app restart / navigating away and back: a brand-new notifier instance
-        // hydrating from the same persisted draft, not the same in-memory state.
-        final (reopenedNotifier, _) = await _makeEditor(db);
+      // Simulates app restart / navigating away and back: a brand-new notifier instance
+      // hydrating from the same persisted draft, not the same in-memory state.
+      final (reopenedNotifier, _) = await _makeEditor(db);
 
-        expect(reopenedNotifier.state.customerSignatureAllegatoId, 'sig-cust-1');
-        expect(reopenedNotifier.state.customerSignatureLocalPath, '/tmp/sig-cust-1.png');
-        expect(reopenedNotifier.state.technicianSignatureAllegatoId, 'sig-tech-1');
-        expect(reopenedNotifier.state.technicianSignatureLocalPath, '/tmp/sig-tech-1.png');
-      },
-    );
+      expect(reopenedNotifier.state.customerSignatureAllegatoId, 'sig-cust-1');
+      expect(
+        reopenedNotifier.state.customerSignatureLocalPath,
+        '/tmp/sig-cust-1.png',
+      );
+      expect(
+        reopenedNotifier.state.technicianSignatureAllegatoId,
+        'sig-tech-1',
+      );
+      expect(
+        reopenedNotifier.state.technicianSignatureLocalPath,
+        '/tmp/sig-tech-1.png',
+      );
+    });
 
-    test(
-      'clearTechnicianSignature marks technicianSignaturePrefillSuppressed, and it survives '
-      'a fresh notifier instance against the same draft (simulates closing/reopening the '
-      'Riepilogo sheet after an explicit Cancella)',
-      () async {
-        await _seedDraft(db, 'draft-1');
-        final (firstNotifier, _) = await _makeEditor(db);
+    test('clearTechnicianSignature marks technicianSignaturePrefillSuppressed, and it survives '
+        'a fresh notifier instance against the same draft (simulates closing/reopening the '
+        'Riepilogo sheet after an explicit Cancella)', () async {
+      await _seedDraft(db, 'draft-1');
+      final (firstNotifier, _) = await _makeEditor(db);
 
-        await firstNotifier.saveTechnicianSignature(
-          allegatoId: 'sig-tech-1',
-          bytes: Uint8List.fromList([1, 2, 3]),
-          localPath: '/tmp/sig-tech-1.png',
-        );
-        expect(firstNotifier.state.technicianSignaturePrefillSuppressed, isFalse);
+      await firstNotifier.saveTechnicianSignature(
+        allegatoId: 'sig-tech-1',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        localPath: '/tmp/sig-tech-1.png',
+      );
+      expect(firstNotifier.state.technicianSignaturePrefillSuppressed, isFalse);
 
-        await firstNotifier.clearTechnicianSignature();
-        expect(firstNotifier.state.technicianSignatureAllegatoId, isNull);
-        expect(firstNotifier.state.technicianSignaturePrefillSuppressed, isTrue);
+      await firstNotifier.clearTechnicianSignature();
+      expect(firstNotifier.state.technicianSignatureAllegatoId, isNull);
+      expect(firstNotifier.state.technicianSignaturePrefillSuppressed, isTrue);
 
-        // Simulates app restart / closing+reopening the bottom sheet: a brand-new notifier
-        // instance hydrating from the same persisted draft, not the same in-memory state —
-        // exactly what `StepRiepilogo`'s pre-fill guard needs to survive.
-        final (reopenedNotifier, _) = await _makeEditor(db);
+      // Simulates app restart / closing+reopening the bottom sheet: a brand-new notifier
+      // instance hydrating from the same persisted draft, not the same in-memory state —
+      // exactly what `StepRiepilogo`'s pre-fill guard needs to survive.
+      final (reopenedNotifier, _) = await _makeEditor(db);
 
-        expect(reopenedNotifier.state.technicianSignatureAllegatoId, isNull);
-        expect(
-          reopenedNotifier.state.technicianSignaturePrefillSuppressed,
-          isTrue,
-          reason: 'must survive a fresh notifier instance, not just live in memory',
-        );
-      },
-    );
+      expect(reopenedNotifier.state.technicianSignatureAllegatoId, isNull);
+      expect(
+        reopenedNotifier.state.technicianSignaturePrefillSuppressed,
+        isTrue,
+        reason:
+            'must survive a fresh notifier instance, not just live in memory',
+      );
+    });
 
-    test(
-      'saveTechnicianSignature resets technicianSignaturePrefillSuppressed after a fresh, '
-      'real signature',
-      () async {
-        await _seedDraft(db, 'draft-1');
-        final (notifier, _) = await _makeEditor(db);
+    test('saveTechnicianSignature resets technicianSignaturePrefillSuppressed after a fresh, '
+        'real signature', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, _) = await _makeEditor(db);
 
-        await notifier.saveTechnicianSignature(
-          allegatoId: 'sig-tech-1',
-          bytes: Uint8List.fromList([1]),
-          localPath: '/tmp/sig-tech-1.png',
-        );
-        await notifier.clearTechnicianSignature();
-        expect(notifier.state.technicianSignaturePrefillSuppressed, isTrue);
+      await notifier.saveTechnicianSignature(
+        allegatoId: 'sig-tech-1',
+        bytes: Uint8List.fromList([1]),
+        localPath: '/tmp/sig-tech-1.png',
+      );
+      await notifier.clearTechnicianSignature();
+      expect(notifier.state.technicianSignaturePrefillSuppressed, isTrue);
 
-        // A genuine new signing act (drawn/typed) is itself a deliberate decision that
-        // supersedes any earlier Cancella-driven suppression.
-        await notifier.saveTechnicianSignature(
-          allegatoId: 'sig-tech-2',
-          bytes: Uint8List.fromList([2]),
-          localPath: '/tmp/sig-tech-2.png',
-        );
-        expect(notifier.state.technicianSignaturePrefillSuppressed, isFalse);
-      },
-    );
+      // A genuine new signing act (drawn/typed) is itself a deliberate decision that
+      // supersedes any earlier Cancella-driven suppression.
+      await notifier.saveTechnicianSignature(
+        allegatoId: 'sig-tech-2',
+        bytes: Uint8List.fromList([2]),
+        localPath: '/tmp/sig-tech-2.png',
+      );
+      expect(notifier.state.technicianSignaturePrefillSuppressed, isFalse);
+    });
   });
 
   // ── Photo allegati ────────────────────────────────────────────────────────
@@ -1430,7 +1511,10 @@ void main() {
       final (notifier, _) = await _makeEditor(db);
 
       expect(notifier.state.isReadyToSubmit, isFalse);
-      expect(notifier.state.validation.issues, contains(DraftValidationIssue.missingTitle));
+      expect(
+        notifier.state.validation.issues,
+        contains(DraftValidationIssue.missingTitle),
+      );
     });
 
     test('isReadyToSubmit=true when all requirements met', () async {
@@ -1440,9 +1524,16 @@ void main() {
       await notifier.setTitle('Test');
       await notifier.setCustomerFromCache('cust-1');
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0),
+      );
       await notifier.addMateriale(
-        const MaterialeRow(id: 'm-1', reportId: 'draft-1', freeTextName: 'Cavo', quantity: 1.0),
+        const MaterialeRow(
+          id: 'm-1',
+          reportId: 'draft-1',
+          freeTextName: 'Cavo',
+          quantity: 1.0,
+        ),
       );
       await notifier.saveCustomerSignature(
         allegatoId: 'sig-c',
@@ -1466,9 +1557,16 @@ void main() {
       await notifier.setTitle('Test');
       await notifier.setCustomerFromCache('cust-1');
 
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0),
+      );
       await notifier.addMateriale(
-        const MaterialeRow(id: 'm-1', reportId: 'draft-1', freeTextName: 'Cavo', quantity: 1.0),
+        const MaterialeRow(
+          id: 'm-1',
+          reportId: 'draft-1',
+          freeTextName: 'Cavo',
+          quantity: 1.0,
+        ),
       );
       // No saveCustomerSignature on purpose: the server accepts this send, so the phone must not
       // hold it back (ReportStateMachine.CanInvia requires only the technician's signature).
@@ -1488,7 +1586,9 @@ void main() {
 
       await notifier.setTitle('T');
       await notifier.setCustomerFromCache('c');
-      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 1.0));
+      await notifier.addStaff(
+        const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 1.0),
+      );
       await notifier.setMaterialiNotRequired(true);
       await notifier.saveCustomerSignature(
         allegatoId: 'sc',
@@ -1512,72 +1612,75 @@ void main() {
     // then call notifier methods to populate the editor state.
     // We verify the notifier correctly stores the prefilled values.
 
-    test('can be prefilled with schedule title, customer, location, ticket', () async {
-      // Simulate a cached schedule + linked entities in the DB
-      await db
-          .into(db.customers)
-          .insert(
-            CustomersCompanion.insert(
-              id: 'cust-sched',
-              tenantId: 'tenant-1',
-              createdAt: DateTime.utc(2026, 6, 21),
-              companyName: 'Cliente Schedule Spa',
-            ),
-          );
+    test(
+      'can be prefilled with schedule title, customer, location, ticket',
+      () async {
+        // Simulate a cached schedule + linked entities in the DB
+        await db
+            .into(db.customers)
+            .insert(
+              CustomersCompanion.insert(
+                id: 'cust-sched',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 21),
+                companyName: 'Cliente Schedule Spa',
+              ),
+            );
 
-      await db
-          .into(db.tickets)
-          .insert(
-            TicketsCompanion.insert(
-              id: 'ticket-sched',
-              tenantId: 'tenant-1',
-              createdAt: DateTime.utc(2026, 6, 21),
-              title: 'Ticket da schedule',
-              customerId: 'cust-sched',
-              locationId: 'loc-sched',
-              statusId: 1,
-              typeId: 1,
-            ),
-          );
+        await db
+            .into(db.tickets)
+            .insert(
+              TicketsCompanion.insert(
+                id: 'ticket-sched',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 21),
+                title: 'Ticket da schedule',
+                customerId: 'cust-sched',
+                locationId: 'loc-sched',
+                statusId: 1,
+                typeId: 1,
+              ),
+            );
 
-      await db
-          .into(db.schedules)
-          .insert(
-            SchedulesCompanion.insert(
-              id: 'sched-1',
-              tenantId: 'tenant-1',
-              createdAt: DateTime.utc(2026, 6, 21),
-              activityDate: DateTime.utc(2026, 6, 21),
-              timeStartMinutes: 480,
-              timeEndMinutes: 1020,
-              userId: 'user-1',
-              statusId: 1,
-              locationId: 'loc-sched',
-              title: 'Manutenzione da schedule',
-              description: 'Descrizione da schedule',
-              ticketId: const Value('ticket-sched'),
-            ),
-          );
+        await db
+            .into(db.schedules)
+            .insert(
+              SchedulesCompanion.insert(
+                id: 'sched-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 21),
+                activityDate: DateTime.utc(2026, 6, 21),
+                timeStartMinutes: 480,
+                timeEndMinutes: 1020,
+                userId: 'user-1',
+                statusId: 1,
+                locationId: 'loc-sched',
+                title: 'Manutenzione da schedule',
+                description: 'Descrizione da schedule',
+                ticketId: const Value('ticket-sched'),
+              ),
+            );
 
-      await _seedDraft(db, 'draft-prefill');
-      final (notifier, _) = await _makeEditor(db, reportId: 'draft-prefill');
+        await _seedDraft(db, 'draft-prefill');
+        final (notifier, _) = await _makeEditor(db, reportId: 'draft-prefill');
 
-      // Simulate prefill: caller reads schedule and calls notifier methods
-      final sched = await (db.select(
-        db.schedules,
-      )..where((s) => s.id.equals('sched-1'))).getSingle();
+        // Simulate prefill: caller reads schedule and calls notifier methods
+        final sched = await (db.select(
+          db.schedules,
+        )..where((s) => s.id.equals('sched-1'))).getSingle();
 
-      await notifier.setTitle(sched.title);
-      await notifier.setLocationFromCache(sched.locationId);
-      if (sched.ticketId != null) {
-        await notifier.setTicketFromCache(sched.ticketId!);
-      }
+        await notifier.setTitle(sched.title);
+        await notifier.setLocationFromCache(sched.locationId);
+        if (sched.ticketId != null) {
+          await notifier.setTicketFromCache(sched.ticketId!);
+        }
 
-      expect(notifier.state.title, 'Manutenzione da schedule');
-      expect(notifier.state.locationId, 'loc-sched');
-      expect(notifier.state.ticketId, 'ticket-sched');
-      expect(notifier.state.scheduleId, isNull); // not set by prefill above
-    });
+        expect(notifier.state.title, 'Manutenzione da schedule');
+        expect(notifier.state.locationId, 'loc-sched');
+        expect(notifier.state.ticketId, 'ticket-sched');
+        expect(notifier.state.scheduleId, isNull); // not set by prefill above
+      },
+    );
 
     test('prefill sets scheduleId', () async {
       await _seedDraft(db, 'draft-prefill2');
@@ -1595,24 +1698,36 @@ void main() {
   // ── Riverpod container integration ────────────────────────────────────────
 
   group('Riverpod provider integration', () {
-    test('draftReportRepositoryProvider wires to appDatabaseProvider', () async {
-      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
-      addTearDown(container.dispose);
+    test(
+      'draftReportRepositoryProvider wires to appDatabaseProvider',
+      () async {
+        final container = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(container.dispose);
 
-      final repo = container.read(draftReportRepositoryProvider);
-      expect(repo, isA<DraftReportRepository>());
-    });
+        final repo = container.read(draftReportRepositoryProvider);
+        expect(repo, isA<DraftReportRepository>());
+      },
+    );
 
-    test('reportEditorProvider.family returns unique notifier per id', () async {
-      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
-      addTearDown(container.dispose);
+    test(
+      'reportEditorProvider.family returns unique notifier per id',
+      () async {
+        final container = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(container.dispose);
 
-      final state1 = container.read(reportEditorProvider('report-a'));
-      final state2 = container.read(reportEditorProvider('report-b'));
+        final state1 = container.read(reportEditorProvider('report-a'));
+        final state2 = container.read(reportEditorProvider('report-b'));
 
-      expect(state1.reportId, 'report-a');
-      expect(state2.reportId, 'report-b');
-    });
+        expect(state1.reportId, 'report-a');
+        expect(state2.reportId, 'report-b');
+      },
+    );
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1670,7 +1785,8 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = await _makeEditor(db);
 
-      const typed = 'Verificata pressione impianto, nessuna anomalia riscontrata';
+      const typed =
+          'Verificata pressione impianto, nessuna anomalia riscontrata';
       // Mirrors StepDettagli's AppTextField.onChanged, which calls setDetails (and therefore
       // autosaves) on every keystroke.
       for (var i = 1; i <= typed.length; i++) {
@@ -1678,7 +1794,9 @@ void main() {
       }
       // GPS captured mid-typing, as the "Acquisisci" button allows at any point in the flow.
       notifier.setGps(45.4654, 9.1859);
-      await notifier.setDetails(typed); // one more keystroke-driven autosave after GPS
+      await notifier.setDetails(
+        typed,
+      ); // one more keystroke-driven autosave after GPS
 
       expect(notifier.state.details, typed);
       final draft = await repo.getDraft('draft-1');
@@ -1727,10 +1845,22 @@ void main() {
       await notifier.setMaterialiNotRequired(true);
 
       final row = await repo.getDraft('srv-1');
-      expect(row!.title, 'Rapportino ufficio', reason: 'no header write at all');
+      expect(
+        row!.title,
+        'Rapportino ufficio',
+        reason: 'no header write at all',
+      );
       expect(row.details, isNull);
-      expect(row.stato, 'Inviato', reason: 'a false Bozza blinds sync to the row forever');
-      expect(row.isLocalOnly, isFalse, reason: 'sync must keep owning this row');
+      expect(
+        row.stato,
+        'Inviato',
+        reason: 'a false Bozza blinds sync to the row forever',
+      );
+      expect(
+        row.isLocalOnly,
+        isFalse,
+        reason: 'sync must keep owning this row',
+      );
     });
 
     test('a server-known BOZZA is still editable (imported for editing, isLocalOnly flipped '

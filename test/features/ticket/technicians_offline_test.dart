@@ -53,6 +53,7 @@ void main() {
 
   ProviderContainer container({required bool online, required _FakeApiClient api}) {
     final c = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(online),

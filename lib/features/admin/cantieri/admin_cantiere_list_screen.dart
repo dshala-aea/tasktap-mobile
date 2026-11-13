@@ -1,7 +1,9 @@
 // dart format width=100
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -10,6 +12,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -82,7 +85,7 @@ class _AdminCantiereListBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cantieriAsync = ref.watch(adminCantieriProvider);
-    final allCantieri = cantieriAsync.valueOrNull ?? [];
+    final allCantieri = cantieriAsync.value ?? [];
 
     final filtered = allCantieri.where((c) {
       if (query.isEmpty) return true;
@@ -92,7 +95,7 @@ class _AdminCantiereListBody extends ConsumerWidget {
 
     // The empty branch below already separates "no search match" from the rest; this separates the
     // remaining two, so a tenant that simply has no cantieri is not told to wait for a sync.
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     return RefreshIndicator(
       onRefresh: () => refreshWithFeedback(context, ref),
@@ -135,7 +138,8 @@ class _AdminCantiereListBody extends ConsumerWidget {
                   : const EmptyState(
                       icon: LucideIcons.hardHat,
                       title: 'Nessun cantiere',
-                      body: 'Non è ancora stato creato nessun cantiere. Usa il pulsante + per '
+                      body:
+                          'Non è ancora stato creato nessun cantiere. Usa il pulsante + per '
                           'crearne uno.',
                     ),
             )

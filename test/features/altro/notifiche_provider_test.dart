@@ -59,11 +59,12 @@ Map<String, dynamic> _page(
   };
 }
 
-Response<dynamic> _ok(Map<String, dynamic> data, String path) => Response<dynamic>(
-  requestOptions: RequestOptions(path: path),
-  statusCode: 200,
-  data: data,
-);
+Response<dynamic> _ok(Map<String, dynamic> data, String path) =>
+    Response<dynamic>(
+      requestOptions: RequestOptions(path: path),
+      statusCode: 200,
+      data: data,
+    );
 
 DioException _networkFailure() =>
     DioException(requestOptions: RequestOptions(path: '/api/notifications'));
@@ -73,9 +74,7 @@ DioException _notFound(String path) => DioException(
   response: Response<dynamic>(
     requestOptions: RequestOptions(path: path),
     statusCode: 404,
-    data: {
-      'title': 'Not Found',
-    },
+    data: {'title': 'Not Found'},
   ),
 );
 
@@ -148,14 +147,11 @@ void main() {
 
   ProviderContainer newContainer() {
     final container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         notificheProvider.overrideWith(
-          (ref) => NotificheNotifier(
-            db,
-            dio,
-            ref,
-            apiBaseUrl: 'https://api.test',
-          ),
+          (ref) =>
+              NotificheNotifier(db, dio, ref, apiBaseUrl: 'https://api.test'),
         ),
       ],
     );
@@ -174,15 +170,18 @@ void main() {
       expect(notifier.state.map((n) => n.id).toSet(), {'a1', 'a2'});
     });
 
-    test('shows nothing — not everything — when no internal user id is known', () async {
-      SharedPreferences.setMockInitialValues({});
-      await _seed(db, 'a1', userId: _me);
-      await _seed(db, 'b1', userId: _other);
+    test(
+      'shows nothing — not everything — when no internal user id is known',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        await _seed(db, 'a1', userId: _me);
+        await _seed(db, 'b1', userId: _other);
 
-      final notifier = await build(newContainer());
+        final notifier = await build(newContainer());
 
-      expect(notifier.state, isEmpty);
-    });
+        expect(notifier.state, isEmpty);
+      },
+    );
 
     test('segnaLette marks only the current user\'s rows read', () async {
       await _seed(db, 'a1', userId: _me);
@@ -193,7 +192,11 @@ void main() {
 
       final rows = {for (final r in await _cached(db)) r.id: r.isRead};
       expect(rows['a1'], isTrue);
-      expect(rows['b1'], isFalse, reason: 'another user\'s unread row was marked read');
+      expect(
+        rows['b1'],
+        isFalse,
+        reason: 'another user\'s unread row was marked read',
+      );
     });
 
     test('segnaLetta refuses to touch another user\'s row', () async {
@@ -209,32 +212,38 @@ void main() {
   });
 
   group('G2b — an offline read survives the next refresh', () {
-    test('segnaLetta records a pending read marker before the request', () async {
-      await _seed(db, 'a1', userId: _me);
+    test(
+      'segnaLetta records a pending read marker before the request',
+      () async {
+        await _seed(db, 'a1', userId: _me);
 
-      final notifier = await build(newContainer());
-      await notifier.segnaLetta('a1');
+        final notifier = await build(newContainer());
+        await notifier.segnaLetta('a1');
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getStringList(_pendingKey(_me)), contains('a1'));
-    });
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getStringList(_pendingKey(_me)), contains('a1'));
+      },
+    );
 
-    test('a refresh that still says unread does not revert a pending local read', () async {
-      await _seed(db, 'a1', userId: _me);
-      _stubPage(dio, _page([_item('a1')]));
-      // The retried PUT fails (still offline): the marker must survive.
-      when(() => dio.put<dynamic>(any())).thenThrow(_networkFailure());
+    test(
+      'a refresh that still says unread does not revert a pending local read',
+      () async {
+        await _seed(db, 'a1', userId: _me);
+        _stubPage(dio, _page([_item('a1')]));
+        // The retried PUT fails (still offline): the marker must survive.
+        when(() => dio.put<dynamic>(any())).thenThrow(_networkFailure());
 
-      final notifier = await build(newContainer());
-      await notifier.segnaLetta('a1');
-      await notifier.refresh();
+        final notifier = await build(newContainer());
+        await notifier.segnaLetta('a1');
+        await notifier.refresh();
 
-      expect(notifier.state.single.letta, isTrue);
-      final row = (await _cached(db)).single;
-      expect(row.isRead, isTrue);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getStringList(_pendingKey(_me)), contains('a1'));
-    });
+        expect(notifier.state.single.letta, isTrue);
+        final row = (await _cached(db)).single;
+        expect(row.isRead, isTrue);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getStringList(_pendingKey(_me)), contains('a1'));
+      },
+    );
 
     test('the next successful refresh flushes the marker and clears it', () async {
       await _seed(db, 'a1', userId: _me);
@@ -247,9 +256,8 @@ void main() {
       expect(prefs.getStringList(_pendingKey(_me)), contains('a1'));
 
       // The connection is back.
-      when(() => dio.put<dynamic>(any())).thenAnswer(
-        (_) async => _ok({}, '/api/notifications/a1/read'),
-      );
+      when(() => dio.put<dynamic>(any()))
+          .thenAnswer((_) async => _ok({}, '/api/notifications/a1/read'));
       await notifier.refresh();
 
       prefs = await SharedPreferences.getInstance();
@@ -257,69 +265,74 @@ void main() {
       expect((await _cached(db)).single.isRead, isTrue);
     });
 
-    test(
-      'a 404 is definitive: it clears the marker, and the server page is the authority after',
-      () async {
-        await _seed(db, 'a1', userId: _me);
-        _stubPage(dio, _page([_item('a1')]));
-
-        final notifier = await build(newContainer());
-        // Offline mark (the setUp stub's PUT is a network failure): only the marker protects the
-        // local read now.
-        await notifier.segnaLetta('a1');
-        var prefs = await SharedPreferences.getInstance();
-        expect(prefs.getStringList(_pendingKey(_me)), contains('a1'));
-
-        // The retried PUT is answered definitively: there is no such notification server-side.
-        when(
-          () => dio.put<dynamic>('/api/notifications/a1/read'),
-        ).thenThrow(_notFound('/api/notifications/a1/read'));
-
-        // This refresh still shows it read: the marker was in force when the upsert ran, and a
-        // 404 is a definitive answer, not a non-answer.
-        await notifier.refresh();
-        expect(notifier.state.single.letta, isTrue);
-        prefs = await SharedPreferences.getInstance();
-        expect(prefs.getStringList(_pendingKey(_me)), isNull);
-
-        // With the marker settled, the page is authoritative. This (deliberately contradictory)
-        // server still lists the row as unread, so it comes back unread — the chosen rule is
-        // "404 settles the marker", not "keep retrying forever". Keeping the marker would pin the
-        // row read and block its pruning.
-        await notifier.refresh();
-        expect(notifier.state.single.letta, isFalse);
-        expect((await _cached(db)).single.isRead, isFalse);
-      },
-    );
-  });
-
-  group('G2c — pruning', () {
-    test('drops this user\'s rows the authoritative page no longer contains', () async {
+    test('a 404 is definitive: it clears the marker, and the server page is the authority after', () async {
       await _seed(db, 'a1', userId: _me);
-      await _seed(db, 'a2', userId: _me);
-      await _seed(db, 'b1', userId: _other);
       _stubPage(dio, _page([_item('a1')]));
 
       final notifier = await build(newContainer());
+      // Offline mark (the setUp stub's PUT is a network failure): only the marker protects the
+      // local read now.
+      await notifier.segnaLetta('a1');
+      var prefs = await SharedPreferences.getInstance();
+      expect(prefs.getStringList(_pendingKey(_me)), contains('a1'));
+
+      // The retried PUT is answered definitively: there is no such notification server-side.
+      when(() => dio.put<dynamic>('/api/notifications/a1/read'))
+          .thenThrow(_notFound('/api/notifications/a1/read'));
+
+      // This refresh still shows it read: the marker was in force when the upsert ran, and a
+      // 404 is a definitive answer, not a non-answer.
       await notifier.refresh();
+      expect(notifier.state.single.letta, isTrue);
+      prefs = await SharedPreferences.getInstance();
+      expect(prefs.getStringList(_pendingKey(_me)), isNull);
 
-      final ids = (await _cached(db)).map((r) => r.id).toSet();
-      expect(ids, {'a1', 'b1'}, reason: 'a2 was pruned; another user\'s b1 was not touched');
-      expect(notifier.state.map((n) => n.id), ['a1']);
-    });
-
-    test('does not prune when the page is only a window over a larger set', () async {
-      await _seed(db, 'a1', userId: _me);
-      await _seed(db, 'a2', userId: _me);
-      // 120 InApp notifications exist; the page carries only the newest one.
-      _stubPage(dio, _page([_item('a1')], totalItems: 120));
-
-      final notifier = await build(newContainer());
+      // With the marker settled, the page is authoritative. This (deliberately contradictory)
+      // server still lists the row as unread, so it comes back unread — the chosen rule is
+      // "404 settles the marker", not "keep retrying forever". Keeping the marker would pin the
+      // row read and block its pruning.
       await notifier.refresh();
-
-      final ids = (await _cached(db)).map((r) => r.id).toSet();
-      expect(ids, {'a1', 'a2'});
+      expect(notifier.state.single.letta, isFalse);
+      expect((await _cached(db)).single.isRead, isFalse);
     });
+  });
+
+  group('G2c — pruning', () {
+    test(
+      'drops this user\'s rows the authoritative page no longer contains',
+      () async {
+        await _seed(db, 'a1', userId: _me);
+        await _seed(db, 'a2', userId: _me);
+        await _seed(db, 'b1', userId: _other);
+        _stubPage(dio, _page([_item('a1')]));
+
+        final notifier = await build(newContainer());
+        await notifier.refresh();
+
+        final ids = (await _cached(db)).map((r) => r.id).toSet();
+        expect(ids, {
+          'a1',
+          'b1',
+        }, reason: 'a2 was pruned; another user\'s b1 was not touched');
+        expect(notifier.state.map((n) => n.id), ['a1']);
+      },
+    );
+
+    test(
+      'does not prune when the page is only a window over a larger set',
+      () async {
+        await _seed(db, 'a1', userId: _me);
+        await _seed(db, 'a2', userId: _me);
+        // 120 InApp notifications exist; the page carries only the newest one.
+        _stubPage(dio, _page([_item('a1')], totalItems: 120));
+
+        final notifier = await build(newContainer());
+        await notifier.refresh();
+
+        final ids = (await _cached(db)).map((r) => r.id).toSet();
+        expect(ids, {'a1', 'a2'});
+      },
+    );
 
     test('never prunes a row that still has a pending read marker', () async {
       await _seed(db, 'a1', userId: _me);
@@ -339,16 +352,19 @@ void main() {
       expect(ids, {'a1', 'a2'});
     });
 
-    test('never writes another user\'s notification from the page into this cache', () async {
-      await _seed(db, 'a1', userId: _me);
-      _stubPage(dio, _page([_item('a1'), _item('b1', userId: _other)]));
+    test(
+      'never writes another user\'s notification from the page into this cache',
+      () async {
+        await _seed(db, 'a1', userId: _me);
+        _stubPage(dio, _page([_item('a1'), _item('b1', userId: _other)]));
 
-      final notifier = await build(newContainer());
-      await notifier.refresh();
+        final notifier = await build(newContainer());
+        await notifier.refresh();
 
-      final ids = (await _cached(db)).map((r) => r.id).toSet();
-      expect(ids, {'a1'});
-      expect(notifier.state.map((n) => n.id), ['a1']);
-    });
+        final ids = (await _cached(db)).map((r) => r.id).toSet();
+        expect(ids, {'a1'});
+        expect(notifier.state.map((n) => n.id), ['a1']);
+      },
+    );
   });
 }

@@ -40,8 +40,7 @@ class _FakeLocationServiceWithFix extends ILocationService {
   const _FakeLocationServiceWithFix();
 
   @override
-  Future<GpsCoords?> getCurrentPosition() async =>
-      (lat: 45.4642, lng: 9.1900, accuracy: 8.0);
+  Future<GpsCoords?> getCurrentPosition() async => (lat: 45.4642, lng: 9.1900, accuracy: 8.0);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -112,7 +111,10 @@ void main() {
 
   group('RapportinoFormScreen — checklist grid layout', () {
     testWidgets('checklist grid lays out 2-per-row on a phone-width screen', (tester) async {
-      tester.view.physicalSize = const Size(960, 1920); // 480dp logical width (phone-class, < wideBreakpoint)
+      tester.view.physicalSize = const Size(
+        960,
+        1920,
+      ); // 480dp logical width (phone-class, < wideBreakpoint)
       tester.view.devicePixelRatio = 2.0;
       addTearDown(tester.view.reset);
 
@@ -367,6 +369,7 @@ void main() {
         await _seedDraft(db, reportId);
 
         final container = ProviderContainer(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             internalUserIdProvider.overrideWith((ref) async => _testInternalUserId),
@@ -401,6 +404,7 @@ void main() {
       // doesn't care how the draft got its state, only what it already holds by the time this
       // screen's first build runs.
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           internalUserIdProvider.overrideWith((ref) async => _testInternalUserId),

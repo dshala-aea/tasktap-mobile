@@ -321,16 +321,16 @@ class _AdminScheduleListBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final schedulesAsync = ref.watch(adminSchedulesProvider);
-    final allSchedules = schedulesAsync.valueOrNull ?? [];
-    final assigneeMap = ref.watch(scheduleAssigneeMapProvider).valueOrNull ?? const {};
-    final colleagues = ref.watch(allColleaguesProvider).valueOrNull ?? const [];
+    final allSchedules = schedulesAsync.value ?? [];
+    final assigneeMap = ref.watch(scheduleAssigneeMapProvider).value ?? const {};
+    final colleagues = ref.watch(allColleaguesProvider).value ?? const [];
     final colleaguesById = {for (final c in colleagues) c.id: c.displayName};
-    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
+    final locations = ref.watch(allLocationsProvider).value ?? const [];
     final locationsById = {for (final l in locations) l.id: l.name};
 
     final squadraMemberIds = filters.squadraId == null
         ? null
-        : ref.watch(_squadraMemberIdsProvider(filters.squadraId!)).valueOrNull;
+        : ref.watch(_squadraMemberIdsProvider(filters.squadraId!)).value;
 
     final businessToday = ref.watch(businessTimeProvider).businessToday();
     final canWrite = capabilityHeld(
@@ -476,7 +476,7 @@ class _AdminScheduleListBody extends ConsumerWidget {
     // Every filter here is client-side over the local mirror, so an empty result has the same 3
     // possible causes as the other admin lists: no match, no sync yet, or genuinely none.
     final hasActiveFilter = query.trim().isNotEmpty || !filters.isEmpty;
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     final isLoading = schedulesAsync.isLoading && !schedulesAsync.hasValue;
     final isUnavailable = schedulesAsync.hasError && !schedulesAsync.hasValue;
@@ -868,11 +868,11 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
   @override
   Widget build(BuildContext context) {
     final techniciansAsync = ref.watch(techniciansProvider);
-    final technicians = techniciansAsync.valueOrNull ?? [];
+    final technicians = techniciansAsync.value ?? [];
     final squadreAsync = ref.watch(adminSquadreProvider);
-    final squadre = squadreAsync.valueOrNull ?? [];
+    final squadre = squadreAsync.value ?? [];
     final ticketsAsync = ref.watch(allTicketsProvider);
-    final tickets = ticketsAsync.valueOrNull ?? [];
+    final tickets = ticketsAsync.value ?? [];
     final dateFmt = DateFormat('d MMM y', 'it');
 
     return Padding(

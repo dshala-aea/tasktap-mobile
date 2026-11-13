@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -25,7 +26,8 @@ import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/attachments/attachment_content_cache.dart';
-import '../../data/entitlements/entitlement_providers.dart' show cachedEntitlementProvider;
+import '../../data/entitlements/entitlement_providers.dart'
+    show cachedEntitlementProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
@@ -52,6 +54,7 @@ import 'ticket_providers.dart';
 import 'ticket_timer_hero.dart';
 import 'steps/step_assegnazione.dart' show techniciansProvider;
 import 'ticket_workflow_api_client.dart';
+
 import 'package:uuid/uuid.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -69,8 +72,8 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final ticketAsync = ref.watch(ticketByIdProvider(widget.ticketId));
-    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? {};
-    final typeMap = ref.watch(ticketTypeMapProvider).valueOrNull ?? {};
+    final statusMap = ref.watch(ticketStatusMapProvider).value ?? {};
+    final typeMap = ref.watch(ticketTypeMapProvider).value ?? {};
 
     return ticketAsync.when(
       loading: () => const DetailScaffold.loading(screenTitle: 'Ticket'),
@@ -124,13 +127,25 @@ class _TicketDetailBody extends ConsumerWidget {
     // write permission server-side (`interventi.ticket.write`). Starting a rapportino is a
     // different catalogue entry: a technician may be able to document work on a ticket without
     // being allowed to rewrite the ticket itself.
-    final canWriteTicket = capabilityHeld(entitlement, 'interventi.ticket.write');
-    final canWriteReport = capabilityHeld(entitlement, 'rapportini.report.write');
+    final canWriteTicket = capabilityHeld(
+      entitlement,
+      'interventi.ticket.write',
+    );
+    final canWriteReport = capabilityHeld(
+      entitlement,
+      'rapportini.report.write',
+    );
     // `/altro/commesse/:id` requires `commesse.commessa.read`; without it the fact stays readable
     // text instead of a link that only dead-ends at /forbidden.
-    final canReadCommessa = capabilityHeld(entitlement, 'commesse.commessa.read');
+    final canReadCommessa = capabilityHeld(
+      entitlement,
+      'commesse.commessa.read',
+    );
     final reference = ticketReference(ticket.numero);
-    final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(ticket.createdAt.toLocal());
+    final dateLabel = DateFormat(
+      'dd/MM/yyyy HH:mm',
+      'it',
+    ).format(ticket.createdAt.toLocal());
     final closedLabel = ticket.closedAt != null
         ? DateFormat('dd/MM/yyyy', 'it').format(ticket.closedAt!.toLocal())
         : '—';
@@ -141,18 +156,18 @@ class _TicketDetailBody extends ConsumerWidget {
     // `statusId`, and that is what the hero actions have to react to immediately.
     final closed = ticketIsClosed(
       ticket,
-      ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const {},
+      ref.watch(closedTicketStatusIdsProvider).value ?? const {},
     );
 
     final customerAsync = ref.watch(customerByIdProvider(ticket.customerId));
     final locationAsync = ref.watch(locationByIdProvider(ticket.locationId));
 
-    final customerName = customerAsync.valueOrNull?.companyName ?? ticket.customerId;
-    final locationName = locationAsync.valueOrNull?.name ?? ticket.locationId;
+    final customerName = customerAsync.value?.companyName ?? ticket.customerId;
+    final locationName = locationAsync.value?.name ?? ticket.locationId;
     final locationAddress = [
-      locationAsync.valueOrNull?.address,
-      locationAsync.valueOrNull?.city,
-      locationAsync.valueOrNull?.postalCode,
+      locationAsync.value?.address,
+      locationAsync.value?.city,
+      locationAsync.value?.postalCode,
     ].where((s) => s != null && s.isNotEmpty).join(', ');
     // Was the raw `assignedUserId` — a GUID, rendered at a technician as the answer to "who has
     // this job". Resolved from the synced colleagues mirror, so it still reads offline; falls back
@@ -160,32 +175,38 @@ class _TicketDetailBody extends ConsumerWidget {
     final assignedId = ticket.assignedUserId;
     final tecnicoLabel = assignedId == null
         ? '—'
-        : (ref.watch(colleagueNameProvider(assignedId)).valueOrNull ?? assignedId);
+        : (ref.watch(colleagueNameProvider(assignedId)).value ?? assignedId);
 
     // Feature audit module #11, Gap D: a technician working this ticket had no way to see the
     // contract it's tied to — contracts are only reachable via the admin-only /altro/contratti
     // route. This is read-only and deliberately small (name here, name/scadenza/condizioni in
     // the sheet it opens) — not a route to a full contract editor.
     final contractId = ticket.contractId;
-    final contractAsync = contractId == null ? null : ref.watch(contractByIdProvider(contractId));
+    final contractAsync = contractId == null
+        ? null
+        : ref.watch(contractByIdProvider(contractId));
     // Same offline-vs-error distinction the contract row draws: offline with nothing in the
     // mirror is its own state ("Non disponibile offline"), not the same as the server saying the
     // contract does not exist.
     final contractLabel = contractAsync?.when(
       data: (c) => c?['name'] as String? ?? '—',
       loading: () => 'Caricamento…',
-      error: (e, _) => e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
+      error: (e, _) =>
+          e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
     );
 
     // Feature audit module #13, Gap 6: mobile already syncs `Ticket.commessaId` but showed it
     // nowhere. Resolved the same way as the contract row above — through commessaByIdProvider,
     // which is online-then-mirror over the `commesse` reference cache.
     final commessaId = ticket.commessaId;
-    final commessaAsync = commessaId == null ? null : ref.watch(commessaByIdProvider(commessaId));
+    final commessaAsync = commessaId == null
+        ? null
+        : ref.watch(commessaByIdProvider(commessaId));
     final commessaLabel = commessaAsync?.when(
       data: (c) => c?['codice'] as String? ?? '—',
       loading: () => 'Caricamento…',
-      error: (e, _) => e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
+      error: (e, _) =>
+          e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
     );
 
     final disagreement = ref.watch(clockDisagreementProvider)[ticket.id];
@@ -293,7 +314,12 @@ class _TicketDetailBody extends ConsumerWidget {
                 ),
               ),
         liveValue: TicketTimerLiveValue(ticketId: ticket.id),
-        primaryAction: ticketTimerAction(context, ref, ticket.id, isClosed: closed),
+        primaryAction: ticketTimerAction(
+          context,
+          ref,
+          ticket.id,
+          isClosed: closed,
+        ),
         // Both report secondary actions mint a rapportino for this ticket, and a closed ticket is
         // finished work: the server would take the submit and leave the ticket closed. The
         // expanded row says why and where the way back is (the status pill reopens it).
@@ -308,11 +334,14 @@ class _TicketDetailBody extends ConsumerWidget {
             DetailAction(
               label: 'Crea report',
               icon: const Icon(LucideIcons.fileEdit, size: 16),
-              onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
+              onPressed: () =>
+                  _createRapportino(context, ref, ticket, locationAddress),
             ),
             DetailAction(
               label: 'AI Copilot',
-              onPressed: () => context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
+              onPressed: () => context.push(
+                AppRoutes.rapportiniCopilot(ticketId: ticket.id),
+              ),
             ),
           ],
           if (ticket.cantiereId != null)
@@ -360,7 +389,9 @@ class _TicketDetailBody extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: AppSpacing.md),
                 child: ClockDisagreementNote(
                   seconds: disagreement,
-                  onDismiss: () => ref.read(clockDisagreementProvider.notifier).dismiss(ticket.id),
+                  onDismiss: () => ref
+                      .read(clockDisagreementProvider.notifier)
+                      .dismiss(ticket.id),
                 ),
               ),
           ],
@@ -382,8 +413,11 @@ class _TicketDetailBody extends ConsumerWidget {
           title: 'Attività',
           trailing: DetailSectionLink(
             label: 'Apri',
-            onTap: () =>
-                openCompartmentSheet(context, label: 'Ore', content: compartmentContent('Ore')),
+            onTap: () => openCompartmentSheet(
+              context,
+              label: 'Ore',
+              content: compartmentContent('Ore'),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -424,14 +458,20 @@ class _TicketDetailBody extends ConsumerWidget {
               if (ticket.cantiereId != null) ...[
                 Consumer(
                   builder: (context, ref, _) {
-                    final cantiereAsync = ref.watch(cantiereByIdProvider(ticket.cantiereId!));
+                    final cantiereAsync = ref.watch(
+                      cantiereByIdProvider(ticket.cantiereId!),
+                    );
                     // Neutral fallback, not the raw GUID — the permanent label whenever the
                     // linked cantiere falls outside this technician's synced scope.
-                    final label = cantiereAsync.valueOrNull?.name ?? 'Cantiere collegato';
+                    final label =
+                        cantiereAsync.value?.name ?? 'Cantiere collegato';
                     return AppChip(
                       label: 'Cantiere: $label',
                       onTap: () => context.push(
-                        AppRoutes.cantieriDetailPath(ticket.cantiereId!, ticketId: ticket.id),
+                        AppRoutes.cantieriDetailPath(
+                          ticket.cantiereId!,
+                          ticketId: ticket.id,
+                        ),
                       ),
                     );
                   },
@@ -473,7 +513,9 @@ class _TicketDetailBody extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.base),
                   child: GeoMapCard(
-                    pointAsync: ref.watch(locationGeocodedLocationProvider(ticket.locationId)),
+                    pointAsync: ref.watch(
+                      locationGeocodedLocationProvider(ticket.locationId),
+                    ),
                     address: locationAddress,
                   ),
                 ),
@@ -503,11 +545,12 @@ class _TicketDetailBody extends ConsumerWidget {
     // rebuild and the tap must not slip a rapportino onto work the office considers finished.
     if (ticketIsClosed(
       ticket,
-      ref.read(closedTicketStatusIdsProvider).valueOrNull ?? const {},
+      ref.read(closedTicketStatusIdsProvider).value ?? const {},
     )) {
       showAppToast(
         context,
-        message: 'Intervento chiuso: riaprilo dal suo stato per creare un rapporto.',
+        message:
+            'Intervento chiuso: riaprilo dal suo stato per creare un rapporto.',
         tone: ToastTone.warning,
       );
       return;
@@ -516,7 +559,10 @@ class _TicketDetailBody extends ConsumerWidget {
     // A ticket can already have a Bozza — this button used to mint a second one silently on every
     // press, leaving rows indistinguishable to the office and to the technician. Ask before
     // creating; a dismissed dialog creates nothing.
-    final existing = await editableDraftsForTicket(ref.read(appDatabaseProvider), ticket.id);
+    final existing = await editableDraftsForTicket(
+      ref.read(appDatabaseProvider),
+      ticket.id,
+    );
     if (!context.mounted) return;
     if (existing.isNotEmpty) {
       // Built here rather than inline in the switch: this is the only use of `context`, and it now
@@ -562,9 +608,9 @@ class _TicketDetailBody extends ConsumerWidget {
   /// (StepClienteSede / StepDettagliTicket), which are built to fill a page, not to sit inside a
   /// DraggableScrollableSheet the way the compartment tabs do.
   void _openEditTicket(BuildContext context, Ticket ticket) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => EditTicketScreen(ticketId: ticket.id)));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => EditTicketScreen(ticketId: ticket.id)),
+    );
   }
 
   void _showAssignSheet(BuildContext context, WidgetRef ref, Ticket ticket) {
@@ -597,16 +643,24 @@ class _TicketDetailBody extends ConsumerWidget {
     final confirmed = await confirmDeleteDialog(
       context,
       title: 'Eliminare il ticket?',
-      message: '"${ticket.title}" verrà eliminato definitivamente, anche sul server.',
+      message:
+          '"${ticket.title}" verrà eliminato definitivamente, anche sul server.',
     );
     if (!confirmed || !context.mounted) return;
 
     try {
       await ref
           .read(ticketDeletionServiceProvider)
-          .deleteServerTicket(ticketId: ticket.id, isOnline: ref.read(isOnlineProvider));
+          .deleteServerTicket(
+            ticketId: ticket.id,
+            isOnline: ref.read(isOnlineProvider),
+          );
       if (context.mounted) {
-        showAppToast(context, message: 'Ticket eliminato', tone: ToastTone.success);
+        showAppToast(
+          context,
+          message: 'Ticket eliminato',
+          tone: ToastTone.success,
+        );
         context.pop(true);
       }
     } on TicketDeleteOfflineException catch (e) {
@@ -691,7 +745,10 @@ class _ContractSummarySheet extends ConsumerWidget {
                 final name = contract['name'] as String? ?? '—';
                 final endDate = contract['endDate'] as String?;
                 final scadenzaLabel = endDate != null
-                    ? DateFormat('dd/MM/yyyy', 'it').format(DateTime.parse(endDate))
+                    ? DateFormat(
+                        'dd/MM/yyyy',
+                        'it',
+                      ).format(DateTime.parse(endDate))
                     : 'Nessuna data fine';
                 final condizioni = contract['condizioni'] as String?;
                 return Column(
@@ -704,7 +761,9 @@ class _ContractSummarySheet extends ConsumerWidget {
                     KeyVal(label: 'Scadenza', value: scadenzaLabel),
                     KeyVal(
                       label: 'Condizioni',
-                      value: condizioni != null && condizioni.isNotEmpty ? condizioni : '—',
+                      value: condizioni != null && condizioni.isNotEmpty
+                          ? condizioni
+                          : '—',
                       showDivider: false,
                     ),
                   ],
@@ -854,7 +913,11 @@ class _DettagliSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           KeyVal(label: 'Data', value: dateLabel),
-          KeyVal(label: 'Chiusura', value: closedLabel, showDivider: hasDescription || hasNotes),
+          KeyVal(
+            label: 'Chiusura',
+            value: closedLabel,
+            showDivider: hasDescription || hasNotes,
+          ),
           if (hasDescription) _Prose(title: 'Descrizione', body: description!),
           if (hasNotes) _Prose(title: 'Note tecnico', body: technicianNotes!),
         ],
@@ -870,7 +933,10 @@ class _TabLoading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Padding(padding: EdgeInsets.all(AppSpacing.xxl), child: CircularProgressIndicator()),
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.xxl),
+        child: CircularProgressIndicator(),
+      ),
     );
   }
 }
@@ -885,8 +951,9 @@ String _formatBytes(int bytes) {
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
 
-String _formatQty(double qty) =>
-    qty == qty.truncateToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(1);
+String _formatQty(double qty) => qty == qty.truncateToDouble()
+    ? qty.toStringAsFixed(0)
+    : qty.toStringAsFixed(1);
 
 // ── Report tab ───────────────────────────────────────────────────────────────
 
@@ -930,9 +997,16 @@ class _ReportTab extends ConsumerWidget {
           ),
           child: Column(
             children: reports.map((r) {
-              final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(r.createdAt.toLocal());
+              final dateLabel = DateFormat(
+                'dd/MM/yyyy HH:mm',
+                'it',
+              ).format(r.createdAt.toLocal());
               return ListRow(
-                leading: Icon(LucideIcons.fileText, size: 20, color: context.colors.inkMuted),
+                leading: Icon(
+                  LucideIcons.fileText,
+                  size: 20,
+                  color: context.colors.inkMuted,
+                ),
                 title: r.title.isNotEmpty ? r.title : 'Rapporto di intervento',
                 subtitle: dateLabel,
                 meta: StatusPill(stato: r.statoLabel, small: true),
@@ -993,7 +1067,10 @@ class _ProdottiTab extends ConsumerWidget {
           child: Column(
             children: [
               for (var i = 0; i < prodotti.length; i++)
-                _ProdottoRow(prodotto: prodotti[i], isLast: i == prodotti.length - 1),
+                _ProdottoRow(
+                  prodotto: prodotti[i],
+                  isLast: i == prodotti.length - 1,
+                ),
             ],
           ),
         );
@@ -1018,7 +1095,10 @@ class _ProdottoRow extends StatelessWidget {
     final name = text('name') ?? 'Asset';
     final codice = text('codice');
     final serial = text('serialNumber');
-    final brandModel = [text('marchio'), text('modello')].whereType<String>().join(' ');
+    final brandModel = [
+      text('marchio'),
+      text('modello'),
+    ].whereType<String>().join(' ');
     final subtitle = [
       ?codice,
       if (serial != null) 'S/N: $serial',
@@ -1033,7 +1113,9 @@ class _ProdottoRow extends StatelessWidget {
       showDivider: !isLast,
       // The card is the same screen the Altro > Prodotti list opens; passing the row as `extra`
       // saves it a second fetch.
-      onTap: id == null ? null : () => context.push('/altro/prodotti/$id', extra: prodotto),
+      onTap: id == null
+          ? null
+          : () => context.push('/altro/prodotti/$id', extra: prodotto),
     );
   }
 }
@@ -1053,7 +1135,11 @@ class _ControlloTab extends ConsumerWidget {
     // ticket without assets renders exactly as before — [TicketChecklist.hasAssetChecklists], not
     // `hasAnything`, so ticket-level rows alone never put the asset card on this tab.
     final showAssets =
-        ref.watch(ticketChecklistProvider(ticketId)).valueOrNull?.hasAssetChecklists ?? false;
+        ref
+            .watch(ticketChecklistProvider(ticketId))
+            .value
+            ?.hasAssetChecklists ??
+        false;
     final assetCard = TicketAssetChecklistsCard(ticketId: ticketId);
     Widget wrap(Widget ticketLevel) => showAssets
         ? Column(
@@ -1127,7 +1213,10 @@ class _TicketControlStatusCard extends StatelessWidget {
     final valueLabel = _valueLabel(c);
 
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: 10,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1140,7 +1229,10 @@ class _TicketControlStatusCard extends StatelessWidget {
                 if (flat.groupPath.isNotEmpty)
                   Text(
                     flat.groupPath,
-                    style: TextStyle(color: context.colors.inkMuted, fontSize: 11),
+                    style: TextStyle(
+                      color: context.colors.inkMuted,
+                      fontSize: 11,
+                    ),
                   ),
                 Text(
                   c.label,
@@ -1155,7 +1247,10 @@ class _TicketControlStatusCard extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       valueLabel,
-                      style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
+                      style: TextStyle(
+                        color: context.colors.inkMuted,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
               ],
@@ -1198,7 +1293,9 @@ String _clock(Duration d) =>
 String _kickerContext(DateTime createdAt) {
   final created = createdAt.toLocal();
   final now = DateTime.now();
-  if (created.year == now.year && created.month == now.month && created.day == now.day) {
+  if (created.year == now.year &&
+      created.month == now.month &&
+      created.day == now.day) {
     return 'Oggi';
   }
   return DateFormat('dd/MM/yyyy', 'it').format(created);
@@ -1219,21 +1316,26 @@ const int _timelineLimit = 4;
 /// elapsed clock does, and history instants are UTC; both go through `.toLocal()`.
 final _ticketTimelineProvider = Provider.autoDispose
     .family<List<DetailActivityEvent>, String>((ref, ticketId) {
-      final worklogs = ref.watch(ticketWorklogsProvider(ticketId)).valueOrNull ?? const [];
-      final history = ref.watch(ticketHistoryMirrorProvider(ticketId)).valueOrNull ?? const [];
-      final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? const {};
-      final typeMap = ref.watch(ticketTypeMapProvider).valueOrNull ?? const {};
+      final worklogs =
+          ref.watch(ticketWorklogsProvider(ticketId)).value ?? const [];
+      final history =
+          ref.watch(ticketHistoryMirrorProvider(ticketId)).value ?? const [];
+      final statusMap = ref.watch(ticketStatusMapProvider).value ?? const {};
+      final typeMap = ref.watch(ticketTypeMapProvider).value ?? const {};
       final businessTime = ref.watch(businessTimeProvider);
       final now = DateTime.now();
 
       String when(DateTime t) {
-        final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
+        final sameDay =
+            t.year == now.year && t.month == now.month && t.day == now.day;
         return DateFormat(sameDay ? 'HH:mm' : 'dd/MM HH:mm', 'it').format(t);
       }
 
       final entries = <(DateTime, DetailActivityEvent)>[];
       for (final w in worklogs) {
-        final start = businessTime.instantOfLegacyLabel(w.workDate, w.startTime).toLocal();
+        final start = businessTime
+            .instantOfLegacyLabel(w.workDate, w.startTime)
+            .toLocal();
         entries.add((
           start,
           DetailActivityEvent(
@@ -1241,7 +1343,8 @@ final _ticketTimelineProvider = Provider.autoDispose
             title: w.isRunning ? 'Intervento in corso' : 'Intervento avviato',
             meta: [
               if (w.isManualEntry) 'inserimento manuale',
-              if (w.description != null && w.description!.isNotEmpty) w.description!,
+              if (w.description != null && w.description!.isNotEmpty)
+                w.description!,
             ].join(' · ').nullIfEmpty,
             tone: DetailEventTone.good,
           ),
@@ -1249,10 +1352,16 @@ final _ticketTimelineProvider = Provider.autoDispose
         if (!w.isRunning && w.endTime != null) {
           // Closed-session end = start instant + duration when known (survives an overnight
           // session); otherwise the end label in the same frame.
-          final end = (w.duration != null
-                  ? businessTime.instantOfLegacyLabel(w.workDate, w.startTime).add(w.duration!)
-                  : businessTime.instantOfLegacyLabel(w.workDate, w.endTime!))
-              .toLocal();
+          final end =
+              (w.duration != null
+                      ? businessTime
+                            .instantOfLegacyLabel(w.workDate, w.startTime)
+                            .add(w.duration!)
+                      : businessTime.instantOfLegacyLabel(
+                          w.workDate,
+                          w.endTime!,
+                        ))
+                  .toLocal();
           entries.add((
             end,
             DetailActivityEvent(
@@ -1271,13 +1380,17 @@ final _ticketTimelineProvider = Provider.autoDispose
             time: when(at),
             title: _StoricoTab._fieldLabel(h.fieldName),
             meta: _StoricoTab._change(h, statusMap, typeMap),
-            tone: h.fieldName == 'StatusId' ? DetailEventTone.warn : DetailEventTone.neutral,
+            tone: h.fieldName == 'StatusId'
+                ? DetailEventTone.warn
+                : DetailEventTone.neutral,
           ),
         ));
       }
 
       entries.sort((a, b) => b.$1.compareTo(a.$1));
-      return [for (final e in entries.take(_timelineLimit).toList().reversed) e.$2];
+      return [
+        for (final e in entries.take(_timelineLimit).toList().reversed) e.$2,
+      ];
     });
 
 class _TicketActivityTimeline extends ConsumerWidget {
@@ -1309,7 +1422,9 @@ class _InlineAttachmentsMeta extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(ticketAttachmentsMirrorProvider(ticketId).select((a) => a.valueOrNull?.length));
+    final count = ref.watch(
+      ticketAttachmentsMirrorProvider(ticketId).select((a) => a.value?.length),
+    );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1330,12 +1445,16 @@ class _InlineAttachments extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Mirror only: no request at page open. An empty mirror means "not known here", not "none".
-    final attachments = ref.watch(ticketAttachmentsMirrorProvider(ticketId)).valueOrNull ?? const [];
+    final attachments =
+        ref.watch(ticketAttachmentsMirrorProvider(ticketId)).value ?? const [];
 
     if (attachments.isEmpty) {
       return Text(
         'Apri per vedere o aggiungere allegati.',
-        style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: context.colors.inkMuted),
+        style: AppTextStyles.bodySmall.copyWith(
+          fontSize: 11,
+          color: context.colors.inkMuted,
+        ),
       );
     }
 
@@ -1378,7 +1497,8 @@ class _AllegatiTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final attachmentsAsync = ref.watch(ticketAttachmentsProvider(ticketId));
-    final pending = ref.watch(pendingTicketAttachmentsProvider(ticketId)).valueOrNull ?? const [];
+    final pending =
+        ref.watch(pendingTicketAttachmentsProvider(ticketId)).value ?? const [];
     // For openAttachment below — contentUrl is a path on the TaskTap API itself, not an external
     // storage URL, so it needs this same authenticated client (see openAttachment's own doc
     // comment).
@@ -1465,7 +1585,11 @@ class _AllegatiTab extends ConsumerWidget {
                     'it',
                   ).format(a.createdAt.toLocal());
                   return ListRow(
-                    leading: Icon(LucideIcons.paperclip, size: 20, color: context.colors.inkMuted),
+                    leading: Icon(
+                      LucideIcons.paperclip,
+                      size: 20,
+                      color: context.colors.inkMuted,
+                    ),
                     title: a.fileName,
                     subtitle: '${_formatBytes(a.sizeBytes)} · $dateLabel',
                     showDivider: a != attachments.last,
@@ -1512,10 +1636,12 @@ class _AttachmentUploadButtons extends ConsumerStatefulWidget {
   final String ticketId;
 
   @override
-  ConsumerState<_AttachmentUploadButtons> createState() => _AttachmentUploadButtonsState();
+  ConsumerState<_AttachmentUploadButtons> createState() =>
+      _AttachmentUploadButtonsState();
 }
 
-class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButtons> {
+class _AttachmentUploadButtonsState
+    extends ConsumerState<_AttachmentUploadButtons> {
   bool _busy = false;
 
   Future<void> _pickImage(ImageSource source) async {
@@ -1530,7 +1656,7 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
       // in the offline outbox for days, and image_picker's path is in purgeable temp storage — a
       // purge in between turns the queued photo into a permanent "non trovato" (audit F6). A copy
       // failure throws into the catch below, so the queue never receives a temp path.
-      final store = await ref.read(captureStoreProvider.future);
+      final store = await ref.readFuture(captureStoreProvider.future);
       final captured = await store.save(
         xfile.path,
         fileName: xfile.name,
@@ -1547,8 +1673,7 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
         if (!mounted) return;
         showAppToast(
           context,
-          message:
-              'File troppo grande: il limite per gli allegati è 10 MB. Scegline uno più piccolo.',
+          message: 'File troppo grande: il limite per gli allegati è 10 MB. Scegline uno più piccolo.',
           tone: ToastTone.error,
         );
         return;
@@ -1576,7 +1701,11 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
           tone: ToastTone.warning,
         );
       } else if (outcome.isSubmitted) {
-        showAppToast(context, message: 'Allegato caricato', tone: ToastTone.success);
+        showAppToast(
+          context,
+          message: 'Allegato caricato',
+          tone: ToastTone.success,
+        );
       } else {
         showAppToast(
           context,
@@ -1676,7 +1805,13 @@ class _PendingAttachmentRow extends ConsumerWidget {
                     color: context.colors.ink,
                   ),
                 ),
-                Text(subtitle, style: TextStyle(fontSize: 11, color: context.colors.inkMuted)),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.colors.inkMuted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1686,7 +1821,9 @@ class _PendingAttachmentRow extends ConsumerWidget {
               label: 'Riprova',
               size: AppButtonSize.sm,
               fullWidth: false,
-              onPressed: () => ref.read(ticketAttachmentUploadQueueProvider).retry(attachment.id),
+              onPressed: () => ref
+                  .read(ticketAttachmentUploadQueueProvider)
+                  .retry(attachment.id),
             ),
           ],
         ],
@@ -1719,7 +1856,9 @@ class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
     final api = ref.read(ticketDetailApiClientProvider);
     await api.setMateriali(widget.ticketId, rows);
 
-    final ticket = await ref.read(ticketByIdProvider(widget.ticketId).future);
+    final ticket = await ref.readFuture(
+      ticketByIdProvider(widget.ticketId).future,
+    );
     if (ticket == null) {
       if (mounted) setState(() => _editing = false);
       return;
@@ -1759,7 +1898,11 @@ class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
 
     if (!mounted) return;
     setState(() => _editing = false);
-    showAppToast(context, message: 'Fabbisogno aggiornato', tone: ToastTone.success);
+    showAppToast(
+      context,
+      message: 'Fabbisogno aggiornato',
+      tone: ToastTone.success,
+    );
   }
 
   @override
@@ -1801,7 +1944,8 @@ class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
         // the phone of missing data it may well have would be the same error pointing the other
         // way.
         final ticketKnown =
-            ref.watch(ticketMirrorKnownProvider(widget.ticketId)).valueOrNull != false;
+            ref.watch(ticketMirrorKnownProvider(widget.ticketId)).value !=
+            false;
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -1843,7 +1987,9 @@ class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
                     leading: Icon(
                       LucideIcons.package,
                       size: 20,
-                      color: m.disponibile ? context.colors.inkMuted : context.colors.red,
+                      color: m.disponibile
+                          ? context.colors.inkMuted
+                          : context.colors.red,
                     ),
                     title: m.nome,
                     subtitle: m.codice != null
@@ -1863,11 +2009,16 @@ class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
   }
 }
 
-String _materialeQtyLabel(TicketMaterialeDto m) =>
-    m.unitaMisura != null ? '${_formatQty(m.quantita)} ${m.unitaMisura}' : _formatQty(m.quantita);
+String _materialeQtyLabel(TicketMaterialeDto m) => m.unitaMisura != null
+    ? '${_formatQty(m.quantita)} ${m.unitaMisura}'
+    : _formatQty(m.quantita);
 
 class _EmptyTab extends StatelessWidget {
-  const _EmptyTab({required this.icon, required this.label, required this.body});
+  const _EmptyTab({
+    required this.icon,
+    required this.label,
+    required this.body,
+  });
 
   final IconData icon;
   final String label;
@@ -1876,7 +2027,12 @@ class _EmptyTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, 0),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        0,
+        AppSpacing.pagePadding,
+        0,
+      ),
       child: EmptyState(icon: icon, title: label, body: body),
     );
   }
@@ -1893,7 +2049,10 @@ class _PianificazioniTab extends ConsumerWidget {
 
     return schedulesAsync.when(
       loading: () => const Center(
-        child: Padding(padding: EdgeInsets.all(AppSpacing.xxl), child: CircularProgressIndicator()),
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.xxl),
+          child: CircularProgressIndicator(),
+        ),
       ),
       // Siblings (Allegati, Materiali, Rapportini, Storico) use UnavailableState.forFetchError,
       // which also names the offline case. That split has no meaning here: this tab reads a pure
@@ -1983,7 +2142,7 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
       // The shared provider, not a direct call: online it is the live list, offline (or when the
       // call fails) the synced colleagues mirror, so assigning a ticket with the radio off offers
       // the same technicians instead of an empty dropdown.
-      final techs = await ref.read(techniciansProvider.future);
+      final techs = await ref.readFuture(techniciansProvider.future);
       if (mounted) {
         setState(() {
           _technicians = techs;
@@ -1994,7 +2153,9 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
           // exactly zero or one item matching its value, so a stale id left in place here would
           // crash the sheet the moment it renders; falling back to unassigned keeps it valid.
           if (_selectedUserId != null &&
-              !_technicians.any((t) => (t['id'] as String?) == _selectedUserId)) {
+              !_technicians.any(
+                (t) => (t['id'] as String?) == _selectedUserId,
+              )) {
             _selectedUserId = null;
           }
         });
@@ -2021,12 +2182,20 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
     try {
       await widget.api.assignTicket(widget.ticket.id, _selectedUserId);
       if (mounted) {
-        showAppToast(context, message: 'Assegnazione aggiornata', tone: ToastTone.success);
+        showAppToast(
+          context,
+          message: 'Assegnazione aggiornata',
+          tone: ToastTone.success,
+        );
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
+        showAppToast(
+          context,
+          message: 'Impossibile salvare. Riprova.',
+          tone: ToastTone.error,
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -2068,11 +2237,18 @@ class _AssignSheetState extends ConsumerState<_AssignSheet> {
               child: DropdownButtonFormField<String>(
                 initialValue: _selectedUserId,
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('Non assegnato')),
+                  const DropdownMenuItem(
+                    value: null,
+                    child: Text('Non assegnato'),
+                  ),
                   ..._technicians.map(
                     (t) => DropdownMenuItem(
                       value: t['id'] as String,
-                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                      child: Text(
+                        t['displayName'] as String? ??
+                            t['email'] as String? ??
+                            '',
+                      ),
                     ),
                   ),
                 ],
@@ -2137,14 +2313,20 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
 
   void _report(String message, {bool ok = false}) {
     if (!mounted) return;
-    showAppToast(context, message: message, tone: ok ? ToastTone.success : ToastTone.error);
+    showAppToast(
+      context,
+      message: message,
+      tone: ok ? ToastTone.success : ToastTone.error,
+    );
   }
 
   Future<void> _selfAssign() async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await ref.read(ticketWorkflowApiClientProvider).selfAssign(widget.ticket.id);
+      await ref
+          .read(ticketWorkflowApiClientProvider)
+          .selfAssign(widget.ticket.id);
       _report('Ticket assegnato a te.', ok: true);
       // No local write — see the class doc. The sync brings back whatever id the server actually
       // recorded, and the Drift stream under this screen updates itself when it lands.
@@ -2172,7 +2354,9 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
       // waited a sync to agree with what the technician had just done.
       final now = DateTime.now().toUtc();
       final db = ref.read(appDatabaseProvider);
-      await (db.update(db.tickets)..where((t) => t.id.equals(widget.ticket.id))).write(
+      await (db.update(
+        db.tickets,
+      )..where((t) => t.id.equals(widget.ticket.id))).write(
         TicketsCompanion(
           statusId: Value(status.id),
           closedAt: Value(status.isClosed ? now : null),
@@ -2199,7 +2383,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     // list is unavailable on a device that has it.
     final List<TicketStatuse> statuses;
     try {
-      statuses = await ref.read(ticketStatusesProvider.future);
+      statuses = await ref.readFuture(ticketStatusesProvider.future);
     } catch (_) {
       _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
       return;
@@ -2223,9 +2407,12 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     // would read as "no capability" even for an office user and hide the statuses they may use.
     bool canConfigureStatuses;
     try {
-      final entitlement = await ref.read(cachedEntitlementProvider.future);
+      final entitlement = await ref.readFuture(
+        cachedEntitlementProvider.future,
+      );
       canConfigureStatuses =
-          entitlement?.capabilities.contains('interventi.ticket.configure') ?? false;
+          entitlement?.capabilities.contains('interventi.ticket.configure') ??
+          false;
     } catch (_) {
       canConfigureStatuses = false;
     }
@@ -2250,7 +2437,9 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     final chosen = await showModalBottomSheet<TicketStatuse>(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRack.cellRadius)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRack.cellRadius),
+        ),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -2335,7 +2524,11 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
         ],
         const Spacer(),
         if (_busy)
-          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
         // A seat that cannot write cannot take the ticket either. The pill above still shows the
         // state, and the reason below says why neither control is available.
         else if (unassigned && widget.canWrite)
@@ -2415,7 +2608,10 @@ class _OreTab extends ConsumerWidget {
         // Only closed entries contribute. A running one has no duration yet, and counting it as
         // zero would quietly understate the total on exactly the ticket being worked.
         final closed = entries.where((e) => !e.isRunning);
-        final total = closed.fold<Duration>(Duration.zero, (a, e) => a + e.duration!);
+        final total = closed.fold<Duration>(
+          Duration.zero,
+          (a, e) => a + e.duration!,
+        );
         final running = entries.where((e) => e.isRunning).length;
 
         return Padding(
@@ -2431,7 +2627,10 @@ class _OreTab extends ConsumerWidget {
               AppCard(
                 child: Row(
                   children: [
-                    if (running > 0) ...[const LiveDot(), const SizedBox(width: 8)],
+                    if (running > 0) ...[
+                      const LiveDot(),
+                      const SizedBox(width: 8),
+                    ],
                     Expanded(
                       child: Text(
                         offline ? 'Totale delle tue ore' : 'Totale registrato',
@@ -2524,7 +2723,8 @@ class TicketWorklogRow extends StatelessWidget {
       subtitle: [
         span,
         if (entry.isManualEntry) 'inserimento manuale',
-        if (entry.description != null && entry.description!.isNotEmpty) entry.description!,
+        if (entry.description != null && entry.description!.isNotEmpty)
+          entry.description!,
       ].join(' · '),
       meta: Text(
         // An open entry shows a dash, not 0:00 — the same refusal to draw a stopped-looking clock
@@ -2566,8 +2766,8 @@ class _StoricoTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(ticketHistoryProvider(ticketId));
-    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? {};
-    final typeMap = ref.watch(ticketTypeMapProvider).valueOrNull ?? {};
+    final statusMap = ref.watch(ticketStatusMapProvider).value ?? {};
+    final typeMap = ref.watch(ticketTypeMapProvider).value ?? {};
 
     return async.when(
       loading: () => const _TabLoading(),
@@ -2605,12 +2805,22 @@ class _StoricoTab extends ConsumerWidget {
             children: [
               for (final e in entries)
                 ListRow(
-                  leading: Icon(LucideIcons.history, size: 20, color: context.colors.inkMuted),
+                  leading: Icon(
+                    LucideIcons.history,
+                    size: 20,
+                    color: context.colors.inkMuted,
+                  ),
                   title: _fieldLabel(e.fieldName),
                   subtitle: _change(e, statusMap, typeMap),
                   meta: Text(
-                    DateFormat('dd/MM HH:mm', 'it').format(e.changedAt.toLocal()),
-                    style: TextStyle(fontSize: 11, color: context.colors.inkMuted),
+                    DateFormat(
+                      'dd/MM HH:mm',
+                      'it',
+                    ).format(e.changedAt.toLocal()),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.colors.inkMuted,
+                    ),
                   ),
                 ),
             ],

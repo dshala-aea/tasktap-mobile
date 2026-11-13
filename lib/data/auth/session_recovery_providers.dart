@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../sync/submission_queue.dart';
 import '../sync/submission_queue_watcher.dart' show realSubmissionQueueProvider;

@@ -27,10 +27,7 @@ final ticketChecklistProvider = StreamProvider.autoDispose.family<TicketChecklis
 ///
 /// Wraps the repository's own test rather than repeating the query: it is a plain "is there a
 /// `tickets` row", and a second copy would be free to drift from the first.
-final ticketMirrorKnownProvider = FutureProvider.autoDispose.family<bool, String>((
-  ref,
-  ticketId,
-) {
+final ticketMirrorKnownProvider = FutureProvider.autoDispose.family<bool, String>((ref, ticketId) {
   return ref.watch(checklistReadRepositoryProvider).hasSyncedTicket(ticketId);
 });
 
@@ -42,8 +39,10 @@ final checklistBackfillProvider = Provider<Future<void> Function(String ticketId
 
 /// The answers this report currently holds, keyed by TicketControl id. Fed by the editor's local
 /// rows so the checklist screen and the Riepilogo warning read the same values the send will carry.
-final controlAnswersProvider =
-    Provider.autoDispose.family<Map<String, ChecklistAnswer>, String>((ref, reportId) {
+final controlAnswersProvider = Provider.autoDispose.family<Map<String, ChecklistAnswer>, String>((
+  ref,
+  reportId,
+) {
   final rows = ref.watch(reportEditorProvider(reportId).select((s) => s.controlloRows));
   return {
     for (final r in rows)
@@ -59,11 +58,13 @@ final controlAnswersProvider =
 
 /// The client's mirror of the required-controls gate, or null when the report has no ticket yet
 /// (or its checklist is not in the local mirror). Never blocks: it informs Riepilogo.
-final assetChecklistStatusProvider =
-    Provider.autoDispose.family<AssetChecklistStatus?, String>((ref, reportId) {
+final assetChecklistStatusProvider = Provider.autoDispose.family<AssetChecklistStatus?, String>((
+  ref,
+  reportId,
+) {
   final ticketId = ref.watch(reportEditorProvider(reportId).select((s) => s.ticketId));
   if (ticketId == null || ticketId.isEmpty) return null;
-  final tree = ref.watch(ticketChecklistProvider(ticketId)).valueOrNull;
+  final tree = ref.watch(ticketChecklistProvider(ticketId)).value;
   if (tree == null) return null;
   final answers = ref.watch(controlAnswersProvider(reportId));
   return assetChecklistStatus(tree, (id) => answers[id]);

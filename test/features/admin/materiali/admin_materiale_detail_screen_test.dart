@@ -14,6 +14,7 @@ import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
@@ -252,9 +253,8 @@ void main() {
         'imageContentUrl': '/api/materiali/m1/image',
       }, '/api/materiali/m1'),
     );
-    when(
-      () => dio.get<List<int>>('/api/materiali/m1/image', options: any(named: 'options')),
-    ).thenAnswer((_) async => _ok<List<int>>([1, 2, 3], '/api/materiali/m1/image'));
+    when(() => dio.get<List<int>>('/api/materiali/m1/image', options: any(named: 'options')))
+        .thenAnswer((_) async => _ok<List<int>>([1, 2, 3], '/api/materiali/m1/image'));
 
     await _pump(tester, db, dio);
     // No live read just by opening the screen.
@@ -282,9 +282,8 @@ void main() {
 
   testWidgets('the Documenti row says when the material has no photo', (tester) async {
     await _seedMateriale(db);
-    when(
-      () => dio.get<Map<String, dynamic>>('/api/materiali/m1'),
-    ).thenAnswer((_) async => _ok<Map<String, dynamic>>({'id': 'm1'}, '/api/materiali/m1'));
+    when(() => dio.get<Map<String, dynamic>>('/api/materiali/m1'))
+        .thenAnswer((_) async => _ok<Map<String, dynamic>>({'id': 'm1'}, '/api/materiali/m1'));
 
     await _pump(tester, db, dio);
     await tester.ensureVisible(find.text('Apri foto materiale'));
@@ -301,9 +300,8 @@ void main() {
 
   testWidgets('a failed photo resolution says it is unavailable', (tester) async {
     await _seedMateriale(db);
-    when(
-      () => dio.get<Map<String, dynamic>>('/api/materiali/m1'),
-    ).thenThrow(DioException(requestOptions: RequestOptions(path: '/api/materiali/m1')));
+    when(() => dio.get<Map<String, dynamic>>('/api/materiali/m1'))
+        .thenThrow(DioException(requestOptions: RequestOptions(path: '/api/materiali/m1')));
 
     await _pump(tester, db, dio);
     await tester.ensureVisible(find.text('Apri foto materiale'));
@@ -330,9 +328,8 @@ void main() {
 
   testWidgets('deactivating asks for confirmation, then calls DELETE', (tester) async {
     await _seedMateriale(db);
-    when(
-      () => dio.delete<dynamic>('/api/materiali/m1'),
-    ).thenAnswer((_) async => _ok<dynamic>(null, '/api/materiali/m1'));
+    when(() => dio.delete<dynamic>('/api/materiali/m1'))
+        .thenAnswer((_) async => _ok<dynamic>(null, '/api/materiali/m1'));
 
     await _pump(tester, db, dio);
 
@@ -352,9 +349,8 @@ void main() {
 
   testWidgets('reactivating calls PUT with isActive true', (tester) async {
     await _seedMateriale(db, active: false);
-    when(
-      () => dio.put<dynamic>('/api/materiali/m1', data: any(named: 'data')),
-    ).thenAnswer((_) async => _ok<dynamic>(null, '/api/materiali/m1'));
+    when(() => dio.put<dynamic>('/api/materiali/m1', data: any(named: 'data')))
+        .thenAnswer((_) async => _ok<dynamic>(null, '/api/materiali/m1'));
 
     await _pump(tester, db, dio);
 
@@ -367,9 +363,9 @@ void main() {
     await tester.pumpAndSettle();
 
     final captured =
-        verify(
-              () => dio.put<dynamic>('/api/materiali/m1', data: captureAny(named: 'data')),
-            ).captured.single
+        verify(() => dio.put<dynamic>('/api/materiali/m1', data: captureAny(named: 'data')))
+                .captured
+                .single
             as Map;
     expect(captured['isActive'], isTrue);
 

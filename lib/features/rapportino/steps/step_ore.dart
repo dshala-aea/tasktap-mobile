@@ -1,6 +1,8 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+
 import '../../../core/widgets/widgets.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +25,7 @@ import '../../cantiere/cantiere_providers.dart' show cantiereWorklogsProvider;
 import '../../timbra/timbra_providers.dart' show workSessionRepositoryProvider;
 import '../../ticket/ticket_providers.dart' show ticketWorklogsProvider;
 import '../../ticket/ticket_workflow_api_client.dart' show TicketWorkLogDto;
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -52,7 +55,7 @@ class StepOre extends ConsumerWidget {
     // (ticketWorklogsProvider is online-only by design, see its own doc comment).
     final ticketId = state.ticketId;
     final worklogEntries = ticketId != null
-        ? ref.watch(ticketWorklogsProvider(ticketId)).valueOrNull
+        ? ref.watch(ticketWorklogsProvider(ticketId)).value
         : null;
 
     // Cantiere tier: only relevant when this report has no ticket-tier suggestion to offer
@@ -101,14 +104,14 @@ class StepOre extends ConsumerWidget {
               if (suggestion == null && cantiereId != null) {
                 final cantiereEntries = ref
                     .watch(cantiereWorklogsProvider((userId: row.userId, cantiereId: cantiereId)))
-                    .valueOrNull;
+                    .value;
                 if (cantiereEntries != null) {
                   suggestion = cantiereWorklogSuggestionFor(businessTime, cantiereEntries, row);
                 }
               }
 
               if (suggestion == null) {
-                final recentEntries = ref.watch(recentWorkLogProvider(row.userId)).valueOrNull;
+                final recentEntries = ref.watch(recentWorkLogProvider(row.userId)).value;
                 if (recentEntries != null) {
                   suggestion = recentWorkLogSuggestionFor(businessTime, recentEntries, row);
                 }
@@ -440,23 +443,16 @@ final recentWorkLogProvider = FutureProvider.autoDispose.family<List<UserWorkLog
     if (me == null || me != userId) return const [];
 
     final businessTime = ref.watch(businessTimeProvider);
-    final sessions = await ref
-        .watch(workSessionRepositoryProvider)
-        .getTodaySessions();
+    final sessions = await ref.watch(workSessionRepositoryProvider).getTodaySessions();
     final open = [
-      for (final i in assembleIntervals(
-        sessions,
-        businessDateOf: businessTime.businessDateOf,
-      ))
+      for (final i in assembleIntervals(sessions, businessDateOf: businessTime.businessDateOf))
         if (i.endTime == null) i,
     ];
     if (open.isEmpty) return const [];
 
     // Same reading as [recentWorkLogSuggestionFor]: an open timbratura is at most one entry, and
     // when a lost close left several, the most recent start is the shift still running.
-    final start = open
-        .map((i) => i.startTime)
-        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final start = open.map((i) => i.startTime).reduce((a, b) => a.isAfter(b) ? a : b);
     final (workDate, timeOfDay) = businessTime.legacyLabelOf(start);
     return [
       UserWorkLogDto(
@@ -572,8 +568,8 @@ class _StaffTileState extends State<_StaffTile> {
                   builder: (context, ref, _) => Text(
                     row.displayName.isNotEmpty
                         ? row.displayName
-                        : (ref.watch(colleagueNameProvider(row.userId)).valueOrNull ??
-                            'Collega non ancora sincronizzato'),
+                        : (ref.watch(colleagueNameProvider(row.userId)).value ??
+                              'Collega non ancora sincronizzato'),
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
@@ -903,10 +899,7 @@ class _ReadOnlyHours extends StatelessWidget {
         label: 'Ore',
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.md,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
           decoration: BoxDecoration(
             color: context.colors.bg3,
             borderRadius: BorderRadius.circular(AppSpacing.inputRadius),

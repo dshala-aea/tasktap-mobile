@@ -55,7 +55,7 @@ final cachedEntitlementProvider = FutureProvider<Entitlement?>((ref) {
 /// 'Both' before the first successful /auth/me — matching the same "no answer means allow"
 /// asymmetry the rest of this file's entitlement reads already use.
 final effectiveClockInMethodProvider = Provider<String>((ref) {
-  final cached = ref.watch(cachedEntitlementProvider).valueOrNull;
+  final cached = ref.watch(cachedEntitlementProvider).value;
   return cached?.clockInMethod ?? 'Both';
 });
 
@@ -72,7 +72,7 @@ final effectiveClockInMethodProvider = Provider<String>((ref) {
 /// whose answer is in hand; the repository records the session that answered and hands it back only
 /// to that same user, so this read is correct by construction, not by invalidating from outside.
 final smartWorkingTodayProvider = Provider<bool?>((ref) {
-  final signedIn = ref.watch(authStateProvider).valueOrNull;
+  final signedIn = ref.watch(authStateProvider).value;
   if (signedIn == null) return null;
   return ref.watch(entitlementRepositoryProvider).smartWorkingTodayFor(signedIn.id);
 });

@@ -72,7 +72,7 @@ class _CommessaDetailBody extends ConsumerWidget {
     final customerId = _string(commessa['customerId']);
     final customerName = customerId == null
         ? null
-        : ref.watch(customerByIdProvider(customerId)).valueOrNull?.companyName;
+        : ref.watch(customerByIdProvider(customerId)).value?.companyName;
     final dataApertura = _date(commessa['dataApertura']);
     final dataChiusura = _date(commessa['dataChiusura']);
     final importoLabel = _money(commessa['importo']);
@@ -88,10 +88,10 @@ class _CommessaDetailBody extends ConsumerWidget {
         : null;
 
     final cantieriAsync = ref.watch(cantieriForCommessaProvider(commessaId));
-    final cantieri = cantieriAsync.valueOrNull ?? const [];
-    final tickets = ref.watch(ticketsForCommessaProvider(commessaId)).valueOrNull ?? const [];
-    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? const <int, String>{};
-    final closedStatusIds = ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const <int>{};
+    final cantieri = cantieriAsync.value ?? const [];
+    final tickets = ref.watch(ticketsForCommessaProvider(commessaId)).value ?? const [];
+    final statusMap = ref.watch(ticketStatusMapProvider).value ?? const <int, String>{};
+    final closedStatusIds = ref.watch(closedTicketStatusIdsProvider).value ?? const <int>{};
     final closedTickets = tickets.where((t) => ticketIsClosed(t, closedStatusIds)).length;
 
     final hasNote = note != null && note.trim().isNotEmpty;

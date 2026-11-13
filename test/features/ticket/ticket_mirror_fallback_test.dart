@@ -21,7 +21,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart' show dioProvider;
-import 'package:tasktap_mobile/data/attachments/attachment_content_cache.dart' show AllegatoEntityType;
+import 'package:tasktap_mobile/data/attachments/attachment_content_cache.dart'
+    show AllegatoEntityType;
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
@@ -70,6 +71,7 @@ void main() {
 
   ProviderContainer container({required bool online, int? serverStatus}) {
     final c = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(online),
@@ -102,9 +104,7 @@ void main() {
     await db.into(db.assets).insert(AssetsCompanion.insert(id: assetId, name: name));
     await db
         .into(db.ticketAssets)
-        .insert(
-          TicketAssetsCompanion.insert(ticketId: 'ticket-1', prodottoAssistenzaId: assetId),
-        );
+        .insert(TicketAssetsCompanion.insert(ticketId: 'ticket-1', prodottoAssistenzaId: assetId));
   }
 
   /// The unit in the local catalogue, plus the ticket row that says it covers it. This is the pair
@@ -151,6 +151,7 @@ void main() {
       await insertAttachment('a1');
 
       final c = container(online: true);
+      c.listen(ticketAttachmentsProvider('ticket-1'), (_, _) {});
       final rows = await c.read(ticketAttachmentsProvider('ticket-1').future);
 
       expect(rows.map((r) => r.id), ['a1']);
@@ -161,6 +162,7 @@ void main() {
       await insertAttachment('a1');
 
       final c = container(online: true, serverStatus: 503);
+      c.listen(ticketAttachmentsProvider('ticket-1'), (_, _) {});
       final rows = await c.read(ticketAttachmentsProvider('ticket-1').future);
 
       expect(rows.map((r) => r.id), ['a1']);
@@ -170,6 +172,7 @@ void main() {
       await insertAttachment('a1');
 
       final c = container(online: true, serverStatus: 404);
+      c.listen(ticketAttachmentsProvider('ticket-1'), (_, _) {});
 
       await expectLater(
         c.read(ticketAttachmentsProvider('ticket-1').future),
@@ -179,6 +182,7 @@ void main() {
 
     test('a fault with an empty mirror says so, rather than listing nothing', () async {
       final c = container(online: true, serverStatus: 503);
+      c.listen(ticketAttachmentsProvider('ticket-1'), (_, _) {});
 
       await expectLater(
         c.read(ticketAttachmentsProvider('ticket-1').future),
@@ -193,6 +197,7 @@ void main() {
       await insertCoveredAsset(assetId: 'p1', name: 'Caldaia');
 
       final c = container(online: true);
+      c.listen(ticketProdottiProvider('ticket-1'), (_, _) {});
       final rows = await c.read(ticketProdottiProvider('ticket-1').future);
 
       expect(rows.map((r) => r['name']), ['Caldaia', 'Split']);
@@ -202,6 +207,7 @@ void main() {
       await insertCoveredAsset(assetId: 'p1', name: 'Caldaia');
 
       final c = container(online: true, serverStatus: 500);
+      c.listen(ticketProdottiProvider('ticket-1'), (_, _) {});
       final rows = await c.read(ticketProdottiProvider('ticket-1').future);
 
       expect(rows.map((r) => r['id']), ['p1']);
@@ -209,6 +215,7 @@ void main() {
 
     test('a fault with an empty mirror says so, rather than listing nothing', () async {
       final c = container(online: true, serverStatus: 500);
+      c.listen(ticketProdottiProvider('ticket-1'), (_, _) {});
 
       await expectLater(
         c.read(ticketProdottiProvider('ticket-1').future),
@@ -225,6 +232,7 @@ void main() {
       await insertCoveredProduct(id: 'p2', name: 'Split', ticketCovers: const ['p2']);
 
       final c = container(online: true);
+      c.listen(ticketProdottiProvider('ticket-1'), (_, _) {});
       final rows = await c.read(ticketProdottiProvider('ticket-1').future);
 
       expect(rows.map((r) => r['id']), ['p2']);
@@ -234,6 +242,7 @@ void main() {
       await insertCoveredProduct(id: 'p1', name: 'Caldaia', ticketCovers: const ['p1']);
 
       final c = container(online: true, serverStatus: 503);
+      c.listen(ticketProdottiProvider('ticket-1'), (_, _) {});
       final rows = await c.read(ticketProdottiProvider('ticket-1').future);
 
       expect(rows.single['name'], 'Caldaia');
@@ -247,6 +256,7 @@ void main() {
       await insertCoveredProduct(id: 'p9', name: 'Non coperto', ticketCovers: const []);
 
       final c = container(online: true, serverStatus: 500);
+      c.listen(ticketProdottiProvider('ticket-1'), (_, _) {});
       final rows = await c.read(ticketProdottiProvider('ticket-1').future);
 
       expect(rows.map((r) => r['id']), ['p1']);

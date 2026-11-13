@@ -339,7 +339,7 @@ class _AdminContractListScreenState extends ConsumerState<AdminContractListScree
 
   Widget _content(ContractListRows data) {
     final today = ref.watch(businessTimeProvider).businessToday();
-    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const [];
+    final customers = ref.watch(allCustomersProvider).value ?? const [];
     final customerNames = {for (final c in customers) c.id: c.companyName};
 
     final entries = data.rows.map((raw) {
@@ -534,9 +534,9 @@ class _ContractFilterSheetState extends ConsumerState<_ContractFilterSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const [];
-    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
-    final rows = ref.watch(adminContractsProvider).valueOrNull?.rows ?? const [];
+    final customers = ref.watch(allCustomersProvider).value ?? const [];
+    final locations = ref.watch(allLocationsProvider).value ?? const [];
+    final rows = ref.watch(adminContractsProvider).value?.rows ?? const [];
     final hasAutoRenewalData = rows.any((r) => r['autoRenewal'] is bool);
 
     final visibleLocations = _customerId == null

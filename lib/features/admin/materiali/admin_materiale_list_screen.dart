@@ -121,7 +121,7 @@ class _AdminMaterialeListBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final materialiAsync = ref.watch(adminMaterialiProvider);
-    final allMateriali = materialiAsync.valueOrNull ?? const <MaterialiData>[];
+    final allMateriali = materialiAsync.value ?? const <MaterialiData>[];
 
     final filtered = allMateriali.where((m) {
       if (!_matchesStatus(m, filters.status)) return false;
@@ -149,7 +149,7 @@ class _AdminMaterialeListBody extends ConsumerWidget {
         ),
     ];
 
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
     final showingInactive = filters.status != _MaterialeStatusFilter.attivi;
 
     Future<void> onRefresh() => refreshWithFeedback(context, ref);
@@ -394,7 +394,7 @@ class _MaterialeFilterSheetState extends ConsumerState<_MaterialeFilterSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final materiali = ref.watch(adminMaterialiProvider).valueOrNull ?? const [];
+    final materiali = ref.watch(adminMaterialiProvider).value ?? const [];
     final categories = {
       for (final m in materiali)
         if (m.category != null && m.category!.trim().isNotEmpty) m.category!.trim(),

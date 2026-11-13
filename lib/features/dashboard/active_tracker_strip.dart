@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:uuid/uuid.dart';
@@ -20,6 +21,7 @@ import '../../data/timbratura/remote_shift.dart' show OfflineRemoteShiftExceptio
 import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../timbra/timbra_providers.dart';
 import 'active_trackers_provider.dart';
+
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// What is running, right now, with the controls to stop it.
@@ -76,7 +78,7 @@ class ActiveTrackerStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // One clock for the whole strip. Until it emits, the rows still show a correct elapsed time
     // computed from the device clock rather than a placeholder.
-    final now = ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc();
+    final now = ref.watch(nowProvider).value ?? DateTime.now().toUtc();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -137,9 +139,9 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
         case ActiveTrackerKind.attendance:
           // The whole-log state, not today's: the same answer that drew "Ferma" decides whether
           // this tap starts or ends the shift.
-          await ref.read(punchNotifierProvider.notifier).punch(
-            ref.read(actionableShiftStateProvider),
-          );
+          await ref
+              .read(punchNotifierProvider.notifier)
+              .punch(ref.read(actionableShiftStateProvider));
           _throwIfPunchFailed();
         case ActiveTrackerKind.cantiere:
           // A site session this device is holding locally (checked in with no signal) has no
@@ -151,13 +153,15 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
           // Awaited rather than read: Drift answers on a microtask, so a synchronous read here
           // would sample the provider before its first emission and decide "nothing local" — the
           // one decision that must not be wrong.
-          final local = await ref.read(localCantiereTimersProvider.future);
+          final local = await ref.readFuture(localCantiereTimersProvider.future);
           if (local.any((l) => l.entityId == t.entityId)) {
-            await ref.read(cantiereSessionRepositoryProvider).addEvent(
-              id: const Uuid().v4(),
-              eventTime: DateTime.now().toUtc(),
-              eventType: 'uscita',
-            );
+            await ref
+                .read(cantiereSessionRepositoryProvider)
+                .addEvent(
+                  id: const Uuid().v4(),
+                  eventTime: DateTime.now().toUtc(),
+                  eventType: 'uscita',
+                );
             unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
             if (mounted) {
               showAppToast(
@@ -167,8 +171,9 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
               );
             }
           } else {
-            final clockDisagreement =
-                await ref.read(cantiereWorklogApiClientProvider).endCantiere();
+            final clockDisagreement = await ref
+                .read(cantiereWorklogApiClientProvider)
+                .endCantiere();
             // Same banner as the punch screens: this is the other door the same close comes
             // through, and the server's answer is the only place the advice exists.
             if (clockDisagreement != null) {

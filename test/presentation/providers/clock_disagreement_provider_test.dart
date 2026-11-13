@@ -13,7 +13,7 @@ import 'package:tasktap_mobile/presentation/providers/clock_disagreement_provide
 void main() {
   late ProviderContainer container;
 
-  setUp(() => container = ProviderContainer());
+  setUp(() => container = ProviderContainer(retry: (_, _) => null));
   tearDown(() => container.dispose());
 
   ClockDisagreementNotifier notifier() =>
@@ -32,15 +32,25 @@ void main() {
 
     notifier().record('t1', 720);
 
-    expect(rebuilds, 0, reason: 'the queued batch is re-sent on every sync with the same answer');
+    expect(
+      rebuilds,
+      0,
+      reason: 'the queued batch is re-sent on every sync with the same answer',
+    );
   });
 
-  test('a later disagreement for another ticket leaves the first one alone', () {
-    notifier().record('t1', 720);
-    notifier().record('t2', -1800);
+  test(
+    'a later disagreement for another ticket leaves the first one alone',
+    () {
+      notifier().record('t1', 720);
+      notifier().record('t2', -1800);
 
-    expect(container.read(clockDisagreementProvider), {'t1': 720, 't2': -1800});
-  });
+      expect(container.read(clockDisagreementProvider), {
+        't1': 720,
+        't2': -1800,
+      });
+    },
+  );
 
   test('dismissing one ticket does not silence another', () {
     notifier().record('t1', 720);
@@ -62,17 +72,25 @@ void main() {
   });
 
   group('the punch-screen banners', () {
-    test('record the gap, and a retried batch reporting it again changes nothing', () {
-      final n = container.read(timbraClockDisagreementProvider.notifier);
-      n.record(720);
-      var rebuilds = 0;
-      container.listen(timbraClockDisagreementProvider, (_, _) => rebuilds++);
+    test(
+      'record the gap, and a retried batch reporting it again changes nothing',
+      () {
+        final n = container.read(timbraClockDisagreementProvider.notifier);
+        n.record(720);
+        var rebuilds = 0;
+        container.listen(timbraClockDisagreementProvider, (_, _) => rebuilds++);
 
-      n.record(720);
+        n.record(720);
 
-      expect(container.read(timbraClockDisagreementProvider), 720);
-      expect(rebuilds, 0, reason: 'the queued batch is re-sent on every sync with the same answer');
-    });
+        expect(container.read(timbraClockDisagreementProvider), 720);
+        expect(
+          rebuilds,
+          0,
+          reason:
+              'the queued batch is re-sent on every sync with the same answer',
+        );
+      },
+    );
 
     test('dismiss clears the banner; the server keeps the record', () {
       final n = container.read(timbraClockDisagreementProvider.notifier);

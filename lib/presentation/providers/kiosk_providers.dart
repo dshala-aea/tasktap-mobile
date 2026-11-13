@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/kiosk/kiosk_lock_service.dart';
 import '../../core/startup/startup_report.dart';

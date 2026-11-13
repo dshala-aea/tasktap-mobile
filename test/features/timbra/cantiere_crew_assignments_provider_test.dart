@@ -38,17 +38,16 @@ void main() {
   });
   tearDown(() => db.close());
 
-  Future<void> seedCrew(String id, String cantiereId, String userId, {bool isLead = false}) =>
-      db
-          .into(db.cantiereCrewAssignments)
-          .insert(
-            CantiereCrewAssignmentsCompanion.insert(
-              id: id,
-              cantiereId: cantiereId,
-              userId: userId,
-              isLead: Value(isLead),
-            ),
-          );
+  Future<void> seedCrew(String id, String cantiereId, String userId, {bool isLead = false}) => db
+      .into(db.cantiereCrewAssignments)
+      .insert(
+        CantiereCrewAssignmentsCompanion.insert(
+          id: id,
+          cantiereId: cantiereId,
+          userId: userId,
+          isLead: Value(isLead),
+        ),
+      );
 
   /// A container holding the crew provider alive (it is autoDispose) plus the two inputs it reads.
   ProviderContainer container({
@@ -57,6 +56,7 @@ void main() {
     String? internalUserId = 'u1',
   }) {
     final c = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(online),
@@ -80,6 +80,7 @@ void main() {
     final client = _FakeCrewClient(error: StateError('offline: no network call expected'));
     final c = container(online: false, client: client);
 
+    c.listen(cantiereCrewAssignmentsProvider('c1'), (_, _) {});
     final rows = await c.read(cantiereCrewAssignmentsProvider('c1').future);
 
     expect(rows.map((r) => r.id), unorderedEquals(['a1', 'a2']));
@@ -96,6 +97,7 @@ void main() {
     );
     final c = container(online: true, client: client);
 
+    c.listen(cantiereCrewAssignmentsProvider('c1'), (_, _) {});
     final rows = await c.read(cantiereCrewAssignmentsProvider('c1').future);
 
     expect(rows.single.id, 's1', reason: 'online this app always shows the latest server data');
@@ -113,6 +115,7 @@ void main() {
     );
     final c = container(online: true, client: client);
 
+    c.listen(cantiereCrewAssignmentsProvider('c1'), (_, _) {});
     final rows = await c.read(cantiereCrewAssignmentsProvider('c1').future);
 
     expect(rows.single.id, 'a1');
@@ -123,7 +126,9 @@ void main() {
     await seedCrew('a1', 'c1', 'u1', isLead: true);
 
     final c = container(online: false, client: _FakeCrewClient());
+    c.listen(internalUserIdProvider, (_, _) {});
     await c.read(internalUserIdProvider.future);
+    c.listen(cantiereCrewAssignmentsProvider('c1'), (_, _) {});
     await c.read(cantiereCrewAssignmentsProvider('c1').future);
 
     expect(c.read(isLeadForCantiereProvider('c1')), isTrue);
@@ -134,7 +139,9 @@ void main() {
     await seedCrew('a2', 'c1', 'u2', isLead: true);
 
     final c = container(online: false, client: _FakeCrewClient());
+    c.listen(internalUserIdProvider, (_, _) {});
     await c.read(internalUserIdProvider.future);
+    c.listen(cantiereCrewAssignmentsProvider('c1'), (_, _) {});
     await c.read(cantiereCrewAssignmentsProvider('c1').future);
 
     expect(c.read(isLeadForCantiereProvider('c1')), isFalse);
@@ -143,7 +150,9 @@ void main() {
   test('offline with nothing mirrored: not lead, and no network call', () async {
     final client = _FakeCrewClient(error: StateError('offline: no network call expected'));
     final c = container(online: false, client: client);
+    c.listen(internalUserIdProvider, (_, _) {});
     await c.read(internalUserIdProvider.future);
+    c.listen(cantiereCrewAssignmentsProvider('c1'), (_, _) {});
     await c.read(cantiereCrewAssignmentsProvider('c1').future);
 
     expect(c.read(isLeadForCantiereProvider('c1')), isFalse);

@@ -5,9 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/auth/account_methods_api_client.dart';
 
 class _Adapter implements HttpClientAdapter {
-  _Adapter({this.status = 200, this.body = '{}'});
+  _Adapter({this.body = '{}'});
 
-  final int status;
   final String body;
   RequestOptions? captured;
 
@@ -23,7 +22,7 @@ class _Adapter implements HttpClientAdapter {
     captured = options;
     return ResponseBody.fromString(
       body,
-      status,
+      200,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },
@@ -36,7 +35,9 @@ AccountMethodsApiClient _client(_Adapter adapter) =>
 
 void main() {
   test('posts the login name to the anonymous methods endpoint', () async {
-    final adapter = _Adapter(body: jsonEncode({'hasPasskey': true, 'hasPassword': false}));
+    final adapter = _Adapter(
+      body: jsonEncode({'hasPasskey': true, 'hasPassword': false}),
+    );
 
     await _client(adapter).fetch('tech@tasktap.io');
 
@@ -47,7 +48,9 @@ void main() {
   });
 
   test('parses both method flags', () async {
-    final adapter = _Adapter(body: jsonEncode({'hasPasskey': true, 'hasPassword': true}));
+    final adapter = _Adapter(
+      body: jsonEncode({'hasPasskey': true, 'hasPassword': true}),
+    );
 
     final methods = await _client(adapter).fetch('tech@tasktap.io');
 

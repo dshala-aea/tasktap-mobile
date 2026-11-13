@@ -297,7 +297,7 @@ class _TitleBlock extends ConsumerWidget {
     final customerId = cantiere.customerId;
     final customer = customerId == null
         ? null
-        : ref.watch(customerByIdProvider(customerId)).valueOrNull?.companyName;
+        : ref.watch(customerByIdProvider(customerId)).value?.companyName;
     final sub = [
       if (customer != null && customer.isNotEmpty) 'Cliente $customer',
       if (address.isNotEmpty) address,
@@ -388,7 +388,7 @@ class _SiteStateCard extends ConsumerWidget {
     final activeElsewhere = active != null && !activeHere;
     final today = ref.watch(cantiereTodayHoursProvider(cantiere.id));
     final closed = cantiere.status != 0;
-    final crewCount = ref.watch(cantiereCrewAssignmentsProvider(cantiere.id)).valueOrNull?.length;
+    final crewCount = ref.watch(cantiereCrewAssignmentsProvider(cantiere.id)).value?.length;
     final crewTail = crewCount != null && crewCount > 0 ? ' · squadra di $crewCount' : '';
 
     return CantiereCard(
@@ -434,8 +434,7 @@ class _SiteStateCard extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: CantiereHeroCopy(
-                before:
-                    'Sei già in cantiere su un altro sito. Chiudi quella sessione prima di timbrare qui.',
+                before: 'Sei già in cantiere su un altro sito. Chiudi quella sessione prima di timbrare qui.',
               ),
             ),
           if (closed)
@@ -507,8 +506,7 @@ class _SquadraSection extends ConsumerWidget {
     final assignmentsAsync = ref.watch(cantiereCrewAssignmentsProvider(cantiereId));
     // Offline plus a mirror that has never been filled is "we don't know", not "nobody".
     final crewUnknown =
-        !ref.watch(isOnlineProvider) &&
-        ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+        !ref.watch(isOnlineProvider) && ref.watch(hasSyncedAtLeastOnceProvider).value == false;
     final isLead = ref.watch(isLeadForCantiereProvider(cantiereId));
 
     return assignmentsAsync.when(
@@ -536,7 +534,7 @@ class _SquadraSection extends ConsumerWidget {
                       _CrewChip(
                         // Same fallback as everywhere colleagueNameProvider is read: the raw id
                         // rather than nothing when the mirror doesn't (yet) know them.
-                        name: ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId,
+                        name: ref.watch(colleagueNameProvider(a.userId)).value ?? a.userId,
                         isLead: a.isLead,
                       ),
                   ],
@@ -610,7 +608,7 @@ class _TicketsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ticketsAsync = ref.watch(ticketsForCantiereProvider(cantiereId));
-    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? const <int, String>{};
+    final statusMap = ref.watch(ticketStatusMapProvider).value ?? const <int, String>{};
 
     return CantiereSection(
       title: 'Ticket collegati',
@@ -891,8 +889,7 @@ class _TimbratureSection extends ConsumerWidget {
     final logsAsync = ref.watch(cantiereWorkLogMirrorProvider(cantiereId));
     // Offline with a mirror that has never been filled is "we don't know", not "you never punched".
     final unknown =
-        !ref.watch(isOnlineProvider) &&
-        ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+        !ref.watch(isOnlineProvider) && ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     return logsAsync.when(
       loading: () => const SizedBox.shrink(),

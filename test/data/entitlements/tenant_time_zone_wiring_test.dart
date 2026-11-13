@@ -56,13 +56,15 @@ void main() {
   );
 
   void stubMe(Map<String, dynamic> body) {
-    when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) async => ok(body));
+    when(() => dio.get<Map<String, dynamic>>(any()))
+        .thenAnswer((_) async => ok(body));
   }
 
   Future<String?> prefsZone() async =>
       (await SharedPreferences.getInstance()).getString(tenantTimeZonePrefsKey);
 
-  Future<void> refresh() => container.read(entitlementServiceProvider).refresh();
+  Future<void> refresh() =>
+      container.read(entitlementServiceProvider).refresh();
 
   setUp(() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -71,10 +73,12 @@ void main() {
     auth = _MockAuthRepository();
     signedIn = user;
     when(() => auth.currentUser).thenAnswer((_) => signedIn);
-    when(() => auth.authStateChanges).thenAnswer((_) => const Stream<AuthUser?>.empty());
+    when(() => auth.authStateChanges)
+        .thenAnswer((_) => const Stream<AuthUser?>.empty());
     when(() => auth.signOut()).thenAnswer((_) async => signedIn = null);
     db = AppDatabase(NativeDatabase.memory());
     container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         dioProvider.overrideWithValue(dio),
         authRepositoryProvider.overrideWithValue(auth),
@@ -97,20 +101,30 @@ void main() {
     expect(await prefsZone(), 'Europe/Berlin');
   });
 
-  test('a later body without the key resets to Rome and forgets the cache', () async {
-    stubMe(authMeBody(tenantTimeZone: 'Europe/Berlin'));
-    await refresh();
-    await pumpEventQueue();
+  test(
+    'a later body without the key resets to Rome and forgets the cache',
+    () async {
+      stubMe(authMeBody(tenantTimeZone: 'Europe/Berlin'));
+      await refresh();
+      await pumpEventQueue();
 
-    stubMe(authMeBody());
-    await refresh();
-    await pumpEventQueue();
+      stubMe(authMeBody());
+      await refresh();
+      await pumpEventQueue();
 
-    expect(container.read(businessZoneIdProvider), 'Europe/Rome');
-    expect(await prefsZone(), isNull);
-  });
+      expect(container.read(businessZoneIdProvider), 'Europe/Rome');
+      expect(await prefsZone(), isNull);
+    },
+  );
 
-  for (final bad in <Object?>['', '   ', null, 'W. Europe Standard Time', 'europe/berlin', 7]) {
+  for (final bad in <Object?>[
+    '',
+    '   ',
+    null,
+    'W. Europe Standard Time',
+    'europe/berlin',
+    7,
+  ]) {
     test(
       'a later invalid tenantTimeZone ($bad) resets to Rome, never keeps the old zone',
       () async {
@@ -134,36 +148,41 @@ void main() {
     await refresh();
     await pumpEventQueue();
 
-    when(
-      () => dio.get<Map<String, dynamic>>(any()),
-    ).thenThrow(DioException(requestOptions: RequestOptions(path: '/api/Auth/me')));
+    when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(
+      DioException(requestOptions: RequestOptions(path: '/api/Auth/me')),
+    );
     await refresh();
     await pumpEventQueue();
 
     expect(container.read(businessZoneIdProvider), 'Asia/Tokyo');
   });
 
-  test('a /me answered after sign-out (old tenant) does not set the zone', () async {
-    final gate = Completer<Response<Map<String, dynamic>>>();
-    when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) => gate.future);
+  test(
+    'a /me answered after sign-out (old tenant) does not set the zone',
+    () async {
+      final gate = Completer<Response<Map<String, dynamic>>>();
+      when(() => dio.get<Map<String, dynamic>>(any()))
+          .thenAnswer((_) => gate.future);
 
-    final pending = refresh();
-    await container.read(loginProvider.notifier).signOut();
-    expect(container.read(businessZoneIdProvider), 'Europe/Rome');
-    expect(await prefsZone(), isNull);
+      final pending = refresh();
+      await container.read(loginProvider.notifier).signOut();
+      expect(container.read(businessZoneIdProvider), 'Europe/Rome');
+      expect(await prefsZone(), isNull);
 
-    gate.complete(ok(authMeBody(tenantTimeZone: 'Pacific/Auckland')));
-    await pending;
-    await pumpEventQueue();
+      gate.complete(ok(authMeBody(tenantTimeZone: 'Pacific/Auckland')));
+      await pending;
+      await pumpEventQueue();
 
-    expect(container.read(businessZoneIdProvider), 'Europe/Rome');
-    expect(await prefsZone(), isNull);
-  });
+      expect(container.read(businessZoneIdProvider), 'Europe/Rome');
+      expect(await prefsZone(), isNull);
+    },
+  );
 
   test('sign-out resets the zone even when wiping local data throws', () async {
     final throwingDb = _ThrowingWipeDb(NativeDatabase.memory());
     addTearDown(throwingDb.close);
     final c = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         dioProvider.overrideWithValue(dio),
         authRepositoryProvider.overrideWithValue(auth),
@@ -174,36 +193,40 @@ void main() {
     await c.read(businessZoneIdProvider.notifier).set('Europe/Berlin');
     expect(c.read(businessZoneIdProvider), 'Europe/Berlin');
 
-    await expectLater(c.read(loginProvider.notifier).signOut(), throwsA(isA<StateError>()));
+    await expectLater(
+      c.read(loginProvider.notifier).signOut(),
+      throwsA(isA<StateError>()),
+    );
 
     expect(c.read(businessZoneIdProvider), 'Europe/Rome');
     expect(await prefsZone(), isNull);
   });
 
-  test(
-    'a /me answered after sign-out writes neither the entitlement row nor internal_user_id',
-    () async {
-      final gate = Completer<Response<Map<String, dynamic>>>();
-      when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) => gate.future);
+  test('a /me answered after sign-out writes neither the entitlement row nor internal_user_id', () async {
+    final gate = Completer<Response<Map<String, dynamic>>>();
+    when(() => dio.get<Map<String, dynamic>>(any()))
+        .thenAnswer((_) => gate.future);
 
-      final pending = container.read(entitlementServiceProvider).refresh();
-      await container.read(loginProvider.notifier).signOut();
+    final pending = container.read(entitlementServiceProvider).refresh();
+    await container.read(loginProvider.notifier).signOut();
 
-      gate.complete(
-        ok({
-          ...authMeBody(tenantTimeZone: 'Pacific/Auckland'),
-          'user': {'id': 'guid-of-old-tenant-user'},
-        }),
-      );
+    gate.complete(
+      ok({
+        ...authMeBody(tenantTimeZone: 'Pacific/Auckland'),
+        'user': {'id': 'guid-of-old-tenant-user'},
+      }),
+    );
 
-      expect(await pending, isFalse);
-      await pumpEventQueue();
+    expect(await pending, isFalse);
+    await pumpEventQueue();
 
-      expect(await container.read(entitlementRepositoryProvider).read(), isNull);
-      expect((await SharedPreferences.getInstance()).getString(internalUserIdPrefsKey), isNull);
-      expect(container.read(businessZoneIdProvider), 'Europe/Rome');
-    },
-  );
+    expect(await container.read(entitlementRepositoryProvider).read(), isNull);
+    expect(
+      (await SharedPreferences.getInstance()).getString(internalUserIdPrefsKey),
+      isNull,
+    );
+    expect(container.read(businessZoneIdProvider), 'Europe/Rome');
+  });
 
   test('refresh() does not return before the zone is persisted', () async {
     stubMe(authMeBody(tenantTimeZone: 'Europe/Berlin'));
@@ -275,7 +298,10 @@ void main() {
     });
 
     test('reset() when already Rome does not rebuild but still clears the prefs key', () async {
-      (await SharedPreferences.getInstance()).setString(tenantTimeZonePrefsKey, 'stale');
+      (await SharedPreferences.getInstance()).setString(
+        tenantTimeZonePrefsKey,
+        'stale',
+      );
       final notifier = container.read(businessZoneIdProvider.notifier);
       await notifier.hydrateForTest();
       await notifier.set('Europe/Rome');

@@ -13,6 +13,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -67,9 +68,7 @@ void main() {
   });
 
   void givenUnsent(int count) {
-    when(() => counter.count()).thenAnswer(
-      (_) async => UnsentWorkBreakdown(pendingTickets: count),
-    );
+    when(() => counter.count()).thenAnswer((_) async => UnsentWorkBreakdown(pendingTickets: count));
   }
 
   List<Override> overrides() => [
@@ -164,7 +163,10 @@ void main() {
 
   Future<void> pumpAuthed(WidgetTester tester, Widget screen) async {
     await tester.pumpWidget(
-      ProviderScope(overrides: overrides(), child: MaterialApp(home: screen)),
+      ProviderScope(
+        overrides: overrides(),
+        child: MaterialApp(home: screen),
+      ),
     );
     await tester.pump();
     authStream.add(_fakeUser());

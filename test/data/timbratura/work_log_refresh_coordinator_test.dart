@@ -98,6 +98,7 @@ void main() {
     test('a WorkLogChanged envelope (real wire shape) requests a refresh', () {
       final fake = _FakeCoordinator();
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [workLogRefreshCoordinatorProvider.overrideWithValue(fake)],
       );
       addTearDown(container.dispose);
@@ -117,6 +118,7 @@ void main() {
     test('every action variant is handled the same way', () {
       final fake = _FakeCoordinator();
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [workLogRefreshCoordinatorProvider.overrideWithValue(fake)],
       );
       addTearDown(container.dispose);
@@ -136,6 +138,7 @@ void main() {
     test('an admin correction nudge requests exactly one refresh', () {
       final fake = _FakeCoordinator();
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [workLogRefreshCoordinatorProvider.overrideWithValue(fake)],
       );
       addTearDown(container.dispose);
@@ -154,6 +157,7 @@ void main() {
     test('a future unknown action still refreshes and does not throw', () {
       final fake = _FakeCoordinator();
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [workLogRefreshCoordinatorProvider.overrideWithValue(fake)],
       );
       addTearDown(container.dispose);
@@ -172,6 +176,7 @@ void main() {
     test('an envelope with no data never reaches the router (parse throws, nothing refreshes)', () {
       final fake = _FakeCoordinator();
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [workLogRefreshCoordinatorProvider.overrideWithValue(fake)],
       );
       addTearDown(container.dispose);
@@ -189,17 +194,20 @@ void main() {
 
 void coordinatorSyncTests() {
   group('WorkLogRefreshCoordinator + pending command retry', () {
-    test('refreshNow retries queued commands BEFORE reconciling, so reconcile sees their result', () async {
-      final order = <String>[];
-      final c = WorkLogRefreshCoordinator(
-        syncPending: () async => order.add('sync'),
-        reconcile: () async => order.add('reconcile'),
-        refetchTrackers: () => order.add('refetch'),
-      );
-      await c.refreshNow();
-      expect(order, ['refetch', 'sync', 'reconcile']);
-      c.dispose();
-    });
+    test(
+      'refreshNow retries queued commands BEFORE reconciling, so reconcile sees their result',
+      () async {
+        final order = <String>[];
+        final c = WorkLogRefreshCoordinator(
+          syncPending: () async => order.add('sync'),
+          reconcile: () async => order.add('reconcile'),
+          refetchTrackers: () => order.add('refetch'),
+        );
+        await c.refreshNow();
+        expect(order, ['refetch', 'sync', 'reconcile']);
+        c.dispose();
+      },
+    );
 
     test('sync:false (used by the sync service itself) does not loop back into sync', () async {
       var syncs = 0;

@@ -54,6 +54,7 @@ AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 ProviderContainer _buildContainer(AppDatabase db) {
   return ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       userSignatureApiClientProvider.overrideWithValue(const _StubUserSignatureApiClient()),
@@ -74,7 +75,9 @@ ProviderContainer _buildContainer(AppDatabase db) {
 Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(home: Scaffold(body: StepRiepilogo(reportId: _reportId))),
+    child: const MaterialApp(
+      home: Scaffold(body: StepRiepilogo(reportId: _reportId)),
+    ),
   );
 }
 
@@ -84,10 +87,8 @@ Finder signoffLabel() => find.text('OSSERVAZIONI CLIENTE', findRichText: true);
 
 /// The signoff input. At rest it is the only `AppTextField` on the step — the typed-signature
 /// dialog's name field is only mounted once that dialog opens.
-Finder signoffInput() => find.descendant(
-  of: find.byType(AppTextField),
-  matching: find.byType(TextField),
-);
+Finder signoffInput() =>
+    find.descendant(of: find.byType(AppTextField), matching: find.byType(TextField));
 
 AppTextField signoffField(WidgetTester tester) =>
     tester.widget<AppTextField>(find.byType(AppTextField));

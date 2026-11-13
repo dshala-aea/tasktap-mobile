@@ -10,6 +10,7 @@ import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
 import '../reference_providers.dart';
 import '../ticket_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -44,10 +45,10 @@ class StepRiepilogoTicket extends ConsumerWidget {
     final statusMapAsync = ref.watch(ticketStatusMapProvider);
     final typeMapAsync = ref.watch(ticketTypeMapProvider);
 
-    final customers = customersAsync.valueOrNull ?? [];
-    final locations = locationsAsync.valueOrNull ?? [];
-    final statusMap = statusMapAsync.valueOrNull ?? {};
-    final typeMap = typeMapAsync.valueOrNull ?? {};
+    final customers = customersAsync.value ?? [];
+    final locations = locationsAsync.value ?? [];
+    final statusMap = statusMapAsync.value ?? {};
+    final typeMap = typeMapAsync.value ?? {};
 
     final customerName = customers
         .where((c) => c.id == state.customerId)
@@ -100,8 +101,7 @@ class StepRiepilogoTicket extends ConsumerWidget {
                 value: typeName ?? '—',
                 valueColor: state.typeId == null ? context.colors.red : null,
               ),
-              if (refs.prodotti.isNotEmpty)
-                KeyVal(label: 'Asset', value: refs.prodotti.join(', ')),
+              if (refs.prodotti.isNotEmpty) KeyVal(label: 'Asset', value: refs.prodotti.join(', ')),
               if (statusName != null) KeyVal(label: 'Stato', value: statusName),
               KeyVal(label: 'Priorità', value: state.priority),
               if (state.description != null && state.description!.isNotEmpty)
@@ -148,9 +148,9 @@ class StepRiepilogoTicket extends ConsumerWidget {
   String? labelOf(List<ReferenceOption> options, String id) =>
       options.where((o) => o.id == id).map((o) => o.label).firstOrNull;
 
-  final contracts = ref.watch(localContractsProvider(customerId)).valueOrNull ?? const [];
-  final commesse = ref.watch(localCommesseProvider(customerId)).valueOrNull ?? const [];
-  final prodotti = ref.watch(localProdottiProvider(customerId)).valueOrNull ?? const [];
+  final contracts = ref.watch(localContractsProvider(customerId)).value ?? const [];
+  final commesse = ref.watch(localCommesseProvider(customerId)).value ?? const [];
+  final prodotti = ref.watch(localProdottiProvider(customerId)).value ?? const [];
 
   return (
     contract: state.contractId == null ? null : labelOf(contracts, state.contractId!),

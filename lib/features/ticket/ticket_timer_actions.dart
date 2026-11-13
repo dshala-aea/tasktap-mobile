@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/sync/connectivity_provider.dart';
@@ -47,7 +48,7 @@ Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
   final clientId = const Uuid().v4();
 
   Future<void> locally() async {
-    final userId = await ref.read(internalUserIdProvider.future) ?? '';
+    final userId = await ref.readFuture(internalUserIdProvider.future) ?? '';
     await repo.start(ticketId: ticketId, userId: userId, clientId: clientId);
     unawaited(ref.read(ticketTimerSyncServiceProvider).syncNow());
   }
@@ -61,11 +62,7 @@ Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
     // through the batch upsert instead, which stamps a separate send-time reading.
     started = await ref
         .read(ticketWorkflowApiClientProvider)
-        .startTimer(
-          ticketId,
-          clientId: clientId,
-          deviceUtc: DateTime.now().toUtc(),
-        );
+        .startTimer(ticketId, clientId: clientId, deviceUtc: DateTime.now().toUtc());
   } on TicketWorkflowFailure catch (e) {
     if (e.cause?.response != null) rethrow;
     await locally();
@@ -88,7 +85,7 @@ Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
   // Mirror the running clock now, from the id the reply carries — not from the next delta sync.
   // Without this row, a technician who started the clock in the office and lost signal on the way
   // to site could not stop it: an offline "Ferma" has nothing to close.
-  final userId = await ref.read(internalUserIdProvider.future) ?? '';
+  final userId = await ref.readFuture(internalUserIdProvider.future) ?? '';
   await repo.adoptServerStart(
     serverId: started.id,
     clientId: clientId,

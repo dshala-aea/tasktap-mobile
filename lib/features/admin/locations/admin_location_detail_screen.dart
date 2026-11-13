@@ -80,7 +80,7 @@ class AdminLocationDetailScreen extends ConsumerWidget {
         if (location == null) {
           // A missing row on a synced device is not "not downloaded": the sedi mirror is there and
           // simply has no such id — deleted, or no longer visible to this role.
-          final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+          final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
           return DetailScaffold.unavailable(
             screenTitle: 'Sede',
             icon: neverSynced ? LucideIcons.cloudOff : LucideIcons.mapPin,
@@ -107,12 +107,11 @@ class _LocationDetailBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
-    final customer = ref.watch(customerByIdProvider(location.customerId)).valueOrNull;
-    final contacts =
-        ref.watch(customerContactsProvider(location.customerId)).valueOrNull ?? const [];
-    final contracts = ref.watch(_locationContractsProvider(locationId)).valueOrNull ?? const [];
-    final tickets = ref.watch(_locationTicketsProvider(locationId)).valueOrNull ?? const [];
-    final statusNames = ref.watch(ticketStatusMapProvider).valueOrNull ?? const <int, String>{};
+    final customer = ref.watch(customerByIdProvider(location.customerId)).value;
+    final contacts = ref.watch(customerContactsProvider(location.customerId)).value ?? const [];
+    final contracts = ref.watch(_locationContractsProvider(locationId)).value ?? const [];
+    final tickets = ref.watch(_locationTicketsProvider(locationId)).value ?? const [];
+    final statusNames = ref.watch(ticketStatusMapProvider).value ?? const <int, String>{};
 
     final canWrite =
         ref

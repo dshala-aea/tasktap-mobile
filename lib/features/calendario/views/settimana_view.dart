@@ -10,6 +10,7 @@ import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
@@ -47,7 +48,7 @@ class SettimanaView extends ConsumerWidget {
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
     final teamScheduleIds =
-        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
+        ref.watch(teamAssignedScheduleIdsProvider).value ?? const {};
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,

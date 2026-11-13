@@ -112,8 +112,7 @@ class _SquadraDetailBody extends ConsumerWidget {
     // UsersController.PopulateSquadreAsync projects onto every user response.
     final usersAsync = ref.watch(allUsersProvider(true));
     final usersById = <String, Map<String, dynamic>>{
-      for (final u in usersAsync.valueOrNull ?? const <Map<String, dynamic>>[])
-        u['id'] as String: u,
+      for (final u in usersAsync.value ?? const <Map<String, dynamic>>[]) u['id'] as String: u,
     };
     // The local colleagues mirror is only the fallback for a user the bulk fetch has already
     // answered for; reading it while that fetch is still in flight would open the database for a
@@ -399,7 +398,7 @@ String _memberName(
   final bulkName = _userName(user);
   if (bulkName != null) return bulkName;
   if (!allowLocalNameFallback) return 'Membro non sincronizzato';
-  final colleague = ref.watch(colleagueNameProvider(userId)).valueOrNull;
+  final colleague = ref.watch(colleagueNameProvider(userId)).value;
   return _clean(colleague) ?? 'Membro non sincronizzato';
 }
 

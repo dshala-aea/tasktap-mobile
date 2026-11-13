@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
@@ -64,9 +65,9 @@ final serverDayProvider = FutureProvider.autoDispose<List<DayWorkLogEntry>>((ref
   // `currentUserProvider.id` carries. Sending the sub made the whole server-day read fail (400 /
   // no rows), which is the "giornata del server non è raggiungibile" banner. See
   // `internalUserIdProvider`'s own doc comment: it exists precisely for server-side foreign keys.
-  // `watch(...).valueOrNull` (not `await ...future`) keeps the first frame's empty rail a normal
+  // `watch(...).value` (not `await ...future`) keeps the first frame's empty rail a normal
   // empty day while the id loads; the provider re-reads as soon as the id arrives.
-  final userId = ref.watch(internalUserIdProvider).valueOrNull;
+  final userId = ref.watch(internalUserIdProvider).value;
   if (userId == null) return const [];
 
   final client = ref.watch(worklogApiClientProvider);
@@ -82,14 +83,14 @@ final serverDayProvider = FutureProvider.autoDispose<List<DayWorkLogEntry>>((ref
 /// band in the rail ticks on its own inside that widget; a whole-screen rebuild every second to
 /// age one number is what the old hero deliberately avoided and this keeps avoiding.
 final dayRailProvider = Provider.autoDispose<DayRail>((ref) {
-  final local = ref.watch(todaySessionsProvider).valueOrNull ?? const <WorkSession>[];
-  final server = ref.watch(serverDayProvider).valueOrNull ?? const <DayWorkLogEntry>[];
+  final local = ref.watch(todaySessionsProvider).value ?? const <WorkSession>[];
+  final server = ref.watch(serverDayProvider).value ?? const <DayWorkLogEntry>[];
   return buildDayRail(localEvents: local, serverRows: server, now: DateTime.now());
 });
 
 /// True when at least one of today's events has not yet been synced.
 final hasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
-  final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? [];
+  final sessions = ref.watch(todaySessionsProvider).value ?? [];
   return sessions.any((s) => s.isPendingSync);
 });
 
@@ -174,7 +175,7 @@ TimbraState deriveShiftState(List<WorkSession> sessions) {
 
 /// Provides the current [TimbraState] derived from today's session stream.
 final timbraStateProvider = Provider.autoDispose<TimbraState>((ref) {
-  final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? [];
+  final sessions = ref.watch(todaySessionsProvider).value ?? [];
   return deriveShiftState(sessions);
 });
 
@@ -211,7 +212,7 @@ final allSessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref) 
 /// The flag in [isButtonPunchWithheld] may remove a way to START work, never a way to finish it —
 /// this is what keeps that promise true past midnight.
 final actionableShiftStateProvider = Provider.autoDispose<TimbraState>((ref) {
-  final all = ref.watch(allSessionsProvider).valueOrNull;
+  final all = ref.watch(allSessionsProvider).value;
   if (all == null) return ref.watch(timbraStateProvider);
   return deriveShiftState(all);
 });
@@ -254,7 +255,7 @@ Duration computeTotalWorked(List<WorkSession> sessions, DateTime now) {
 }
 
 final totalWorkedTodayProvider = Provider.autoDispose<Duration>((ref) {
-  final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? [];
+  final sessions = ref.watch(todaySessionsProvider).value ?? [];
   return computeTotalWorked(sessions, DateTime.now());
 });
 
@@ -347,7 +348,7 @@ TimbraGuard resolveGuard({
 final punchGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
   final shift = ref.watch(actionableShiftStateProvider);
   return resolveGuard(
-    giornata: ref.watch(giornataProvider).valueOrNull,
+    giornata: ref.watch(giornataProvider).value,
     hasPendingSync: ref.watch(hasPendingSyncProvider),
     action: shift.isOnShift ? 'ClockOut' : 'ClockIn',
   );
@@ -362,7 +363,7 @@ final pauseGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
   // midnight must still be told "not on break"/"on break" from what the server holds.
   final shift = ref.watch(actionableShiftStateProvider);
   return resolveGuard(
-    giornata: ref.watch(giornataProvider).valueOrNull,
+    giornata: ref.watch(giornataProvider).value,
     hasPendingSync: ref.watch(hasPendingSyncProvider),
     action: shift.isOnPause ? 'EndBreak' : 'StartBreak',
   );
@@ -406,6 +407,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     if (!remote) return;
     if (!await probe()) throw const OfflineRemoteShiftException();
   }
+
   final TimbraSyncService? _syncService;
   final ILocationService _locationService;
 
@@ -454,8 +456,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
         // stamp the stop before it and leave a negative interval. Keep it at least 1s after. The
         // whole log again: an opener from a previous business day is exactly the one a day-scoped
         // read would miss, leaving the clamp inert.
-        final opener =
-            analyseRemoteShifts(await _repo.getAllSessions()).openRemoteOpenerTime;
+        final opener = analyseRemoteShifts(await _repo.getAllSessions()).openRemoteOpenerTime;
         if (opener != null && !stop.isAfter(opener)) stop = opener.add(const Duration(seconds: 1));
         await _repo.addEvent(id: _uuid.v4(), eventTime: stop, eventType: _kFine);
         _onShiftChanged?.call();

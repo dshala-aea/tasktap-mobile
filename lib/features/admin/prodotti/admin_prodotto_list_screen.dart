@@ -3,6 +3,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/riverpod/read_future.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -237,7 +239,7 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
   @override
   Widget build(BuildContext context) {
     final prodottiAsync = ref.watch(adminProdottiAssistenzaProvider);
-    final fresh = prodottiAsync.valueOrNull;
+    final fresh = prodottiAsync.value;
     if (fresh != null) _lastData = fresh;
     final data = fresh ?? _lastData;
     final allRows = data?.rows ?? const <Map<String, dynamic>>[];
@@ -357,10 +359,7 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
       subtitle: 'Gli asset del cliente e la loro prossima manutenzione.',
       showBack: true,
       action: canWrite
-          ? ListHeaderAction(
-              label: 'Nuovo',
-              onPressed: () => context.push('/altro/prodotti/nuovo'),
-            )
+          ? ListHeaderAction(label: 'Nuovo', onPressed: () => context.push('/altro/prodotti/nuovo'))
           : null,
       searchController: _searchCtrl,
       searchHint: 'Cerca prodotto, seriale, cliente…',
@@ -392,7 +391,7 @@ class _AdminProdottoListScreenState extends ConsumerState<AdminProdottoListScree
   Future<void> _refresh() async {
     ref.invalidate(adminProdottiAssistenzaProvider);
     try {
-      await ref.read(adminProdottiAssistenzaProvider.future);
+      await ref.readFuture(adminProdottiAssistenzaProvider.future);
     } catch (_) {
       // The provider's error is already rendered by the unavailable/error branch. A refresh
       // future that completes with an error would be reported by RefreshIndicator as an
@@ -474,7 +473,7 @@ class _ProdottoFilterSheetState extends ConsumerState<_ProdottoFilterSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const <Location>[];
+    final locations = ref.watch(allLocationsProvider).value ?? const <Location>[];
     final locationsById = {for (final l in locations) l.id: l};
     final customers = _customerOptions(widget.rows);
     // A facet chosen before the search term changed can point at a value the current rows no

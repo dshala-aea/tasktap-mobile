@@ -280,18 +280,21 @@ void main() {
 
   tearDown(() async => db.close());
 
-  ProviderContainer buildContainer({AuthUser? user, CantiereReportApiClient? cantiereReportApi}) =>
-      ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          currentUserProvider.overrideWithValue(user),
-          // Mirrors currentUserProvider's null-ness: no signed-in user means no resolved internal
-          // id either, matching the real app's "never fetched /api/Auth/me" state.
-          internalUserIdProvider.overrideWith((ref) async => user != null ? _testInternalUserId : null),
-          if (cantiereReportApi != null)
-            cantiereReportApiClientProvider.overrideWithValue(cantiereReportApi),
-        ],
-      );
+  ProviderContainer buildContainer({
+    AuthUser? user,
+    CantiereReportApiClient? cantiereReportApi,
+  }) => ProviderContainer(
+    retry: (_, _) => null,
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      currentUserProvider.overrideWithValue(user),
+      // Mirrors currentUserProvider's null-ness: no signed-in user means no resolved internal
+      // id either, matching the real app's "never fetched /api/Auth/me" state.
+      internalUserIdProvider.overrideWith((ref) async => user != null ? _testInternalUserId : null),
+      if (cantiereReportApi != null)
+        cantiereReportApiClientProvider.overrideWithValue(cantiereReportApi),
+    ],
+  );
 
   group('createLocalDraft', () {
     testWidgets('generates a real GUID id, not a draft-<timestamp> string', (tester) async {
@@ -304,7 +307,8 @@ void main() {
       expect(
         _guidPattern.hasMatch(id!),
         isTrue,
-        reason: 'must satisfy POST /api/reports/{id:guid}/attachments — a draft-<timestamp> '
+        reason:
+            'must satisfy POST /api/reports/{id:guid}/attachments — a draft-<timestamp> '
             'string never matches that route',
       );
     });
@@ -356,25 +360,24 @@ void main() {
       expect(draft!.metadataJson, isNull);
     });
 
-    testWidgets(
-      'does not seed a staff row — the Ore tile does that itself, on first open',
-      (tester) async {
-        final container = buildContainer(user: _testUser);
-        addTearDown(container.dispose);
+    testWidgets('does not seed a staff row — the Ore tile does that itself, on first open', (
+      tester,
+    ) async {
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
 
-        final id = await _callCreateLocalDraft(tester, container, title: 'Nuovo rapportino');
+      final id = await _callCreateLocalDraft(tester, container, title: 'Nuovo rapportino');
 
-        final staff = await repo.getStaff(id!);
-        expect(
-          staff,
-          isEmpty,
-          reason:
-              'a staff row existing before the technician ever opened Ore used to prefill the '
-              'list with a misleading entry; seeding now happens on Ore\'s first open instead '
-              '(rapportino_form_screen_test.dart), not at draft-creation time',
-        );
-      },
-    );
+      final staff = await repo.getStaff(id!);
+      expect(
+        staff,
+        isEmpty,
+        reason:
+            'a staff row existing before the technician ever opened Ore used to prefill the '
+            'list with a misleading entry; seeding now happens on Ore\'s first open instead '
+            '(rapportino_form_screen_test.dart), not at draft-creation time',
+      );
+    });
   });
 
   group('createReworkDraft', () {
@@ -395,10 +398,8 @@ void main() {
       tester,
     ) async {
       await repo.createDraft(
-        _rejectedReportCompanion(id: 'report-cant').copyWith(
-          ticketId: const Value(null),
-          cantiereId: const Value('cant-1'),
-        ),
+        _rejectedReportCompanion(id: 'report-cant')
+            .copyWith(ticketId: const Value(null), cantiereId: const Value('cant-1')),
       );
       final source = (await repo.getDraft('report-cant'))!;
 
@@ -916,24 +917,23 @@ void main() {
       expect(draft!.metadataJson, contains('Via Roma 10, Milano, 20100'));
     });
 
-    testWidgets(
-      'refuses (returns null) with no signed-in author, without calling the backend',
-      (tester) async {
-        final api = _FakeCantiereReportApiClient();
-        final container = buildContainer(user: null, cantiereReportApi: api);
-        addTearDown(container.dispose);
+    testWidgets('refuses (returns null) with no signed-in author, without calling the backend', (
+      tester,
+    ) async {
+      final api = _FakeCantiereReportApiClient();
+      final container = buildContainer(user: null, cantiereReportApi: api);
+      addTearDown(container.dispose);
 
-        final id = await _callCreateCantiereReportDraft(
-          tester,
-          container,
-          cantiereId: 'cant-1',
-          cantiereName: 'Cantiere Via Roma',
-        );
+      final id = await _callCreateCantiereReportDraft(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
 
-        expect(id, isNull);
-        expect(api.calledWithCantiereId, isNull);
-        expect(await db.select(db.draftReports).get(), isEmpty);
-      },
-    );
+      expect(id, isNull);
+      expect(api.calledWithCantiereId, isNull);
+      expect(await db.select(db.draftReports).get(), isEmpty);
+    });
   });
 }

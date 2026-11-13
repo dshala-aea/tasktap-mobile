@@ -24,13 +24,12 @@ import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/admin/reports/admin_report_detail_screen.dart';
 import 'package:tasktap_mobile/features/admin/reports/admin_report_list_screen.dart';
 
-Entitlement _entitlementWith(Set<String> capabilities, {String seatType = 'office'}) =>
-    Entitlement(
-      features: const {'rapportini'},
-      capabilities: capabilities,
-      seatType: seatType,
-      fetchedAt: DateTime.utc(2026, 11, 9),
-    );
+Entitlement _entitlementWith(Set<String> capabilities, {String seatType = 'office'}) => Entitlement(
+  features: const {'rapportini'},
+  capabilities: capabilities,
+  seatType: seatType,
+  fetchedAt: DateTime.utc(2026, 11, 9),
+);
 
 final _officeWrite = _entitlementWith(const {'rapportini.report.write'});
 
@@ -289,8 +288,9 @@ void main() {
       isOnlineProvider.overrideWithValue(false),
       cachedEntitlementProvider.overrideWith((ref) async => _officeWrite),
     ];
-    final container = ProviderContainer(overrides: overrides);
+    final container = ProviderContainer(retry: (_, _) => null, overrides: overrides);
     addTearDown(container.dispose);
+    container.listen(adminReportsProvider(const StatoFilter('Inviato')), (_, _) {});
     final rows = await container.read(adminReportsProvider(const StatoFilter('Inviato')).future);
     final row = rows.rows.single;
     expect(rows.fromMirror, isTrue);

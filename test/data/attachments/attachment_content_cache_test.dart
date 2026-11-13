@@ -18,8 +18,11 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 /// sweep that only runs on unmetered Wi-Fi.
 class MockDio extends Mock implements Dio {}
 
-Response<List<int>> _bytes(List<int> body) =>
-    Response(data: body, statusCode: 200, requestOptions: RequestOptions(path: '/x'));
+Response<List<int>> _bytes(List<int> body) => Response(
+  data: body,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: '/x'),
+);
 
 void main() {
   late MockDio dio;
@@ -35,13 +38,16 @@ void main() {
   });
 
   void respondWith(List<int> body) {
-    when(
-      () => dio.get<List<int>>(any(), options: any(named: 'options')),
-    ).thenAnswer((_) async => _bytes(body));
+    when(() => dio.get<List<int>>(any(), options: any(named: 'options')))
+        .thenAnswer((_) async => _bytes(body));
   }
 
   AttachmentContentCache cache({int maxBytes = 500 * 1024 * 1024}) =>
-      AttachmentContentCache(dio: dio, maxBytes: maxBytes, rootLoader: () async => root);
+      AttachmentContentCache(
+        dio: dio,
+        maxBytes: maxBytes,
+        rootLoader: () async => root,
+      );
 
   AttachmentRef ref({
     String id = 'a-1',
@@ -58,14 +64,27 @@ void main() {
 
     expect(file.existsSync(), isTrue);
     expect(await file.readAsBytes(), [1, 2, 3]);
-    expect((await c.lookup(allegatoId: 'a-1', contentHash: 'h1', sizeBytes: 3))?.path, file.path);
+    expect(
+      (await c.lookup(
+        allegatoId: 'a-1',
+        contentHash: 'h1',
+        sizeBytes: 3,
+      ))?.path,
+      file.path,
+    );
   });
 
   test('a cache miss is null and touches the network not at all', () async {
-    final hit = await cache().lookup(allegatoId: 'a-1', contentHash: 'h1', sizeBytes: 3);
+    final hit = await cache().lookup(
+      allegatoId: 'a-1',
+      contentHash: 'h1',
+      sizeBytes: 3,
+    );
 
     expect(hit, isNull);
-    verifyNever(() => dio.get<List<int>>(any(), options: any(named: 'options')));
+    verifyNever(
+      () => dio.get<List<int>>(any(), options: any(named: 'options')),
+    );
   });
 
   test('ensure serves the cached file without a second request', () async {
@@ -75,25 +94,29 @@ void main() {
 
     await c.ensure(ref());
 
-    verify(() => dio.get<List<int>>(any(), options: any(named: 'options'))).called(1);
+    verify(() => dio.get<List<int>>(any(), options: any(named: 'options')))
+        .called(1);
   });
 
-  test('a replaced allegato is a different key, and the old bytes are deleted', () async {
-    respondWith([1, 2, 3]);
-    final c = cache();
-    final old = await c.ensure(ref(hash: 'h1'));
+  test(
+    'a replaced allegato is a different key, and the old bytes are deleted',
+    () async {
+      respondWith([1, 2, 3]);
+      final c = cache();
+      final old = await c.ensure(ref(hash: 'h1'));
 
-    respondWith([4, 5, 6]);
-    final fresh = await c.ensure(ref(hash: 'h2'));
+      respondWith([4, 5, 6]);
+      final fresh = await c.ensure(ref(hash: 'h2'));
 
-    expect(fresh.path, isNot(old.path));
-    expect(await fresh.readAsBytes(), [4, 5, 6]);
-    expect(
-      old.existsSync(),
-      isFalse,
-      reason: 'one file per id: the unreachable old key must not linger',
-    );
-  });
+      expect(fresh.path, isNot(old.path));
+      expect(await fresh.readAsBytes(), [4, 5, 6]);
+      expect(
+        old.existsSync(),
+        isFalse,
+        reason: 'one file per id: the unreachable old key must not linger',
+      );
+    },
+  );
 
   test('with no hash the key falls back to the size', () async {
     respondWith([1, 2, 3, 4]);
@@ -106,9 +129,8 @@ void main() {
   });
 
   test('a failed download writes nothing', () async {
-    when(
-      () => dio.get<List<int>>(any(), options: any(named: 'options')),
-    ).thenThrow(DioException(requestOptions: RequestOptions(path: '/x')));
+    when(() => dio.get<List<int>>(any(), options: any(named: 'options')))
+        .thenThrow(DioException(requestOptions: RequestOptions(path: '/x')));
 
     await expectLater(cache().ensure(ref()), throwsA(isA<DioException>()));
 
@@ -154,8 +176,16 @@ void main() {
     final file = await c.ensure(ref());
     await file.setLastModified(DateTime(2026, 1, 1));
 
-    await c.lookup(allegatoId: 'a-1', contentHash: 'h1', sizeBytes: 3, touch: false);
-    expect((await file.stat()).modified.isAtSameMomentAs(DateTime(2026, 1, 1)), isTrue);
+    await c.lookup(
+      allegatoId: 'a-1',
+      contentHash: 'h1',
+      sizeBytes: 3,
+      touch: false,
+    );
+    expect(
+      (await file.stat()).modified.isAtSameMomentAs(DateTime(2026, 1, 1)),
+      isTrue,
+    );
 
     await c.lookup(allegatoId: 'a-1', contentHash: 'h1', sizeBytes: 3);
     expect((await file.stat()).modified.isAfter(DateTime(2026, 1, 1)), isTrue);
@@ -171,7 +201,11 @@ void main() {
 
     tearDown(() => db.close());
 
-    Future<void> seedServerFile(String id, {int entityType = 1, String? hash = 'h1'}) => db
+    Future<void> seedServerFile(
+      String id, {
+      int entityType = 1,
+      String? hash = 'h1',
+    }) => db
         .into(db.reportAllegati)
         .insert(
           ReportAllegatiCompanion.insert(
@@ -190,24 +224,41 @@ void main() {
           ),
         );
 
-    test('a ticket file is cached under the key the ticket tab reads it with', () async {
-      respondWith([1, 2, 3]);
-      final c = cache();
-      await seedServerFile('a-9', entityType: 0);
+    test(
+      'a ticket file is cached under the key the ticket tab reads it with',
+      () async {
+        respondWith([1, 2, 3]);
+        final c = cache();
+        await seedServerFile('a-9', entityType: 0);
 
-      await AttachmentPrefetcher(db: db, cache: c, canPrefetch: () async => true).run();
+        await AttachmentPrefetcher(
+          db: db,
+          cache: c,
+          canPrefetch: () async => true,
+        ).run();
 
-      // The ticket Allegati tab holds no hash (its DTO never carries one), so it asks by size.
-      expect(
-        await c.lookup(allegatoId: 'a-9', contentHash: 'h1', sizeBytes: 3, touch: false),
-        isNull,
-        reason: 'a hash key nothing looks up would be dead weight in the cache',
-      );
-      expect(
-        (await c.lookup(allegatoId: 'a-9', sizeBytes: 3, touch: false))?.existsSync(),
-        isTrue,
-      );
-    });
+        // The ticket Allegati tab holds no hash (its DTO never carries one), so it asks by size.
+        expect(
+          await c.lookup(
+            allegatoId: 'a-9',
+            contentHash: 'h1',
+            sizeBytes: 3,
+            touch: false,
+          ),
+          isNull,
+          reason:
+              'a hash key nothing looks up would be dead weight in the cache',
+        );
+        expect(
+          (await c.lookup(
+            allegatoId: 'a-9',
+            sizeBytes: 3,
+            touch: false,
+          ))?.existsSync(),
+          isTrue,
+        );
+      },
+    );
 
     test('does nothing at all off Wi-Fi', () async {
       await seedServerFile('a-1');
@@ -219,7 +270,9 @@ void main() {
       ).run();
 
       expect(fetched, 0);
-      verifyNever(() => dio.get<List<int>>(any(), options: any(named: 'options')));
+      verifyNever(
+        () => dio.get<List<int>>(any(), options: any(named: 'options')),
+      );
     });
 
     test('downloads what is missing and skips what is cached', () async {
@@ -239,7 +292,11 @@ void main() {
 
       expect(fetched, 1);
       expect(
-        (await c.lookup(allegatoId: 'a-2', contentHash: 'h1', sizeBytes: 3))?.existsSync(),
+        (await c.lookup(
+          allegatoId: 'a-2',
+          contentHash: 'h1',
+          sizeBytes: 3,
+        ))?.existsSync(),
         isTrue,
       );
     });
@@ -262,50 +319,62 @@ void main() {
       expect(fetched, 0, reason: 'already full: nothing more is downloaded');
     });
 
-    test('stops on a network error and leaves the rest for the next sync', () async {
-      when(
-        () => dio.get<List<int>>(any(), options: any(named: 'options')),
-      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/x')));
-      await seedServerFile('a-1');
-      await seedServerFile('a-2');
+    test(
+      'stops on a network error and leaves the rest for the next sync',
+      () async {
+        when(
+          () => dio.get<List<int>>(any(), options: any(named: 'options')),
+        ).thenThrow(DioException(requestOptions: RequestOptions(path: '/x')));
+        await seedServerFile('a-1');
+        await seedServerFile('a-2');
 
-      final fetched = await AttachmentPrefetcher(
-        db: db,
-        cache: cache(),
-        canPrefetch: () async => true,
-      ).run();
+        final fetched = await AttachmentPrefetcher(
+          db: db,
+          cache: cache(),
+          canPrefetch: () async => true,
+        ).run();
 
-      expect(fetched, 0);
-      verify(() => dio.get<List<int>>(any(), options: any(named: 'options'))).called(1);
-    });
+        expect(fetched, 0);
+        verify(() => dio.get<List<int>>(any(), options: any(named: 'options')))
+            .called(1);
+      },
+    );
   });
 
   group('attachmentFileProvider', () {
     test('offline and cold it answers null instead of an error', () async {
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           attachmentContentCacheProvider.overrideWithValue(cache()),
           isOnlineProvider.overrideWithValue(false),
         ],
       );
       addTearDown(container.dispose);
+      container.listen(attachmentFileProvider(ref()), (_, _) {});
 
+      container.listen(attachmentFileProvider(ref()), (_, _) {});
       final file = await container.read(attachmentFileProvider(ref()).future);
 
       expect(file, isNull);
-      verifyNever(() => dio.get<List<int>>(any(), options: any(named: 'options')));
+      verifyNever(
+        () => dio.get<List<int>>(any(), options: any(named: 'options')),
+      );
     });
 
     test('online and cold it fetches', () async {
       respondWith([1, 2, 3]);
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           attachmentContentCacheProvider.overrideWithValue(cache()),
           isOnlineProvider.overrideWithValue(true),
         ],
       );
       addTearDown(container.dispose);
+      container.listen(attachmentFileProvider(ref()), (_, _) {});
 
+      container.listen(attachmentFileProvider(ref()), (_, _) {});
       final file = await container.read(attachmentFileProvider(ref()).future);
 
       expect(file, isNotNull);

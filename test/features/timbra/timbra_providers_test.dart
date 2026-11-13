@@ -136,7 +136,8 @@ class _DelayedRepo implements IWorkSessionRepository {
   @override
   Future<void> clearToday() => _inner.clearToday();
   @override
-  Future<void> markReconciledOrphan(String id) => _inner.markReconciledOrphan(id);
+  Future<void> markReconciledOrphan(String id) =>
+      _inner.markReconciledOrphan(id);
 }
 
 /// Fake location service returning a fixed coordinate, never prompting — same shape as
@@ -160,7 +161,9 @@ class _WouldPromptLocationService extends ILocationService {
 
   @override
   Future<GpsCoords?> getCurrentPosition() async {
-    throw StateError('must not be called when willPromptForPermission() is true');
+    throw StateError(
+      'must not be called when willPromptForPermission() is true',
+    );
   }
 }
 
@@ -337,6 +340,7 @@ void main() {
     setUp(() {
       db = _makeDb();
       container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
@@ -350,6 +354,7 @@ void main() {
     });
 
     test('todaySessionsProvider emits empty list when db empty', () async {
+      container.listen(todaySessionsProvider, (_, _) {});
       final result = await container.read(todaySessionsProvider.future);
       expect(result, isEmpty);
     });
@@ -359,6 +364,7 @@ void main() {
       final now = DateTime.now().toUtc();
       await repo.addEvent(id: 'test-1', eventTime: now, eventType: 'ingresso');
 
+      container.listen(todaySessionsProvider, (_, _) {});
       final result = await container.read(todaySessionsProvider.future);
       expect(result.length, equals(1));
       expect(result.first.eventType, equals('ingresso'));
@@ -370,6 +376,7 @@ void main() {
 
       await notifier.punch(initialState);
 
+      container.listen(todaySessionsProvider, (_, _) {});
       final sessions = await container.read(todaySessionsProvider.future);
       expect(sessions.length, equals(1));
       expect(sessions.first.eventType, equals('ingresso'));
@@ -384,6 +391,7 @@ void main() {
       // Second punch → fine (shift is now active)
       await notifier.punch(const TimbraState(isOnShift: true));
 
+      container.listen(todaySessionsProvider, (_, _) {});
       final sessions = await container.read(todaySessionsProvider.future);
       expect(sessions.length, equals(2));
       expect(sessions[0].eventType, equals('ingresso'));
@@ -402,13 +410,16 @@ void main() {
       );
 
       // Today's view — the sessions card and the "Ore lavorate oggi" total use it — cannot see it.
-      final today = deriveShiftState(await container.read(todaySessionsProvider.future));
+      final today = deriveShiftState(
+        await container.read(todaySessionsProvider.future),
+      );
       expect(today.isOnShift, isFalse);
 
       // The state a punch control acts on can. `listen` keeps both autoDispose streams alive
       // between the read and the assertion.
       final sub = container.listen(actionableShiftStateProvider, (_, _) {});
       addTearDown(sub.close);
+      container.listen(allSessionsProvider, (_, _) {});
       await container.read(allSessionsProvider.future);
       final actionable = container.read(actionableShiftStateProvider);
 
@@ -416,23 +427,32 @@ void main() {
       expect(actionable.shiftStartTime, isNotNull);
     });
 
-    test('timbraStateProvider: sessions after punch derive correct state', () async {
-      final notifier = container.read(punchNotifierProvider.notifier);
-      await notifier.punch(const TimbraState());
+    test(
+      'timbraStateProvider: sessions after punch derive correct state',
+      () async {
+        final notifier = container.read(punchNotifierProvider.notifier);
+        await notifier.punch(const TimbraState());
 
-      // Wait for DB to emit the new session.
-      final sessions = await container.read(todaySessionsProvider.future);
-      final state = deriveShiftState(sessions);
-      expect(state.isOnShift, isTrue);
-    });
+        // Wait for DB to emit the new session.
+        container.listen(todaySessionsProvider, (_, _) {});
+        final sessions = await container.read(todaySessionsProvider.future);
+        final state = deriveShiftState(sessions);
+        expect(state.isOnShift, isTrue);
+      },
+    );
 
     test('clearToday removes all sessions', () async {
       final repo = container.read(workSessionRepositoryProvider);
       final now = DateTime.now().toUtc();
       await repo.addEvent(id: 'a', eventTime: now, eventType: 'ingresso');
-      await repo.addEvent(id: 'b', eventTime: now.add(const Duration(hours: 4)), eventType: 'fine');
+      await repo.addEvent(
+        id: 'b',
+        eventTime: now.add(const Duration(hours: 4)),
+        eventType: 'fine',
+      );
       await repo.clearToday();
 
+      container.listen(todaySessionsProvider, (_, _) {});
       final sessions = await container.read(todaySessionsProvider.future);
       expect(sessions, isEmpty);
     });
@@ -451,47 +471,61 @@ void main() {
   // scheduler's dispose task (a `Timer`-scheduled macrotask — see riverpod's
   // `ProviderScheduler._defaultVsync`) has a real chance to fire mid-write, exactly as it does on
   // a device.
-  group('punchNotifierProvider survives an unwatched read across a real async gap', () {
-    late AppDatabase db;
-    late ProviderContainer container;
+  group(
+    'punchNotifierProvider survives an unwatched read across a real async gap',
+    () {
+      late AppDatabase db;
+      late ProviderContainer container;
 
-    setUp(() {
-      db = _makeDb();
-      container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
-          workSessionRepositoryProvider.overrideWithValue(_DelayedRepo(WorkSessionRepository(db))),
-        ],
+      setUp(() {
+        db = _makeDb();
+        container = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+            workSessionRepositoryProvider.overrideWithValue(
+              _DelayedRepo(WorkSessionRepository(db)),
+            ),
+          ],
+        );
+      });
+
+      tearDown(() async {
+        container.dispose();
+        await db.close();
+      });
+
+      test(
+        'punch() does not throw when nothing ref.watch()es the provider',
+        () async {
+          final notifier = container.read(punchNotifierProvider.notifier);
+
+          await notifier.punch(const TimbraState());
+
+          container.listen(todaySessionsProvider, (_, _) {});
+          final sessions = await container.read(todaySessionsProvider.future);
+          expect(sessions.length, equals(1));
+          expect(sessions.first.eventType, equals('ingresso'));
+        },
       );
-    });
 
-    tearDown(() async {
-      container.dispose();
-      await db.close();
-    });
+      test(
+        'togglePause() does not throw when nothing ref.watch()es the provider',
+        () async {
+          final notifier = container.read(punchNotifierProvider.notifier);
+          await notifier.punch(const TimbraState());
 
-    test('punch() does not throw when nothing ref.watch()es the provider', () async {
-      final notifier = container.read(punchNotifierProvider.notifier);
+          await notifier.togglePause(const TimbraState(isOnShift: true));
 
-      await notifier.punch(const TimbraState());
-
-      final sessions = await container.read(todaySessionsProvider.future);
-      expect(sessions.length, equals(1));
-      expect(sessions.first.eventType, equals('ingresso'));
-    });
-
-    test('togglePause() does not throw when nothing ref.watch()es the provider', () async {
-      final notifier = container.read(punchNotifierProvider.notifier);
-      await notifier.punch(const TimbraState());
-
-      await notifier.togglePause(const TimbraState(isOnShift: true));
-
-      final sessions = await container.read(todaySessionsProvider.future);
-      expect(sessions.length, equals(2));
-      expect(sessions.last.eventType, equals('pausa'));
-    });
-  });
+          container.listen(todaySessionsProvider, (_, _) {});
+          final sessions = await container.read(todaySessionsProvider.future);
+          expect(sessions.length, equals(2));
+          expect(sessions.last.eventType, equals('pausa'));
+        },
+      );
+    },
+  );
 
   // ── pauseGuardProvider ──────────────────────────────────────────────────────
   //
@@ -523,6 +557,7 @@ void main() {
 
     test('requests StartBreak when not currently on a break', () async {
       container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
@@ -549,6 +584,7 @@ void main() {
 
     test('requests EndBreak when currently on a break', () async {
       container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
@@ -579,14 +615,20 @@ void main() {
       final bt = BusinessTime.fallback();
       final dayStart = bt.utcRangeForBusinessDate(bt.businessToday()).$1;
       final sessionRepo = container.read(workSessionRepositoryProvider);
-      await sessionRepo.addEvent(id: 'a', eventTime: dayStart, eventType: 'ingresso');
+      await sessionRepo.addEvent(
+        id: 'a',
+        eventTime: dayStart,
+        eventType: 'ingresso',
+      );
       await sessionRepo.addEvent(
         id: 'b',
         eventTime: dayStart.add(const Duration(minutes: 5)),
         eventType: 'pausa',
       );
       await sessionRepo.markSynced(['a', 'b']);
+      container.listen(todaySessionsProvider, (_, _) {});
       await container.read(todaySessionsProvider.future);
+      container.listen(giornataProvider, (_, _) {});
       await container.read(giornataProvider.future);
 
       final guard = container.read(pauseGuardProvider);
@@ -617,17 +659,25 @@ void main() {
 
     test('punch-in (ingresso) persists the captured position', () async {
       container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
           locationServiceProvider.overrideWithValue(
-            const _FakeLocationService((lat: 45.4654, lng: 9.1859, accuracy: 8.0)),
+            const _FakeLocationService((
+              lat: 45.4654,
+              lng: 9.1859,
+              accuracy: 8.0,
+            )),
           ),
         ],
       );
 
-      await container.read(punchNotifierProvider.notifier).punch(const TimbraState());
+      await container
+          .read(punchNotifierProvider.notifier)
+          .punch(const TimbraState());
 
+      container.listen(todaySessionsProvider, (_, _) {});
       final sessions = await container.read(todaySessionsProvider.future);
       expect(sessions.single.eventType, 'ingresso');
       expect(sessions.single.latitude, 45.4654);
@@ -635,66 +685,91 @@ void main() {
       expect(sessions.single.gpsAccuracyMeters, 8.0);
     });
 
-    test('punch-out (fine) never carries a position, even when one is available', () async {
-      container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
-          locationServiceProvider.overrideWithValue(
-            const _FakeLocationService((lat: 45.4654, lng: 9.1859, accuracy: 8.0)),
-          ),
-        ],
-      );
+    test(
+      'punch-out (fine) never carries a position, even when one is available',
+      () async {
+        container = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+            locationServiceProvider.overrideWithValue(
+              const _FakeLocationService((
+                lat: 45.4654,
+                lng: 9.1859,
+                accuracy: 8.0,
+              )),
+            ),
+          ],
+        );
 
-      final notifier = container.read(punchNotifierProvider.notifier);
-      await notifier.punch(const TimbraState());
-      await notifier.punch(const TimbraState(isOnShift: true));
+        final notifier = container.read(punchNotifierProvider.notifier);
+        await notifier.punch(const TimbraState());
+        await notifier.punch(const TimbraState(isOnShift: true));
 
-      final sessions = await container.read(todaySessionsProvider.future);
-      final fine = sessions.firstWhere((s) => s.eventType == 'fine');
-      expect(fine.latitude, isNull);
-      expect(fine.longitude, isNull);
-    });
+        container.listen(todaySessionsProvider, (_, _) {});
+        final sessions = await container.read(todaySessionsProvider.future);
+        final fine = sessions.firstWhere((s) => s.eventType == 'fine');
+        expect(fine.latitude, isNull);
+        expect(fine.longitude, isNull);
+      },
+    );
 
     test('no position available (GPS off/denied) → event persists with null coordinates, punch '
         'still succeeds', () async {
       container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
-          locationServiceProvider.overrideWithValue(const _FakeLocationService(null)),
+          locationServiceProvider.overrideWithValue(
+            const _FakeLocationService(null),
+          ),
         ],
       );
 
-      await container.read(punchNotifierProvider.notifier).punch(const TimbraState());
+      await container
+          .read(punchNotifierProvider.notifier)
+          .punch(const TimbraState());
 
+      container.listen(todaySessionsProvider, (_, _) {});
       final sessions = await container.read(todaySessionsProvider.future);
       expect(sessions.single.eventType, 'ingresso');
       expect(sessions.single.latitude, isNull);
       expect(container.read(punchNotifierProvider), isA<AsyncData<void>>());
     });
 
-    test('never prompts for permission — skips capture instead of asking', () async {
-      container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
-          locationServiceProvider.overrideWithValue(const _WouldPromptLocationService()),
-        ],
-      );
+    test(
+      'never prompts for permission — skips capture instead of asking',
+      () async {
+        container = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+            locationServiceProvider.overrideWithValue(
+              const _WouldPromptLocationService(),
+            ),
+          ],
+        );
 
-      // _WouldPromptLocationService.getCurrentPosition() throws if ever called — reaching this
-      // line without throwing is the assertion that _captureGpsSilently short-circuited on
-      // willPromptForPermission() instead of prompting.
-      await container.read(punchNotifierProvider.notifier).punch(const TimbraState());
+        // _WouldPromptLocationService.getCurrentPosition() throws if ever called — reaching this
+        // line without throwing is the assertion that _captureGpsSilently short-circuited on
+        // willPromptForPermission() instead of prompting.
+        await container
+            .read(punchNotifierProvider.notifier)
+            .punch(const TimbraState());
 
-      final sessions = await container.read(todaySessionsProvider.future);
-      expect(sessions.single.latitude, isNull);
-      expect(container.read(punchNotifierProvider), isA<AsyncData<void>>());
-    });
+        container.listen(todaySessionsProvider, (_, _) {});
+        final sessions = await container.read(todaySessionsProvider.future);
+        expect(sessions.single.latitude, isNull);
+        expect(container.read(punchNotifierProvider), isA<AsyncData<void>>());
+      },
+    );
 
     test('ripresa (resume) also captures a position, like ingresso', () async {
       container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
@@ -707,8 +782,11 @@ void main() {
       final notifier = container.read(punchNotifierProvider.notifier);
       await notifier.punch(const TimbraState()); // ingresso
       await notifier.togglePause(const TimbraState(isOnShift: true)); // pausa
-      await notifier.togglePause(const TimbraState(isOnShift: true, isOnPause: true)); // ripresa
+      await notifier.togglePause(
+        const TimbraState(isOnShift: true, isOnPause: true),
+      ); // ripresa
 
+      container.listen(todaySessionsProvider, (_, _) {});
       final sessions = await container.read(todaySessionsProvider.future);
       final ripresa = sessions.firstWhere((s) => s.eventType == 'ripresa');
       expect(ripresa.latitude, 45.5);

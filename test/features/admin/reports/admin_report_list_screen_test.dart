@@ -20,6 +20,7 @@ import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -181,6 +182,7 @@ void main() {
       await db.setLastSync(DateTime.utc(2026, 10, 1));
 
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: _overrides(db: db, api: _FakeAdminApiClient(), isOnline: false),
       );
       addTearDown(container.dispose);
@@ -191,6 +193,7 @@ void main() {
       expect(inviati.fromMirror, isTrue);
       expect(inviati.rows.map((r) => r['title']), ['Inviato uno']);
 
+      container.listen(adminReportsProvider(const StatoFilter(null)), (_, _) {});
       final tutti = await container.read(adminReportsProvider(const StatoFilter(null)).future);
       expect(tutti.rows.length, 2);
     });

@@ -3,8 +3,10 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -17,6 +19,7 @@ import '../../ticket/steps/step_assegnazione.dart';
 import '../admin_api_client.dart';
 import '../admin_widgets.dart';
 import '../squadre/admin_squadra_list_screen.dart' show adminSquadreProvider;
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -308,10 +311,8 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
   (List<String>? technicianIds, String? squadraId) get _conflictCheckTargets =>
       switch (_assignmentType) {
         AssignmentType.squadra => (null, _selectedSquadraId),
-        AssignmentType.tecnico || AssignmentType.capoSquadra => (
-          _technicianIds.isEmpty ? null : _technicianIds,
-          null,
-        ),
+        AssignmentType.tecnico ||
+        AssignmentType.capoSquadra => (_technicianIds.isEmpty ? null : _technicianIds, null),
       };
 
   Future<void> _save() async {
@@ -590,7 +591,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
   @override
   Widget build(BuildContext context) {
     final locationsAsync = ref.watch(allLocationsProvider);
-    final locations = locationsAsync.valueOrNull ?? [];
+    final locations = locationsAsync.value ?? [];
 
     final dateLabel = DateFormat('EEEE d MMMM yyyy', 'it').format(_selectedDate);
 
@@ -769,7 +770,7 @@ class _AssignmentPicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final techniciansAsync = ref.watch(techniciansProvider);
-    final technicians = techniciansAsync.valueOrNull ?? [];
+    final technicians = techniciansAsync.value ?? [];
 
     switch (type) {
       case AssignmentType.tecnico:
@@ -849,7 +850,7 @@ class _AssignmentPicker extends ConsumerWidget {
           );
         }
         final squadreAsync = ref.watch(adminSquadreProvider);
-        final squadre = squadreAsync.valueOrNull ?? [];
+        final squadre = squadreAsync.value ?? [];
         return AppFieldShell(
           label: 'Squadra *',
           child: DropdownButtonFormField<String>(

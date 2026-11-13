@@ -25,7 +25,11 @@ class _FakeApi implements BadgeApiClient {
     required String token,
     required String clientScanId,
   }) async {
-    calls.add((cantiereId: cantiereId, token: token, clientScanId: clientScanId));
+    calls.add((
+      cantiereId: cantiereId,
+      token: token,
+      clientScanId: clientScanId,
+    ));
     if (gate != null) return gate!.future;
     if (throwOnScan != null) throw throwOnScan!;
     return reply;
@@ -40,13 +44,16 @@ void main() {
   late DateTime now;
   late ProviderContainer container;
 
-  BadgeScanController ctl() => container.read(badgeScanControllerProvider('c1').notifier);
-  List<BadgeScanEntry> entries() => container.read(badgeScanControllerProvider('c1'));
+  BadgeScanController ctl() =>
+      container.read(badgeScanControllerProvider('c1').notifier);
+  List<BadgeScanEntry> entries() =>
+      container.read(badgeScanControllerProvider('c1'));
 
   setUp(() {
     api = _FakeApi();
     now = DateTime.utc(2026, 10, 28, 8);
     container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         badgeApiClientProvider.overrideWithValue(api),
         badgeScanClockProvider.overrideWithValue(() => now),
@@ -94,20 +101,27 @@ void main() {
     expect(api.calls, hasLength(2), reason: 'at the 3s boundary');
   });
 
-  test('5xx and unexpected failures are retryable, 4xx answers are not', () async {
-    api.throwOnScan = const BadgeApiException(statusCode: 500, message: 's');
-    await at(0, 'tok-A');
-    await at(3000, 'tok-A');
-    expect(api.calls, hasLength(2));
-    api.throwOnScan = StateError('x');
-    await at(0, 'tok-B');
-    await at(3000, 'tok-B');
-    expect(api.calls, hasLength(4));
-    api.throwOnScan = const BadgeApiException(statusCode: 403, code: 'NotLead', message: 'n');
-    await at(0, 'tok-C');
-    await at(10000, 'tok-C');
-    expect(api.calls, hasLength(5));
-  });
+  test(
+    '5xx and unexpected failures are retryable, 4xx answers are not',
+    () async {
+      api.throwOnScan = const BadgeApiException(statusCode: 500, message: 's');
+      await at(0, 'tok-A');
+      await at(3000, 'tok-A');
+      expect(api.calls, hasLength(2));
+      api.throwOnScan = StateError('x');
+      await at(0, 'tok-B');
+      await at(3000, 'tok-B');
+      expect(api.calls, hasLength(4));
+      api.throwOnScan = const BadgeApiException(
+        statusCode: 403,
+        code: 'NotLead',
+        message: 'n',
+      );
+      await at(0, 'tok-C');
+      await at(10000, 'tok-C');
+      expect(api.calls, hasLength(5));
+    },
+  );
 
   test('rejected_result_is_not_resent_within_token_life', () async {
     api.reply = const BadgeScanOutcome(
@@ -135,18 +149,21 @@ void main() {
     expect(api.calls[1].clientScanId, api.calls[0].clientScanId);
   });
 
-  test('408 and 429 are not answers: retried after the window with the same id', () async {
-    for (final code in [408, 429]) {
-      api.calls.clear();
-      api.throwOnScan = BadgeApiException(statusCode: code, message: 'x');
-      await at(0, 'tok-$code');
-      await at(2999, 'tok-$code');
-      expect(api.calls, hasLength(1));
-      await at(3000, 'tok-$code');
-      expect(api.calls, hasLength(2));
-      expect(api.calls[1].clientScanId, api.calls[0].clientScanId);
-    }
-  });
+  test(
+    '408 and 429 are not answers: retried after the window with the same id',
+    () async {
+      for (final code in [408, 429]) {
+        api.calls.clear();
+        api.throwOnScan = BadgeApiException(statusCode: code, message: 'x');
+        await at(0, 'tok-$code');
+        await at(2999, 'tok-$code');
+        expect(api.calls, hasLength(1));
+        await at(3000, 'tok-$code');
+        expect(api.calls, hasLength(2));
+        expect(api.calls[1].clientScanId, api.calls[0].clientScanId);
+      }
+    },
+  );
 
   test('different_code_gets_new_clientScanId', () async {
     api.throwOnScan = const BadgeApiException(message: 't', offline: true);
@@ -219,14 +236,21 @@ void main() {
 
   test('entries are newest first', () async {
     await ctl().onCode('tok-A');
-    api.throwOnScan = const BadgeApiException(statusCode: 403, code: 'NotLead', message: 'x');
+    api.throwOnScan = const BadgeApiException(
+      statusCode: 403,
+      code: 'NotLead',
+      message: 'x',
+    );
     await ctl().onCode('tok-B');
     expect(entries().first.error?.isNotLead, isTrue);
     expect(entries().last.outcome, isNotNull);
   });
 
   test('BadgeApiException becomes an error entry', () async {
-    api.throwOnScan = const BadgeApiException(message: 'offline', offline: true);
+    api.throwOnScan = const BadgeApiException(
+      message: 'offline',
+      offline: true,
+    );
     await ctl().onCode('tok-A');
     expect(entries().single.error?.isOffline, isTrue);
     expect(entries().single.outcome, isNull);

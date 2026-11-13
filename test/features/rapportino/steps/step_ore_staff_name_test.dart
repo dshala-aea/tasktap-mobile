@@ -30,6 +30,7 @@ AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 ProviderContainer _buildContainer({required AppDatabase db, required List<StaffRow> staffRows}) {
   return ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       reportEditorProvider(_reportId).overrideWith(
@@ -50,7 +51,9 @@ ProviderContainer _buildContainer({required AppDatabase db, required List<StaffR
 Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(home: Scaffold(body: StepOre(reportId: _reportId))),
+    child: const MaterialApp(
+      home: Scaffold(body: StepOre(reportId: _reportId)),
+    ),
   );
 }
 
@@ -81,20 +84,21 @@ void main() {
       expect(find.text('user-1'), findsNothing);
     });
 
-    testWidgets('a staff row unknown to the colleagues mirror falls back to a placeholder, never the raw id', (
-      tester,
-    ) async {
-      final container = _buildContainer(
-        db: db,
-        staffRows: [const StaffRow(id: 'staff-1', userId: 'user-unsynced')],
-      );
-      addTearDown(container.dispose);
+    testWidgets(
+      'a staff row unknown to the colleagues mirror falls back to a placeholder, never the raw id',
+      (tester) async {
+        final container = _buildContainer(
+          db: db,
+          staffRows: [const StaffRow(id: 'staff-1', userId: 'user-unsynced')],
+        );
+        addTearDown(container.dispose);
 
-      await tester.pumpWidget(_buildStep(container));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_buildStep(container));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Collega non ancora sincronizzato'), findsOneWidget);
-      expect(find.text('user-unsynced'), findsNothing);
-    });
+        expect(find.text('Collega non ancora sincronizzato'), findsOneWidget);
+        expect(find.text('user-unsynced'), findsNothing);
+      },
+    );
   });
 }

@@ -63,6 +63,7 @@ Future<String?> _callApply(
 
 ProviderContainer _container(AppDatabase db, {String? internalUserId = _testInternalUserId}) =>
     ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         internalUserIdProvider.overrideWith((ref) async => internalUserId),
@@ -132,7 +133,11 @@ void main() {
     expect(mat.freeTextName, 'Guarnizione');
     expect(mat.quantity, 2);
     expect(mat.notes, contains('Da verificare'));
-    expect(mat.magazzinoId, isNull, reason: 'nothing resolved a magazzino — no stock leaves by itself');
+    expect(
+      mat.magazzinoId,
+      isNull,
+      reason: 'nothing resolved a magazzino — no stock leaves by itself',
+    );
 
     final ctrl = await db.select(db.reportControlli).getSingle();
     expect(ctrl.controlId, 'tc-1');
@@ -197,8 +202,9 @@ void main() {
     expect(row.isAiAssisted, isTrue);
   });
 
-  testWidgets('a response with no title leaves one for the technician rather than inventing one',
-      (tester) async {
+  testWidgets('a response with no title leaves one for the technician rather than inventing one', (
+    tester,
+  ) async {
     final db = _makeDb();
     addTearDown(db.close);
     final container = _container(db);
@@ -224,18 +230,15 @@ void main() {
     expect(row.locationId, '');
   });
 
-  testWidgets('no signed-in internal user id refuses, exactly as createLocalDraft does',
-      (tester) async {
+  testWidgets('no signed-in internal user id refuses, exactly as createLocalDraft does', (
+    tester,
+  ) async {
     final db = _makeDb();
     addTearDown(db.close);
     final container = _container(db, internalUserId: null);
     addTearDown(container.dispose);
 
-    final id = await _callApply(
-      tester,
-      container,
-      const AiConversationConfirmResponse(title: 'X'),
-    );
+    final id = await _callApply(tester, container, const AiConversationConfirmResponse(title: 'X'));
 
     expect(id, isNull);
     expect(await db.select(db.draftReports).get(), isEmpty);

@@ -4,8 +4,11 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
@@ -36,6 +39,7 @@ import '../ticket/ticket_detail_api_client.dart'
 import 'create_draft.dart';
 import 'rapportino_list_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -135,7 +139,7 @@ class _RapportinoViewBody extends ConsumerWidget {
         ? ref.watch(cachedTicketControlsProvider(ticketId))
         : null;
     final controlLabels = <String, FlatTicketControl>{
-      for (final f in flattenTicketControls(ticketControlsAsync?.valueOrNull ?? const []))
+      for (final f in flattenTicketControls(ticketControlsAsync?.value ?? const []))
         f.control.id: f,
     };
 
@@ -144,14 +148,14 @@ class _RapportinoViewBody extends ConsumerWidget {
       'it',
     ).format((draft.updatedAt ?? draft.createdAt).toLocal());
 
-    final staff = staffAsync.valueOrNull ?? [];
-    final materiali = materialiAsync.valueOrNull ?? [];
-    final controlli = controlliAsync.valueOrNull ?? [];
+    final staff = staffAsync.value ?? [];
+    final materiali = materialiAsync.value ?? [];
+    final controlli = controlliAsync.value ?? [];
 
     // rapportinoAllegatiProvider mixes photo and signature rows (both are just "allegati" for
     // the report) — split them here so the photo grid never shows a signature as if it were a
     // job photo, and _SignatureBlock gets the real row instead of resolving it itself.
-    final allegati = allegatiAsync.valueOrNull ?? [];
+    final allegati = allegatiAsync.value ?? [];
     final signatureIds = {draft.customerSignatureAllegatoId, draft.technicianSignatureAllegatoId}
       ..removeWhere((id) => id == null);
     final photoAllegati = allegati.where((a) => !signatureIds.contains(a.id)).toList();
@@ -170,7 +174,7 @@ class _RapportinoViewBody extends ConsumerWidget {
     // geocode or cache a point against, same as `_locationLabel`'s own fallback chain above.
     final locationId = draft.locationId;
     final locationAsync = locationId.isEmpty ? null : ref.watch(locationByIdProvider(locationId));
-    final location = locationAsync?.valueOrNull;
+    final location = locationAsync?.value;
     final locationAddress = [
       location?.address,
       location?.city,
@@ -185,11 +189,8 @@ class _RapportinoViewBody extends ConsumerWidget {
     final hasTechnicianSignature = draft.technicianSignatureAllegatoId != null;
 
     final techNames = staff.isNotEmpty
-        ? staff
-              .map((s) => ref.watch(colleagueNameProvider(s.userId)).valueOrNull ?? s.userId)
-              .join(', ')
-        : (ref.watch(colleagueNameProvider(draft.insertedUserId)).valueOrNull ??
-              draft.insertedUserId);
+        ? staff.map((s) => ref.watch(colleagueNameProvider(s.userId)).value ?? s.userId).join(', ')
+        : (ref.watch(colleagueNameProvider(draft.insertedUserId)).value ?? draft.insertedUserId);
     final signatureLabel = hasCustomerSignature
         ? 'Firmato'
         : hasCustomerAbsence
@@ -283,7 +284,7 @@ class _RapportinoViewBody extends ConsumerWidget {
               for (final s in staff)
                 _RuleRow(
                   icon: LucideIcons.user,
-                  title: ref.watch(colleagueNameProvider(s.userId)).valueOrNull ?? s.userId,
+                  title: ref.watch(colleagueNameProvider(s.userId)).value ?? s.userId,
                   subtitle: [
                     if (s.kmTraveled > 0) '${s.kmTraveled.toStringAsFixed(1)} km',
                     ?s.vehicle,
@@ -315,7 +316,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                         final name =
                             m.freeTextName ??
                             (m.materialeId != null
-                                ? (ref.watch(materialeNameProvider(m.materialeId!)).valueOrNull ??
+                                ? (ref.watch(materialeNameProvider(m.materialeId!)).value ??
                                       m.materialeId!)
                                 : '—');
                         final qty = m.quantity.toStringAsFixed(
@@ -737,7 +738,7 @@ String _locationLabel(BuildContext context, WidgetRef ref, DraftReport draft) {
   if (draft.locationId.isEmpty) {
     return _metadataField(draft.metadataJson, 'locationFreeText') ?? '—';
   }
-  return ref.watch(locationNameProvider(draft.locationId)).valueOrNull ??
+  return ref.watch(locationNameProvider(draft.locationId)).value ??
       _metadataField(draft.metadataJson, 'locationFreeText') ??
       draft.locationId;
 }
@@ -748,7 +749,7 @@ String _customerLabel(BuildContext context, WidgetRef ref, DraftReport draft) {
   if (customerId == null || customerId.isEmpty) {
     return _metadataField(draft.metadataJson, 'customerFreeText') ?? '—';
   }
-  return ref.watch(customerNameProvider(customerId)).valueOrNull ??
+  return ref.watch(customerNameProvider(customerId)).value ??
       _metadataField(draft.metadataJson, 'customerFreeText') ??
       customerId;
 }
@@ -788,10 +789,7 @@ DetailHeroData _buildRapportinoHero(
     liveValue: oreLabel == '—' ? null : Text(oreLabel),
     heroCopy: Row(
       children: [
-        if (draft.isAiAssisted) ...[
-          const AiAssistedBadge(),
-          const SizedBox(width: 8),
-        ],
+        if (draft.isAiAssisted) ...[const AiAssistedBadge(), const SizedBox(width: 8)],
         Expanded(
           child: Text.rich(
             TextSpan(
@@ -1154,7 +1152,7 @@ class _AssetGroupHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final name = ref.watch(assetNameProvider(assetId)).valueOrNull;
+    final name = ref.watch(assetNameProvider(assetId)).value;
     // A device that never synced this asset still names the block honestly rather than dropping
     // the grouping or repeating the GUID.
     return Padding(

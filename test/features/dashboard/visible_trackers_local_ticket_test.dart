@@ -10,7 +10,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
+import 'package:tasktap_mobile/data/sync/sync_service.dart'
+    show appDatabaseProvider;
 import 'package:tasktap_mobile/data/worklogs/active_tracker_api_client.dart';
 import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart';
 import 'package:tasktap_mobile/features/timbra/timbra_providers.dart';
@@ -53,11 +54,16 @@ Future<void> _insertTimer(
 /// Reads [localTicketTimersProvider] once its stream has emitted.
 Future<List<ActiveTracker>> _local(AppDatabase db) async {
   final c = ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       // The merge reads this too; the server list is empty unless a test overrides it.
-      activeTrackersProvider.overrideWith((ref) => Stream.value(const <ActiveTracker>[])),
-      todaySessionsProvider.overrideWith((ref) => Stream.value(const <WorkSession>[])),
+      activeTrackersProvider.overrideWith(
+        (ref) => Stream.value(const <ActiveTracker>[]),
+      ),
+      todaySessionsProvider.overrideWith(
+        (ref) => Stream.value(const <WorkSession>[]),
+      ),
     ],
   );
   addTearDown(c.dispose);
@@ -73,20 +79,23 @@ void main() {
   });
   tearDown(() => db.close());
 
-  test('a running ticket timer becomes a tracker carrying the ticket title', () async {
-    await _insertTicket(db, 't1', 'Perdita in centrale');
-    await _insertTimer(db, id: 'w1', ticketId: 't1');
+  test(
+    'a running ticket timer becomes a tracker carrying the ticket title',
+    () async {
+      await _insertTicket(db, 't1', 'Perdita in centrale');
+      await _insertTimer(db, id: 'w1', ticketId: 't1');
 
-    final trackers = await _local(db);
+      final trackers = await _local(db);
 
-    expect(trackers, hasLength(1));
-    final tracker = trackers.single;
-    expect(tracker.kind, ActiveTrackerKind.ticket);
-    expect(tracker.id, 'w1');
-    expect(tracker.entityId, 't1');
-    expect(tracker.label, 'Perdita in centrale');
-    expect(tracker.startedAtUtc, _start);
-  });
+      expect(trackers, hasLength(1));
+      final tracker = trackers.single;
+      expect(tracker.kind, ActiveTrackerKind.ticket);
+      expect(tracker.id, 'w1');
+      expect(tracker.entityId, 't1');
+      expect(tracker.label, 'Perdita in centrale');
+      expect(tracker.startedAtUtc, _start);
+    },
+  );
 
   test('a closed timer is not running and is not listed', () async {
     await _insertTicket(db, 't1', 'Perdita in centrale');
@@ -135,21 +144,27 @@ void main() {
     );
 
     final c = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         activeTrackersProvider.overrideWith(
           (ref) => Stream.value([serverTicket]),
         ),
-        todaySessionsProvider.overrideWith((ref) => Stream.value(const <WorkSession>[])),
+        todaySessionsProvider.overrideWith(
+          (ref) => Stream.value(const <WorkSession>[]),
+        ),
         localTicketTimersProvider.overrideWith(
           (ref) => Stream.value([serverTicket, localOnly]),
         ),
         // A site session is covered by visible_trackers_local_cantiere_test.dart; overriding keeps
         // this container off the real Drift database.
-        localCantiereTimersProvider.overrideWith((ref) => Stream.value(const <ActiveTracker>[])),
+        localCantiereTimersProvider.overrideWith(
+          (ref) => Stream.value(const <ActiveTracker>[]),
+        ),
       ],
     );
     addTearDown(c.dispose);
     c.listen(visibleTrackersProvider, (_, _) {});
+    c.listen(activeTrackersProvider, (_, _) {});
     await c.read(activeTrackersProvider.future);
     await pumpEventQueue();
 

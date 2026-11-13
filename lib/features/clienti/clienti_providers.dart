@@ -38,9 +38,9 @@ final allClientiCustomersProvider = StreamProvider.autoDispose<List<Customer>>((
 /// not what the prototype's `ticket aperti` says.
 final customerOpenTicketCountsProvider = Provider.autoDispose<Map<String, int>>(
   (ref) {
-    final tickets = ref.watch(ticketsProvider).valueOrNull ?? const <Ticket>[];
+    final tickets = ref.watch(ticketsProvider).value ?? const <Ticket>[];
     final closedStatusIds =
-        ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const <int>{};
+        ref.watch(closedTicketStatusIdsProvider).value ?? const <int>{};
     final counts = <String, int>{};
     for (final ticket in tickets) {
       if (ticketIsClosed(ticket, closedStatusIds)) continue;

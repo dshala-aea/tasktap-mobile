@@ -23,6 +23,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 
 import '../../core/scanner/barcode_scan_sheet.dart';
 import '../../core/theme/app_palette.dart';
@@ -81,9 +82,8 @@ class _ScanTimbraScreenState extends State<ScanTimbraScreen> {
       return;
     }
 
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => KioskConfirmTimbraScreen(token: value.trim())));
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => KioskConfirmTimbraScreen(token: value.trim())));
 
     // The confirmation screen pops itself once the punch lands (or offers its own way back on a
     // failure); this route has served its purpose either way and must not be what the technician
@@ -154,7 +154,7 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
 
     final String? userId;
     try {
-      userId = _userId ?? await ref.read(internalUserIdProvider.future);
+      userId = _userId ?? await ref.readFuture(internalUserIdProvider.future);
     } catch (_) {
       // The one await in here that is not already guarded, and `_begin` turned the spinner on
       // before it: a failed session read has to land in the same error state as everything else,
@@ -383,9 +383,7 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
         AppButton(
           label: onBreak ? 'Riprendi il lavoro' : 'Inizia la pausa',
           icon: Icon(onBreak ? Icons.play_arrow : Icons.free_breakfast, size: 18),
-          onPressed: _submittable(primary)
-              ? () => _submit(primaryAction, _userId!)
-              : null,
+          onPressed: _submittable(primary) ? () => _submit(primaryAction, _userId!) : null,
         ),
         const SizedBox(height: AppSpacing.sm),
         AppButton.secondary(

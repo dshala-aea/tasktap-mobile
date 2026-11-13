@@ -8,6 +8,7 @@ import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -36,14 +37,21 @@ const double _kBlockPadding = AppSpacing.xs * 2; // vertical padding, both sides
 /// A 30-minute job is 44dp tall and a two-hour one 128dp, so these lines are shown only when they
 /// fit, and folded onto one line when only one fits — rather than drawn always and clipped. A
 /// block too short for even one line still has both in `_ScheduleInfoSheet` and in the Lista row.
-List<String> _placeLines(ScheduleWhere? where, double height, {required bool withTime}) {
+List<String> _placeLines(
+  ScheduleWhere? where,
+  double height, {
+  required bool withTime,
+}) {
   final customer = where?.customerName;
   final address = where?.address;
   final lines = <String>[?customer, ?address];
   if (lines.isEmpty) return const [];
 
   final budget =
-      height - _kBlockPadding - _kTitleLineHeight - (withTime ? _kMetaLineHeight : 0);
+      height -
+      _kBlockPadding -
+      _kTitleLineHeight -
+      (withTime ? _kMetaLineHeight : 0);
   if (budget >= _kMetaLineHeight * lines.length) return lines;
   if (budget >= _kMetaLineHeight) return [lines.join(' · ')];
   return const [];
@@ -70,7 +78,7 @@ class GiornoView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final totalHeight = (_kEndHour - _kStartHour) * _kHourHeight;
     final teamScheduleIds =
-        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
+        ref.watch(teamAssignedScheduleIdsProvider).value ?? const {};
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(0, AppSpacing.sm, 0, context.navClearance),
@@ -175,9 +183,12 @@ class _EventBlock extends ConsumerWidget {
     // row and the detail sheet use — no wire field, nothing to fetch, so it works with no signal.
     final where = ref
         .watch(
-          scheduleWhereProvider((ticketId: schedule.ticketId, locationId: schedule.locationId)),
+          scheduleWhereProvider((
+            ticketId: schedule.ticketId,
+            locationId: schedule.locationId,
+          )),
         )
-        .valueOrNull;
+        .value;
     final startMin = schedule.timeStartMinutes;
     final endMin = schedule.timeEndMinutes;
     final clampedStart = startMin

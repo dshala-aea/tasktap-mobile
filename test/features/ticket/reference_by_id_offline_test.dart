@@ -19,7 +19,8 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reference/reference_cache_repository.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_dto.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
+import 'package:tasktap_mobile/data/sync/sync_service.dart'
+    show appDatabaseProvider;
 import 'package:tasktap_mobile/features/ticket/ticket_detail_api_client.dart'
     show TicketDetailOfflineException;
 import 'package:tasktap_mobile/features/ticket/ticket_providers.dart';
@@ -70,6 +71,7 @@ void main() {
 
   ProviderContainer container({required bool online, int? serverStatus}) {
     final c = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(online),
@@ -96,6 +98,7 @@ void main() {
     ]);
 
     final c = container(online: false);
+    c.listen(contractByIdProvider('c1'), (_, _) {});
     final contract = await c.read(contractByIdProvider('c1').future);
 
     expect(contract, isNotNull);
@@ -110,6 +113,7 @@ void main() {
 
   test('offline with nothing mirrored is unknown, not "not found"', () async {
     final c = container(online: false);
+    c.listen(contractByIdProvider('missing'), (_, _) {});
 
     await expectLater(
       c.read(contractByIdProvider('missing').future),
@@ -117,28 +121,31 @@ void main() {
     );
   });
 
-  test('online, a request that never arrived falls back to the mirror', () async {
-    await repo.upsertCommesse([
-      CommessaSyncDto(
-        id: 'm1',
-        tenantId: 't',
-        createdAt: DateTime.utc(2026, 1, 1),
-        codice: 'COM-7',
-        descrizione: 'Rifacimento centrale',
-        customerId: 'cu1',
-      ),
-    ]);
+  test(
+    'online, a request that never arrived falls back to the mirror',
+    () async {
+      await repo.upsertCommesse([
+        CommessaSyncDto(
+          id: 'm1',
+          tenantId: 't',
+          createdAt: DateTime.utc(2026, 1, 1),
+          codice: 'COM-7',
+          descrizione: 'Rifacimento centrale',
+          customerId: 'cu1',
+        ),
+      ]);
 
-    final c = container(online: true);
-    final commessa = await c.read(commessaByIdProvider('m1').future);
+      final c = container(online: true);
+      c.listen(commessaByIdProvider('m1'), (_, _) {});
+      final commessa = await c.read(commessaByIdProvider('m1').future);
 
-    expect(commessa, isNotNull);
-    expect(commessa!['codice'], 'COM-7');
-    expect(commessa['descrizione'], 'Rifacimento centrale');
-  });
+      expect(commessa, isNotNull);
+      expect(commessa!['codice'], 'COM-7');
+      expect(commessa['descrizione'], 'Rifacimento centrale');
+    },
+  );
 
-  test('online, a server fault falls back to the mirror — a 503 is not "this commessa is gone"',
-      () async {
+  test('online, a server fault falls back to the mirror — a 503 is not "this commessa is gone"', () async {
     await repo.upsertCommesse([
       CommessaSyncDto(
         id: 'm1',
@@ -151,31 +158,36 @@ void main() {
     ]);
 
     final c = container(online: true, serverStatus: 503);
+    c.listen(commessaByIdProvider('m1'), (_, _) {});
     final commessa = await c.read(commessaByIdProvider('m1').future);
 
     expect(commessa, isNotNull);
     expect(commessa!['codice'], 'COM-7');
   });
 
-  test('online, a server 404 is the answer and the mirror is not consulted', () async {
-    await repo.upsertCommesse([
-      CommessaSyncDto(
-        id: 'm1',
-        tenantId: 't',
-        createdAt: DateTime.utc(2026, 1, 1),
-        codice: 'COM-7',
-        customerId: 'cu1',
-      ),
-    ]);
+  test(
+    'online, a server 404 is the answer and the mirror is not consulted',
+    () async {
+      await repo.upsertCommesse([
+        CommessaSyncDto(
+          id: 'm1',
+          tenantId: 't',
+          createdAt: DateTime.utc(2026, 1, 1),
+          codice: 'COM-7',
+          customerId: 'cu1',
+        ),
+      ]);
 
-    final c = container(online: true, serverStatus: 404);
+      final c = container(online: true, serverStatus: 404);
+      c.listen(commessaByIdProvider('m1'), (_, _) {});
 
-    await expectLater(
-      c.read(commessaByIdProvider('m1').future),
-      throwsA(isA<DioException>()),
-      reason: 'showing a deleted commessa from the mirror would state it still exists',
-    );
-  });
+      await expectLater(
+        c.read(commessaByIdProvider('m1').future),
+        throwsA(isA<DioException>()),
+        reason: 'showing a deleted commessa from the mirror would state it still exists',
+      );
+    },
+  );
 
   test('offline, a mirrored prodotto assistenza answers by id', () async {
     await repo.upsertProdottiAssistenza([
@@ -192,6 +204,7 @@ void main() {
     ]);
 
     final c = container(online: false);
+    c.listen(prodottoAssistenzaByIdProvider('p1'), (_, _) {});
     final prodotto = await c.read(prodottoAssistenzaByIdProvider('p1').future);
 
     expect(prodotto, isNotNull);

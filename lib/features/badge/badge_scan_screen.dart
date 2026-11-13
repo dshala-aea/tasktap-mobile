@@ -23,10 +23,15 @@ import 'badge_scan_result_card.dart';
 
 /// Builds the camera side of the screen and reports every detected code. Injectable so widget
 /// tests drive scans with no camera.
-typedef ScanSource = Widget Function(BuildContext context, void Function(String code) onCode);
+typedef ScanSource = Widget Function(
+  BuildContext context,
+  void Function(String code) onCode,
+);
 
-Widget _defaultScanSource(BuildContext context, void Function(String code) onCode) =>
-    ContinuousScanView(onCode: onCode);
+Widget _defaultScanSource(
+  BuildContext context,
+  void Function(String code) onCode,
+) => ContinuousScanView(onCode: onCode);
 
 /// The team leader's continuous badge scanner: camera on top (so the leader keeps aiming), the
 /// newest result prominent below it, the session's earlier results under that. Online-only; the
@@ -58,7 +63,11 @@ class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
   }
 
   void _onCode(String code) {
-    unawaited(ref.read(badgeScanControllerProvider(widget.cantiereId).notifier).onCode(code));
+    unawaited(
+      ref
+          .read(badgeScanControllerProvider(widget.cantiereId).notifier)
+          .onCode(code),
+    );
   }
 
   @override
@@ -66,7 +75,10 @@ class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
     final c = context.colors;
     final entries = ref.watch(badgeScanControllerProvider(widget.cantiereId));
     final inFlight = ref.watch(badgeScanInFlightProvider(widget.cantiereId));
-    final cantiereName = ref.watch(cantiereByIdProvider(widget.cantiereId)).valueOrNull?.name;
+    final cantiereName = ref
+        .watch(cantiereByIdProvider(widget.cantiereId))
+        .value
+        ?.name;
     final source = widget.scanSource ?? _defaultScanSource;
     final height = MediaQuery.sizeOf(context).height;
 
@@ -79,7 +91,9 @@ class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
             ScreenHeader(title: 'Scansiona badge', showBack: true),
             if (cantiereName != null)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.pagePadding,
+                ),
                 child: Text(
                   cantiereName,
                   style: AppTextStyles.titleMedium.copyWith(color: c.inkMuted),
@@ -87,7 +101,9 @@ class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
               ),
             const SizedBox(height: AppSpacing.sm),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.pagePadding,
+              ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: SizedBox(
@@ -105,7 +121,9 @@ class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
                       child: Center(
                         child: Text(
                           'Verifica in corso…',
-                          style: AppTextStyles.bodyMedium.copyWith(color: c.inkMuted),
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: c.inkMuted,
+                          ),
                         ),
                       ),
                     )
@@ -116,7 +134,9 @@ class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
                   ? Center(
                       child: Text(
                         'Inquadra il badge del lavoratore',
-                        style: AppTextStyles.bodyLarge.copyWith(color: c.inkMuted),
+                        style: AppTextStyles.bodyLarge.copyWith(
+                          color: c.inkMuted,
+                        ),
                       ),
                     )
                   : ListView.separated(
@@ -127,9 +147,13 @@ class _BadgeScanScreenState extends ConsumerState<BadgeScanScreen> {
                         AppSpacing.xxl,
                       ),
                       itemCount: entries.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                      separatorBuilder: (_, _) =>
+                          const SizedBox(height: AppSpacing.sm),
                       itemBuilder: (context, i) {
-                        final card = BadgeScanResultCard(entry: entries[i], prominent: i == 0);
+                        final card = BadgeScanResultCard(
+                          entry: entries[i],
+                          prominent: i == 0,
+                        );
                         if (i != 0) return card;
                         // The newest result is announced to screen readers as it arrives.
                         return Semantics(

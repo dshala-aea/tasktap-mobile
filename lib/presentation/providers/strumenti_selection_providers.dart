@@ -1,6 +1,6 @@
 // dart format width=100
 import 'package:drift/drift.dart' show Value;
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../data/local/app_database.dart';
 import '../../data/reports/draft_report_repository.dart';
@@ -134,26 +134,22 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
             .where((s) => s.strumentoId != null)
             .toList();
         if (server.isNotEmpty) {
-          await _repo.seedLocalStrumenti(
-            reportId,
-            [
-              for (final s in server)
-                ReportStrumentiCompanion.insert(
-                  id: rowId(reportId, s.strumentoId!),
-                  reportId: reportId,
-                  strumentoId: Value(s.strumentoId),
-                  name: s.name,
-                  matricola: s.matricola,
-                  calibrationExpiry: Value(s.calibrationExpiry),
-                  certificateReference: Value(s.certificateReference),
-                  expiredAcknowledged: Value(s.expiredAcknowledged),
-                  usageDescription: Value(s.usageDescription),
-                  outcome: Value(s.outcome),
-                  isLocal: const Value(true),
-                ),
-            ],
-            markPrefilled: true,
-          );
+          await _repo.seedLocalStrumenti(reportId, [
+            for (final s in server)
+              ReportStrumentiCompanion.insert(
+                id: rowId(reportId, s.strumentoId!),
+                reportId: reportId,
+                strumentoId: Value(s.strumentoId),
+                name: s.name,
+                matricola: s.matricola,
+                calibrationExpiry: Value(s.calibrationExpiry),
+                certificateReference: Value(s.certificateReference),
+                expiredAcknowledged: Value(s.expiredAcknowledged),
+                usageDescription: Value(s.usageDescription),
+                outcome: Value(s.outcome),
+                isLocal: const Value(true),
+              ),
+          ], markPrefilled: true);
         } else {
           final kit = catalogue.where((s) => s.isMine).toList();
           await _repo.seedLocalStrumenti(
@@ -267,8 +263,10 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
   /// moment). Writes ONLY that column, so acknowledgement/snapshot are untouched, and the in-memory
   /// snapshot is patched rather than reloaded: the text field owns what is on screen while typing,
   /// and a reload would fight it for the cursor.
-  Future<void> setUsageDescription(String strumentoId, String value) =>
-      _writeNote(strumentoId, ReportStrumentiCompanion(usageDescription: Value(_nullIfBlank(value))));
+  Future<void> setUsageDescription(String strumentoId, String value) => _writeNote(
+    strumentoId,
+    ReportStrumentiCompanion(usageDescription: Value(_nullIfBlank(value))),
+  );
 
   /// Same as [setUsageDescription], for the esito.
   Future<void> setOutcome(String strumentoId, String value) =>

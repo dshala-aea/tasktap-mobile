@@ -29,6 +29,7 @@ void main() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     db = AppDatabase(NativeDatabase.memory());
     container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [appDatabaseProvider.overrideWithValue(db)],
     );
     // Anchored to the *business* day, not the UTC date. The queue reads its day through
@@ -138,15 +139,21 @@ void main() {
   /// run at all.
   Future<WorkQueueBuckets> readQueue() async {
     container.listen(workQueueProvider, (_, _) {});
+    container.listen(todaySchedulesProvider, (_, _) {});
     await container.read(todaySchedulesProvider.future);
+    container.listen(upcomingSchedulesProvider, (_, _) {});
     await container.read(upcomingSchedulesProvider.future);
+    container.listen(closedTicketIdsProvider, (_, _) {});
     await container.read(closedTicketIdsProvider.future);
+    container.listen(runningTicketTimerIdsProvider, (_, _) {});
     await container.read(runningTicketTimerIdsProvider.future);
+    container.listen(inProgressTicketIdsProvider, (_, _) {});
     await container.read(inProgressTicketIdsProvider.future);
     return container.read(workQueueProvider);
   }
 
   test('inProgressSchedulesProvider emits empty list when db empty', () async {
+    container.listen(inProgressSchedulesProvider, (_, _) {});
     final result = await container.read(inProgressSchedulesProvider.future);
     expect(result, isEmpty);
   });
@@ -175,25 +182,22 @@ void main() {
     expect(queue.fatto.map((s) => s.id), ['s-closed']);
   });
 
-  test(
-    'closedAt alone marks the ticket closed, before the status reaches the phone',
-    () async {
-      await seedStatus(id: 1, name: 'Aperto');
-      // A ticket closed on the phone carries the new statusId and nothing else; a ticket closed by
-      // the office can arrive with closedAt set under a status the mirror still calls open.
-      await seedTicket(
-        id: 't-closed',
-        statusId: 1,
-        closedAt: DateTime.utc(2026, 7, 9),
-      );
-      await seedSchedule(id: 's-closed', ticketId: 't-closed', day: today);
+  test('closedAt alone marks the ticket closed, before the status reaches the phone', () async {
+    await seedStatus(id: 1, name: 'Aperto');
+    // A ticket closed on the phone carries the new statusId and nothing else; a ticket closed by
+    // the office can arrive with closedAt set under a status the mirror still calls open.
+    await seedTicket(
+      id: 't-closed',
+      statusId: 1,
+      closedAt: DateTime.utc(2026, 7, 9),
+    );
+    await seedSchedule(id: 's-closed', ticketId: 't-closed', day: today);
 
-      final queue = await readQueue();
+    final queue = await readQueue();
 
-      expect(queue.daFare, null);
-      expect(queue.fatto.map((s) => s.id), ['s-closed']);
-    },
-  );
+    expect(queue.daFare, null);
+    expect(queue.fatto.map((s) => s.id), ['s-closed']);
+  });
 
   test('a running ticket timer puts its job in Live, not "da fare"', () async {
     await seedStatus(id: 1, name: 'Aperto');
@@ -290,49 +294,63 @@ void main() {
   // The office starts a job by moving the TICKET to "In corso"; the linked schedule row stays in
   // "da fare", because nothing rewrites it. With only the schedule's own statusId to go on, the
   // dashboard kept the job in the "DA FARE" slot while the work was already under way.
-  test("a ticket in \"In corso\" is live even with its schedule still 'da fare'", () async {
-    await seedStatus(id: 1, name: 'Aperto');
-    await seedStatus(id: _inCorso, name: 'In corso', isInProgress: true);
-    await seedTicket(id: 't-started', statusId: _inCorso);
-    await seedTicket(id: 't-pending', statusId: 1);
-    await seedSchedule(id: 's-started', ticketId: 't-started', day: today);
-    await seedSchedule(id: 's-pending', ticketId: 't-pending', day: today);
+  test(
+    "a ticket in \"In corso\" is live even with its schedule still 'da fare'",
+    () async {
+      await seedStatus(id: 1, name: 'Aperto');
+      await seedStatus(id: _inCorso, name: 'In corso', isInProgress: true);
+      await seedTicket(id: 't-started', statusId: _inCorso);
+      await seedTicket(id: 't-pending', statusId: 1);
+      await seedSchedule(id: 's-started', ticketId: 't-started', day: today);
+      await seedSchedule(id: 's-pending', ticketId: 't-pending', day: today);
 
-    final queue = await readQueue();
-    final stats = container.read(dashboardStatsProvider);
+      final queue = await readQueue();
+      final stats = container.read(dashboardStatsProvider);
 
-    expect(queue.live.map((s) => s.id), ['s-started']);
-    expect(queue.daFare?.id, 's-pending');
-    expect(stats.inProgressCount, 1);
-  });
+      expect(queue.live.map((s) => s.id), ['s-started']);
+      expect(queue.daFare?.id, 's-pending');
+      expect(stats.inProgressCount, 1);
+    },
+  );
 
   // The flag is the contract, not the id and not the name: a tenant that renames "In corso" or
   // seeds its own statuses gets a different id, and a dashboard keyed on `statusId == 2` would
   // silently stop recognising started work for that tenant.
-  test('a renamed in-progress status is recognised through its flag, not its id', () async {
-    await seedStatus(id: 1, name: 'Aperto');
-    await seedStatus(id: 42, name: 'Sul posto', isInProgress: true);
-    await seedTicket(id: 't-1', statusId: 42);
-    await seedSchedule(id: 's-1', ticketId: 't-1', day: today);
+  test(
+    'a renamed in-progress status is recognised through its flag, not its id',
+    () async {
+      await seedStatus(id: 1, name: 'Aperto');
+      await seedStatus(id: 42, name: 'Sul posto', isInProgress: true);
+      await seedTicket(id: 't-1', statusId: 42);
+      await seedSchedule(id: 's-1', ticketId: 't-1', day: today);
 
-    final queue = await readQueue();
+      final queue = await readQueue();
 
-    expect(queue.live.map((s) => s.id), ['s-1']);
-    expect(queue.daFare, null);
-  });
+      expect(queue.live.map((s) => s.id), ['s-1']);
+      expect(queue.daFare, null);
+    },
+  );
 
   // A closed status that also carries the started flag is still finished work — closing must keep
   // outranking every "work has started" signal, or a closed ticket would reappear on the clock.
-  test('a closed ticket outranks an in-progress flag on the same status', () async {
-    await seedStatus(id: 6, name: 'Chiuso', isClosed: true, isInProgress: true);
-    await seedTicket(id: 't-1', statusId: 6);
-    await seedSchedule(id: 's-1', ticketId: 't-1', day: today);
+  test(
+    'a closed ticket outranks an in-progress flag on the same status',
+    () async {
+      await seedStatus(
+        id: 6,
+        name: 'Chiuso',
+        isClosed: true,
+        isInProgress: true,
+      );
+      await seedTicket(id: 't-1', statusId: 6);
+      await seedSchedule(id: 's-1', ticketId: 't-1', day: today);
 
-    final queue = await readQueue();
+      final queue = await readQueue();
 
-    expect(queue.live, isEmpty);
-    expect(queue.fatto.map((s) => s.id), ['s-1']);
-  });
+      expect(queue.live, isEmpty);
+      expect(queue.fatto.map((s) => s.id), ['s-1']);
+    },
+  );
 
   // An approved absence is materialised server-side as an ordinary schedule so the agenda blocks
   // the day. Nothing in the row itself says "not work": it has a status, an assignee and no ticket,
@@ -342,7 +360,12 @@ void main() {
     await seedStatus(id: 1, name: 'Aperto');
     await seedTicket(id: 't-1', statusId: 1);
     await seedSchedule(id: 's-job', ticketId: 't-1', day: today);
-    await seedSchedule(id: 's-ferie', ticketId: null, day: today, isAssenza: true);
+    await seedSchedule(
+      id: 's-ferie',
+      ticketId: null,
+      day: today,
+      isAssenza: true,
+    );
 
     final queue = await readQueue();
     final stats = container.read(dashboardStatsProvider);
@@ -355,7 +378,12 @@ void main() {
   });
 
   test('a day that holds only an absence is not an empty day', () async {
-    await seedSchedule(id: 's-ferie', ticketId: null, day: today, isAssenza: true);
+    await seedSchedule(
+      id: 's-ferie',
+      ticketId: null,
+      day: today,
+      isAssenza: true,
+    );
 
     final queue = await readQueue();
 
@@ -386,28 +414,34 @@ void main() {
 
   // The flag outranks the status for the same reason a closed ticket does: the office may well
   // move an absence row's status, and a finished-looking one must not return to the queue.
-  test('an absence stays out of every work tier whatever its status says', () async {
-    await seedSchedule(
-      id: 's-ferie-live',
-      ticketId: null,
-      day: today,
-      statusId: _inCorso,
-      isAssenza: true,
-    );
-    await seedSchedule(
-      id: 's-ferie-fatto',
-      ticketId: null,
-      day: today,
-      statusId: 5,
-      isAssenza: true,
-    );
+  test(
+    'an absence stays out of every work tier whatever its status says',
+    () async {
+      await seedSchedule(
+        id: 's-ferie-live',
+        ticketId: null,
+        day: today,
+        statusId: _inCorso,
+        isAssenza: true,
+      );
+      await seedSchedule(
+        id: 's-ferie-fatto',
+        ticketId: null,
+        day: today,
+        statusId: 5,
+        isAssenza: true,
+      );
 
-    final queue = await readQueue();
+      final queue = await readQueue();
 
-    expect(queue.live, isEmpty);
-    expect(queue.fatto, isEmpty);
-    expect(queue.absences.map((s) => s.id), ['s-ferie-live', 's-ferie-fatto']);
-  });
+      expect(queue.live, isEmpty);
+      expect(queue.fatto, isEmpty);
+      expect(queue.absences.map((s) => s.id), [
+        's-ferie-live',
+        's-ferie-fatto',
+      ]);
+    },
+  );
 
   test('pastSchedulesProvider returns past schedules newest first, excluding today', () async {
     Future<void> insert(String id, DateTime date) => db
@@ -433,16 +467,26 @@ void main() {
     await insert('today', today);
     await insert('tomorrow', tomorrow);
 
+    container.listen(pastSchedulesProvider, (_, _) {});
     final result = await container.read(pastSchedulesProvider.future);
     expect(result.map((s) => s.id), ['yesterday', 'lastWeek']);
   });
 
-  test('dashboardStatsProvider excludes cancelled schedules from upcomingCount', () async {
-    await seedSchedule(id: 'cancelled', ticketId: null, day: tomorrow, statusId: _annullato);
-    await seedSchedule(id: 'open', ticketId: null, day: tomorrow);
+  test(
+    'dashboardStatsProvider excludes cancelled schedules from upcomingCount',
+    () async {
+      await seedSchedule(
+        id: 'cancelled',
+        ticketId: null,
+        day: tomorrow,
+        statusId: _annullato,
+      );
+      await seedSchedule(id: 'open', ticketId: null, day: tomorrow);
 
-    await container.read(upcomingSchedulesProvider.future);
-    final stats = container.read(dashboardStatsProvider);
-    expect(stats.upcomingCount, 1);
-  });
+      container.listen(upcomingSchedulesProvider, (_, _) {});
+      await container.read(upcomingSchedulesProvider.future);
+      final stats = container.read(dashboardStatsProvider);
+      expect(stats.upcomingCount, 1);
+    },
+  );
 }

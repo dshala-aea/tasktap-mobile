@@ -143,12 +143,14 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
     // rapportino, or a first run before the first sync) — never to an invented name.
     final customer = state.customerId == null
         ? null
-        : ref.watch(customerByIdProvider(state.customerId!)).valueOrNull;
+        : ref.watch(customerByIdProvider(state.customerId!)).value;
     final company = customer?.companyName.trim();
     final contact = customer?.contactPerson?.trim();
     final signerName = (contact != null && contact.isNotEmpty)
         ? contact
-        : (company != null && company.isNotEmpty) ? company : null;
+        : (company != null && company.isNotEmpty)
+        ? company
+        : null;
     final when = DateFormat('dd/MM/yyyy, HH:mm').format(DateTime.now());
     final stamp = (contact != null && contact.isNotEmpty && company != null && company.isNotEmpty)
         ? '$company · $when'
@@ -263,9 +265,7 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
                                   onPressed: _capturing || _sending
                                       ? null
                                       : () => notifier.clearCustomerSignature(),
-                                  style: TextButton.styleFrom(
-                                    minimumSize: const Size(44, 44),
-                                  ),
+                                  style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
                                   child: Text(
                                     'Cancella firma',
                                     style: TextStyle(
@@ -305,9 +305,7 @@ class _AiSignScreenState extends ConsumerState<AiSignScreen> {
                                   onPressed: _capturing || _sending
                                       ? null
                                       : () => _recordAbsence(state, notifier),
-                                  style: TextButton.styleFrom(
-                                    minimumSize: const Size(44, 44),
-                                  ),
+                                  style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
                                   child: Text(
                                     'Il cliente non può firmare',
                                     style: TextStyle(
@@ -462,7 +460,9 @@ class _FirmaDialogState extends State<_FirmaDialog> {
               style: TextStyle(color: context.colors.inkMuted),
             ),
           ),
-          Expanded(child: Signature(controller: _ctrl, backgroundColor: context.colors.bg1)),
+          Expanded(
+            child: Signature(controller: _ctrl, backgroundColor: context.colors.bg1),
+          ),
         ],
       ),
     );

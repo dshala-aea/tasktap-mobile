@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:firebase_messaging/firebase_messaging.dart'
     show AuthorizationStatus;
@@ -14,6 +15,8 @@ import 'package:tasktap_mobile/features/onboarding/onboarding_screen.dart';
 import 'package:tasktap_mobile/features/onboarding/onboarding_notification_ask.dart';
 
 class _RecordingNotifier extends OnboardingCompletedNotifier {
+  _RecordingNotifier(super.arg);
+
   int completions = 0;
 
   @override
@@ -44,12 +47,15 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  ({Widget widget, ProviderContainer container, _SpyLocationService location}) build({
-    List<Override> overrides = const [],
-  }) {
+  ({Widget widget, ProviderContainer container, _SpyLocationService location})
+  build({List<Override> overrides = const []}) {
     final location = _SpyLocationService();
     final container = ProviderContainer(
-      overrides: [locationServiceProvider.overrideWithValue(location), ...overrides],
+      retry: (_, _) => null,
+      overrides: [
+        locationServiceProvider.overrideWithValue(location),
+        ...overrides,
+      ],
     );
     addTearDown(container.dispose);
     return (
@@ -62,7 +68,9 @@ void main() {
     );
   }
 
-  testWidgets('the welcome offers Inizia and asks nothing else', (tester) async {
+  testWidgets('the welcome offers Inizia and asks nothing else', (
+    tester,
+  ) async {
     final built = build();
     await tester.pumpWidget(built.widget);
     await tester.pumpAndSettle();
@@ -83,9 +91,12 @@ void main() {
     expect(built.location.calls, 0);
   });
 
-  testWidgets('a notification request that throws is not an unhandled error', (tester) async {
+  testWidgets('a notification request that throws is not an unhandled error', (
+    tester,
+  ) async {
     final location = _SpyLocationService();
     final container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         locationServiceProvider.overrideWithValue(location),
         onboardingNotificationAskProvider.overrideWithValue(
@@ -108,48 +119,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Non è stato possibile attivare le notifiche. Riprova.'), findsOneWidget);
+    expect(
+      find.text('Non è stato possibile attivare le notifiche. Riprova.'),
+      findsOneWidget,
+    );
     // The action stays available to retry.
     expect(find.text('Attiva le notifiche'), findsOneWidget);
   });
 
-  testWidgets('an already-granted device shows the granted state, not the ask', (tester) async {
-    final built = build(
-      overrides: [
-        notificationAvailableProvider.overrideWithValue(true),
-        onboardingNotificationStatusProvider.overrideWithValue(
-          () async => AuthorizationStatus.authorized,
+  testWidgets(
+    'an already-granted device shows the granted state, not the ask',
+    (tester) async {
+      final built = build(
+        overrides: [
+          notificationAvailableProvider.overrideWithValue(true),
+          onboardingNotificationStatusProvider.overrideWithValue(
+            () async => AuthorizationStatus.authorized,
+          ),
+        ],
+      );
+      await tester.pumpWidget(built.widget);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Notifiche attive.'), findsOneWidget);
+      expect(find.text('Attiva le notifiche'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'a denied device is pointed at Impostazioni instead of a dead button',
+    (tester) async {
+      final built = build(
+        overrides: [
+          notificationAvailableProvider.overrideWithValue(true),
+          onboardingNotificationStatusProvider.overrideWithValue(
+            () async => AuthorizationStatus.denied,
+          ),
+        ],
+      );
+      await tester.pumpWidget(built.widget);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Le notifiche sono disattivate. Puoi attivarle da Impostazioni.',
         ),
-      ],
-    );
-    await tester.pumpWidget(built.widget);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Notifiche attive.'), findsOneWidget);
-    expect(find.text('Attiva le notifiche'), findsNothing);
-  });
-
-  testWidgets('a denied device is pointed at Impostazioni instead of a dead button', (
-    tester,
-  ) async {
-    final built = build(
-      overrides: [
-        notificationAvailableProvider.overrideWithValue(true),
-        onboardingNotificationStatusProvider.overrideWithValue(
-          () async => AuthorizationStatus.denied,
-        ),
-      ],
-    );
-    await tester.pumpWidget(built.widget);
-    await tester.pumpAndSettle();
-
-    expect(
-      find.text('Le notifiche sono disattivate. Puoi attivarle da Impostazioni.'),
-      findsOneWidget,
-    );
-    expect(find.text('Apri Impostazioni'), findsOneWidget);
-    expect(find.text('Attiva le notifiche'), findsNothing);
-  });
+        findsOneWidget,
+      );
+      expect(find.text('Apri Impostazioni'), findsOneWidget);
+      expect(find.text('Attiva le notifiche'), findsNothing);
+    },
+  );
 
   testWidgets('a device never asked gets the ask', (tester) async {
     final built = build(
@@ -167,9 +187,9 @@ void main() {
   });
 
   testWidgets('a second tap on Inizia completes once', (tester) async {
-    final notifier = _RecordingNotifier();
+    final notifier = _RecordingNotifier('user-1');
     final built = build(
-      overrides: [onboardingCompletedProvider.overrideWith(() => notifier)],
+      overrides: [onboardingCompletedProvider.overrideWith2((_) => notifier)],
     );
     await tester.pumpWidget(built.widget);
     await tester.pumpAndSettle();
@@ -195,7 +215,9 @@ void main() {
     );
   });
 
-  testWidgets('a second tap on Inizia does not fail or double-complete', (tester) async {
+  testWidgets('a second tap on Inizia does not fail or double-complete', (
+    tester,
+  ) async {
     final built = build();
     await tester.pumpWidget(built.widget);
     await tester.pumpAndSettle();

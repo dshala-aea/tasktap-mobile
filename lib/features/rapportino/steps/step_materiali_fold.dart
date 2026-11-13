@@ -2,12 +2,15 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import '../../../core/widgets/widgets.dart';
 import '../../materiali/materiale_picker_dialog.dart';
 import '../../materiali/materiale_qty_field.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -21,6 +24,7 @@ import '../../checklist/asset_checklist_entry_card.dart';
 import '../../checklist/checklist_providers.dart';
 import '../../ticket/control_group_accordion.dart';
 import '../../ticket/ticket_detail_api_client.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -181,7 +185,11 @@ class StepMaterialiFold extends ConsumerWidget {
     );
   }
 
-  Future<void> _showAddMaterialeDialog(BuildContext context, WidgetRef ref, String? ticketId) async {
+  Future<void> _showAddMaterialeDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String? ticketId,
+  ) async {
     final result = await showMaterialePickerDialog(context, ticketId: ticketId);
     if (result == null || !context.mounted) return;
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
@@ -208,7 +216,7 @@ class StepMaterialiFold extends ConsumerWidget {
       // in purgeable temp storage, and a purge between now and submit is a rapportino that can
       // never be sent (audit F6). A copy failure throws into the catch below, so a temp path is
       // never what the draft ends up holding.
-      final captured = await (await ref.read(captureStoreProvider.future)).save(
+      final captured = await (await ref.readFuture(captureStoreProvider.future)).save(
         xfile.path,
         fileName: xfile.name,
         // The plugin re-encodes a picked image to JPEG (imageQuality is set), so an unknown
@@ -254,7 +262,7 @@ class StepMaterialiFold extends ConsumerWidget {
       if (picked.path == null) return;
       // Same durable-copy rule as the photo picker above (audit F6): the picked document is
       // copied into `captures/` now, and only that path is stored on the draft.
-      final captured = await (await ref.read(captureStoreProvider.future)).save(
+      final captured = await (await ref.readFuture(captureStoreProvider.future)).save(
         picked.path!,
         fileName: picked.name,
         contentType: contentTypeForFileName(picked.name, fallback: 'application/pdf'),
@@ -339,7 +347,7 @@ class _MaterialeQtyStepperState extends ConsumerState<_MaterialeQtyStepper> {
     // material until the report reloads.
     final resolvedName = row.freeTextName != null || row.materialeId == null
         ? null
-        : ref.watch(materialeNameProvider(row.materialeId!)).valueOrNull;
+        : ref.watch(materialeNameProvider(row.materialeId!)).value;
     // An imported row can point at a catalog entry this device has not synced yet: say so
     // instead of showing a bare GUID (the id is still kept and submitted).
     final displayName =
@@ -383,9 +391,7 @@ class _MaterialeQtyStepperState extends ConsumerState<_MaterialeQtyStepper> {
               QtyStepButton(
                 icon: LucideIcons.minus,
                 label: 'Diminuisci quantità',
-                onTap: row.quantity > 1
-                    ? () => widget.onQtyChanged(row.quantity - 1)
-                    : null,
+                onTap: row.quantity > 1 ? () => widget.onQtyChanged(row.quantity - 1) : null,
               ),
               const SizedBox(width: 6),
               SizedBox(
@@ -549,7 +555,7 @@ class StepControlli extends ConsumerWidget {
     final hasAssets =
         ticket != null &&
         ticket.isNotEmpty &&
-        (ref.watch(ticketChecklistProvider(ticket)).valueOrNull?.hasAssetChecklists ?? false);
+        (ref.watch(ticketChecklistProvider(ticket)).value?.hasAssetChecklists ?? false);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,

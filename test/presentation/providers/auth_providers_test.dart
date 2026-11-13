@@ -30,6 +30,7 @@ AuthUser _fakeUser({String id = 'user-1', String token = 'tok'}) => AuthUser(
 
 ProviderContainer _makeContainer(MockAuthRepository repo, {AppDatabase? db}) {
   return ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       if (db != null) appDatabaseProvider.overrideWithValue(db),
@@ -46,7 +47,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     repo = MockAuthRepository();
     authStreamController = StreamController<AuthUser?>.broadcast();
-    when(() => repo.authStateChanges).thenAnswer((_) => authStreamController.stream);
+    when(() => repo.authStateChanges)
+        .thenAnswer((_) => authStreamController.stream);
     when(() => repo.currentUser).thenReturn(null);
   });
 
@@ -150,7 +152,8 @@ void main() {
     });
 
     test('signIn sets isLoading then clears on success', () async {
-      when(() => repo.signIn()).thenAnswer((_) async => (user: _fakeUser(), failure: null));
+      when(() => repo.signIn())
+          .thenAnswer((_) async => (user: _fakeUser(), failure: null));
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
@@ -163,9 +166,9 @@ void main() {
     });
 
     test('signIn sets failure on InvalidCredentials', () async {
-      when(
-        () => repo.signIn(),
-      ).thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
+      when(() => repo.signIn()).thenAnswer(
+        (_) async => (user: null, failure: const InvalidCredentials()),
+      );
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
@@ -178,9 +181,8 @@ void main() {
     });
 
     test('clearError resets failure to null', () async {
-      when(
-        () => repo.signIn(),
-      ).thenAnswer((_) async => (user: null, failure: const NetworkError()));
+      when(() => repo.signIn())
+          .thenAnswer((_) async => (user: null, failure: const NetworkError()));
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
@@ -211,30 +213,35 @@ void main() {
     // (possibly a different tenant) would see the previous account's full cached dataset until an
     // eventual sync happened to overwrite it. Both must be genuinely empty afterward, not just
     // "not obviously broken."
-    test('signOut wipes the local database and clears SharedPreferences', () async {
-      when(() => repo.signOut()).thenAnswer((_) async {});
+    test(
+      'signOut wipes the local database and clears SharedPreferences',
+      () async {
+        when(() => repo.signOut()).thenAnswer((_) async {});
 
-      final db = AppDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
-      await db.into(db.customers).insert(
-        CustomersCompanion.insert(
-          id: 'cust-1',
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 1, 1),
-          companyName: 'Acme Srl',
-        ),
-      );
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('autenticazioneBiometrica', true);
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        await db
+            .into(db.customers)
+            .insert(
+              CustomersCompanion.insert(
+                id: 'cust-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                companyName: 'Acme Srl',
+              ),
+            );
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('autenticazioneBiometrica', true);
 
-      final container = _makeContainer(repo, db: db);
-      addTearDown(container.dispose);
+        final container = _makeContainer(repo, db: db);
+        addTearDown(container.dispose);
 
-      await container.read(loginProvider.notifier).signOut();
+        await container.read(loginProvider.notifier).signOut();
 
-      expect(await db.select(db.customers).get(), isEmpty);
-      expect(prefs.getBool('autenticazioneBiometrica'), isNull);
-    });
+        expect(await db.select(db.customers).get(), isEmpty);
+        expect(prefs.getBool('autenticazioneBiometrica'), isNull);
+      },
+    );
 
     test('signOut resets the business zone to Europe/Rome', () async {
       when(() => repo.signOut()).thenAnswer((_) async {});
@@ -263,68 +270,78 @@ void main() {
     // token — the thing that would reach the vulnerable `NotificationService.instance` line if
     // the guard didn't hold), signOut() still completes and still calls repo.signOut(), rather
     // than throwing `[core/no-app]` out of the FCM unregister step.
-    test(
-      'signOut does not crash and still signs out when a real access token is present '
-      '(Firebase unavailable in test — the isAvailable guard is what is under test)',
-      () async {
-        when(() => repo.currentUser).thenReturn(_fakeUser(token: 'real-token'));
-        when(() => repo.signOut()).thenAnswer((_) async {});
+    test('signOut does not crash and still signs out when a real access token is present '
+        '(Firebase unavailable in test — the isAvailable guard is what is under test)', () async {
+      when(() => repo.currentUser).thenReturn(_fakeUser(token: 'real-token'));
+      when(() => repo.signOut()).thenAnswer((_) async {});
 
-        final db = AppDatabase(NativeDatabase.memory());
-        addTearDown(db.close);
-        final container = _makeContainer(repo, db: db);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final container = _makeContainer(repo, db: db);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signOut();
+
+      verify(() => repo.signOut()).called(1);
+    });
+
+    test(
+      'signInWithPassword success clears loading and failure state',
+      () async {
+        final user = _fakeUser();
+        when(() => repo.signInWithPassword('tech@tasktap.io', 'correct'))
+            .thenAnswer((_) async => (user: user, failure: null));
+
+        final container = _makeContainer(repo);
         addTearDown(container.dispose);
 
-        await container.read(loginProvider.notifier).signOut();
+        await container
+            .read(loginProvider.notifier)
+            .signInWithPassword('tech@tasktap.io', 'correct');
 
-        verify(() => repo.signOut()).called(1);
+        final state = container.read(loginProvider);
+        expect(state.isLoading, isFalse);
+        expect(state.failure, isNull);
       },
     );
 
-    test('signInWithPassword success clears loading and failure state', () async {
-      final user = _fakeUser();
-      when(() => repo.signInWithPassword('tech@tasktap.io', 'correct'))
-          .thenAnswer((_) async => (user: user, failure: null));
-
-      final container = _makeContainer(repo);
-      addTearDown(container.dispose);
-
-      await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'correct');
-
-      final state = container.read(loginProvider);
-      expect(state.isLoading, isFalse);
-      expect(state.failure, isNull);
-    });
-
     test('signInWithPassword wrong credentials surfaces InvalidCredentials, does not call signIn', () async {
-      when(() => repo.signInWithPassword('tech@tasktap.io', 'wrong')).thenAnswer(
-        (_) async => (user: null, failure: const InvalidCredentials()),
-      );
+      when(() => repo.signInWithPassword('tech@tasktap.io', 'wrong'))
+          .thenAnswer(
+            (_) async => (user: null, failure: const InvalidCredentials()),
+          );
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'wrong');
+      await container
+          .read(loginProvider.notifier)
+          .signInWithPassword('tech@tasktap.io', 'wrong');
 
       final state = container.read(loginProvider);
       expect(state.failure, isA<InvalidCredentials>());
       verifyNever(() => repo.signIn());
     });
 
-    test('a cancelled passkey attempt clears the spinner and shows no error', () async {
-      when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
-        (_) async => (user: null, failure: const PasskeyCancelled()),
-      );
+    test(
+      'a cancelled passkey attempt clears the spinner and shows no error',
+      () async {
+        when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
+          (_) async => (user: null, failure: const PasskeyCancelled()),
+        );
 
-      final container = _makeContainer(repo);
-      addTearDown(container.dispose);
+        final container = _makeContainer(repo);
+        addTearDown(container.dispose);
 
-      await container.read(loginProvider.notifier).signInWithPasskey('tech@tasktap.io');
+        await container
+            .read(loginProvider.notifier)
+            .signInWithPasskey('tech@tasktap.io');
 
-      final state = container.read(loginProvider);
-      expect(state.isLoading, isFalse);
-      expect(state.failure, isNull);
-    });
+        final state = container.read(loginProvider);
+        expect(state.isLoading, isFalse);
+        expect(state.failure, isNull);
+      },
+    );
 
     test('PasskeyNotRegistered is surfaced as a failure', () async {
       when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
@@ -334,7 +351,9 @@ void main() {
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container.read(loginProvider.notifier).signInWithPasskey('tech@tasktap.io');
+      await container
+          .read(loginProvider.notifier)
+          .signInWithPasskey('tech@tasktap.io');
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
@@ -345,12 +364,15 @@ void main() {
       when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
         (_) async => (user: null, failure: const AdditionalFactorRequired()),
       );
-      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+      when(() => repo.signIn())
+          .thenAnswer((_) async => (user: null, failure: null));
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container.read(loginProvider.notifier).signInWithPasskey('tech@tasktap.io');
+      await container
+          .read(loginProvider.notifier)
+          .signInWithPasskey('tech@tasktap.io');
 
       verify(() => repo.signIn()).called(1);
       // The browser hand-off is a transition, not an error: no stale failure may remain.
@@ -359,15 +381,20 @@ void main() {
     });
 
     test('signInWithPassword AdditionalFactorRequired falls back to signIn() automatically', () async {
-      when(() => repo.signInWithPassword('tech@tasktap.io', 'correct')).thenAnswer(
-        (_) async => (user: null, failure: const AdditionalFactorRequired()),
-      );
-      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+      when(() => repo.signInWithPassword('tech@tasktap.io', 'correct'))
+          .thenAnswer(
+            (_) async =>
+                (user: null, failure: const AdditionalFactorRequired()),
+          );
+      when(() => repo.signIn())
+          .thenAnswer((_) async => (user: null, failure: null));
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'correct');
+      await container
+          .read(loginProvider.notifier)
+          .signInWithPassword('tech@tasktap.io', 'correct');
 
       verify(() => repo.signIn()).called(1);
       // Verify that the fallback successfully clears the failure state,
@@ -382,7 +409,10 @@ void main() {
     // These tests encode the redirect rules used in app_router.dart without
     // spinning up a real router — they verify the decision function directly.
 
-    String? routeRedirect({required AsyncValue<AuthUser?> authAsync, required bool isOnLogin}) {
+    String? routeRedirect({
+      required AsyncValue<AuthUser?> authAsync,
+      required bool isOnLogin,
+    }) {
       return authAsync.when(
         loading: () => null,
         error: (err, stack) => isOnLogin ? null : '/login',
@@ -396,35 +426,56 @@ void main() {
     }
 
     test('loading → no redirect (stay on current route)', () {
-      expect(routeRedirect(authAsync: const AsyncLoading(), isOnLogin: false), isNull);
+      expect(
+        routeRedirect(authAsync: const AsyncLoading(), isOnLogin: false),
+        isNull,
+      );
     });
 
     test('unauthenticated on protected route → /login', () {
-      expect(routeRedirect(authAsync: const AsyncData(null), isOnLogin: false), equals('/login'));
+      expect(
+        routeRedirect(authAsync: const AsyncData(null), isOnLogin: false),
+        equals('/login'),
+      );
     });
 
     test('unauthenticated already on /login → no redirect', () {
-      expect(routeRedirect(authAsync: const AsyncData(null), isOnLogin: true), isNull);
+      expect(
+        routeRedirect(authAsync: const AsyncData(null), isOnLogin: true),
+        isNull,
+      );
     });
 
     test('authenticated on /login → /oggi', () {
-      expect(routeRedirect(authAsync: AsyncData(_fakeUser()), isOnLogin: true), equals('/oggi'));
+      expect(
+        routeRedirect(authAsync: AsyncData(_fakeUser()), isOnLogin: true),
+        equals('/oggi'),
+      );
     });
 
     test('authenticated on protected route → no redirect', () {
-      expect(routeRedirect(authAsync: AsyncData(_fakeUser()), isOnLogin: false), isNull);
+      expect(
+        routeRedirect(authAsync: AsyncData(_fakeUser()), isOnLogin: false),
+        isNull,
+      );
     });
 
     test('error state on protected route → /login', () {
       expect(
-        routeRedirect(authAsync: AsyncError(Exception('boom'), StackTrace.empty), isOnLogin: false),
+        routeRedirect(
+          authAsync: AsyncError(Exception('boom'), StackTrace.empty),
+          isOnLogin: false,
+        ),
         equals('/login'),
       );
     });
 
     test('error state already on /login → no redirect', () {
       expect(
-        routeRedirect(authAsync: AsyncError(Exception('boom'), StackTrace.empty), isOnLogin: true),
+        routeRedirect(
+          authAsync: AsyncError(Exception('boom'), StackTrace.empty),
+          isOnLogin: true,
+        ),
         isNull,
       );
     });
@@ -450,15 +501,24 @@ void main() {
     });
 
     test('not completed, already on onboarding → stays put', () {
-      expect(onboardingRedirect(isOnOnboarding: true, completed: false), isNull);
+      expect(
+        onboardingRedirect(isOnOnboarding: true, completed: false),
+        isNull,
+      );
     });
 
     test('completed, on onboarding → sent to dashboard', () {
-      expect(onboardingRedirect(isOnOnboarding: true, completed: true), '/dashboard');
+      expect(
+        onboardingRedirect(isOnOnboarding: true, completed: true),
+        '/dashboard',
+      );
     });
 
     test('completed, elsewhere → stays put', () {
-      expect(onboardingRedirect(isOnOnboarding: false, completed: true), isNull);
+      expect(
+        onboardingRedirect(isOnOnboarding: false, completed: true),
+        isNull,
+      );
     });
   });
 }

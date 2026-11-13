@@ -21,7 +21,7 @@ class TicketAssetChecklistsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tree = ref.watch(ticketChecklistProvider(ticketId)).valueOrNull;
+    final tree = ref.watch(ticketChecklistProvider(ticketId)).value;
     // [TicketChecklist.hasAssetChecklists], not `hasAnything`: a ticket whose only rows are
     // ticket-level has a checklist, but this card is about assets and must stay hidden for it.
     if (tree == null || !tree.hasAssetChecklists) return const SizedBox.shrink();

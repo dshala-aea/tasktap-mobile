@@ -60,6 +60,7 @@ AppNotifica _notifica({
 }) {
   final db = AppDatabase(NativeDatabase.memory());
   final container = ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       notificaDettaglioProvider.overrideWith((ref, id) => load()),
       notificheProvider.overrideWith((ref) {
@@ -97,7 +98,9 @@ void main() {
       'Questa è una comunicazione lunga che deve essere leggibile per intero.',
     ).join('\n\n');
 
-    await tester.pumpWidget(_build(load: () async => _notifica(corpo: longBody)).widget);
+    await tester.pumpWidget(
+      _build(load: () async => _notifica(corpo: longBody)).widget,
+    );
     await tester.pumpAndSettle();
 
     expect(find.text(longBody), findsOneWidget);
@@ -141,7 +144,9 @@ void main() {
     expect(find.text('Comunicazione di servizio.'), findsOneWidget);
   });
 
-  testWidgets('an unread notification is marked read on open, once', (tester) async {
+  testWidgets('an unread notification is marked read on open, once', (
+    tester,
+  ) async {
     final built = _build(load: () async => _notifica(letta: false));
     await tester.pumpWidget(built.widget);
     await tester.pumpAndSettle();
@@ -151,7 +156,9 @@ void main() {
     expect(recorder.markedRead, ['n1']);
   });
 
-  testWidgets('an already-read notification is not marked again', (tester) async {
+  testWidgets('an already-read notification is not marked again', (
+    tester,
+  ) async {
     final built = _build(load: () async => _notifica(letta: true));
     await tester.pumpWidget(built.widget);
     await tester.pumpAndSettle();

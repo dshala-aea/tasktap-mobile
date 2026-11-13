@@ -16,6 +16,7 @@ import '../reference_providers.dart';
 import '../ticket_providers.dart';
 import 'blamed_field_notice.dart';
 import 'read_only_caption.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -183,7 +184,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     final customerId = widget.state.customerId;
     final prodotti = customerId == null
         ? const <ReferenceOption>[]
-        : ref.watch(localProdottiProvider(customerId)).valueOrNull ?? const <ReferenceOption>[];
+        : ref.watch(localProdottiProvider(customerId)).value ?? const <ReferenceOption>[];
     final byId = {for (final p in prodotti) p.id: p};
     final ids = widget.state.prodottoAssistenzaIds;
 
@@ -278,7 +279,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
   /// built from data the device does not have would be a guess.
   List<Widget> _maintenanceTemplateSection() {
     if (widget.ticketId != null) return const [];
-    final rows = ref.watch(maintenanceTemplatesProvider).valueOrNull ?? const [];
+    final rows = ref.watch(maintenanceTemplatesProvider).value ?? const [];
     final offerable = assignableMaintenanceTemplates(rows);
     if (offerable.isEmpty) return const [];
 
@@ -309,8 +310,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
               value: null,
               child: Text('— Nessuna (auto da tipo/contratto) —'),
             ),
-            for (final t in offerable)
-              DropdownMenuItem<String?>(value: t.id, child: Text(t.name)),
+            for (final t in offerable) DropdownMenuItem<String?>(value: t.id, child: Text(t.name)),
           ],
           onChanged: (id) => widget.onChanged(
             id == null
@@ -325,7 +325,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
   @override
   Widget build(BuildContext context) {
     final typesAsync = ref.watch(ticketTypeMapProvider);
-    final types = typesAsync.valueOrNull ?? {};
+    final types = typesAsync.value ?? {};
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -443,7 +443,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         Consumer(
           builder: (context, ref, _) {
             final agentsAsync = ref.watch(localAgentsProvider(''));
-            final agents = agentsAsync.valueOrNull ?? const <ReferenceOption>[];
+            final agents = agentsAsync.value ?? const <ReferenceOption>[];
             final selected = agents
                 .where((a) => a.id == widget.state.agentId)
                 .map((a) => a.label)
@@ -641,10 +641,7 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
                   AppSpacing.base,
                   AppSpacing.base,
                 ),
-                child: Text(
-                  hint,
-                  style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
-                ),
+                child: Text(hint, style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
               ),
           ],
         ),

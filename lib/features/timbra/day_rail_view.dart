@@ -65,11 +65,7 @@ const double _kLabelGap = 4;
 /// today". A day whose server did not answer may only say what this phone knows, because a totem
 /// punch exists somewhere this screen cannot read. A day whose *own phone* could not be read is not
 /// partly known at all: it is unknown, and it must not invite a punch into a day nobody has seen.
-enum DayCoverage {
-  complete,
-  phoneOnly,
-  unknown,
-}
+enum DayCoverage { complete, phoneOnly, unknown }
 
 class DayRailView extends ConsumerStatefulWidget {
   const DayRailView({super.key, required this.day, this.coverage = DayCoverage.complete});
@@ -142,7 +138,7 @@ class _DayRailViewState extends ConsumerState<DayRailView> with SingleTickerProv
     // A closed day cannot move, so its own build instant is used rather than the ticking clock;
     // an open one re-derives every second from the shared ticker instead of rebuilding the whole
     // screen (which is what watching it in TimbraScreen would do).
-    final ticking = ref.watch(nowProvider).valueOrNull;
+    final ticking = ref.watch(nowProvider).value;
     final now = day.isOpen ? (ticking ?? DateTime.now()) : day.now;
 
     // Labels grow with the system font. Their box height is what the push-down maths measures, so
@@ -190,8 +186,7 @@ class _DayRailViewState extends ConsumerState<DayRailView> with SingleTickerProv
               anchor: y0 + h / 2,
               height: entryLabelH,
               title: _titleOf(entry),
-              detail:
-                  '${_rangeOf(entry, bt, now)} · ${_originOf(entry)}',
+              detail: '${_rangeOf(entry, bt, now)} · ${_originOf(entry)}',
               duration: _fmtDuration(entry.durationAt(now)),
               tone: entry.pending
                   ? colors.amberInk
@@ -561,15 +556,11 @@ class _RailEmpty extends StatelessWidget {
 /// anything is open) — not to the calendar day, because a technician who punched in at 07:40 and
 /// out at 17:10 should not see four-fifths of their screen spent on hours they never worked.
 class _Axis {
-  _Axis({
-    required this.start,
-    required this.end,
-    required this.top,
-    required this.bottom,
-  }) : _spanMs = math.max(
-         end.difference(start).inMilliseconds,
-         5 * 60 * 1000, // a day shorter than five minutes has no axis worth drawing
-       );
+  _Axis({required this.start, required this.end, required this.top, required this.bottom})
+    : _spanMs = math.max(
+        end.difference(start).inMilliseconds,
+        5 * 60 * 1000, // a day shorter than five minutes has no axis worth drawing
+      );
 
   final DateTime start;
   final DateTime end;
@@ -597,8 +588,9 @@ List<_TickMark> _tickMarks(BusinessTime bt, DateTime from, DateTime to, _Axis ax
   final span = to.difference(from);
   final stepMin = span <= const Duration(hours: 3) ? 30 : 60;
 
-  var t = from.subtract(Duration(seconds: from.second, milliseconds: from.millisecond,
-      microseconds: from.microsecond));
+  var t = from.subtract(
+    Duration(seconds: from.second, milliseconds: from.millisecond, microseconds: from.microsecond),
+  );
   final minute = int.tryParse(bt.formatInZone(t, 'mm')) ?? 0;
   final toNext = (stepMin - (minute % stepMin)) % stepMin;
   t = t.add(Duration(minutes: toNext));
@@ -616,12 +608,7 @@ List<_TickMark> _tickMarks(BusinessTime bt, DateTime from, DateTime to, _Axis ax
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _Band {
-  const _Band({
-    required this.top,
-    required this.height,
-    required this.kind,
-    required this.pending,
-  });
+  const _Band({required this.top, required this.height, required this.kind, required this.pending});
   final double top;
   final double height;
   final RailKind kind;
@@ -698,11 +685,7 @@ class _RailPainter extends CustomPainter {
 
     // The spine: one unbroken hairline for the whole span. Everything else either thickens it
     // (worked), hollows it out (paused) or dashes it over it (nothing recorded).
-    canvas.drawLine(
-      Offset(_kSpineX, top),
-      Offset(_kSpineX, bottom),
-      spinePaint,
-    );
+    canvas.drawLine(Offset(_kSpineX, top), Offset(_kSpineX, bottom), spinePaint);
 
     for (final tick in ticks) {
       canvas.drawLine(
@@ -745,11 +728,7 @@ class _RailPainter extends CustomPainter {
         3.4 + 3.4 * eased,
         Paint()..color = live.withAlpha((70 * (1 - eased)).round().clamp(0, 255)),
       );
-      canvas.drawCircle(
-        Offset(_kSpineX, nowY),
-        3.4,
-        Paint()..color = live,
-      );
+      canvas.drawCircle(Offset(_kSpineX, nowY), 3.4, Paint()..color = live);
     }
   }
 
@@ -765,16 +744,10 @@ class _RailPainter extends CustomPainter {
     switch (band.kind) {
       case RailKind.work:
       case RailKind.unknown:
-        canvas.drawRRect(
-          rrect,
-          Paint()..color = ink.withAlpha(band.pending ? 110 : 255),
-        );
+        canvas.drawRRect(rrect, Paint()..color = ink.withAlpha(band.pending ? 110 : 255));
       case RailKind.breakShort:
         // Paid: a solid amber bar — it is part of the day, counted in the total.
-        canvas.drawRRect(
-          rrect,
-          Paint()..color = amber.withAlpha(band.pending ? 120 : 255),
-        );
+        canvas.drawRRect(rrect, Paint()..color = amber.withAlpha(band.pending ? 120 : 255));
       case RailKind.breakLong:
       case RailKind.breakUndecided:
         // Unpaid, or not yet known: hollow. The day is interrupted, and the total does not count

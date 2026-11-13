@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/time/business_time.dart' show formatDateOnly;
 import '../api/dio_client.dart';
@@ -12,7 +13,8 @@ import '../attachments/attachment_content_cache.dart'
     show AllegatoEntityType, attachmentPrefetcherProvider;
 import '../local/app_database.dart';
 import '../reference/reference_cache_repository.dart';
-import '../timbratura/cantiere_session_repository.dart' show cantiereReconciledOrphanMarker;
+import '../timbratura/cantiere_session_repository.dart'
+    show cantiereReconciledOrphanMarker;
 import 'checklist_reconciler.dart';
 import 'checklist_refetch_service.dart';
 import 'draft_submission_state.dart';
@@ -35,7 +37,10 @@ class SyncService {
 
   /// Owns the re-request of checklists the server omitted from a sync (bounded, batched, and
   /// self-disabling — see that class's own doc comment).
-  late final ChecklistRefetchService checklistRefetch = ChecklistRefetchService(db: db, dio: dio);
+  late final ChecklistRefetchService checklistRefetch = ChecklistRefetchService(
+    db: db,
+    dio: dio,
+  );
 
   /// Perform a delta sync.
   ///
@@ -142,7 +147,10 @@ class SyncService {
       }
       await replaceServerReportStrumenti(
         db,
-        reportIdsInPayload: [...payload.draftReports, ...payload.submittedReports].map((r) => r.id),
+        reportIdsInPayload: [
+          ...payload.draftReports,
+          ...payload.submittedReports,
+        ].map((r) => r.id),
         rows: payload.reportStrumenti,
       );
     }
@@ -306,7 +314,9 @@ class SyncService {
               t.maintenanceTemplateId.isNotNull() &
               t.maintenanceTemplateId.isNotIn(keepIds),
         ))
-        .write(const PendingTicketsCompanion(maintenanceTemplateId: Value(null)));
+        .write(
+          const PendingTicketsCompanion(maintenanceTemplateId: Value(null)),
+        );
   }
 
   // ── Authoritative scope (sync v2) ──────────────────────────────────────────
@@ -334,12 +344,13 @@ class SyncService {
     // Local rapportini not yet submitted — the counter's own predicate (`isLocalOnly` and not
     // `submitted`). A local-only row is never a prune candidate itself (rule: no manifest
     // describes it), and every row it points at has to survive with it.
-    final drafts = await (db.select(db.draftReports)..where(
-          (r) =>
-              r.isLocalOnly.equals(true) &
-              r.submissionState.equals(submitted).not(),
-        ))
-        .get();
+    final drafts =
+        await (db.select(db.draftReports)..where(
+              (r) =>
+                  r.isLocalOnly.equals(true) &
+                  r.submissionState.equals(submitted).not(),
+            ))
+            .get();
     for (final d in drafts) {
       _addIfNotNull(pins.tickets, d.ticketId);
       _addIfNotNull(pins.customers, d.customerId);
@@ -351,13 +362,15 @@ class SyncService {
     }
     if (drafts.isNotEmpty) {
       final ids = drafts.map((d) => d.id).toList();
-      final materialRows =
-          await (db.select(db.reportMateriali)..where((m) => m.reportId.isIn(ids))).get();
+      final materialRows = await (db.select(
+        db.reportMateriali,
+      )..where((m) => m.reportId.isIn(ids))).get();
       for (final m in materialRows) {
         _addIfNotNull(pins.materiali, m.materialeId);
       }
-      final strumentoRows =
-          await (db.select(db.reportStrumenti)..where((s) => s.reportId.isIn(ids))).get();
+      final strumentoRows = await (db.select(
+        db.reportStrumenti,
+      )..where((s) => s.reportId.isIn(ids))).get();
       for (final s in strumentoRows) {
         _addIfNotNull(pins.strumenti, s.strumentoId);
       }
@@ -365,10 +378,9 @@ class SyncService {
 
     // Ticket-create outbox rows in any state but submitted: their customer/location/cantiere
     // must still be there when the queue retries, and for the repair affordance to name them.
-    final pendingTickets = await (db.select(db.pendingTickets)..where(
-          (t) => t.state.equals(submitted).not(),
-        ))
-        .get();
+    final pendingTickets = await (db.select(
+      db.pendingTickets,
+    )..where((t) => t.state.equals(submitted).not())).get();
     for (final t in pendingTickets) {
       pins.customers.add(t.customerId);
       pins.locations.add(t.locationId);
@@ -377,23 +389,23 @@ class SyncService {
     }
 
     // Ticket-attachment outbox rows: they point at a ticket.
-    final pendingAttachments = await (db.select(db.pendingTicketAttachments)..where(
-          (a) => a.state.equals(submitted).not(),
-        ))
-        .get();
+    final pendingAttachments = await (db.select(
+      db.pendingTicketAttachments,
+    )..where((a) => a.state.equals(submitted).not())).get();
     for (final a in pendingAttachments) {
       pins.tickets.add(a.ticketId);
     }
 
     // Cantiere punches on ANY day, excluding the ones the reconciler has already established the
     // server holds (`reconciled_orphan` — the same rule the counter applies).
-    final pendingPunches = await (db.select(db.cantierePunches)..where(
-          (p) =>
-              p.isPendingSync.equals(true) &
-              (p.notes.isNull() |
-                  p.notes.equals(cantiereReconciledOrphanMarker).not()),
-        ))
-        .get();
+    final pendingPunches =
+        await (db.select(db.cantierePunches)..where(
+              (p) =>
+                  p.isPendingSync.equals(true) &
+                  (p.notes.isNull() |
+                      p.notes.equals(cantiereReconciledOrphanMarker).not()),
+            ))
+            .get();
     for (final p in pendingPunches) {
       _addIfNotNull(pins.cantieri, p.cantiereId);
       _addIfNotNull(pins.customers, p.customerId);
@@ -407,10 +419,9 @@ class SyncService {
     // A pinned ticket pins what its own row points at — the case that matters is a ticket
     // reassigned to a colleague but still needed by a local draft or a queued attachment.
     if (pins.tickets.isNotEmpty) {
-      final ticketRows = await (db.select(db.tickets)..where(
-            (t) => t.id.isIn(pins.tickets.toList()),
-          ))
-          .get();
+      final ticketRows = await (db.select(
+        db.tickets,
+      )..where((t) => t.id.isIn(pins.tickets.toList()))).get();
       for (final t in ticketRows) {
         pins.customers.add(t.customerId);
         pins.locations.add(t.locationId);
@@ -422,10 +433,9 @@ class SyncService {
     // A pinned customer's Riferimento: the create wizard pre-fills a new ticket's agent from it,
     // so the agent row must remain readable.
     if (pins.customers.isNotEmpty) {
-      final customerRows = await (db.select(db.customers)..where(
-            (c) => c.id.isIn(pins.customers.toList()),
-          ))
-          .get();
+      final customerRows = await (db.select(
+        db.customers,
+      )..where((c) => c.id.isIn(pins.customers.toList()))).get();
       for (final c in customerRows) {
         _addIfNotNull(pins.agents, c.agentId);
       }
@@ -458,19 +468,39 @@ class SyncService {
     }
     await _pruneReports(scope);
     if (scope.locations != null) {
-      await _pruneIds(db.locations, db.locations.id, scope.locations!, pins.locations);
+      await _pruneIds(
+        db.locations,
+        db.locations.id,
+        scope.locations!,
+        pins.locations,
+      );
     }
     if (scope.customers != null) {
-      await _pruneIds(db.customers, db.customers.id, scope.customers!, pins.customers);
+      await _pruneIds(
+        db.customers,
+        db.customers.id,
+        scope.customers!,
+        pins.customers,
+      );
     }
     if (scope.cantieri != null) {
-      await _pruneIds(db.cantieri, db.cantieri.id, scope.cantieri!, pins.cantieri);
+      await _pruneIds(
+        db.cantieri,
+        db.cantieri.id,
+        scope.cantieri!,
+        pins.cantieri,
+      );
     }
     if (scope.agents != null) {
       await _pruneIds(db.agents, db.agents.id, scope.agents!, pins.agents);
     }
     if (scope.materiali != null) {
-      await _pruneIds(db.materiali, db.materiali.id, scope.materiali!, pins.materiali);
+      await _pruneIds(
+        db.materiali,
+        db.materiali.id,
+        scope.materiali!,
+        pins.materiali,
+      );
     }
     if (scope.materialiBarcodes != null) {
       // No pin: nothing unsent references a barcode.
@@ -484,22 +514,31 @@ class SyncService {
     if (scope.strumenti != null) {
       // Rule 2: null means this caller has no authoritative instrument set — skip. `[]` means
       // nothing is in scope and does prune (the wholesale replace above already ran with the pins).
-      await _pruneIds(db.strumenti, db.strumenti.id, scope.strumenti!, pins.strumenti);
+      await _pruneIds(
+        db.strumenti,
+        db.strumenti.id,
+        scope.strumenti!,
+        pins.strumenti,
+      );
     }
     if (scope.ticketWorkLogs != null) {
       // A pending row is a session this device still owes the server: absent from scope because
       // it has not been sent yet, not because it was deleted. Only confirmed rows are pruned.
       final keep = scope.ticketWorkLogs!.toSet();
-      await (db.delete(db.ticketTimers)..where(
-        (t) => t.id.isNotIn(keep) & t.isPendingSync.equals(false),
-      )).go();
+      await (db.delete(
+        db.ticketTimers,
+      )..where((t) => t.id.isNotIn(keep) & t.isPendingSync.equals(false))).go();
     }
     if (scope.cantiereWorkLogs != null) {
       // No pins: this table only ever mirrors the server, so nothing local can be waiting in it.
       // Null (an older backend) already skipped above — that is what keeps a server which
       // predates the member from emptying the device's site history.
-      await _pruneIds(db.cantiereWorkLogs, db.cantiereWorkLogs.id, scope.cantiereWorkLogs!,
-          const <String>{});
+      await _pruneIds(
+        db.cantiereWorkLogs,
+        db.cantiereWorkLogs.id,
+        scope.cantiereWorkLogs!,
+        const <String>{},
+      );
     }
   }
 
@@ -510,7 +549,9 @@ class SyncService {
     final local = await _localIds(db.schedules, db.schedules.id);
     final drop = local.difference(keep);
     if (drop.isEmpty) return;
-    await (db.delete(db.scheduleAssignees)..where((a) => a.scheduleId.isIn(drop))).go();
+    await (db.delete(
+      db.scheduleAssignees,
+    )..where((a) => a.scheduleId.isIn(drop))).go();
     await (db.delete(db.schedules)..where((s) => s.id.isIn(drop))).go();
   }
 
@@ -525,12 +566,24 @@ class SyncService {
       // (see `checklistOmittedTicketIds`), so a manifest would delete rows the server withheld on
       // purpose. Their ticket-scoped rows follow the ticket prune instead; the shared
       // groups/assets are garbage-collected by `applyChecklistBatch`.
-      await (db.delete(db.ticketMateriali)..where((r) => r.ticketId.isIn(drop))).go();
-      await (db.delete(db.ticketControls)..where((r) => r.ticketId.isIn(drop))).go();
-      await (db.delete(db.ticketAssets)..where((r) => r.ticketId.isIn(drop))).go();
-      await (db.delete(db.cachedTicketControls)..where((r) => r.ticketId.isIn(drop))).go();
-      await (db.delete(db.checklistOmittedTickets)..where((r) => r.ticketId.isIn(drop))).go();
-      await (db.delete(db.ticketHistory)..where((h) => h.ticketId.isIn(drop))).go();
+      await (db.delete(
+        db.ticketMateriali,
+      )..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(
+        db.ticketControls,
+      )..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(
+        db.ticketAssets,
+      )..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(
+        db.cachedTicketControls,
+      )..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(
+        db.checklistOmittedTickets,
+      )..where((r) => r.ticketId.isIn(drop))).go();
+      await (db.delete(
+        db.ticketHistory,
+      )..where((h) => h.ticketId.isIn(drop))).go();
       await (db.delete(db.tickets)..where((t) => t.id.isIn(drop))).go();
     }
     // Fabbisogno has no manifest of its own: it follows the ticket. This also clears rows that
@@ -579,13 +632,23 @@ class SyncService {
 
     // Report child rows first — none has a foreign key, but a child whose report is gone is a
     // read path with nothing to resolve against.
-    await (db.delete(db.reportStaffTable)..where((r) => r.reportId.isIn(drop))).go();
+    await (db.delete(
+      db.reportStaffTable,
+    )..where((r) => r.reportId.isIn(drop))).go();
     // The intervals hang off the same report as the staff rows above: a report the server has
     // deleted must not leave the hours that justified it behind as orphans nothing can attribute.
-    await (db.delete(db.reportStaffSegments)..where((g) => g.reportId.isIn(drop))).go();
-    await (db.delete(db.reportMateriali)..where((r) => r.reportId.isIn(drop))).go();
-    await (db.delete(db.reportControlli)..where((r) => r.reportId.isIn(drop))).go();
-    await (db.delete(db.reportStrumenti)..where((r) => r.reportId.isIn(drop))).go();
+    await (db.delete(
+      db.reportStaffSegments,
+    )..where((g) => g.reportId.isIn(drop))).go();
+    await (db.delete(
+      db.reportMateriali,
+    )..where((r) => r.reportId.isIn(drop))).go();
+    await (db.delete(
+      db.reportControlli,
+    )..where((r) => r.reportId.isIn(drop))).go();
+    await (db.delete(
+      db.reportStrumenti,
+    )..where((r) => r.reportId.isIn(drop))).go();
     await (db.delete(db.draftReports)..where((r) => r.id.isIn(drop))).go();
   }
 
@@ -738,7 +801,9 @@ class SyncService {
     if (ticketIds.isEmpty) return;
 
     await db.transaction(() async {
-      await (db.delete(db.ticketMateriali)..where((m) => m.ticketId.isIn(ticketIds))).go();
+      await (db.delete(
+        db.ticketMateriali,
+      )..where((m) => m.ticketId.isIn(ticketIds))).go();
       await db.batch(
         (b) => b.insertAll(
           db.ticketMateriali,
@@ -836,8 +901,9 @@ class SyncService {
     if (cantiereIds.isEmpty) return;
 
     await db.transaction(() async {
-      await (db.delete(db.cantiereCrewAssignments)..where((a) => a.cantiereId.isIn(cantiereIds)))
-          .go();
+      await (db.delete(
+        db.cantiereCrewAssignments,
+      )..where((a) => a.cantiereId.isIn(cantiereIds))).go();
       await db.batch(
         (b) => b.insertAll(
           db.cantiereCrewAssignments,
@@ -1143,16 +1209,17 @@ class SyncService {
       // insert, or every sync strips a sent report of the names it shows and of the asset its rows
       // are grouped under — and the read-only view, whose whole point is to name its own rows,
       // falls back to raw control ids.
-      final controlliSnapshots = <String, ({String? controlLabel, String? assetId})>{
-        if (replace.isNotEmpty)
-          for (final r in await (db.select(
-            db.reportControlli,
-          )..where((r) => r.reportId.isIn(replace))).get())
-            '${r.reportId}|${r.controlId}': (
-              controlLabel: r.controlLabel,
-              assetId: r.assetId,
-            ),
-      };
+      final controlliSnapshots =
+          <String, ({String? controlLabel, String? assetId})>{
+            if (replace.isNotEmpty)
+              for (final r in await (db.select(
+                db.reportControlli,
+              )..where((r) => r.reportId.isIn(replace))).get())
+                '${r.reportId}|${r.controlId}': (
+                  controlLabel: r.controlLabel,
+                  assetId: r.assetId,
+                ),
+          };
       if (replace.isNotEmpty) {
         // Delete first and insert after, per table: the payload is the complete set for these
         // report ids, so a merge would keep a child the office has already removed.
@@ -1215,7 +1282,8 @@ class SyncService {
                   );
             }
           }
-          for (final m in materiali[reportId] ?? const <SyncReportMaterialeDto>[]) {
+          for (final m
+              in materiali[reportId] ?? const <SyncReportMaterialeDto>[]) {
             await db
                 .into(db.reportMateriali)
                 .insert(
@@ -1237,7 +1305,8 @@ class SyncService {
           }
           for (final c
               in controlli[reportId] ?? const <SyncReportControlloDto>[]) {
-            final snapshot = controlliSnapshots['$reportId|${c.ticketControlId}'];
+            final snapshot =
+                controlliSnapshots['$reportId|${c.ticketControlId}'];
             await db
                 .into(db.reportControlli)
                 .insert(
@@ -1297,13 +1366,16 @@ class SyncService {
         // know about it, so its absence from the payload says nothing. `isPendingUpload` is the
         // existing marker for that state (see the table's own doc comment).
         await (db.delete(db.reportAllegati)..where(
-              (a) => a.entityType.equals(entityType) & a.entityId.isIn(entities) &
+              (a) =>
+                  a.entityType.equals(entityType) &
+                  a.entityId.isIn(entities) &
                   a.isPendingUpload.equals(false),
             ))
             .go();
         for (final entityId in entities) {
-          for (final a in byEntity['$entityType:$entityId'] ??
-              const <SyncReportAllegatoDto>[]) {
+          for (final a
+              in byEntity['$entityType:$entityId'] ??
+                  const <SyncReportAllegatoDto>[]) {
             await db
                 .into(db.reportAllegati)
                 .insertOnConflictUpdate(
@@ -1334,7 +1406,9 @@ class SyncService {
       }
 
       await replaceEntity(AllegatoEntityType.report, reportEntities);
-      if (ticketScope != null) await replaceEntity(AllegatoEntityType.ticket, ticketScope);
+      if (ticketScope != null) {
+        await replaceEntity(AllegatoEntityType.ticket, ticketScope);
+      }
     }
   }
 
@@ -1650,7 +1724,8 @@ class SyncState {
 }
 
 class SyncNotifier extends StateNotifier<SyncState> {
-  SyncNotifier(this._service, this._db, {this.prefetchAttachments}) : super(const SyncState()) {
+  SyncNotifier(this._service, this._db, {this.prefetchAttachments})
+    : super(const SyncState()) {
     _loadLastSync();
   }
 

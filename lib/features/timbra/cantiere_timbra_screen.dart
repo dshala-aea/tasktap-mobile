@@ -63,6 +63,7 @@ import 'chiudi_turno_screen.dart';
 import 'clock_disagreement_note.dart';
 import 'gps_status_indicator.dart';
 import 'teammate_picker_sheet.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -90,7 +91,7 @@ final cantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref) {
 ///
 /// Purely a "richer detail when reachable" source now — see [cantiereActiveSessionProvider] for
 /// the offline-durable signal the screen actually gates its body on.
-class ActiveCantiereLogNotifier extends AutoDisposeAsyncNotifier<CantiereWorkLogDto?> {
+class ActiveCantiereLogNotifier extends AsyncNotifier<CantiereWorkLogDto?> {
   @override
   Future<CantiereWorkLogDto?> build() async {
     final client = ref.watch(cantiereWorklogApiClientProvider);
@@ -113,7 +114,7 @@ class ActiveCantiereLogNotifier extends AutoDisposeAsyncNotifier<CantiereWorkLog
 }
 
 final activeCantiereLogProvider =
-    AutoDisposeAsyncNotifierProvider<ActiveCantiereLogNotifier, CantiereWorkLogDto?>(() {
+    AsyncNotifierProvider.autoDispose<ActiveCantiereLogNotifier, CantiereWorkLogDto?>(() {
       return ActiveCantiereLogNotifier();
     });
 
@@ -125,7 +126,7 @@ final todayCantiereEventsProvider = StreamProvider.autoDispose<List<CantierePunc
 
 /// True when at least one of today's local cantiere events has not yet been synced.
 final cantiereHasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
-  final events = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
+  final events = ref.watch(todayCantiereEventsProvider).value ?? [];
   return events.any((e) => e.isPendingSync);
 });
 
@@ -135,7 +136,7 @@ final cantiereHasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
 /// sync stops retrying those unattended — so without this the punch would sit there as an
 /// indefinite amber dot with nothing to act on. See CantiereTimbraSyncService.
 final cantiereSyncErrorProvider = Provider.autoDispose<String?>((ref) {
-  final events = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
+  final events = ref.watch(todayCantiereEventsProvider).value ?? [];
   for (final e in events) {
     final error = e.syncError;
     if (error != null && error.isNotEmpty) return error;
@@ -153,7 +154,7 @@ final cantiereSyncErrorProvider = Provider.autoDispose<String?>((ref) {
 /// Scoped to one cantiere (not a cross-cantiere daily total) — matches the screen's own context:
 /// "how much have I worked *here* today."
 final cantiereTodayHoursProvider = Provider.autoDispose.family<Duration, String>((ref, cantiereId) {
-  final events = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
+  final events = ref.watch(todayCantiereEventsProvider).value ?? [];
   CantierePunche? opener;
   var total = Duration.zero;
   for (final e in events) {
@@ -182,7 +183,7 @@ String formatHoursMinutes(Duration d) {
 /// falls back to the raw id if the mirror doesn't have it yet (matches the same
 /// not-found-falls-back-to-itself contract used elsewhere in this screen, e.g. colleague names).
 String _cantiereNameFor(WidgetRef ref, String cantiereId) {
-  return ref.watch(cantiereByIdProvider(cantiereId)).valueOrNull?.name ?? cantiereId;
+  return ref.watch(cantiereByIdProvider(cantiereId)).value?.name ?? cantiereId;
 }
 
 /// Elapsed time since [startTime], clamped so it never counts time before the start of the
@@ -395,12 +396,10 @@ CantiereActiveSession? activeCantiereSessionFromLatestPunch(CantierePunche? late
 /// last-known server answer, which covers a session started from another device or surface (e.g.
 /// the office) with nothing queued locally.
 final cantiereActiveSessionProvider = Provider.autoDispose<CantiereActiveSession?>((ref) {
-  final local = activeCantiereSessionFromLatestPunch(
-    ref.watch(cantiereLatestPunchProvider).valueOrNull,
-  );
+  final local = activeCantiereSessionFromLatestPunch(ref.watch(cantiereLatestPunchProvider).value);
   if (local != null) return local;
 
-  final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;
+  final serverLog = ref.watch(activeCantiereLogProvider).value;
   if (serverLog == null) return null;
   final DateTime start;
   try {
@@ -448,14 +447,11 @@ final cantiereCrewAssignmentsProvider = FutureProvider.autoDispose
       final db = ref.watch(appDatabaseProvider);
 
       Future<List<CantiereCrewAssignmentDto>> mirrored() async {
-        final rows =
-            await (db.select(db.cantiereCrewAssignments)
-                  ..where((a) => a.cantiereId.equals(cantiereId)))
-                .get();
+        final rows = await (db.select(
+          db.cantiereCrewAssignments,
+        )..where((a) => a.cantiereId.equals(cantiereId))).get();
         return rows
-            .map(
-              (r) => CantiereCrewAssignmentDto(id: r.id, userId: r.userId, isLead: r.isLead),
-            )
+            .map((r) => CantiereCrewAssignmentDto(id: r.id, userId: r.userId, isLead: r.isLead))
             .toList();
       }
 
@@ -482,8 +478,8 @@ final cantiereCrewAssignmentsProvider = FutureProvider.autoDispose
 final isLeadForCantiereProvider = Provider.autoDispose.family<bool, String>((ref, cantiereId) {
   // The internal database Guid, not currentUserProvider.id (the Zitadel OIDC sub) — assignment
   // rows' userId is the internal Guid, so comparing against the sub never matched anyone.
-  final userId = ref.watch(internalUserIdProvider).valueOrNull;
-  final assignments = ref.watch(cantiereCrewAssignmentsProvider(cantiereId)).valueOrNull;
+  final userId = ref.watch(internalUserIdProvider).value;
+  final assignments = ref.watch(cantiereCrewAssignmentsProvider(cantiereId)).value;
   if (userId == null || assignments == null) return false;
   return assignments.any((a) => a.userId == userId && a.isLead);
 });
@@ -570,9 +566,8 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   /// — unreachable through any real navigation today (every caller resolves a cantiereId first;
   /// see this file's own header comment) but kept honest rather than force-unwrapped, so a
   /// malformed deep link reads as "cantiere not found" instead of crashing.
-  CantieriData? get _effectiveCantiere => widget.cantiereId == null
-      ? null
-      : ref.read(cantiereByIdProvider(widget.cantiereId!)).valueOrNull;
+  CantieriData? get _effectiveCantiere =>
+      widget.cantiereId == null ? null : ref.read(cantiereByIdProvider(widget.cantiereId!)).value;
 
   @override
   Widget build(BuildContext context) {
@@ -597,7 +592,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 
     final localEventsAsync = ref.watch(todayCantiereEventsProvider);
     final active = ref.watch(cantiereActiveSessionProvider);
-    final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;
+    final serverLog = ref.watch(activeCantiereLogProvider).value;
     final hasPendingSync = ref.watch(cantiereHasPendingSyncProvider);
     // The server compared this phone's clock with its own receipt instant when the batch landed
     // and found them far apart. Only the server can make that comparison, so this is the only way
@@ -631,16 +626,10 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
             ScreenHeader(title: 'Timbra cantiere', showBack: true),
             if (clockDisagreement != null)
               Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                  AppSpacing.md,
-                  0,
-                ),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
                 child: ClockDisagreementNote(
                   seconds: clockDisagreement,
-                  onDismiss: () =>
-                      ref.read(cantiereClockDisagreementProvider.notifier).dismiss(),
+                  onDismiss: () => ref.read(cantiereClockDisagreementProvider.notifier).dismiss(),
                 ),
               ),
             Expanded(
@@ -683,7 +672,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   /// null (disabled) while loading, while the cantiere hasn't resolved, or while "Seleziona
   /// squadra" is chosen but nobody's been picked yet.
   VoidCallback? _primaryStartAction(AsyncValue<CantieriData?> fixedCantiereAsync) {
-    if (_isLoading || fixedCantiereAsync.valueOrNull == null) return null;
+    if (_isLoading || fixedCantiereAsync.value == null) return null;
     switch (_chiTimbra) {
       case _ChiTimbra.io:
         return _handleStartCantiere;
@@ -733,7 +722,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 
     final cantiere = _effectiveCantiere;
     if (cantiere == null) return;
-    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).valueOrNull ?? [];
+    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).value ?? [];
     final selected = await openTeammatePickerSheet(context, assignments: assignments);
     if (!mounted) return;
     setState(() => _squadraSelection = selected);
@@ -867,7 +856,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   Future<void> _handleTuttaLaSquadra() async {
     final cantiere = _effectiveCantiere;
     if (cantiere == null) return;
-    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).valueOrNull ?? [];
+    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).value ?? [];
     if (assignments.isEmpty) return;
     await _handleBatchStart(assignments.map((a) => a.userId).toList());
   }
@@ -1000,7 +989,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                         child: Consumer(
                           builder: (context, ref, _) {
                             final name =
-                                ref.watch(colleagueNameProvider(f.userId)).valueOrNull ?? f.userId;
+                                ref.watch(colleagueNameProvider(f.userId)).value ?? f.userId;
                             return Text(
                               '$name: $reason',
                               style: TextStyle(
@@ -1572,7 +1561,7 @@ class _ActiveSessionBody extends ConsumerWidget {
     final ticketId = serverLog?.ticketId ?? local.ticketId;
     final ticketLabel = ticketId == null
         ? null
-        : ref.watch(ticketByIdProvider(ticketId)).valueOrNull?.title;
+        : ref.watch(ticketByIdProvider(ticketId)).value?.title;
 
     final closedTodayHours = ref.watch(cantiereTodayHoursProvider(local.cantiereId));
 

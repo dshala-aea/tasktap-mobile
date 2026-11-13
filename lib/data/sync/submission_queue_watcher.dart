@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 
 import '../api/dio_client.dart';
 import '../reports/report_submit_api_client.dart';
@@ -64,7 +65,7 @@ VoidCallback initSubmissionQueueWatcher(WidgetRef ref) {
   Future.microtask(() async {
     try {
       await ref.read(realSubmissionQueueProvider).recoverInterrupted();
-      await ref.read(connectivityProvider.future);
+      await ref.readFuture(connectivityProvider.future);
     } catch (_) {
       // Connectivity check failed: fall through, the queue's own gate decides.
     }

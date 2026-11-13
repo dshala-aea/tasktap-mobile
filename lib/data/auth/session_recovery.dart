@@ -1,7 +1,7 @@
 // dart format width=100
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'retained_owner.dart';
@@ -10,8 +10,7 @@ import 'unsent_work_counter.dart';
 // The marker itself — the two keys and the one writer — lives in `retained_owner.dart`, because a
 // session also ends at COLD START (`ZitadelAuthRepository._restore`) and that path must write the
 // same marker. Re-exported so every reader keeps importing it from here.
-export 'retained_owner.dart'
-    show sessionRetainedOwnerSubKey, sessionRetainedOwnerInternalIdKey;
+export 'retained_owner.dart' show sessionRetainedOwnerSubKey, sessionRetainedOwnerInternalIdKey;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Session recovery — what happens to a forced sign-out's leftovers

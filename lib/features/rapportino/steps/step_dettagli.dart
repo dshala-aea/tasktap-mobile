@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/dictation/dictate_button.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/widgets/geo_map_card.dart';
@@ -12,6 +13,7 @@ import '../../../core/theme/app_colors.dart';
 // that already carry their own padding.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -82,10 +84,10 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
   Widget build(BuildContext context) {
     final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
     final state = ref.watch(reportEditorProvider(widget.reportId));
-    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const [];
-    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
-    final tickets = ref.watch(allTicketsProvider).valueOrNull ?? const [];
-    final cantieri = ref.watch(allCantieriProvider).valueOrNull ?? const [];
+    final customers = ref.watch(allCustomersProvider).value ?? const [];
+    final locations = ref.watch(allLocationsProvider).value ?? const [];
+    final tickets = ref.watch(allTicketsProvider).value ?? const [];
+    final cantieri = ref.watch(allCantieriProvider).value ?? const [];
 
     // A rapportino opened from a ticket or a cantiere already knows what it is about. Naming it
     // once at the top and dropping the pickers is the difference between confirming a fact and
@@ -203,10 +205,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               label: 'Diagnosi',
               hint: 'Cosa hai riscontrato...',
               maxLines: 3,
-              suffixIcon: DictateButton(
-                controller: _diagnosiCtrl,
-                onChanged: notifier.setDiagnosi,
-              ),
+              suffixIcon: DictateButton(controller: _diagnosiCtrl, onChanged: notifier.setDiagnosi),
               onChanged: (v) => notifier.setDiagnosi(v),
             ),
             const SizedBox(height: 12),

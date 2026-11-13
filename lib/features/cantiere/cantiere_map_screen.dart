@@ -44,12 +44,12 @@ class CantiereMapScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cantiere = ref.watch(cantiereByIdProvider(cantiereId)).valueOrNull;
+    final cantiere = ref.watch(cantiereByIdProvider(cantiereId)).value;
     final pointAsync = ref.watch(cantiereGeocodedLocationProvider(cantiereId));
     final active = ref.watch(cantiereActiveSessionProvider);
     final activeHere = active?.cantiereId == cantiereId;
     final todayHours = ref.watch(cantiereTodayHoursProvider(cantiereId));
-    final crewCount = ref.watch(cantiereCrewAssignmentsProvider(cantiereId)).valueOrNull?.length;
+    final crewCount = ref.watch(cantiereCrewAssignmentsProvider(cantiereId)).value?.length;
 
     final address = [
       cantiere?.address,

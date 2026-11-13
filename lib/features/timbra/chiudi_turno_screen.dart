@@ -195,7 +195,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
     final ticketId = widget.ticketId;
     final ticketLabel = ticketId == null
         ? null
-        : ref.watch(ticketByIdProvider(ticketId)).valueOrNull?.title;
+        : ref.watch(ticketByIdProvider(ticketId)).value?.title;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -225,7 +225,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  cantiereAsync.valueOrNull?.name ?? 'Cantiere',
+                                  cantiereAsync.value?.name ?? 'Cantiere',
                                   style: AppTextStyles.titleMedium.copyWith(
                                     color: context.colors.ink,
                                   ),

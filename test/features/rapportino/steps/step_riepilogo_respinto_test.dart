@@ -87,6 +87,7 @@ void main() {
           );
 
       container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           userSignatureApiClientProvider.overrideWithValue(const _StubUserSignatureApiClient()),
@@ -106,7 +107,9 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: Scaffold(body: StepRiepilogo(reportId: _reportId))),
+          child: const MaterialApp(
+            home: Scaffold(body: StepRiepilogo(reportId: _reportId)),
+          ),
         ),
       );
       await tester.pumpAndSettle();

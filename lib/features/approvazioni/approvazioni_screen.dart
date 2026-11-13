@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -49,7 +50,7 @@ class _ApprovazioniScreenState extends ConsumerState<ApprovazioniScreen> {
               ? ref.watch(absenceApprovalQueueProvider)
               : ref.watch(smartWorkingApprovalQueueProvider))
         : null;
-    final count = selected?.valueOrNull?.length;
+    final count = selected?.value?.length;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -121,7 +122,10 @@ class _AbsenceQueueState extends ConsumerState<_AbsenceQueue> {
         content: Text(_absenceSubtitle(item)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Approva richiesta')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Approva richiesta'),
+          ),
         ],
       ),
     );
@@ -213,13 +217,11 @@ class _AbsenceQueueState extends ConsumerState<_AbsenceQueue> {
     }
 
     final requests = ref.watch(absenceApprovalQueueProvider);
-    final names = ref.watch(userNameByIdProvider).valueOrNull ?? const <String, String>{};
+    final names = ref.watch(userNameByIdProvider).value ?? const <String, String>{};
 
     return requests.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, _) => ErrorState(
-        onRetry: () => ref.invalidate(absenceApprovalQueueProvider),
-      ),
+      error: (_, _) => ErrorState(onRetry: () => ref.invalidate(absenceApprovalQueueProvider)),
       data: (items) => items.isEmpty
           ? const EmptyState(
               icon: LucideIcons.calendarX,
@@ -227,10 +229,7 @@ class _AbsenceQueueState extends ConsumerState<_AbsenceQueue> {
               body: 'Le nuove richieste di ferie e permessi compariranno qui.',
             )
           : ListView.builder(
-              padding: EdgeInsets.only(
-                top: AppSpacing.xs,
-                bottom: context.navClearance,
-              ),
+              padding: EdgeInsets.only(top: AppSpacing.xs, bottom: context.navClearance),
               itemCount: items.length,
               itemBuilder: (context, i) {
                 final item = items[i];
@@ -275,7 +274,10 @@ class _SmartWorkingQueueState extends ConsumerState<_SmartWorkingQueue> {
         content: Text(_smartWorkingSubtitle(item)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Approva richiesta')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Approva richiesta'),
+          ),
         ],
       ),
     );
@@ -363,13 +365,11 @@ class _SmartWorkingQueueState extends ConsumerState<_SmartWorkingQueue> {
     }
 
     final requests = ref.watch(smartWorkingApprovalQueueProvider);
-    final names = ref.watch(userNameByIdProvider).valueOrNull ?? const <String, String>{};
+    final names = ref.watch(userNameByIdProvider).value ?? const <String, String>{};
 
     return requests.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, _) => ErrorState(
-        onRetry: () => ref.invalidate(smartWorkingApprovalQueueProvider),
-      ),
+      error: (_, _) => ErrorState(onRetry: () => ref.invalidate(smartWorkingApprovalQueueProvider)),
       data: (items) => items.isEmpty
           ? const EmptyState(
               icon: LucideIcons.laptop,
@@ -377,10 +377,7 @@ class _SmartWorkingQueueState extends ConsumerState<_SmartWorkingQueue> {
               body: 'Le nuove richieste di smart working compariranno qui.',
             )
           : ListView.builder(
-              padding: EdgeInsets.only(
-                top: AppSpacing.xs,
-                bottom: context.navClearance,
-              ),
+              padding: EdgeInsets.only(top: AppSpacing.xs, bottom: context.navClearance),
               itemCount: items.length,
               itemBuilder: (context, i) {
                 final item = items[i];

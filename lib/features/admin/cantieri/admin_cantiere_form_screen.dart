@@ -2,7 +2,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -20,6 +22,7 @@ import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../admin_api_client.dart';
 import '../admin_widgets.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -245,7 +248,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
         appBar: ScreenHeaderBar(title: 'Modifica cantiere', showBack: true),
         // The row can be missing because the mirror has not arrived yet OR because the cantiere
         // was deleted meanwhile; the old single message asserted the first for both.
-        body: ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+        body: ref.watch(hasSyncedAtLeastOnceProvider).value == false
             ? const UnavailableState(
                 icon: LucideIcons.cloudOff,
                 titolo: 'Cantiere non disponibile',
@@ -257,18 +260,19 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
             : const UnavailableState(
                 icon: LucideIcons.hardHat,
                 titolo: 'Cantiere non trovato',
-                motivo: 'Questo cantiere non è più disponibile: potrebbe essere stato eliminato. '
+                motivo:
+                    'Questo cantiere non è più disponibile: potrebbe essere stato eliminato. '
                     'Torna all\'elenco e aggiorna.',
               ),
       );
     }
 
     final customersAsync = ref.watch(allCustomersProvider);
-    final customers = customersAsync.valueOrNull ?? [];
+    final customers = customersAsync.value ?? [];
     // Server-filtered by the selected client (item 2 of the admin-form audit) — refetches
     // whenever _selectedCustomerId changes, since adminCommesseProvider is keyed by it.
     final commesseAsync = ref.watch(adminCommesseProvider(_selectedCustomerId));
-    final commesse = commesseAsync.valueOrNull ?? [];
+    final commesse = commesseAsync.value ?? [];
     // If the cached value isn't in the fetched (client-scoped) list — e.g. it belongs to a
     // different client than the one currently selected, or is inactive — keep it selectable
     // rather than silently blanking the field on open, which would let an unrelated save clear a
@@ -286,7 +290,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
     // linking it, and typing something new (or nothing matching) just sets the address text
     // directly, same "type and it stands on its own" behavior AppLookupField uses everywhere else.
     final allLocationsAsync = ref.watch(allLocationsProvider);
-    final allLocations = allLocationsAsync.valueOrNull ?? [];
+    final allLocations = allLocationsAsync.value ?? [];
     final clientLocations = _selectedCustomerId != null
         ? allLocations.where((l) => l.customerId == _selectedCustomerId).toList()
         : const <Location>[];
@@ -398,9 +402,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
                         subtitle: l.city,
                       ),
                   ],
-                  emptyCacheHint: _selectedCustomerId == null
-                      ? null
-                      : 'Nessuna sede esistente per questo cliente: scrivi per inserirne un nuovo indirizzo.',
+                  emptyCacheHint: _selectedCustomerId == null ? null : 'Nessuna sede esistente per questo cliente: scrivi per inserirne un nuovo indirizzo.',
                   // Picking a suggestion copies that sede's address into these fields — see the
                   // clientLocations doc comment above for why this isn't a real link.
                   onSelected: (id) {

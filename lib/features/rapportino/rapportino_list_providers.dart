@@ -74,10 +74,7 @@ final rapportinoControlliProvider = StreamProvider.autoDispose
 /// Mirror only, never a request: the view is the record of a finished visit, opened on site with no
 /// signal as often as at the office. A device that has never seen the asset gets `null`, and the
 /// section says "Attrezzatura" rather than inventing or fetching a name.
-final assetNameProvider = FutureProvider.autoDispose.family<String?, String>((
-  ref,
-  assetId,
-) async {
+final assetNameProvider = FutureProvider.autoDispose.family<String?, String>((ref, assetId) async {
   final row = await ref.watch(referenceCacheProvider).prodottoAssistenzaById(assetId);
   return row?.name;
 });
@@ -149,8 +146,8 @@ final rapportinoRowSummaryProvider = Provider.autoDispose.family<RapportinoRowSu
   final materialiAsync = ref.watch(rapportinoMaterialiProvider(reportId));
   final oreLabel = ref.watch(rapportinoOreProvider(reportId));
   return RapportinoRowSummary(
-    staffCount: staffAsync.valueOrNull?.length ?? 0,
-    materialiCount: materialiAsync.valueOrNull?.length ?? 0,
+    staffCount: staffAsync.value?.length ?? 0,
+    materialiCount: materialiAsync.value?.length ?? 0,
     oreLabel: oreLabel,
   );
 });

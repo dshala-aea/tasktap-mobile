@@ -14,7 +14,10 @@ void main() {
   setUp(() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     db = AppDatabase(NativeDatabase.memory());
-    container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+    container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
+    );
   });
 
   tearDown(() async {
@@ -23,6 +26,7 @@ void main() {
   });
 
   test('ticketsProvider emits empty list when db empty', () async {
+    container.listen(ticketsProvider, (_, _) {});
     final result = await container.read(ticketsProvider.future);
     expect(result, isEmpty);
   });
@@ -43,6 +47,7 @@ void main() {
           ),
         );
 
+    container.listen(ticketsProvider, (_, _) {});
     final result = await container.read(ticketsProvider.future);
     expect(result.length, 1);
     expect(result.first.title, 'Perdita idrica');
@@ -51,13 +56,24 @@ void main() {
   test('ticketStatusMapProvider emits id→name map', () async {
     await db
         .into(db.ticketStatuses)
-        .insert(TicketStatusesCompanion.insert(id: Value(1), tenantId: 'tenant-1', name: 'Aperto'));
+        .insert(
+          TicketStatusesCompanion.insert(
+            id: Value(1),
+            tenantId: 'tenant-1',
+            name: 'Aperto',
+          ),
+        );
     await db
         .into(db.ticketStatuses)
         .insert(
-          TicketStatusesCompanion.insert(id: Value(2), tenantId: 'tenant-1', name: 'In corso'),
+          TicketStatusesCompanion.insert(
+            id: Value(2),
+            tenantId: 'tenant-1',
+            name: 'In corso',
+          ),
         );
 
+    container.listen(ticketStatusMapProvider, (_, _) {});
     final result = await container.read(ticketStatusMapProvider.future);
     expect(result[1], 'Aperto');
     expect(result[2], 'In corso');
@@ -67,36 +83,52 @@ void main() {
     await db
         .into(db.ticketTypes)
         .insert(
-          TicketTypesCompanion.insert(id: Value(1), tenantId: 'tenant-1', name: 'Assistenza'),
+          TicketTypesCompanion.insert(
+            id: Value(1),
+            tenantId: 'tenant-1',
+            name: 'Assistenza',
+          ),
         );
 
+    container.listen(ticketTypeMapProvider, (_, _) {});
     final result = await container.read(ticketTypeMapProvider.future);
     expect(result[1], 'Assistenza');
   });
 
   test('ticketStatusMapProvider returns empty map when no statuses', () async {
+    container.listen(ticketStatusMapProvider, (_, _) {});
     final result = await container.read(ticketStatusMapProvider.future);
     expect(result, isEmpty);
   });
 
-  test('closedTicketStatusIdsProvider lists only the statuses flagged isClosed', () async {
-    await db
-        .into(db.ticketStatuses)
-        .insert(TicketStatusesCompanion.insert(id: Value(1), tenantId: 'tenant-1', name: 'Aperto'));
-    await db
-        .into(db.ticketStatuses)
-        .insert(
-          TicketStatusesCompanion.insert(
-            id: Value(2),
-            tenantId: 'tenant-1',
-            name: 'Completato',
-            isClosed: Value(true),
-          ),
-        );
+  test(
+    'closedTicketStatusIdsProvider lists only the statuses flagged isClosed',
+    () async {
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: Value(1),
+              tenantId: 'tenant-1',
+              name: 'Aperto',
+            ),
+          );
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: Value(2),
+              tenantId: 'tenant-1',
+              name: 'Completato',
+              isClosed: Value(true),
+            ),
+          );
 
-    final result = await container.read(closedTicketStatusIdsProvider.future);
-    expect(result, {2});
-  });
+      container.listen(closedTicketStatusIdsProvider, (_, _) {});
+      final result = await container.read(closedTicketStatusIdsProvider.future);
+      expect(result, {2});
+    },
+  );
 
   /// The bug this pair was written for: closing a ticket from the phone wrote the new `statusId`
   /// and no `closedAt` (that bookkeeping was the server's alone), so a rule that only read
@@ -135,7 +167,13 @@ void main() {
     // device was stale. `closedAt` alone still has to answer true.
     await db
         .into(db.ticketStatuses)
-        .insert(TicketStatusesCompanion.insert(id: Value(1), tenantId: 'tenant-1', name: 'Aperto'));
+        .insert(
+          TicketStatusesCompanion.insert(
+            id: Value(1),
+            tenantId: 'tenant-1',
+            name: 'Aperto',
+          ),
+        );
     await db
         .into(db.tickets)
         .insert(
@@ -158,7 +196,13 @@ void main() {
   test('mirroredTicketIsClosed is false for an open ticket and for an unmirrored one', () async {
     await db
         .into(db.ticketStatuses)
-        .insert(TicketStatusesCompanion.insert(id: Value(1), tenantId: 'tenant-1', name: 'Aperto'));
+        .insert(
+          TicketStatusesCompanion.insert(
+            id: Value(1),
+            tenantId: 'tenant-1',
+            name: 'Aperto',
+          ),
+        );
     await db
         .into(db.tickets)
         .insert(
@@ -179,50 +223,56 @@ void main() {
     expect(await mirroredTicketIsClosed(db, 'ticket-unknown'), isFalse);
   });
 
-  test('schedulesForTicketProvider returns schedules for matching ticketId', () async {
-    await db
-        .into(db.schedules)
-        .insert(
-          SchedulesCompanion.insert(
-            id: 'sched-1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            ticketId: const Value('ticket-1'),
-            activityDate: DateTime.utc(2026, 7, 1),
-            timeStartMinutes: 480,
-            timeEndMinutes: 1020,
-            userId: 'user-1',
-            statusId: 1,
-            locationId: 'loc-1',
-            title: 'Intervento',
-            description: '',
-          ),
-        );
+  test(
+    'schedulesForTicketProvider returns schedules for matching ticketId',
+    () async {
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: const Value('ticket-1'),
+              activityDate: DateTime.utc(2026, 7, 1),
+              timeStartMinutes: 480,
+              timeEndMinutes: 1020,
+              userId: 'user-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Intervento',
+              description: '',
+            ),
+          );
 
-    // Schedule for a different ticket
-    await db
-        .into(db.schedules)
-        .insert(
-          SchedulesCompanion.insert(
-            id: 'sched-2',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            ticketId: const Value('ticket-2'),
-            activityDate: DateTime.utc(2026, 7, 2),
-            timeStartMinutes: 480,
-            timeEndMinutes: 1020,
-            userId: 'user-1',
-            statusId: 1,
-            locationId: 'loc-1',
-            title: 'Altro intervento',
-            description: '',
-          ),
-        );
+      // Schedule for a different ticket
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: const Value('ticket-2'),
+              activityDate: DateTime.utc(2026, 7, 2),
+              timeStartMinutes: 480,
+              timeEndMinutes: 1020,
+              userId: 'user-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Altro intervento',
+              description: '',
+            ),
+          );
 
-    final result = await container.read(schedulesForTicketProvider('ticket-1').future);
-    expect(result.length, 1);
-    expect(result.first.id, 'sched-1');
-  });
+      container.listen(schedulesForTicketProvider('ticket-1'), (_, _) {});
+      final result = await container.read(
+        schedulesForTicketProvider('ticket-1').future,
+      );
+      expect(result.length, 1);
+      expect(result.first.id, 'sched-1');
+    },
+  );
 
   group('ticketMaterialiProvider — offline fabbisogno mirror', () {
     test('resolves a catalog-referenced item\'s name/code/unit from the synced Materiale', () async {
@@ -252,7 +302,10 @@ void main() {
             ),
           );
 
-      final result = await container.read(ticketMaterialiProvider('ticket-1').future);
+      container.listen(ticketMaterialiProvider('ticket-1'), (_, _) {});
+      final result = await container.read(
+        ticketMaterialiProvider('ticket-1').future,
+      );
 
       expect(result, hasLength(1));
       expect(result.single.nome, 'Valvola 3/4"');
@@ -262,61 +315,73 @@ void main() {
       expect(result.single.disponibile, isTrue);
     });
 
-    test('resolves the planned source warehouse name from the mirrored Magazzini', () async {
-      await db
-          .into(db.magazzini)
-          .insert(
-            MagazziniCompanion.insert(
-              id: 'mag-1',
-              tenantId: 'tenant-1',
-              createdAt: DateTime.utc(2026, 6, 1),
-              nome: 'Furgone Mario',
-              tipo: 'Furgone',
-            ),
-          );
-      await db
-          .into(db.ticketMateriali)
-          .insert(
-            TicketMaterialiCompanion.insert(
-              id: 'tm-source',
-              tenantId: 'tenant-1',
-              createdAt: DateTime.utc(2026, 6, 1),
-              ticketId: 'ticket-1',
-              freeTextName: const Value('Guarnizione'),
-              quantity: 1,
-              magazzinoId: const Value('mag-1'),
-            ),
-          );
+    test(
+      'resolves the planned source warehouse name from the mirrored Magazzini',
+      () async {
+        await db
+            .into(db.magazzini)
+            .insert(
+              MagazziniCompanion.insert(
+                id: 'mag-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 1),
+                nome: 'Furgone Mario',
+                tipo: 'Furgone',
+              ),
+            );
+        await db
+            .into(db.ticketMateriali)
+            .insert(
+              TicketMaterialiCompanion.insert(
+                id: 'tm-source',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 1),
+                ticketId: 'ticket-1',
+                freeTextName: const Value('Guarnizione'),
+                quantity: 1,
+                magazzinoId: const Value('mag-1'),
+              ),
+            );
 
-      final result = await container.read(ticketMaterialiProvider('ticket-1').future);
+        container.listen(ticketMaterialiProvider('ticket-1'), (_, _) {});
+        final result = await container.read(
+          ticketMaterialiProvider('ticket-1').future,
+        );
 
-      expect(result.single.magazzinoId, 'mag-1');
-      expect(result.single.magazzinoNome, 'Furgone Mario');
-    });
+        expect(result.single.magazzinoId, 'mag-1');
+        expect(result.single.magazzinoNome, 'Furgone Mario');
+      },
+    );
 
-    test('a free-text item (no materialeId) uses its own name, no catalog lookup', () async {
-      await db
-          .into(db.ticketMateriali)
-          .insert(
-            TicketMaterialiCompanion.insert(
-              id: 'tm-2',
-              tenantId: 'tenant-1',
-              createdAt: DateTime.utc(2026, 6, 1),
-              ticketId: 'ticket-1',
-              freeTextName: const Value('Guarnizione generica'),
-              quantity: 1,
-            ),
-          );
+    test(
+      'a free-text item (no materialeId) uses its own name, no catalog lookup',
+      () async {
+        await db
+            .into(db.ticketMateriali)
+            .insert(
+              TicketMaterialiCompanion.insert(
+                id: 'tm-2',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 1),
+                ticketId: 'ticket-1',
+                freeTextName: const Value('Guarnizione generica'),
+                quantity: 1,
+              ),
+            );
 
-      final result = await container.read(ticketMaterialiProvider('ticket-1').future);
+        container.listen(ticketMaterialiProvider('ticket-1'), (_, _) {});
+        final result = await container.read(
+          ticketMaterialiProvider('ticket-1').future,
+        );
 
-      expect(result, hasLength(1));
-      expect(result.single.nome, 'Guarnizione generica');
-      // Bare `isNull` is ambiguous in this file (drift.dart's own query-builder symbol vs.
-      // matcher's) — plain `null` reads identically for an equality check.
-      expect(result.single.materialeId, null);
-      expect(result.single.codice, null);
-    });
+        expect(result, hasLength(1));
+        expect(result.single.nome, 'Guarnizione generica');
+        // Bare `isNull` is ambiguous in this file (drift.dart's own query-builder symbol vs.
+        // matcher's) — plain `null` reads identically for an equality check.
+        expect(result.single.materialeId, null);
+        expect(result.single.codice, null);
+      },
+    );
 
     test('only returns fabbisogno for the requested ticket', () async {
       await db
@@ -332,7 +397,10 @@ void main() {
             ),
           );
 
-      final result = await container.read(ticketMaterialiProvider('ticket-1').future);
+      container.listen(ticketMaterialiProvider('ticket-1'), (_, _) {});
+      final result = await container.read(
+        ticketMaterialiProvider('ticket-1').future,
+      );
 
       expect(result, isEmpty);
     });

@@ -71,7 +71,10 @@ Future<void> _seedCatalogue(AppDatabase db) async {
 }
 
 ProviderContainer _container(AppDatabase db) {
-  final c = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+  final c = ProviderContainer(
+    retry: (_, _) => null,
+    overrides: [appDatabaseProvider.overrideWithValue(db)],
+  );
   addTearDown(c.dispose);
   return c;
 }
@@ -140,10 +143,10 @@ void main() {
       final c1 = _container(db);
       final n1 = c1.read(strumentiSelectionProvider(_rid).notifier);
       await n1.ready;
-      expect(
-        c1.read(strumentiSelectionProvider(_rid)).items.map((i) => i.strumentoId).toSet(),
-        {'mine-valid', 'mine-expired'},
-      );
+      expect(c1.read(strumentiSelectionProvider(_rid)).items.map((i) => i.strumentoId).toSet(), {
+        'mine-valid',
+        'mine-expired',
+      });
       expect((await db.select(db.draftReports).getSingle()).strumentiPrefilled, isTrue);
 
       await n1.remove('mine-valid');
@@ -168,24 +171,27 @@ void main() {
       expect(c2.read(strumentiSelectionProvider(_rid)).items, hasLength(2));
     });
 
-    test('adopts the server selection (not the kit) for a draft the server already holds', () async {
-      await _seedDraft(db);
-      await _seedCatalogue(db);
-      await db
-          .into(db.reportStrumenti)
-          .insert(
-            ReportStrumentiCompanion.insert(
-              id: 'srv-1',
-              reportId: _rid,
-              strumentoId: const Value('other'),
-              name: 'Anemometro',
-              matricola: 'A-3',
-            ),
-          );
-      final c = _container(db);
-      await c.read(strumentiSelectionProvider(_rid).notifier).ready;
-      expect(c.read(strumentiSelectionProvider(_rid)).items.map((i) => i.strumentoId), ['other']);
-    });
+    test(
+      'adopts the server selection (not the kit) for a draft the server already holds',
+      () async {
+        await _seedDraft(db);
+        await _seedCatalogue(db);
+        await db
+            .into(db.reportStrumenti)
+            .insert(
+              ReportStrumentiCompanion.insert(
+                id: 'srv-1',
+                reportId: _rid,
+                strumentoId: const Value('other'),
+                name: 'Anemometro',
+                matricola: 'A-3',
+              ),
+            );
+        final c = _container(db);
+        await c.read(strumentiSelectionProvider(_rid).notifier).ready;
+        expect(c.read(strumentiSelectionProvider(_rid)).items.map((i) => i.strumentoId), ['other']);
+      },
+    );
 
     test('adopting the server selection keeps its notes', () async {
       await _seedDraft(db);
@@ -210,89 +216,97 @@ void main() {
       expect(item.outcome, '12 m/s');
     });
 
-    test('setUsageDescription/setOutcome persist at once, survive an acknowledgement, blank -> null',
-        () async {
-      await _seedDraft(db);
-      await _seedCatalogue(db);
-      final c = _container(db);
-      final n = c.read(strumentiSelectionProvider(_rid).notifier);
-      await n.ready;
+    test(
+      'setUsageDescription/setOutcome persist at once, survive an acknowledgement, blank -> null',
+      () async {
+        await _seedDraft(db);
+        await _seedCatalogue(db);
+        final c = _container(db);
+        final n = c.read(strumentiSelectionProvider(_rid).notifier);
+        await n.ready;
 
-      await n.setUsageDescription('mine-expired', 'Ispezione quadro');
-      await n.setOutcome('mine-expired', 'Punto caldo');
-      await n.setAcknowledged('mine-expired', true); // rewrites the row: must not wipe the notes
+        await n.setUsageDescription('mine-expired', 'Ispezione quadro');
+        await n.setOutcome('mine-expired', 'Punto caldo');
+        await n.setAcknowledged('mine-expired', true); // rewrites the row: must not wipe the notes
 
-      Future<ReportStrumentoRow> row() => (db.select(
-        db.reportStrumenti,
-      )..where((s) => s.strumentoId.equals('mine-expired'))).getSingle();
-      var r = await row();
-      expect(r.usageDescription, 'Ispezione quadro');
-      expect(r.outcome, 'Punto caldo');
-      expect(r.expiredAcknowledged, isTrue);
+        Future<ReportStrumentoRow> row() => (db.select(
+          db.reportStrumenti,
+        )..where((s) => s.strumentoId.equals('mine-expired'))).getSingle();
+        var r = await row();
+        expect(r.usageDescription, 'Ispezione quadro');
+        expect(r.outcome, 'Punto caldo');
+        expect(r.expiredAcknowledged, isTrue);
 
-      await n.setOutcome('mine-expired', '   ');
-      r = await row();
-      expect(r.outcome, isNull);
-      expect(r.usageDescription, 'Ispezione quadro');
+        await n.setOutcome('mine-expired', '   ');
+        r = await row();
+        expect(r.outcome, isNull);
+        expect(r.usageDescription, 'Ispezione quadro');
 
-      // The live snapshot follows the write. The instrument card seeds its text controllers from
-      // `state.items` once per mount, so while this provider stays alive (the rapportino screen
-      // watches it for its own count) a stale snapshot here means closing and reopening the
-      // Strumenti sheet shows blank fields even though the note was saved.
-      final live = c
-          .read(strumentiSelectionProvider(_rid))
-          .items
-          .firstWhere((i) => i.strumentoId == 'mine-expired');
-      expect(live.usageDescription, 'Ispezione quadro');
-      expect(live.outcome, '');
+        // The live snapshot follows the write. The instrument card seeds its text controllers from
+        // `state.items` once per mount, so while this provider stays alive (the rapportino screen
+        // watches it for its own count) a stale snapshot here means closing and reopening the
+        // Strumenti sheet shows blank fields even though the note was saved.
+        final live = c
+            .read(strumentiSelectionProvider(_rid))
+            .items
+            .firstWhere((i) => i.strumentoId == 'mine-expired');
+        expect(live.usageDescription, 'Ispezione quadro');
+        expect(live.outcome, '');
 
-      // A fresh open reads them back.
-      final c2 = _container(db);
-      await c2.read(strumentiSelectionProvider(_rid).notifier).ready;
-      final item = c2
-          .read(strumentiSelectionProvider(_rid))
-          .items
-          .firstWhere((i) => i.strumentoId == 'mine-expired');
-      expect(item.usageDescription, 'Ispezione quadro');
-      expect(item.outcome, '');
-    });
+        // A fresh open reads them back.
+        final c2 = _container(db);
+        await c2.read(strumentiSelectionProvider(_rid).notifier).ready;
+        final item = c2
+            .read(strumentiSelectionProvider(_rid))
+            .items
+            .firstWhere((i) => i.strumentoId == 'mine-expired');
+        expect(item.usageDescription, 'Ispezione quadro');
+        expect(item.outcome, '');
+      },
+    );
 
-    test('add pulls from the catalogue and remove drops it; the picker excludes selected', () async {
-      await _seedDraft(db, prefilled: true);
-      await _seedCatalogue(db);
-      final c = _container(db);
-      final n = c.read(strumentiSelectionProvider(_rid).notifier);
-      await n.ready;
-      expect(c.read(strumentiSelectionProvider(_rid)).items, isEmpty);
-      expect(c.read(strumentiSelectionProvider(_rid)).available.first.isMine, isTrue);
+    test(
+      'add pulls from the catalogue and remove drops it; the picker excludes selected',
+      () async {
+        await _seedDraft(db, prefilled: true);
+        await _seedCatalogue(db);
+        final c = _container(db);
+        final n = c.read(strumentiSelectionProvider(_rid).notifier);
+        await n.ready;
+        expect(c.read(strumentiSelectionProvider(_rid)).items, isEmpty);
+        expect(c.read(strumentiSelectionProvider(_rid)).available.first.isMine, isTrue);
 
-      await n.add('other');
-      var s = c.read(strumentiSelectionProvider(_rid));
-      expect(s.items.single.name, 'Anemometro');
-      expect(s.available.any((a) => a.id == 'other'), isFalse);
+        await n.add('other');
+        var s = c.read(strumentiSelectionProvider(_rid));
+        expect(s.items.single.name, 'Anemometro');
+        expect(s.available.any((a) => a.id == 'other'), isFalse);
 
-      await n.remove('other');
-      s = c.read(strumentiSelectionProvider(_rid));
-      expect(s.items, isEmpty);
-      expect(s.available.any((a) => a.id == 'other'), isTrue);
-    });
+        await n.remove('other');
+        s = c.read(strumentiSelectionProvider(_rid));
+        expect(s.items, isEmpty);
+        expect(s.available.any((a) => a.id == 'other'), isTrue);
+      },
+    );
 
-    test('acknowledgement is stored for an expired instrument and ignored for a valid one', () async {
-      await _seedDraft(db);
-      await _seedCatalogue(db);
-      final c = _container(db);
-      final n = c.read(strumentiSelectionProvider(_rid).notifier);
-      await n.ready;
-      expect(c.read(strumentiSelectionProvider(_rid)).unacknowledgedExpired, 1);
+    test(
+      'acknowledgement is stored for an expired instrument and ignored for a valid one',
+      () async {
+        await _seedDraft(db);
+        await _seedCatalogue(db);
+        final c = _container(db);
+        final n = c.read(strumentiSelectionProvider(_rid).notifier);
+        await n.ready;
+        expect(c.read(strumentiSelectionProvider(_rid)).unacknowledgedExpired, 1);
 
-      await n.setAcknowledged('mine-valid', true); // valid: ignored
-      await n.setAcknowledged('mine-expired', true);
-      final s = c.read(strumentiSelectionProvider(_rid));
-      expect(s.unacknowledgedExpired, 0);
-      final byId = {for (final i in s.items) i.strumentoId: i};
-      expect(byId['mine-expired']!.expiredAcknowledged, isTrue);
-      expect(byId['mine-valid']!.expiredAcknowledged, isFalse);
-    });
+        await n.setAcknowledged('mine-valid', true); // valid: ignored
+        await n.setAcknowledged('mine-expired', true);
+        final s = c.read(strumentiSelectionProvider(_rid));
+        expect(s.unacknowledgedExpired, 0);
+        final byId = {for (final i in s.items) i.strumentoId: i};
+        expect(byId['mine-expired']!.expiredAcknowledged, isTrue);
+        expect(byId['mine-valid']!.expiredAcknowledged, isFalse);
+      },
+    );
 
     test('a borrowed instrument carries its holder; one on the shelf carries nobody', () async {
       await _seedDraft(db, prefilled: true);
@@ -324,7 +338,9 @@ void main() {
         ProviderScope(
           overrides: [appDatabaseProvider.overrideWithValue(db)],
           child: const MaterialApp(
-            home: Scaffold(body: SingleChildScrollView(child: StepStrumenti(reportId: _rid))),
+            home: Scaffold(
+              body: SingleChildScrollView(child: StepStrumenti(reportId: _rid)),
+            ),
           ),
         ),
       );
@@ -349,78 +365,86 @@ void main() {
     // The complaint this closes: "we do not actually see who owns the strumento". A colleague's
     // instrument was a bare name in the picker, and the technician had to guess whose it was
     // before borrowing it on the rapportino.
-    testWidgets('the picker names the holder, and both picker and card stay silent when nobody holds it',
-        (tester) async {
-      await _seedDraft(db, prefilled: true);
-      await _seedCatalogue(db);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [appDatabaseProvider.overrideWithValue(db)],
-          child: const MaterialApp(
-            home: Scaffold(body: SingleChildScrollView(child: StepStrumenti(reportId: _rid))),
+    testWidgets(
+      'the picker names the holder, and both picker and card stay silent when nobody holds it',
+      (tester) async {
+        await _seedDraft(db, prefilled: true);
+        await _seedCatalogue(db);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [appDatabaseProvider.overrideWithValue(db)],
+            child: const MaterialApp(
+              home: Scaffold(
+                body: SingleChildScrollView(child: StepStrumenti(reportId: _rid)),
+              ),
+            ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Aggiungi strumento'));
-      await tester.tap(find.text('Aggiungi strumento'));
-      await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Aggiungi strumento'));
+        await tester.tap(find.text('Aggiungi strumento'));
+        await tester.pumpAndSettle();
 
-      expect(find.textContaining('di Anna Neri'), findsOneWidget);
-      // On the shelf: the matricola alone, never "di null" or an empty owner segment.
-      expect(find.text('L-7'), findsOneWidget);
+        expect(find.textContaining('di Anna Neri'), findsOneWidget);
+        // On the shelf: the matricola alone, never "di null" or an empty owner segment.
+        expect(find.text('L-7'), findsOneWidget);
 
-      await tester.tap(find.text('Anemometro'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Anemometro'));
+        await tester.pumpAndSettle();
 
-      // The card is what the technician reads back before sending, so the owner is repeated there.
-      expect(find.text('Di Anna Neri'), findsOneWidget);
-    });
+        // The card is what the technician reads back before sending, so the owner is repeated there.
+        expect(find.text('Di Anna Neri'), findsOneWidget);
+      },
+    );
 
-    testWidgets('typing in the two note fields persists to the Drift row, counter hidden until 1800',
-        (tester) async {
-      await _seedDraft(db);
-      await _seedCatalogue(db);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [appDatabaseProvider.overrideWithValue(db)],
-          child: const MaterialApp(
-            home: Scaffold(body: SingleChildScrollView(child: StepStrumenti(reportId: _rid))),
+    testWidgets(
+      'typing in the two note fields persists to the Drift row, counter hidden until 1800',
+      (tester) async {
+        await _seedDraft(db);
+        await _seedCatalogue(db);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [appDatabaseProvider.overrideWithValue(db)],
+            child: const MaterialApp(
+              home: Scaffold(
+                body: SingleChildScrollView(child: StepStrumenti(reportId: _rid)),
+              ),
+            ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      final usage = find.byKey(const ValueKey('strumento-usage-mine-valid'));
-      final esito = find.byKey(const ValueKey('strumento-outcome-mine-valid'));
-      expect(find.text('DESCRIZIONE DELL\'UTILIZZO'), findsNWidgets(2));
-      expect(find.text('ESITO'), findsNWidgets(2));
-      await tester.ensureVisible(usage);
-      await tester.enterText(
-        find.descendant(of: usage, matching: find.byType(TextFormField)),
-        'Misura isolamento',
-      );
-      await tester.ensureVisible(esito);
-      await tester.enterText(
-        find.descendant(of: esito, matching: find.byType(TextFormField)),
-        'Conforme',
-      );
-      await tester.pumpAndSettle();
+        final usage = find.byKey(const ValueKey('strumento-usage-mine-valid'));
+        final esito = find.byKey(const ValueKey('strumento-outcome-mine-valid'));
+        expect(find.text('DESCRIZIONE DELL\'UTILIZZO'), findsNWidgets(2));
+        expect(find.text('ESITO'), findsNWidgets(2));
+        await tester.ensureVisible(usage);
+        await tester.enterText(
+          find.descendant(of: usage, matching: find.byType(TextFormField)),
+          'Misura isolamento',
+        );
+        await tester.ensureVisible(esito);
+        await tester.enterText(
+          find.descendant(of: esito, matching: find.byType(TextFormField)),
+          'Conforme',
+        );
+        await tester.pumpAndSettle();
 
-      final row = await (db.select(
-        db.reportStrumenti,
-      )..where((s) => s.strumentoId.equals('mine-valid'))).getSingle();
-      expect(row.usageDescription, 'Misura isolamento');
-      expect(row.outcome, 'Conforme');
-      expect(find.text('17/2000'), findsNothing, reason: 'counter hidden below 1800');
+        final row = await (db.select(
+          db.reportStrumenti,
+        )..where((s) => s.strumentoId.equals('mine-valid'))).getSingle();
+        expect(row.usageDescription, 'Misura isolamento');
+        expect(row.outcome, 'Conforme');
+        expect(find.text('17/2000'), findsNothing, reason: 'counter hidden below 1800');
 
-      await tester.enterText(
-        find.descendant(of: usage, matching: find.byType(TextFormField)),
-        'x' * 1850,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('1850/2000'), findsOneWidget, reason: 'counter shows from 1800');
-    });
+        await tester.enterText(
+          find.descendant(of: usage, matching: find.byType(TextFormField)),
+          'x' * 1850,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('1850/2000'), findsOneWidget, reason: 'counter shows from 1800');
+      },
+    );
   });
 }

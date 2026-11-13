@@ -3,7 +3,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -16,6 +18,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -447,7 +450,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
         backgroundColor: context.colors.bg2,
         appBar: ScreenHeaderBar(title: 'Modifica materiale', showBack: true),
         // Missing on a synced device is a deletion, not a download still in flight.
-        body: ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+        body: ref.watch(hasSyncedAtLeastOnceProvider).value == false
             ? const UnavailableState(
                 icon: LucideIcons.cloudOff,
                 titolo: 'Materiale non disponibile',
@@ -459,7 +462,8 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
             : const UnavailableState(
                 icon: LucideIcons.package,
                 titolo: 'Materiale non trovato',
-                motivo: 'Questo materiale non è più nel catalogo: potrebbe essere stato eliminato. '
+                motivo:
+                    'Questo materiale non è più nel catalogo: potrebbe essere stato eliminato. '
                     'Torna all\'elenco e aggiorna.',
               ),
       );

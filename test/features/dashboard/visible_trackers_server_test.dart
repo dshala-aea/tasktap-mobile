@@ -21,6 +21,7 @@ Future<List<ActiveTracker>> _visible({
   required List<WorkSession> local,
 }) async {
   final c = ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       activeTrackersProvider.overrideWith((ref) => Stream.value(server)),
       todaySessionsProvider.overrideWith((ref) => Stream.value(local)),
@@ -34,7 +35,9 @@ Future<List<ActiveTracker>> _visible({
   );
   addTearDown(c.dispose);
   c.listen(visibleTrackersProvider, (_, _) {});
+  c.listen(activeTrackersProvider, (_, _) {});
   await c.read(activeTrackersProvider.future);
+  c.listen(todaySessionsProvider, (_, _) {});
   await c.read(todaySessionsProvider.future);
   await pumpEventQueue();
   return c.read(visibleTrackersProvider);
@@ -81,13 +84,16 @@ void main() {
     expect(v.where((t) => t.kind == ActiveTrackerKind.attendance), isEmpty);
   });
 
-  test('a synced local stop newer than the server row hides it until the server catches up', () async {
-    final v = await _visible(
-      server: trackersFromWire([attendanceWorkingJson]),
-      local: [_s('i', 'ingresso', _shift), _s('f', 'fine', DateTime.utc(2026, 9, 30, 12))],
-    );
-    expect(v.where((t) => t.kind == ActiveTrackerKind.attendance), isEmpty);
-  });
+  test(
+    'a synced local stop newer than the server row hides it until the server catches up',
+    () async {
+      final v = await _visible(
+        server: trackersFromWire([attendanceWorkingJson]),
+        local: [_s('i', 'ingresso', _shift), _s('f', 'fine', DateTime.utc(2026, 9, 30, 12))],
+      );
+      expect(v.where((t) => t.kind == ActiveTrackerKind.attendance), isEmpty);
+    },
+  );
 
   test('a shift started elsewhere AFTER a local stop is shown', () async {
     final v = await _visible(

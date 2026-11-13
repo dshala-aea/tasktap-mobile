@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/riverpod/read_future.dart';
 
 import '../../core/time/business_time.dart';
 import '../../core/utils/error_message.dart';
@@ -16,6 +17,7 @@ import '../admin/admin_api_client.dart';
 import 'new_ticket_form_state.dart';
 import 'steps/step_cliente_sede.dart';
 import 'steps/step_dettagli_ticket.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -221,7 +223,7 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
       if (e is DioException && e.response?.statusCode == 409) {
         await ref.read(syncProvider.notifier).performSync();
         if (!mounted) return;
-        final refreshed = await ref.read(ticketByIdProvider(widget.ticketId).future);
+        final refreshed = await ref.readFuture(ticketByIdProvider(widget.ticketId).future);
         if (!mounted) return;
         setState(() => _isSaving = false);
         _seedIfNeeded(refreshed, force: true);

@@ -58,7 +58,11 @@ class _RecordingAiApiClient extends AiApiClient {
     capturedCantiereId = cantiereId;
     capturedVoiceTranscript = voiceTranscript;
     voiceTranscriptWasPassed = true;
-    return const AiReportDraftDto(title: 'Titolo AI', details: 'Descrizione AI', modelUsed: 'test-model');
+    return const AiReportDraftDto(
+      title: 'Titolo AI',
+      details: 'Descrizione AI',
+      modelUsed: 'test-model',
+    );
   }
 
   @override
@@ -78,6 +82,7 @@ ProviderContainer _buildContainer({
   String? cantiereId,
 }) {
   return ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       aiApiClientProvider.overrideWithValue(aiClient),

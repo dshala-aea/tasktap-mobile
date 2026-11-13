@@ -137,7 +137,7 @@ final connectivityProvider = AsyncNotifierProvider<ConnectivityNotifier, bool>(
 
 /// Convenience synchronous bool (true = online). May be null before first check.
 final isOnlineProvider = Provider<bool>((ref) {
-  return ref.watch(connectivityProvider).valueOrNull ?? false;
+  return ref.watch(connectivityProvider).value ?? false;
 });
 
 /// True only on an unmetered Wi-Fi link. Asked at the moment it matters (a prefetch sweep), not
@@ -149,9 +149,7 @@ final isOnlineProvider = Provider<bool>((ref) {
 Future<bool> onUnmeteredWifi() async {
   try {
     final results = await Connectivity().checkConnectivity();
-    return results.any(
-      (r) => r == ConnectivityResult.wifi || r == ConnectivityResult.ethernet,
-    );
+    return results.any((r) => r == ConnectivityResult.wifi || r == ConnectivityResult.ethernet);
   } catch (_) {
     // No platform answer (tests, an unsupported runner): treat as "do not spend the user's data".
     return false;

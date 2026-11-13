@@ -84,16 +84,15 @@ void main() {
         );
   }
 
-  ProviderContainer buildContainer({
-    required bool online,
-    required _FakeApiClient api,
-  }) => ProviderContainer(
-    overrides: [
-      appDatabaseProvider.overrideWithValue(db),
-      isOnlineProvider.overrideWithValue(online),
-      ticketDetailApiClientProvider.overrideWithValue(api),
-    ],
-  );
+  ProviderContainer buildContainer({required bool online, required _FakeApiClient api}) =>
+      ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          isOnlineProvider.overrideWithValue(online),
+          ticketDetailApiClientProvider.overrideWithValue(api),
+        ],
+      );
 
   test('offline answers from the mirror and never calls the API', () async {
     await seedMirror();
@@ -101,6 +100,7 @@ void main() {
     final container = buildContainer(online: false, api: api);
     addTearDown(container.dispose);
 
+    container.listen(ticketControlsProvider('ticket-1'), (_, _) {});
     final groups = await container.read(ticketControlsProvider('ticket-1').future);
 
     expect(api.calls, 0);
@@ -115,6 +115,7 @@ void main() {
     final container = buildContainer(online: true, api: api);
     addTearDown(container.dispose);
 
+    container.listen(ticketControlsProvider('ticket-1'), (_, _) {});
     final groups = await container.read(ticketControlsProvider('ticket-1').future);
 
     expect(api.calls, 1);
@@ -128,6 +129,7 @@ void main() {
     final container = buildContainer(online: true, api: api);
     addTearDown(container.dispose);
 
+    container.listen(ticketControlsProvider('ticket-1'), (_, _) {});
     final groups = await container.read(ticketControlsProvider('ticket-1').future);
 
     expect(api.calls, 1);
@@ -141,6 +143,7 @@ void main() {
     final api = _FakeApiClient(error: StateError('radio off mid-request'));
     final container = buildContainer(online: true, api: api);
     addTearDown(container.dispose);
+    container.listen(ticketControlsProvider('ticket-1'), (_, _) {});
 
     await expectLater(
       container.read(ticketControlsProvider('ticket-1').future),

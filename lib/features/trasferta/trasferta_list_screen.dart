@@ -23,7 +23,7 @@ class TrasfertaListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(myTrasfertaRequestsProvider);
-    final loaded = async.valueOrNull;
+    final loaded = async.value;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -129,7 +129,9 @@ class _TrasfertaRowState extends ConsumerState<_TrasfertaRow> {
       if (!mounted) return;
       showAppToast(
         context,
-        message: e is TrasfertaRuleError ? e.detail : 'Impossibile annullare la trasferta. Riprova.',
+        message: e is TrasfertaRuleError
+            ? e.detail
+            : 'Impossibile annullare la trasferta. Riprova.',
         tone: ToastTone.error,
       );
       setState(() => _busy = false);

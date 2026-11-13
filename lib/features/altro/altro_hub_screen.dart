@@ -13,6 +13,7 @@ import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/entitlements/entitlement_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'logout_action.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -50,13 +51,17 @@ class AltroHubScreen extends ConsumerWidget {
             // ── Gestione section ───────────────────────────────────────────
             const SliverToBoxAdapter(child: SectionTitle(title: 'Gestione')),
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.pagePadding,
+              ),
               sliver: SliverGrid(
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   // 2 on a phone, more on a tablet/wide window — same width-driven breakpoint
                   // rapportino_form_screen.dart's materiali grid already uses, so a fixed count
                   // doesn't stretch two tiles across a much wider viewport.
-                  crossAxisCount: MediaQuery.sizeOf(context).width > 600 ? 4 : 2,
+                  crossAxisCount: MediaQuery.sizeOf(context).width > 600
+                      ? 4
+                      : 2,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
                   // Was 1.4 — tall enough that VetroCompartmentTile's icon-top/label-bottom
@@ -71,7 +76,10 @@ class AltroHubScreen extends ConsumerWidget {
                   childAspectRatio: 1.5,
                 ),
                 delegate: SliverChildListDelegate(
-                  _buildGestioneTiles(context, ref.watch(cachedEntitlementProvider).valueOrNull),
+                  _buildGestioneTiles(
+                    context,
+                    ref.watch(cachedEntitlementProvider).value,
+                  ),
                 ),
               ),
             ),
@@ -83,7 +91,9 @@ class AltroHubScreen extends ConsumerWidget {
             // ── Danger: Logout ─────────────────────────────────────────────
             SliverToBoxAdapter(child: _LogoutRow(ref: ref)),
 
-            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: context.navClearance),
+            ),
           ],
         ),
       ),
@@ -105,115 +115,122 @@ class AltroHubScreen extends ConsumerWidget {
   /// The office-admin tiles additionally require the same `.read` capability their route requires
   /// (see `_routeRequirements` in `app_router.dart`), so a tile never offers a screen the guard
   /// will refuse. Fail-closed when no entitlement is cached, like `CapabilityGate`.
-  List<Widget> _buildGestioneTiles(BuildContext context, Entitlement? entitlement) {
-    final tiles = <({
-      IconData icon,
-      String label,
-      String module,
-      String? capability,
-      VoidCallback onTap,
-    })>[
-      (
-        icon: LucideIcons.clipboardList,
-        label: 'Interventi',
-        module: 'interventi',
-        capability: null,
-        // Pushed, not `go`: the ticket list is a root-level route now, so the shell branch this
-        // tile used to open no longer exists.
-        onTap: () => context.push(AppRoutes.ticket),
-      ),
-      (
-        icon: LucideIcons.users,
-        label: 'Clienti',
-        module: 'clienti',
-        capability: 'clienti.customer.read',
-        onTap: () => context.push(AppRoutes.altroClienti),
-      ),
-      // Sedi are customer sites: the same always-on module, not one of its own.
-      (
-        icon: LucideIcons.mapPin,
-        label: 'Sedi',
-        module: 'clienti',
-        capability: 'clienti.location.read',
-        onTap: () => context.push('/altro/sedi'),
-      ),
-      (
-        icon: LucideIcons.hardHat,
-        label: 'Cantieri',
-        module: 'cantieri',
-        capability: null,
-        // The technician-scoped Cantieri tab (with "Timbrato oggi" badges and proper
-        // empty/error states), not the office CRUD screen under /altro/cantieri.
-        onTap: () => context.go(AppRoutes.cantieri),
-      ),
-      (
-        icon: LucideIcons.package,
-        label: 'Asset',
-        module: 'prodotti',
-        capability: null,
-        onTap: () => context.push('/altro/prodotti'),
-      ),
-      (
-        icon: LucideIcons.warehouse,
-        label: 'Magazzino',
-        module: 'magazzino',
-        capability: 'magazzino.article.read',
-        onTap: () => context.push(AppRoutes.altroMagazzino),
-      ),
-      (
-        icon: LucideIcons.fileSignature,
-        label: 'Contratti',
-        module: 'contratti',
-        capability: 'contratti.contract.read',
-        onTap: () => context.push('/altro/contratti'),
-      ),
-      // Squadre is crew management — the always-on `team` module.
-      (
-        icon: LucideIcons.users2,
-        label: 'Squadre',
-        module: 'team',
-        capability: 'team.squadra.read',
-        onTap: () => context.push('/altro/squadre'),
-      ),
-      (
-        icon: LucideIcons.calendarDays,
-        label: 'Pianificazioni',
-        module: 'pianificazione',
-        capability: 'pianificazione.schedule.read',
-        onTap: () => context.push('/altro/pianificazioni'),
-      ),
-      (
-        icon: LucideIcons.calendarX,
-        label: 'Ferie e Permessi',
-        module: 'presenze',
-        capability: null,
-        onTap: () => context.push(AppRoutes.altroFerie),
-      ),
-      // Smart working is the same `presenze` module as Ferie: a request is a marker for a remote
-      // day, not a timesheet entry, so it belongs beside the absences rather than under Timbra.
-      (
-        icon: LucideIcons.laptop,
-        label: 'Smart working',
-        module: 'presenze',
-        capability: null,
-        onTap: () => context.push(AppRoutes.altroSmartWorking),
-      ),
-      // Trasferta (travel time recognised as worked time) sits beside the other presenze requests.
-      (
-        icon: LucideIcons.mapPin,
-        label: 'Trasferta',
-        module: 'presenze',
-        capability: null,
-        onTap: () => context.push(AppRoutes.altroTrasferta),
-      ),
-    ];
+  List<Widget> _buildGestioneTiles(
+    BuildContext context,
+    Entitlement? entitlement,
+  ) {
+    final tiles =
+        <
+          ({
+            IconData icon,
+            String label,
+            String module,
+            String? capability,
+            VoidCallback onTap,
+          })
+        >[
+          (
+            icon: LucideIcons.clipboardList,
+            label: 'Interventi',
+            module: 'interventi',
+            capability: null,
+            // Pushed, not `go`: the ticket list is a root-level route now, so the shell branch this
+            // tile used to open no longer exists.
+            onTap: () => context.push(AppRoutes.ticket),
+          ),
+          (
+            icon: LucideIcons.users,
+            label: 'Clienti',
+            module: 'clienti',
+            capability: 'clienti.customer.read',
+            onTap: () => context.push(AppRoutes.altroClienti),
+          ),
+          // Sedi are customer sites: the same always-on module, not one of its own.
+          (
+            icon: LucideIcons.mapPin,
+            label: 'Sedi',
+            module: 'clienti',
+            capability: 'clienti.location.read',
+            onTap: () => context.push('/altro/sedi'),
+          ),
+          (
+            icon: LucideIcons.hardHat,
+            label: 'Cantieri',
+            module: 'cantieri',
+            capability: null,
+            // The technician-scoped Cantieri tab (with "Timbrato oggi" badges and proper
+            // empty/error states), not the office CRUD screen under /altro/cantieri.
+            onTap: () => context.go(AppRoutes.cantieri),
+          ),
+          (
+            icon: LucideIcons.package,
+            label: 'Asset',
+            module: 'prodotti',
+            capability: null,
+            onTap: () => context.push('/altro/prodotti'),
+          ),
+          (
+            icon: LucideIcons.warehouse,
+            label: 'Magazzino',
+            module: 'magazzino',
+            capability: 'magazzino.article.read',
+            onTap: () => context.push(AppRoutes.altroMagazzino),
+          ),
+          (
+            icon: LucideIcons.fileSignature,
+            label: 'Contratti',
+            module: 'contratti',
+            capability: 'contratti.contract.read',
+            onTap: () => context.push('/altro/contratti'),
+          ),
+          // Squadre is crew management — the always-on `team` module.
+          (
+            icon: LucideIcons.users2,
+            label: 'Squadre',
+            module: 'team',
+            capability: 'team.squadra.read',
+            onTap: () => context.push('/altro/squadre'),
+          ),
+          (
+            icon: LucideIcons.calendarDays,
+            label: 'Pianificazioni',
+            module: 'pianificazione',
+            capability: 'pianificazione.schedule.read',
+            onTap: () => context.push('/altro/pianificazioni'),
+          ),
+          (
+            icon: LucideIcons.calendarX,
+            label: 'Ferie e Permessi',
+            module: 'presenze',
+            capability: null,
+            onTap: () => context.push(AppRoutes.altroFerie),
+          ),
+          // Smart working is the same `presenze` module as Ferie: a request is a marker for a remote
+          // day, not a timesheet entry, so it belongs beside the absences rather than under Timbra.
+          (
+            icon: LucideIcons.laptop,
+            label: 'Smart working',
+            module: 'presenze',
+            capability: null,
+            onTap: () => context.push(AppRoutes.altroSmartWorking),
+          ),
+          // Trasferta (travel time recognised as worked time) sits beside the other presenze requests.
+          (
+            icon: LucideIcons.mapPin,
+            label: 'Trasferta',
+            module: 'presenze',
+            capability: null,
+            onTap: () => context.push(AppRoutes.altroTrasferta),
+          ),
+        ];
 
     final canApprove = capabilityHeld(entitlement, 'presenze.absence.approve');
 
     return [
       for (final t in tiles)
         if (moduleIsOffered(t.module, entitlement) &&
-            (t.capability == null || capabilityHeld(entitlement, t.capability!)))
+            (t.capability == null ||
+                capabilityHeld(entitlement, t.capability!)))
           AppCompartmentTile(icon: t.icon, label: t.label, onTap: t.onTap),
       // Approving is office work, not part of either self-service screen: the tile appears only
       // for a capability holder (fail-closed when the cache is missing), like the route guard.
@@ -250,7 +267,10 @@ class _UserCard extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           children: [
-            AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 52),
+            AppAvatar(
+              name: displayName.isNotEmpty ? displayName : (email ?? '?'),
+              size: 52,
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -318,7 +338,10 @@ class _SistemaSection extends ConsumerWidget {
         children: [
           // Il mio badge — the worker's rotating QR for the cantiere scan.
           ListRow(
-            leading: _sistemaTileIcon(LucideIcons.scanLine, context.colors.blue),
+            leading: _sistemaTileIcon(
+              LucideIcons.scanLine,
+              context.colors.blue,
+            ),
             title: 'Il mio badge',
             subtitle: 'Mostra il codice al caposquadra',
             showDivider: true,
@@ -328,7 +351,10 @@ class _SistemaSection extends ConsumerWidget {
           // it is not a preference, it is the answer to "what do you know about me", and the
           // backend has served it since before this app shipped with nothing on the client asking.
           ListRow(
-            leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.blue),
+            leading: _sistemaTileIcon(
+              LucideIcons.shieldCheck,
+              context.colors.blue,
+            ),
             title: 'I miei dati',
             subtitle: 'Cosa registra l\'azienda su di te',
             showDivider: true,
@@ -351,7 +377,10 @@ class _SistemaSection extends ConsumerWidget {
     return Container(
       width: 36,
       height: 36,
-      decoration: BoxDecoration(color: color.withAlpha(26), borderRadius: AppRack.insetShape),
+      decoration: BoxDecoration(
+        color: color.withAlpha(26),
+        borderRadius: AppRack.insetShape,
+      ),
       child: Icon(icon, size: 18, color: color),
     );
   }

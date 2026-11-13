@@ -2,8 +2,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -15,6 +17,7 @@ import '../../clienti/clienti_providers.dart';
 import '../admin_api_client.dart';
 import '../admin_widgets.dart';
 import 'admin_prodotto_list_screen.dart' show adminProdottiAssistenzaProvider;
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -264,7 +267,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
   @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(allCustomersProvider);
-    final customers = customersAsync.valueOrNull ?? [];
+    final customers = customersAsync.value ?? [];
     // Sedi are scoped to the selected customer, never the whole tenant book — `allLocationsProvider`
     // (every active location in the tenant) listed other customers' sedi and, because branch names
     // repeat across a tenant ("Sede", "Magazzino", "Milano"), rendered the same label several times
@@ -273,7 +276,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
     final locationsAsync = _selectedCustomerId == null
         ? null
         : ref.watch(locationsForCustomerProvider(_selectedCustomerId!));
-    final locations = locationsAsync?.valueOrNull ?? const [];
+    final locations = locationsAsync?.value ?? const [];
     // A chosen sede absent from the scoped list (customer just switched, or the location is
     // inactive/not yet synced) must not be handed to the dropdown as its value — Flutter asserts
     // when the value is not among `items`. [_onCustomerChanged] nulls it on a switch; this covers
@@ -288,10 +291,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: ScreenHeaderBar(
-        title: _isEditing ? 'Modifica asset' : 'Nuovo asset',
-        showBack: true,
-      ),
+      appBar: ScreenHeaderBar(title: _isEditing ? 'Modifica asset' : 'Nuovo asset', showBack: true),
       body: Form(
         key: _formKey,
         child: Center(

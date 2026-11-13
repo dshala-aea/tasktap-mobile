@@ -173,8 +173,8 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
   @override
   Widget build(BuildContext context) {
     final requestsAsync = ref.watch(myAbsenceRequestsProvider);
-    final meId = ref.watch(_freshInternalUserIdProvider).valueOrNull;
-    final myName = meId == null ? null : ref.watch(colleagueNameProvider(meId)).valueOrNull;
+    final meId = ref.watch(_freshInternalUserIdProvider).value;
+    final myName = meId == null ? null : ref.watch(colleagueNameProvider(meId)).value;
 
     Future<void> onRefresh() => ref.refresh(myAbsenceRequestsProvider.future);
 
@@ -184,14 +184,12 @@ class _FeriePermessiListScreenState extends ConsumerState<FeriePermessiListScree
         ? ListShellState.unavailable
         : ListShellState.content;
 
-    final result =
-        requestsAsync.valueOrNull ?? (items: const <AbsenceRequestDto>[], fromDevice: false);
+    final result = requestsAsync.value ?? (items: const <AbsenceRequestDto>[], fromDevice: false);
 
     // An empty list from the mirror on a phone that has never synced is a missing download, not a
     // fact about the technician: saying "Nessuna richiesta" there would tell them their history
     // never existed. An empty list from the SERVER is such a fact.
-    final neverSynced =
-        result.fromDevice && ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = result.fromDevice && ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     final visible = result.items.where((item) {
       if (!_filters.matchesStatus(item.status)) return false;

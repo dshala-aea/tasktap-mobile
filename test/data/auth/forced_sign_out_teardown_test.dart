@@ -58,9 +58,8 @@ class _DeadSessionRepo implements IAuthRepository {
   ) async => (user: null, failure: const UnknownAuthError('unused'));
 
   @override
-  Future<({AuthUser? user, AuthFailure? failure})> signInWithPasskey(
-    String loginName,
-  ) async => (user: null, failure: const UnknownAuthError('unused'));
+  Future<({AuthUser? user, AuthFailure? failure})> signInWithPasskey(String loginName) async =>
+      (user: null, failure: const UnknownAuthError('unused'));
 
   @override
   Future<({AuthUser? user, AuthFailure? failure})> refreshSession() async =>
@@ -106,6 +105,7 @@ void main() {
 
     final repo = _DeadSessionRepo();
     final container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         authRepositoryProvider.overrideWithValue(repo),
         appDatabaseProvider.overrideWithValue(db),
@@ -149,6 +149,7 @@ void main() {
       ),
     );
     final container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         authRepositoryProvider.overrideWithValue(repo),
         appDatabaseProvider.overrideWithValue(db),

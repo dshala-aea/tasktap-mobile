@@ -101,6 +101,7 @@ ProviderContainer _buildContainer({
   BusinessTime? businessTime,
 }) {
   return ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       if (businessTime != null) businessTimeProvider.overrideWithValue(businessTime),
       appDatabaseProvider.overrideWithValue(db),
@@ -320,7 +321,10 @@ void main() {
 
       // Nothing is deleted until the technician confirms.
       expect(find.text('Sostituire gli orari registrati?'), findsOneWidget);
-      expect(container.read(reportEditorProvider(_reportId)).staffRows.single.segments, hasLength(1));
+      expect(
+        container.read(reportEditorProvider(_reportId)).staffRows.single.segments,
+        hasLength(1),
+      );
       expect(await repo.getSegments(_reportId), hasLength(1));
 
       await tester.tap(find.text('Sostituisci'));
@@ -335,10 +339,7 @@ void main() {
       expect((await repo.getStaff(_reportId)).single.hoursWorked, closeTo(3.75, 0.01));
 
       // Editable again, holding the suggested hours rather than the timer's.
-      expect(
-        find.byWidgetPredicate((w) => w is AppTextField && w.label == 'Ore'),
-        findsOneWidget,
-      );
+      expect(find.byWidgetPredicate((w) => w is AppTextField && w.label == 'Ore'), findsOneWidget);
       expect(find.text('3.8'), findsOneWidget);
       expect(find.textContaining('Calcolate dal timer'), findsNothing);
     });
@@ -395,7 +396,10 @@ void main() {
       await tester.tap(find.text('Annulla'));
       await tester.pumpAndSettle();
 
-      expect(container.read(reportEditorProvider(_reportId)).staffRows.single.segments, hasLength(1));
+      expect(
+        container.read(reportEditorProvider(_reportId)).staffRows.single.segments,
+        hasLength(1),
+      );
       expect(await repo.getSegments(_reportId), hasLength(1));
       expect(find.textContaining('Calcolate dal timer'), findsOneWidget);
     });
@@ -530,62 +534,63 @@ void main() {
 
     // The sum of several sessions describes no single start→end. Now that the apply path can
     // clear a span, the row does not have to keep a range it cannot explain — it drops it.
-    testWidgets('a multi-session sum applies to a timed row and clears the span it cannot explain', (
-      tester,
-    ) async {
-      final workDate = DateTime.utc(2026, 8, 31);
-      final container = _buildContainer(
-        db: db,
-        staffRows: [
-          StaffRow(
-            id: 'staff-1',
-            userId: 'user-1',
-            startTime: DateTime.utc(2026, 8, 31, 6),
-            endTime: DateTime.utc(2026, 8, 31, 8),
-            segments: [
-              StaffSegment(
-                id: 'seg-1',
-                startUtc: DateTime.utc(2026, 8, 31, 6),
-                endUtc: DateTime.utc(2026, 8, 31, 8),
-              ),
-            ],
-          ),
-        ],
-        worklogEntries: [
-          _entry(
-            userId: 'user-1',
-            workDate: workDate,
-            startTime: const Duration(hours: 8),
-            endTime: const Duration(hours: 10),
-          ),
-          _entry(
-            userId: 'user-1',
-            workDate: workDate.add(const Duration(days: 1)),
-            startTime: const Duration(hours: 9),
-            endTime: const Duration(hours: 10, minutes: 30),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
+    testWidgets(
+      'a multi-session sum applies to a timed row and clears the span it cannot explain',
+      (tester) async {
+        final workDate = DateTime.utc(2026, 8, 31);
+        final container = _buildContainer(
+          db: db,
+          staffRows: [
+            StaffRow(
+              id: 'staff-1',
+              userId: 'user-1',
+              startTime: DateTime.utc(2026, 8, 31, 6),
+              endTime: DateTime.utc(2026, 8, 31, 8),
+              segments: [
+                StaffSegment(
+                  id: 'seg-1',
+                  startUtc: DateTime.utc(2026, 8, 31, 6),
+                  endUtc: DateTime.utc(2026, 8, 31, 8),
+                ),
+              ],
+            ),
+          ],
+          worklogEntries: [
+            _entry(
+              userId: 'user-1',
+              workDate: workDate,
+              startTime: const Duration(hours: 8),
+              endTime: const Duration(hours: 10),
+            ),
+            _entry(
+              userId: 'user-1',
+              workDate: workDate.add(const Duration(days: 1)),
+              startTime: const Duration(hours: 9),
+              endTime: const Duration(hours: 10, minutes: 30),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      await tester.pumpWidget(_buildStep(container));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(_buildStep(container));
+        await tester.pumpAndSettle();
 
-      expect(find.textContaining('Da worklog: 3,5h'), findsOneWidget);
-      expect(find.textContaining('Inizio:'), findsOneWidget);
+        expect(find.textContaining('Da worklog: 3,5h'), findsOneWidget);
+        expect(find.textContaining('Inizio:'), findsOneWidget);
 
-      await tester.tap(find.textContaining('Da worklog:'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Sostituisci'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.textContaining('Da worklog:'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sostituisci'));
+        await tester.pumpAndSettle();
 
-      final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
-      expect(row.hoursWorked, closeTo(3.5, 0.01));
-      expect(row.segments, isEmpty);
-      expect(row.startTime, isNull);
-      expect(row.endTime, isNull);
-      expect(find.textContaining('Inizio:'), findsNothing);
-    });
+        final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
+        expect(row.hoursWorked, closeTo(3.5, 0.01));
+        expect(row.segments, isEmpty);
+        expect(row.startTime, isNull);
+        expect(row.endTime, isNull);
+        expect(find.textContaining('Inizio:'), findsNothing);
+      },
+    );
 
     testWidgets('a still-running session is never suggested', (tester) async {
       final container = _buildContainer(
@@ -630,6 +635,7 @@ void main() {
 
     testWidgets('no chip when the report has no ticketId', (tester) async {
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           reportEditorProvider(_reportId).overrideWith(
@@ -657,6 +663,7 @@ void main() {
       tester,
     ) async {
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           reportEditorProvider(_reportId).overrideWith(
@@ -698,6 +705,7 @@ void main() {
       BusinessTime? businessTime,
     }) {
       return ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           if (businessTime != null) businessTimeProvider.overrideWithValue(businessTime),
           appDatabaseProvider.overrideWithValue(db),
@@ -823,10 +831,7 @@ void main() {
       final container = _buildContainer(
         db: db,
         staffRows: [imported],
-        businessTime: BusinessTime(
-          'America/New_York',
-          clock: () => DateTime.utc(2026, 7, 10, 12),
-        ),
+        businessTime: BusinessTime('America/New_York', clock: () => DateTime.utc(2026, 7, 10, 12)),
       );
       addTearDown(container.dispose);
 
@@ -837,9 +842,7 @@ void main() {
       expect(find.textContaining('Fine: 10:30'), findsOneWidget);
     });
 
-    testWidgets('the suggestion chip reads 08:00–16:30 (Rome), never the UTC hour', (
-      tester,
-    ) async {
+    testWidgets('the suggestion chip reads 08:00–16:30 (Rome), never the UTC hour', (tester) async {
       final container = _buildContainer(
         db: db,
         staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],

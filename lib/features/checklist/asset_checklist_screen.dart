@@ -147,8 +147,7 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
     // real answer. Under a ticket the device has never synced it is a missing download, and
     // "questo ticket non ha asset con una checklist" states it as a fact about the customer's
     // site. `!= false`, i.e. the plain sentence stands while the check is still in flight.
-    final mirrorKnown =
-        ref.watch(ticketMirrorKnownProvider(ticketId)).valueOrNull != false;
+    final mirrorKnown = ref.watch(ticketMirrorKnownProvider(ticketId)).value != false;
     final unfiltered = _query.filter == ChecklistFilter.all && _query.text.isEmpty;
     // ...except when the ticket is *omitted*: the banner above already says in full why its
     // checklist is not here and offers "Scarica checklist", so repeating "non ancora scaricati"
@@ -296,9 +295,7 @@ class _OmittedBannerState extends ConsumerState<_OmittedBanner> {
           InlineAlert(
             icon: LucideIcons.alertTriangle,
             color: context.colors.amber,
-            message: online
-                ? 'La checklist di questo ticket non è ancora scaricata sul telefono.'
-                : 'La checklist di questo ticket non è ancora scaricata. Collegati a internet per averla.',
+            message: online ? 'La checklist di questo ticket non è ancora scaricata sul telefono.' : 'La checklist di questo ticket non è ancora scaricata. Collegati a internet per averla.',
           ),
           if (_error != null) ...[
             const SizedBox(height: AppSpacing.xs),
@@ -348,16 +345,28 @@ class _ItemView extends StatelessWidget {
             Expanded(
               child: Text(
                 i.libretto.name,
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: context.colors.ink),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: context.colors.ink,
+                ),
               ),
             ),
-            Text('${i.childCount} asset', style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
+            Text(
+              '${i.childCount} asset',
+              style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+            ),
           ],
         ),
       ),
       AssetHeaderItem i => _AssetHeader(item: i, onToggle: onToggle, reportId: reportId),
       ControlGroupItem i => Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding + 8, AppSpacing.sm, AppSpacing.pagePadding, 2),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.pagePadding + 8,
+          AppSpacing.sm,
+          AppSpacing.pagePadding,
+          2,
+        ),
         child: Text(i.path, style: TextStyle(fontSize: 11, color: context.colors.inkMuted)),
       ),
       ControlItem i =>
@@ -376,10 +385,17 @@ class _ItemView extends StatelessWidget {
             Expanded(
               child: Text(
                 i.label,
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: context.colors.ink),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: context.colors.ink,
+                ),
               ),
             ),
-            Text('${i.assetCount} asset', style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
+            Text(
+              '${i.assetCount} asset',
+              style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+            ),
           ],
         ),
       ),
@@ -412,7 +428,10 @@ class _AssetHeader extends ConsumerWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 56),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.pagePadding,
+            vertical: AppSpacing.sm,
+          ),
           child: Row(
             children: [
               Icon(
@@ -432,7 +451,10 @@ class _AssetHeader extends ConsumerWidget {
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: c.ink),
                     ),
                     if ((a.matricola ?? '').isNotEmpty)
-                      Text('Matr. ${a.matricola}', style: TextStyle(fontSize: 12, color: c.inkMuted)),
+                      Text(
+                        'Matr. ${a.matricola}',
+                        style: TextStyle(fontSize: 12, color: c.inkMuted),
+                      ),
                     if (!a.coveredNow)
                       Text('Non più nel ticket', style: TextStyle(fontSize: 12, color: c.amber))
                     else if (!a.templated)
@@ -461,11 +483,7 @@ class _AssetHeader extends ConsumerWidget {
                                 fgColor: c.amber,
                               ),
                             if (p.exceptions > 0)
-                              AppBadge(
-                                label: '${p.exceptions} ecc.',
-                                small: true,
-                                fgColor: c.red,
-                              ),
+                              AppBadge(label: '${p.exceptions} ecc.', small: true, fgColor: c.red),
                           ],
                         ),
                       ),
@@ -551,7 +569,10 @@ class ControlItemTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (showAssetName)
-                  Text(item.asset.name, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: c.ink)),
+                  Text(
+                    item.asset.name,
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: c.ink),
+                  ),
                 Row(
                   children: [
                     Flexible(
@@ -567,12 +588,18 @@ class ControlItemTile extends StatelessWidget {
                     if (control.isRequired)
                       Padding(
                         padding: const EdgeInsets.only(left: 4),
-                        child: Text('*', style: TextStyle(color: c.red, fontWeight: FontWeight.bold)),
+                        child: Text(
+                          '*',
+                          style: TextStyle(color: c.red, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     if (control.isRetained)
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
-                        child: Text('Non più richiesto', style: TextStyle(fontSize: 11, color: c.amber)),
+                        child: Text(
+                          'Non più richiesto',
+                          style: TextStyle(fontSize: 11, color: c.amber),
+                        ),
                       ),
                   ],
                 ),

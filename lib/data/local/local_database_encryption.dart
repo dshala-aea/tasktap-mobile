@@ -157,11 +157,7 @@ class LocalDatabaseEncryption {
       valid = false;
     }
     if (valid) {
-      return LocalDatabaseOpenPlan(
-        file: file,
-        keyHex: key,
-        mode: LocalDatabaseOpenMode.encrypted,
-      );
+      return LocalDatabaseOpenPlan(file: file, keyHex: key, mode: LocalDatabaseOpenMode.encrypted);
     }
 
     // Key lost/corrupt (or a restored backup without its keystore entry). The file is
@@ -175,11 +171,7 @@ class LocalDatabaseEncryption {
     } catch (_) {
       // If the delete fails, the Drift open will surface the real error.
     }
-    return LocalDatabaseOpenPlan(
-      file: file,
-      keyHex: key,
-      mode: LocalDatabaseOpenMode.encrypted,
-    );
+    return LocalDatabaseOpenPlan(file: file, keyHex: key, mode: LocalDatabaseOpenMode.encrypted);
   }
 }
 
@@ -205,7 +197,7 @@ class SqlCipherDatabaseCipher implements LocalDatabaseCipher {
       try {
         return db.select('PRAGMA cipher_version;').isNotEmpty;
       } finally {
-        db.dispose();
+        db.close();
       }
     } catch (_) {
       return false;
@@ -224,14 +216,12 @@ class SqlCipherDatabaseCipher implements LocalDatabaseCipher {
       // same name.
       db.execute('PRAGMA wal_checkpoint(TRUNCATE);');
       final version = (db.select('PRAGMA user_version').first.values.first as int?) ?? 0;
-      db.execute(
-        "ATTACH DATABASE '${_escapeSqlPath(temp.path)}' AS encrypted KEY \"x'$keyHex'\";",
-      );
+      db.execute("ATTACH DATABASE '${_escapeSqlPath(temp.path)}' AS encrypted KEY \"x'$keyHex'\";");
       db.execute("SELECT sqlcipher_export('encrypted');");
       db.execute('PRAGMA encrypted.user_version = $version;');
       db.execute('DETACH DATABASE encrypted;');
     } finally {
-      db.dispose();
+      db.close();
     }
 
     _deleteSidecars(source);
@@ -257,7 +247,7 @@ class SqlCipherDatabaseCipher implements LocalDatabaseCipher {
         db.execute('PRAGMA wal_checkpoint(TRUNCATE);');
         return true;
       } finally {
-        db.dispose();
+        db.close();
       }
     } catch (_) {
       return false;

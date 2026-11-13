@@ -158,34 +158,33 @@ class _TicketListBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ticketsAsync = ref.watch(ticketsProvider);
     final statusMapAsync = ref.watch(ticketStatusMapProvider);
-    final statuses = ref.watch(ticketStatusesProvider).valueOrNull ?? const <TicketStatuse>[];
-    final closedIds = ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const <int>{};
-    final pendingTickets = ref.watch(pendingTicketsProvider).valueOrNull ?? const <PendingTicket>[];
+    final statuses = ref.watch(ticketStatusesProvider).value ?? const <TicketStatuse>[];
+    final closedIds = ref.watch(closedTicketStatusIdsProvider).value ?? const <int>{};
+    final pendingTickets = ref.watch(pendingTicketsProvider).value ?? const <PendingTicket>[];
 
     // Which of those rows the server has refused over a reference this client can repair. The list
     // observes that fact through its own provider rather than deciding it — the queue owns the
     // column, and a row leaves this set the moment a repair clears it.
     final repairableIds = {
-      for (final t in ref.watch(repairablePendingTicketsProvider).valueOrNull ?? <PendingTicket>[])
-        t.id,
+      for (final t in ref.watch(repairablePendingTicketsProvider).value ?? <PendingTicket>[]) t.id,
     };
 
-    final statusMap = statusMapAsync.valueOrNull ?? const <int, String>{};
+    final statusMap = statusMapAsync.value ?? const <int, String>{};
     final statusById = {for (final s in statuses) s.id: s};
-    final allTickets = ticketsAsync.valueOrNull ?? const <Ticket>[];
+    final allTickets = ticketsAsync.value ?? const <Ticket>[];
 
     // One stream each for the whole list, not one per row: a per-row location/customer/colleague
     // watch would open (and tear down on scroll-out) live subscriptions for every visible row.
     final locationsById = {
-      for (final l in ref.watch(allLocationsProvider).valueOrNull ?? const <Location>[]) l.id: l,
+      for (final l in ref.watch(allLocationsProvider).value ?? const <Location>[]) l.id: l,
     };
     final customersById = {
-      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[]) c.id: c,
+      for (final c in ref.watch(allCustomersProvider).value ?? const <Customer>[]) c.id: c,
     };
     final colleaguesById = {
-      for (final c in ref.watch(allColleaguesProvider).valueOrNull ?? const <Colleague>[]) c.id: c,
+      for (final c in ref.watch(allColleaguesProvider).value ?? const <Colleague>[]) c.id: c,
     };
-    final myId = ref.watch(internalUserIdProvider).valueOrNull;
+    final myId = ref.watch(internalUserIdProvider).value;
     final businessToday = ref.watch(businessTimeProvider).businessToday();
     final canWrite = capabilityHeld(
       ref.watch(cachedEntitlementProvider).value,
@@ -297,7 +296,7 @@ class _TicketListBody extends ConsumerWidget {
     //  - a filter or a search that matches nothing is "no result" for a question just asked;
     //  - an empty mirror on a device that has never synced is "not downloaded yet";
     //  - anything else is the tenant genuinely having no ticket in view.
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
     Widget empty = const EmptyState(
       key: ValueKey('empty'),
       icon: LucideIcons.ticket,
@@ -702,10 +701,10 @@ class _TicketFilterSheetState extends ConsumerState<_TicketFilterSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[];
-    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const <Location>[];
-    final colleagues = ref.watch(allColleaguesProvider).valueOrNull ?? const <Colleague>[];
-    final myId = ref.watch(internalUserIdProvider).valueOrNull;
+    final customers = ref.watch(allCustomersProvider).value ?? const <Customer>[];
+    final locations = ref.watch(allLocationsProvider).value ?? const <Location>[];
+    final colleagues = ref.watch(allColleaguesProvider).value ?? const <Colleague>[];
+    final myId = ref.watch(internalUserIdProvider).value;
 
     final visibleLocations = _customerId == null
         ? locations
