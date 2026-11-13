@@ -23,6 +23,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
@@ -264,17 +265,13 @@ void main() {
   tearDown(() async => db.close());
 
   group('RapportiniListScreen — header and shell', () {
-    testWidgets('shows the prototype title, subtitle, search hint and Nuovo action', (
-      tester,
-    ) async {
+    testWidgets('shows the root-page title, search hint and Nuovo action', (tester) async {
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rapportini'), findsOneWidget);
-      expect(
-        find.text('Il documento che deve uscire dal cantiere: bozza, firma, invio.'),
-        findsOneWidget,
-      );
+      expect(find.text('Rapportini di intervento'), findsOneWidget);
+      expect(find.textContaining('Il documento che deve uscire'), findsNothing);
+      expect(find.byIcon(LucideIcons.chevronLeft), findsNothing);
       expect(find.text('Cerca rapportino, cliente, sede o data…'), findsOneWidget);
       expect(find.text('NUOVO'), findsOneWidget);
       expect(find.byType(AppFab), findsNothing);
@@ -1374,7 +1371,7 @@ void main() {
       findsOneWidget,
     );
     // Still on the list: the tap produced feedback, not a navigation.
-    expect(find.text('Rapportini'), findsOneWidget);
+    expect(find.text('Rapportini di intervento'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

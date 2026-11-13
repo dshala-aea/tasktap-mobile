@@ -282,9 +282,7 @@ class _RapportiniListBody extends ConsumerWidget {
           );
 
     return ListShell(
-      title: 'Rapportini',
-      subtitle: 'Il documento che deve uscire dal cantiere: bozza, firma, invio.',
-      showBack: true,
+      title: 'Rapportini di intervento',
       action: canWrite
           ? ListHeaderAction(label: 'Nuovo', onPressed: creating ? null : onNew)
           : null,
