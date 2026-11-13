@@ -126,7 +126,7 @@ Work is split by what each service is good (and free) at:
 | Codemagic | `ios_release` | `v*` tag or manual start only | `build_runner`, sign, `flutter build ipa`, upload to TestFlight |
 | Codemagic | `ios_app_store` | manual only | promote the TestFlight build to the App Store |
 
-Analyze and test run **only** on GitHub Actions (free for this public repo); Codemagic does not run them, so pushing to `main` does not start a Codemagic build. The Flutter version (`3.44.4`) is pinned in `ci.yml`, `android-release.yml`, `debug-apk.yml` and `codemagic.yaml` and must be changed in all of them together.
+Analyze and test run **only** on GitHub Actions (free for this public repo); Codemagic does not run them, so pushing to `main` does not start a Codemagic build. The Flutter version (`3.47.9`) is pinned in `ci.yml`, `android-release.yml`, `debug-apk.yml` and `codemagic.yaml` and must be changed in all of them together.
 
 ### Cutting a release
 
