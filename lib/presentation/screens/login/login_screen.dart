@@ -13,9 +13,11 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/auth/account_methods_api_client.dart';
 import '../../providers/auth_providers.dart';
 import '../../../domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'access_request_sheet.dart';
 
 /// Login screen — native username/password sign-in.
 ///
@@ -40,6 +42,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// it before anything can happen — the password BFF takes it with the password, and the
   /// ZITADEL session behind the passkey path needs a user to challenge.
   _LoginStep _step = _LoginStep.email;
+
+  /// Whether "Continua" is asking the backend which methods the account has. The method step is
+  /// not shown until the answer (or the fallback) is in hand.
+  bool _isCheckingMethods = false;
+
+  /// The account's methods once known. Null while the check is in flight;
+  /// [AccountMethods.fallback] (both true) when it failed, so a broken check never hides a way in.
+  AccountMethods? _methods;
 
   /// Last email used on this device, so the first step is not retyped every time. A plain
   /// preference — never a token; the value only prefills an editable field.
@@ -93,14 +103,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   static bool _looksLikeEmail(String value) => _emailShape.hasMatch(value.trim());
 
   Future<void> _onContinue() async {
-    if (!_looksLikeEmail(_usernameCtrl.text)) return;
+    if (_isCheckingMethods || !_looksLikeEmail(_usernameCtrl.text)) return;
+    final email = _usernameCtrl.text.trim();
     ref.read(loginProvider.notifier).clearError();
-    setState(() => _step = _LoginStep.method);
+    setState(() {
+      _isCheckingMethods = true;
+      _methods = null;
+    });
+
+    AccountMethods methods;
+    try {
+      methods = await ref.read(accountMethodsApiClientProvider).fetch(email);
+    } catch (_) {
+      // Network error, timeout or a 5xx: the check must never block sign-in. Fall back to the
+      // pre-endpoint behaviour — every method the device can actually use.
+      methods = AccountMethods.fallback;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isCheckingMethods = false;
+      _methods = methods;
+      _step = _LoginStep.method;
+    });
   }
 
   void _onChangeEmail() {
     ref.read(loginProvider.notifier).clearError();
-    setState(() => _step = _LoginStep.email);
+    setState(() {
+      _step = _LoginStep.email;
+      _methods = null;
+    });
   }
 
   Future<void> _onLogin() async {
@@ -123,9 +156,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // that removes the button, and a second attempt would open a second native sheet.
     if (ref.read(loginProvider).isLoading) return;
     ref.read(loginProvider.notifier).clearError();
-    await ref
-        .read(loginProvider.notifier)
-        .signInWithPasskey(_usernameCtrl.text.trim());
+    await ref.read(loginProvider.notifier).signInWithPasskey(_usernameCtrl.text.trim());
     if (ref.read(loginProvider).failure == null) {
       await _rememberEmail();
     }
@@ -137,6 +168,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref.read(loginProvider.notifier).clearError();
     // Zitadel's own hosted page has its own password-reset link — no need to build one here.
     await ref.read(loginProvider.notifier).signIn();
+  }
+
+  void _onRequestAccess() {
+    unawaited(showAccessRequestSheet(context, initialEmail: _usernameCtrl.text.trim()));
   }
 
   @override
@@ -184,7 +219,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   _step == _LoginStep.email
-                      ? 'Inserisci la tua email per continuare.'
+                      ? (_isCheckingMethods
+                            ? 'Verifico come accedere…'
+                            : 'Inserisci la tua email per continuare.')
                       : 'Scegli come accedere.',
                   style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
                 ),
@@ -212,6 +249,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         keyboardType: TextInputType.emailAddress,
         textInputAction: TextInputAction.next,
         autofillHints: const [AutofillHints.username],
+        readOnly: _isCheckingMethods,
         onEditingComplete: _onContinue,
       ),
       const SizedBox(height: AppSpacing.base),
@@ -219,13 +257,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         valueListenable: _usernameCtrl,
         builder: (context, value, _) => AppButton(
           label: 'Continua',
-          onPressed: _looksLikeEmail(value.text) ? _onContinue : null,
+          isLoading: _isCheckingMethods,
+          onPressed: _looksLikeEmail(value.text) && !_isCheckingMethods ? _onContinue : null,
         ),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      Center(
+        child: TextButton(onPressed: _onRequestAccess, child: const Text('Richiedi accesso')),
       ),
     ];
   }
 
   List<Widget> _methodStep(bool isLoading, AuthFailure? failure, bool passkeySupported) {
+    final methods = _methods ?? AccountMethods.fallback;
+    final hasPassword = methods.hasPassword;
+    final hasPasskey = methods.hasPasskey;
+    final accountUnknown = !hasPassword && !hasPasskey;
+    final passkeyOnlyUnsupported = hasPasskey && !hasPassword && !passkeySupported;
+
     return [
       // The email stays visible (and inside the AutofillGroup) so the pair reads as one
       // credential; "Cambia" is the way back to editing it.
@@ -242,50 +291,66 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
       ),
       const SizedBox(height: AppSpacing.base),
-      AppTextField(
-        key: const ValueKey('login-password'),
-        controller: _passwordCtrl,
-        label: 'Password',
-        obscureText: true,
-        textInputAction: TextInputAction.done,
-        onEditingComplete: isLoading ? null : _onLogin,
-        autofillHints: const [AutofillHints.password],
-      ),
-      if (failure != null) ...[
-        const SizedBox(height: AppSpacing.base),
-        InlineAlert(message: authFailureMessage(failure), icon: LucideIcons.alertCircle),
-      ],
-      if (failure != null && failure is! InvalidCredentials) ...[
-        const SizedBox(height: AppSpacing.sm),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: isLoading ? null : _onForgotPassword,
-            child: const Text('Accedi con il browser'),
+      if (accountUnknown) ...[
+        InlineAlert(
+          message: 'Account non trovato. Controlla l\'email o richiedi accesso.',
+          icon: LucideIcons.alertCircle,
+        ),
+      ] else if (passkeyOnlyUnsupported) ...[
+        InlineAlert(
+          message: 'Questo account usa una passkey, ma questo dispositivo non la supporta.',
+          icon: LucideIcons.alertCircle,
+        ),
+      ] else ...[
+        if (hasPassword) ...[
+          AppTextField(
+            key: const ValueKey('login-password'),
+            controller: _passwordCtrl,
+            label: 'Password',
+            obscureText: true,
+            textInputAction: TextInputAction.done,
+            onEditingComplete: isLoading ? null : _onLogin,
+            autofillHints: const [AutofillHints.password],
           ),
-        ),
+          const SizedBox(height: AppSpacing.base),
+        ],
+        if (failure != null) ...[
+          InlineAlert(message: authFailureMessage(failure), icon: LucideIcons.alertCircle),
+          const SizedBox(height: AppSpacing.base),
+        ],
+        if (failure != null && failure is! InvalidCredentials) ...[
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: isLoading ? null : _onForgotPassword,
+              child: const Text('Accedi con il browser'),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+        if (hasPassword) ...[
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: isLoading ? null : _onForgotPassword,
+              child: const Text('Password dimenticata?'),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.base),
+          AppButton(label: 'Accedi', onPressed: isLoading ? null : _onLogin, isLoading: isLoading),
+        ],
+        if (hasPasskey && passkeySupported && !isLoading) ...[
+          const SizedBox(height: AppSpacing.sm),
+          OutlinedButton(onPressed: _onPasskey, child: const Text('Accedi con passkey')),
+        ],
       ],
-      const SizedBox(height: AppSpacing.sm),
-      Align(
-        alignment: Alignment.centerRight,
-        child: TextButton(
-          onPressed: isLoading ? null : _onForgotPassword,
-          child: const Text('Password dimenticata?'),
-        ),
-      ),
       const SizedBox(height: AppSpacing.base),
-      AppButton(
-        label: 'Accedi',
-        onPressed: isLoading ? null : _onLogin,
-        isLoading: isLoading,
-      ),
-      if (passkeySupported && !isLoading) ...[
-        const SizedBox(height: AppSpacing.sm),
-        OutlinedButton(
-          onPressed: _onPasskey,
-          child: const Text('Accedi con passkey'),
+      Center(
+        child: TextButton(
+          onPressed: isLoading ? null : _onRequestAccess,
+          child: const Text('Richiedi accesso'),
         ),
-      ],
+      ),
     ];
   }
 }

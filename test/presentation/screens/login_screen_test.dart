@@ -13,6 +13,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/core/security/passkey_support.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
+import 'package:tasktap_mobile/data/auth/account_methods_api_client.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
@@ -21,11 +22,28 @@ import 'package:tasktap_mobile/presentation/screens/login/login_screen.dart';
 
 class MockAuthRepository extends Mock implements IAuthRepository {}
 
-Widget _buildLoginScreen(IAuthRepository repo, {bool passkeySupported = false}) {
+class _FakeAccountMethodsApiClient implements AccountMethodsApiClient {
+  _FakeAccountMethodsApiClient(this._fetch);
+
+  final Future<AccountMethods> Function(String loginName) _fetch;
+
+  @override
+  Future<AccountMethods> fetch(String loginName) => _fetch(loginName);
+}
+
+Widget _buildLoginScreen(
+  IAuthRepository repo, {
+  bool passkeySupported = false,
+  Future<AccountMethods> Function(String loginName)? methods,
+}) {
+  final client = _FakeAccountMethodsApiClient(
+    methods ?? (_) async => const AccountMethods(hasPasskey: true, hasPassword: true),
+  );
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       passkeySupportedProvider.overrideWith((ref) async => passkeySupported),
+      accountMethodsApiClientProvider.overrideWithValue(client),
     ],
     child: const MaterialApp(home: LoginScreen()),
   );
@@ -34,28 +52,29 @@ Widget _buildLoginScreen(IAuthRepository repo, {bool passkeySupported = false}) 
 Finder get _continueCta =>
     find.descendant(of: find.byType(AppButton), matching: find.text('Continua'));
 
-Finder get _loginCta =>
-    find.descendant(of: find.byType(AppButton), matching: find.text('Accedi'));
+Finder get _loginCta => find.descendant(of: find.byType(AppButton), matching: find.text('Accedi'));
 
 Finder get _usernameField => find.byKey(const ValueKey('login-username'));
 Finder get _passwordField => find.byKey(const ValueKey('login-password'));
 Finder get _browserFallbackButton => find.text('Accedi con il browser');
 Finder get _passkeyButton => find.text('Accedi con passkey');
 
-TextField _usernameTextField(WidgetTester tester) => tester.widget<TextField>(
-  find.descendant(of: _usernameField, matching: find.byType(TextField)),
-);
+TextField _usernameTextField(WidgetTester tester) =>
+    tester.widget<TextField>(find.descendant(of: _usernameField, matching: find.byType(TextField)));
 
-TextField _passwordTextField(WidgetTester tester) => tester.widget<TextField>(
-  find.descendant(of: _passwordField, matching: find.byType(TextField)),
+TextField _passwordTextField(WidgetTester tester) =>
+    tester.widget<TextField>(find.descendant(of: _passwordField, matching: find.byType(TextField)));
+
+TextField _accessRequestEmailTextField(WidgetTester tester) => tester.widget<TextField>(
+  find.descendant(
+    of: find.byKey(const ValueKey('access-request-email')),
+    matching: find.byType(TextField),
+  ),
 );
 
 String? _usernameText(WidgetTester tester) => _usernameTextField(tester).controller?.text;
 
-Future<void> _goToMethodStep(
-  WidgetTester tester, {
-  String email = 'tech@tasktap.io',
-}) async {
+Future<void> _goToMethodStep(WidgetTester tester, {String email = 'tech@tasktap.io'}) async {
   await tester.enterText(_usernameField, email);
   await tester.pump();
   await tester.tap(_continueCta);
@@ -98,8 +117,7 @@ void main() {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
-      AppButton button() =>
-          tester.widget<AppButton>(find.widgetWithText(AppButton, 'Continua'));
+      AppButton button() => tester.widget<AppButton>(find.widgetWithText(AppButton, 'Continua'));
 
       await tester.enterText(_usernameField, 'not-an-email');
       await tester.pump();
@@ -114,8 +132,7 @@ void main() {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
-      AppButton button() =>
-          tester.widget<AppButton>(find.widgetWithText(AppButton, 'Continua'));
+      AppButton button() => tester.widget<AppButton>(find.widgetWithText(AppButton, 'Continua'));
       expect(button().onPressed, isNull);
 
       await tester.enterText(_usernameField, 'tech@tasktap.io');
@@ -166,8 +183,9 @@ void main() {
     });
 
     testWidgets('Cambia clears the error of the failed attempt', (tester) async {
-      when(() => repo.signInWithPassword(any(), any()))
-          .thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
+      when(
+        () => repo.signInWithPassword(any(), any()),
+      ).thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
@@ -208,6 +226,114 @@ void main() {
     });
   });
 
+  group('method availability', () {
+    testWidgets('Continua shows a loading state while the methods are checked', (tester) async {
+      final completer = Completer<AccountMethods>();
+
+      await tester.pumpWidget(_buildLoginScreen(repo, methods: (_) => completer.future));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(_usernameField, 'tech@tasktap.io');
+      await tester.pump();
+      await tester.tap(_continueCta);
+      await tester.pump();
+
+      expect(find.text('Verifico come accedere…'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(_passwordField, findsNothing);
+
+      completer.complete(const AccountMethods(hasPasskey: false, hasPassword: true));
+      await tester.pumpAndSettle();
+
+      expect(_passwordField, findsOneWidget);
+    });
+
+    testWidgets('a passkey-only account gets the passkey button and no password', (tester) async {
+      await tester.pumpWidget(
+        _buildLoginScreen(
+          repo,
+          passkeySupported: true,
+          methods: (_) async => const AccountMethods(hasPasskey: true, hasPassword: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      expect(_passkeyButton, findsOneWidget);
+      expect(_passwordField, findsNothing);
+      expect(_loginCta, findsNothing);
+      expect(find.text('Password dimenticata?'), findsNothing);
+    });
+
+    testWidgets('a password-only account gets the password form and no passkey', (tester) async {
+      await tester.pumpWidget(
+        _buildLoginScreen(
+          repo,
+          passkeySupported: true,
+          methods: (_) async => const AccountMethods(hasPasskey: false, hasPassword: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      expect(_passwordField, findsOneWidget);
+      expect(_loginCta, findsOneWidget);
+      expect(_passkeyButton, findsNothing);
+    });
+
+    testWidgets('an account with no methods shows the not-found state', (tester) async {
+      await tester.pumpWidget(
+        _buildLoginScreen(
+          repo,
+          passkeySupported: true,
+          methods: (_) async => const AccountMethods(hasPasskey: false, hasPassword: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      expect(find.textContaining('Account non trovato'), findsOneWidget);
+      expect(find.text('Richiedi accesso'), findsOneWidget);
+      expect(_passwordField, findsNothing);
+      expect(_loginCta, findsNothing);
+      expect(_passkeyButton, findsNothing);
+    });
+
+    testWidgets('a failed check falls back to password and passkey', (tester) async {
+      await tester.pumpWidget(
+        _buildLoginScreen(
+          repo,
+          passkeySupported: true,
+          methods: (_) async => throw StateError('network down'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      expect(_passwordField, findsOneWidget);
+      expect(_loginCta, findsOneWidget);
+      expect(_passkeyButton, findsOneWidget);
+    });
+
+    testWidgets('the check uses the trimmed email', (tester) async {
+      String? requested;
+
+      await tester.pumpWidget(
+        _buildLoginScreen(
+          repo,
+          methods: (email) async {
+            requested = email;
+            return const AccountMethods(hasPasskey: false, hasPassword: true);
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester, email: '  tech@tasktap.io  ');
+
+      expect(requested, 'tech@tasktap.io');
+    });
+  });
+
   group('remembered email', () {
     testWidgets('a saved email prefills the first step', (tester) async {
       SharedPreferences.setMockInitialValues({'login.last_email': 'saved@tasktap.io'});
@@ -219,8 +345,9 @@ void main() {
     });
 
     testWidgets('a successful password sign-in remembers the email', (tester) async {
-      when(() => repo.signInWithPassword(any(), any()))
-          .thenAnswer((_) async => (user: null, failure: null));
+      when(
+        () => repo.signInWithPassword(any(), any()),
+      ).thenAnswer((_) async => (user: null, failure: null));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
@@ -235,8 +362,9 @@ void main() {
 
     testWidgets('a failed attempt does not overwrite the saved email', (tester) async {
       SharedPreferences.setMockInitialValues({'login.last_email': 'old@tasktap.io'});
-      when(() => repo.signInWithPassword(any(), any()))
-          .thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
+      when(
+        () => repo.signInWithPassword(any(), any()),
+      ).thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
@@ -252,8 +380,9 @@ void main() {
 
   group('signing in', () {
     testWidgets('a valid password calls signInWithPassword with the step-1 email', (tester) async {
-      when(() => repo.signInWithPassword(any(), any()))
-          .thenAnswer((_) async => (user: null, failure: null));
+      when(
+        () => repo.signInWithPassword(any(), any()),
+      ).thenAnswer((_) async => (user: null, failure: null));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
@@ -268,8 +397,9 @@ void main() {
     });
 
     testWidgets('a wrong password stays on the method step', (tester) async {
-      when(() => repo.signInWithPassword(any(), any()))
-          .thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
+      when(
+        () => repo.signInWithPassword(any(), any()),
+      ).thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
@@ -286,8 +416,9 @@ void main() {
     });
 
     testWidgets('the passkey action uses the step-1 email', (tester) async {
-      when(() => repo.signInWithPasskey(any()))
-          .thenAnswer((_) async => (user: null, failure: const PasskeyCancelled()));
+      when(
+        () => repo.signInWithPasskey(any()),
+      ).thenAnswer((_) async => (user: null, failure: const PasskeyCancelled()));
 
       await tester.pumpWidget(_buildLoginScreen(repo, passkeySupported: true));
       await tester.pumpAndSettle();
@@ -331,8 +462,9 @@ void main() {
     });
 
     testWidgets('an unexpected failure still offers the browser fallback', (tester) async {
-      when(() => repo.signInWithPassword(any(), any()))
-          .thenAnswer((_) async => (user: null, failure: const NetworkError()));
+      when(
+        () => repo.signInWithPassword(any(), any()),
+      ).thenAnswer((_) async => (user: null, failure: const NetworkError()));
       when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
@@ -347,6 +479,34 @@ void main() {
       await tester.tap(_browserFallbackButton);
       await tester.pumpAndSettle();
       verify(() => repo.signIn()).called(1);
+    });
+  });
+
+  group('access request', () {
+    testWidgets('the email step offers Richiedi accesso', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Richiedi accesso'), findsOneWidget);
+    });
+
+    testWidgets('the method step still offers Richiedi accesso', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      expect(find.text('Richiedi accesso'), findsOneWidget);
+    });
+
+    testWidgets('opens the form with the email already typed', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(_usernameField, 'tech@tasktap.io');
+      await tester.tap(find.text('Richiedi accesso'));
+      await tester.pumpAndSettle();
+
+      expect(_accessRequestEmailTextField(tester).controller?.text, 'tech@tasktap.io');
     });
   });
 }
