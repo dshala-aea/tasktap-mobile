@@ -5,6 +5,7 @@ import '../../core/kiosk/kiosk_lock_service.dart';
 import '../../core/startup/startup_report.dart';
 import '../../data/kiosk/kiosk_api_client.dart';
 import '../../data/kiosk/kiosk_credentials_store.dart';
+import '../../data/kiosk/kiosk_token_generator.dart';
 
 // ── Dependency providers ────────────────────────────────────────────────────
 
@@ -129,13 +130,17 @@ class KioskModeNotifier extends StateNotifier<KioskModeState> {
     required String deviceLabel,
     required String exitPin,
   }) async {
-    await _api.fetchQr(
+    final provisioning = await _api.provision(
       rawKey,
     ); // throws KioskApiException on invalid/revoked/network/etc.
     await _store.save(
       rawKey: rawKey,
       deviceLabel: deviceLabel,
       exitPin: exitPin,
+      deviceId: provisioning.deviceId,
+      signingKey: provisioning.signingKey,
+      serverTimeOffsetSeconds: _serverOffsetSeconds(provisioning.serverTimeUtc),
+      expiresInSeconds: provisioning.expiresInSeconds,
     );
     final outcome = await _lock.start();
     state = KioskModeState(
@@ -151,19 +156,50 @@ class KioskModeNotifier extends StateNotifier<KioskModeState> {
   /// automatically deactivates kiosk mode on the device itself rather than leaving it pinned to
   /// a dead credential forever.
   Future<KioskQrToken> refreshQr() async {
-    final creds = await _store.read();
+    var creds = await _store.read();
     if (creds == null) {
       throw const KioskApiException(KioskApiFailureReason.invalidOrRevoked);
     }
-    try {
-      return await _api.fetchQr(creds.rawKey);
-    } on KioskApiException catch (e) {
-      if (e.reason == KioskApiFailureReason.invalidOrRevoked) {
-        await _forceDeactivate();
+
+    if (creds.deviceId == null || creds.signingKey == null) {
+      try {
+        final provisioning = await _api.provision(creds.rawKey);
+        final offset = _serverOffsetSeconds(provisioning.serverTimeUtc);
+        await _store.saveProvisioning(
+          deviceId: provisioning.deviceId,
+          signingKey: provisioning.signingKey,
+          serverTimeOffsetSeconds: offset,
+          expiresInSeconds: provisioning.expiresInSeconds,
+        );
+        creds = creds.copyWith(
+          deviceId: provisioning.deviceId,
+          signingKey: provisioning.signingKey,
+          serverTimeOffsetSeconds: offset,
+          expiresInSeconds: provisioning.expiresInSeconds,
+        );
+      } on KioskApiException catch (e) {
+        if (e.reason == KioskApiFailureReason.invalidOrRevoked) {
+          await _forceDeactivate();
+        }
+        rethrow;
       }
-      rethrow;
     }
+
+    final issuedAt = DateTime.now().toUtc().add(
+      Duration(seconds: creds.serverTimeOffsetSeconds),
+    );
+    return KioskQrToken(
+      token: KioskTokenGenerator.generate(
+        deviceId: creds.deviceId!,
+        signingKeyBase64: creds.signingKey!,
+        issuedAt: issuedAt,
+      ),
+      expiresInSeconds: creds.expiresInSeconds,
+    );
   }
+
+  static int _serverOffsetSeconds(DateTime serverTimeUtc) =>
+      serverTimeUtc.difference(DateTime.now().toUtc()).inSeconds;
 
   /// Human-initiated exit: only proceeds when [pin] matches the PIN chosen at activation.
   /// Returns false (state unchanged) on a wrong PIN.
