@@ -3,7 +3,9 @@ import 'dart:async';
 
 import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -25,6 +27,7 @@ import '../../../presentation/providers/schedule_providers.dart';
 import '../../rapportino/create_draft.dart';
 import '../../ticket/ticket_providers.dart';
 import '../admin_api_client.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -89,7 +92,7 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
             if (cantiere == null) {
               // A missing row on a synced device is a deletion, not a download problem — the old
               // single message promised a sync that would never bring it back.
-              return ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+              return ref.watch(hasSyncedAtLeastOnceProvider).value == false
                   ? const UnavailableState(
                       icon: LucideIcons.cloudOff,
                       titolo: 'Cantiere non disponibile',
@@ -793,7 +796,7 @@ class _CrewSection extends ConsumerWidget {
                   final role = a['role'] as String?;
                   final nome = userId.isEmpty
                       ? null
-                      : ref.watch(colleagueNameProvider(userId)).valueOrNull;
+                      : ref.watch(colleagueNameProvider(userId)).value;
                   return ListRow(
                     leading: AppAvatar(name: nome ?? '?', size: 36),
                     title: nome ?? 'Persona non sincronizzata',
@@ -1046,7 +1049,7 @@ class _WorkLogsSection extends ConsumerWidget {
                   final userId = log['userId'] as String?;
                   final userName = userId == null
                       ? null
-                      : ref.watch(colleagueNameProvider(userId)).valueOrNull;
+                      : ref.watch(colleagueNameProvider(userId)).value;
                   return ListRow(
                     leading: const RowIconTile(icon: LucideIcons.clock),
                     title: userName ?? dateLabel,
@@ -1078,7 +1081,7 @@ class _TicketsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ticketsAsync = ref.watch(adminCantiereTicketsProvider(cantiereId));
-    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? const {};
+    final statusMap = ref.watch(ticketStatusMapProvider).value ?? const {};
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

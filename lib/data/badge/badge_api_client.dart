@@ -25,7 +25,12 @@ import 'badge_models.dart';
 
 /// A badge call that failed, with the server's machine code when it sent one.
 class BadgeApiException implements Exception {
-  const BadgeApiException({this.statusCode, this.code, required this.message, this.offline = false});
+  const BadgeApiException({
+    this.statusCode,
+    this.code,
+    required this.message,
+    this.offline = false,
+  });
 
   final int? statusCode;
 
@@ -92,7 +97,10 @@ class BadgeApiClient {
           e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.sendTimeout ||
           e.type == DioExceptionType.receiveTimeout;
-      return BadgeApiException(message: e.message ?? 'Network error', offline: offline);
+      return BadgeApiException(
+        message: e.message ?? 'Network error',
+        offline: offline,
+      );
     }
     String? code;
     String? message;

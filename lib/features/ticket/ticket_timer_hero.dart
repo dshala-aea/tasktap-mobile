@@ -59,7 +59,7 @@ class TicketTimerLiveValue extends ConsumerWidget {
     if (running != null) {
       final elapsed = ticketTimerElapsed(
         running,
-        ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc(),
+        ref.watch(nowProvider).value ?? DateTime.now().toUtc(),
         ref.watch(businessTimeProvider),
       );
       // The mockup's `.timer`: red mono 22, tabular, no extra marker.
@@ -117,7 +117,7 @@ DetailAction ticketTimerAction(
 }) {
   final running = ref.watch(runningTicketWorklogProvider(ticketId));
   final busy = ref.watch(ticketTimerBusyProvider(ticketId));
-  final currentUserId = ref.watch(internalUserIdProvider).valueOrNull;
+  final currentUserId = ref.watch(internalUserIdProvider).value;
 
   final label = running == null ? 'Avvia intervento' : 'Chiudi intervento';
 

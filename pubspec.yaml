@@ -111,9 +111,15 @@ dependencies:
   # Keeps the screen awake while the worker badge QR is on screen (lib/features/badge) so the
   # code does not dim out in front of the scanner. Enabled on mount, released on dispose.
   wakelock_plus: ^1.8.0
-  sqlcipher_flutter_libs: ^0.7.0+eol
   flutter_tts: ^4.2.5
   sqlite3: ^3.9.1
+
+# package:sqlite3 3.x bundles SQLite through Dart build hooks. Selecting the SQLCipher build here
+# replaces sqlcipher_flutter_libs (0.7.0+eol is an end-of-life no-op).
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlcipher
 
 dev_dependencies:
   flutter_test:

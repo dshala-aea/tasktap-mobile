@@ -15,22 +15,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/extension_fields/extension_fields_api_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
+import 'package:tasktap_mobile/data/sync/sync_service.dart'
+    show appDatabaseProvider;
 
 /// A bare container, no widget tree. Any call reaching the API client is a failure — offline must
 /// never touch the wire.
 class _ExplodingApiClient implements ExtensionFieldsApiClient {
   @override
-  Future<List<ExtensionFieldDefinitionDto>> fetchDefinitions(String entityType) =>
-      throw StateError('offline: fetchDefinitions must not be called');
+  Future<List<ExtensionFieldDefinitionDto>> fetchDefinitions(
+    String entityType,
+  ) => throw StateError('offline: fetchDefinitions must not be called');
 
   @override
   Future<Map<String, String>> fetchValues(String entityType, String entityId) =>
       throw StateError('offline: fetchValues must not be called');
 
   @override
-  Future<void> saveValues(String entityType, String entityId, Map<String, String> values) =>
-      throw StateError('offline: saveValues must not be called');
+  Future<void> saveValues(
+    String entityType,
+    String entityId,
+    Map<String, String> values,
+  ) => throw StateError('offline: saveValues must not be called');
 }
 
 void main() {
@@ -62,10 +67,13 @@ void main() {
 
   ProviderContainer container() {
     final c = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(false),
-        extensionFieldsApiClientProvider.overrideWithValue(_ExplodingApiClient()),
+        extensionFieldsApiClientProvider.overrideWithValue(
+          _ExplodingApiClient(),
+        ),
       ],
     );
     addTearDown(c.dispose);
@@ -83,11 +91,10 @@ void main() {
     /// The stored value is a JSON object whose values are not necessarily strings — the backend's
     /// `jsonb` accepts numbers and booleans, and the section renders every field from a string.
     test('stringifies non-string JSON values', () {
-      expect(decodeExtensionValues('{"priorita":3,"urgente":true,"peso":1.5}'), {
-        'priorita': '3',
-        'urgente': 'true',
-        'peso': '1.5',
-      });
+      expect(
+        decodeExtensionValues('{"priorita":3,"urgente":true,"peso":1.5}'),
+        {'priorita': '3', 'urgente': 'true', 'peso': '1.5'},
+      );
     });
 
     test('null, empty and whitespace all mean "no values recorded"', () {
@@ -112,26 +119,53 @@ void main() {
     test('answers from the mirrored definitions instead of the wire', () async {
       await seedDefinition('d1', key: 'zona', entityType: 'ticket');
 
-      final defs = await container().read(extensionFieldDefinitionsProvider('ticket').future);
+      final defs = await container().read(
+        extensionFieldDefinitionsProvider('ticket').future,
+      );
 
       expect(defs.single.key, 'zona');
       expect(defs.single.label, 'Campo zona');
     });
 
-    test('returns only the requested entity type, ordered by sortOrder', () async {
-      await seedDefinition('d2', key: 'secondo', entityType: 'ticket', sortOrder: 2);
-      await seedDefinition('d1', key: 'primo', entityType: 'ticket', sortOrder: 1);
-      await seedDefinition('d3', key: 'meteo', entityType: 'cantiere', sortOrder: 1);
+    test(
+      'returns only the requested entity type, ordered by sortOrder',
+      () async {
+        await seedDefinition(
+          'd2',
+          key: 'secondo',
+          entityType: 'ticket',
+          sortOrder: 2,
+        );
+        await seedDefinition(
+          'd1',
+          key: 'primo',
+          entityType: 'ticket',
+          sortOrder: 1,
+        );
+        await seedDefinition(
+          'd3',
+          key: 'meteo',
+          entityType: 'cantiere',
+          sortOrder: 1,
+        );
 
-      final defs = await container().read(extensionFieldDefinitionsProvider('ticket').future);
+        final defs = await container().read(
+          extensionFieldDefinitionsProvider('ticket').future,
+        );
 
-      expect(defs.map((d) => d.key), ['primo', 'secondo']);
-    });
+        expect(defs.map((d) => d.key), ['primo', 'secondo']);
+      },
+    );
 
     /// An empty mirror means "the last sync carried nothing readable" — the section renders nothing
     /// (its own contract) rather than failing.
     test('an empty mirror yields an empty list, not an error', () async {
-      expect(await container().read(extensionFieldDefinitionsProvider('ticket').future), isEmpty);
+      expect(
+        await container().read(
+          extensionFieldDefinitionsProvider('ticket').future,
+        ),
+        isEmpty,
+      );
     });
   });
 
@@ -155,7 +189,9 @@ void main() {
     test('answers from the ticket row', () async {
       await seedTicket('tk1', '{"zona":"Nord"}');
 
-      final values = await container().read(extensionFieldValuesProvider(('ticket', 'tk1')).future);
+      final values = await container().read(
+        extensionFieldValuesProvider(('ticket', 'tk1')).future,
+      );
 
       expect(values, {'zona': 'Nord'});
     });
@@ -173,7 +209,9 @@ void main() {
             ),
           );
 
-      final values = await container().read(extensionFieldValuesProvider(('cantiere', 'ca1')).future);
+      final values = await container().read(
+        extensionFieldValuesProvider(('cantiere', 'ca1')).future,
+      );
 
       expect(values, {'meteo': 'pioggia'});
     });
@@ -193,7 +231,9 @@ void main() {
             ),
           );
 
-      final values = await container().read(extensionFieldValuesProvider(('report', 'rp1')).future);
+      final values = await container().read(
+        extensionFieldValuesProvider(('report', 'rp1')).future,
+      );
 
       expect(values, {'rif': 'A-12'});
     });
@@ -202,16 +242,23 @@ void main() {
       await seedTicket('tk1', null);
 
       expect(
-        await container().read(extensionFieldValuesProvider(('ticket', 'tk1')).future),
+        await container().read(
+          extensionFieldValuesProvider(('ticket', 'tk1')).future,
+        ),
         isEmpty,
       );
     });
 
-    test('an entity that is not mirrored locally yields an empty map', () async {
-      expect(
-        await container().read(extensionFieldValuesProvider(('customer', 'cu1')).future),
-        isEmpty,
-      );
-    });
+    test(
+      'an entity that is not mirrored locally yields an empty map',
+      () async {
+        expect(
+          await container().read(
+            extensionFieldValuesProvider(('customer', 'cu1')).future,
+          ),
+          isEmpty,
+        );
+      },
+    );
   });
 }

@@ -1,4 +1,5 @@
-import 'package:firebase_messaging/firebase_messaging.dart' show AuthorizationStatus;
+import 'package:firebase_messaging/firebase_messaging.dart'
+    show AuthorizationStatus;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -61,7 +62,12 @@ class PushLaunchPermission {
       return true;
     } catch (e, st) {
       debugPrint('Push launch permission ask failed: $e');
-      reportPushFailure(PushStage.permission, e, stackTrace: st, onceKey: 'launch-ask');
+      reportPushFailure(
+        PushStage.permission,
+        e,
+        stackTrace: st,
+        onceKey: 'launch-ask',
+      );
       return false;
     }
   }

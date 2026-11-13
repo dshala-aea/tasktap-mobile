@@ -185,7 +185,7 @@ Widget _buildView({
   AppDatabase? db,
   Set<String> capabilities = const {'team.squadra.write', 'pianificazione.schedule.read'},
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       adminApiClientProvider.overrideWithValue(api),
       isOnlineProvider.overrideWithValue(online),
@@ -448,7 +448,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           adminApiClientProvider.overrideWithValue(
             _FakeAdminApiClient(_prototypeDetail(), users: _prototypeUsers()),

@@ -102,8 +102,7 @@ class LocationService extends ILocationService {
         return GpsPermissionStatus.serviceDisabled;
       }
       return switch (await Geolocator.checkPermission()) {
-        LocationPermission.always ||
-        LocationPermission.whileInUse => GpsPermissionStatus.granted,
+        LocationPermission.always || LocationPermission.whileInUse => GpsPermissionStatus.granted,
         LocationPermission.deniedForever => GpsPermissionStatus.deniedForever,
         LocationPermission.denied ||
         LocationPermission.unableToDetermine => GpsPermissionStatus.notDetermined,
@@ -185,7 +184,6 @@ final tenantGpsEnabledProvider = Provider<bool>((ref) => true);
 /// that reports a choice it does not enforce is worse than no toggle, and under a consent audit it
 /// is worse still.
 final locationServiceProvider = Provider<ILocationService>((ref) {
-  final allowed =
-      ref.watch(tenantGpsEnabledProvider) && ref.watch(gpsPreferenceProvider);
+  final allowed = ref.watch(tenantGpsEnabledProvider) && ref.watch(gpsPreferenceProvider);
   return allowed ? const LocationService() : const DisabledLocationService();
 });

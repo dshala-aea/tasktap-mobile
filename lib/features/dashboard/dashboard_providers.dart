@@ -70,7 +70,10 @@ final upcomingSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
   final db = ref.watch(appDatabaseProvider);
   // Same business-zone day as the two counters above: "today" cannot mean one thing in the
   // card that counts it and another in the block that holds what follows it.
-  final start = ref.watch(businessTimeProvider).businessToday().add(const Duration(days: 1));
+  final start = ref
+      .watch(businessTimeProvider)
+      .businessToday()
+      .add(const Duration(days: 1));
   final end = start.add(const Duration(days: 7));
   return (db.select(db.schedules)
         ..where(
@@ -119,12 +122,15 @@ bool scheduleTicketIsClosed(Schedule schedule, Set<String> closedTicketIds) =>
 /// fare" — so without this set the dashboard called a started job outstanding work. The timer set
 /// below stays the device-local truth (the technician tapped start, possibly offline and not yet
 /// synced); the two are unioned at the bucketing step rather than one standing in for the other.
-final inProgressTicketIdsProvider = StreamProvider.autoDispose<Set<String>>((ref) {
+final inProgressTicketIdsProvider = StreamProvider.autoDispose<Set<String>>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
   final inProgressStatusIds = db.selectOnly(db.ticketStatuses)
     ..addColumns([db.ticketStatuses.id])
     ..where(db.ticketStatuses.isInProgress.equals(true));
-  return (db.select(db.tickets)..where((t) => t.statusId.isInQuery(inProgressStatusIds)))
+  return (db.select(db.tickets)
+        ..where((t) => t.statusId.isInQuery(inProgressStatusIds)))
       .watch()
       .map((rows) => {for (final row in rows) row.id});
 });
@@ -172,7 +178,8 @@ ScheduleBucket bucketOfSchedule(
   }
   if (schedule.statusId == _kStatusCancelled) return ScheduleBucket.cancelled;
   if (schedule.statusId == _kStatusInProgress) return ScheduleBucket.live;
-  if (schedule.ticketId != null && runningTicketIds.contains(schedule.ticketId)) {
+  if (schedule.ticketId != null &&
+      runningTicketIds.contains(schedule.ticketId)) {
     return ScheduleBucket.live;
   }
   // The schedule row is a separate record from the ticket, and the office updates only the
@@ -205,16 +212,16 @@ final pastSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
 });
 
 /// Computed 2×2 stats from the providers above.
-/// Uses [AsyncValue.valueOrNull] so it reads synchronously without blocking.
+/// Uses [AsyncValue.value] so it reads synchronously without blocking.
 final dashboardStatsProvider = Provider.autoDispose<DashboardStats>((ref) {
-  final today = ref.watch(todaySchedulesProvider).valueOrNull ?? [];
-  final upcoming = ref.watch(upcomingSchedulesProvider).valueOrNull ?? [];
+  final today = ref.watch(todaySchedulesProvider).value ?? [];
+  final upcoming = ref.watch(upcomingSchedulesProvider).value ?? [];
   final closedTickets =
-      ref.watch(closedTicketIdsProvider).valueOrNull ?? const <String>{};
+      ref.watch(closedTicketIdsProvider).value ?? const <String>{};
   final runningTickets =
-      ref.watch(runningTicketTimerIdsProvider).valueOrNull ?? const <String>{};
+      ref.watch(runningTicketTimerIdsProvider).value ?? const <String>{};
   final inProgressTickets =
-      ref.watch(inProgressTicketIdsProvider).valueOrNull ?? const <String>{};
+      ref.watch(inProgressTicketIdsProvider).value ?? const <String>{};
 
   ScheduleBucket bucket(Schedule s) => bucketOfSchedule(
     s,
@@ -309,7 +316,10 @@ class WorkQueueBuckets {
   /// empty, whatever [upcoming] holds — the dashboard states that rather than letting future
   /// rows stand in for today's work.
   bool get hasTodayWork =>
-      live.isNotEmpty || daFare != null || inAttesa.isNotEmpty || fatto.isNotEmpty;
+      live.isNotEmpty ||
+      daFare != null ||
+      inAttesa.isNotEmpty ||
+      fatto.isNotEmpty;
 
   /// Whether today holds anything at all, work or absence. The day off is a fact about the day,
   /// not an empty day, so the screen states it instead of the "nothing assigned" sentence.
@@ -324,14 +334,14 @@ class WorkQueueBuckets {
 }
 
 final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
-  final today = ref.watch(todaySchedulesProvider).valueOrNull ?? [];
-  final upcoming = ref.watch(upcomingSchedulesProvider).valueOrNull ?? [];
+  final today = ref.watch(todaySchedulesProvider).value ?? [];
+  final upcoming = ref.watch(upcomingSchedulesProvider).value ?? [];
   final closedTickets =
-      ref.watch(closedTicketIdsProvider).valueOrNull ?? const <String>{};
+      ref.watch(closedTicketIdsProvider).value ?? const <String>{};
   final runningTickets =
-      ref.watch(runningTicketTimerIdsProvider).valueOrNull ?? const <String>{};
+      ref.watch(runningTicketTimerIdsProvider).value ?? const <String>{};
   final inProgressTickets =
-      ref.watch(inProgressTicketIdsProvider).valueOrNull ?? const <String>{};
+      ref.watch(inProgressTicketIdsProvider).value ?? const <String>{};
 
   ScheduleBucket bucket(Schedule s) => bucketOfSchedule(
     s,

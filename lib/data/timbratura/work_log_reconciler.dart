@@ -166,11 +166,7 @@ class WorkLogReconciler {
             _rerun = true; // stale answer: discard, fetch again
             continue;
           }
-          await _reconcileWithSessions(
-            snapshot,
-            all: all,
-            today: await _repo.getTodaySessions(),
-          );
+          await _reconcileWithSessions(snapshot, all: all, today: await _repo.getTodaySessions());
         } catch (_) {
           // Swallow — see doc comment above.
         }
@@ -276,7 +272,11 @@ class WorkLogReconciler {
       if (breakStart != null) {
         // Events are ordered by time; keep the pausa strictly after its ingresso even if the
         // server reports them equal.
-        await _addMarked('pausa', breakStart.isAfter(start) ? breakStart : start.add(_epsilon), null);
+        await _addMarked(
+          'pausa',
+          breakStart.isAfter(start) ? breakStart : start.add(_epsilon),
+          null,
+        );
       }
     }
   }

@@ -27,7 +27,7 @@ Widget _app({Entitlement? cached}) {
       ),
     ],
   );
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authStateProvider.overrideWith((ref) => Stream<AuthUser?>.value(null)),
       // Null = the field-seat baseline, which is exactly what a technician on a fresh install

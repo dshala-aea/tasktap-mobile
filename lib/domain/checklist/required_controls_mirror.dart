@@ -41,12 +41,9 @@ AssetChecklistStatus assetChecklistStatus(TicketChecklist tree, AnswerLookup loc
       if (c.isRetained || !c.isRequired) continue;
       requiredTotal++;
       if (!isAnswered(c, local(c.id))) {
-        missing.add(MissingRequired(
-          controlId: c.id,
-          label: c.label,
-          assetId: a.assetId,
-          assetName: a.name,
-        ));
+        missing.add(
+          MissingRequired(controlId: c.id, label: c.label, assetId: a.assetId, assetName: a.name),
+        );
       }
     }
   }

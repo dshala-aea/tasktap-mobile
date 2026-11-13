@@ -108,7 +108,7 @@ Widget _buildView({
   String scheduleId = 'sched-1',
   Set<String> capabilities = const {'pianificazione.schedule.write'},
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome', clock: () => _now)),

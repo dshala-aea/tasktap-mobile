@@ -200,11 +200,13 @@ class ReferenceCacheRepository {
   /// stands in for `GET /api/contracts?customerId=`, which returns inactive rows too, shown with
   /// an "Inattivo" pill.
   Future<List<Contract>> contractsForCustomer(String customerId, {bool activeOnly = true}) =>
-      (_db.select(_db.contracts)..where(
-            (c) => activeOnly
-                ? c.customerId.equals(customerId) & c.isActive.equals(true)
-                : c.customerId.equals(customerId),
-          )..orderBy([(c) => OrderingTerm.asc(c.name)]))
+      (_db.select(_db.contracts)
+            ..where(
+              (c) => activeOnly
+                  ? c.customerId.equals(customerId) & c.isActive.equals(true)
+                  : c.customerId.equals(customerId),
+            )
+            ..orderBy([(c) => OrderingTerm.asc(c.name)]))
           .get();
 
   /// Every contract the sync put in scope — the Contratti list's own rows.
@@ -229,20 +231,21 @@ class ReferenceCacheRepository {
   /// too, marked with a pill). Technician-scoped like everything else the sync carries, so a
   /// mirrored list is a partial one and its screen says so.
   Future<List<ProdottiAssistenzaData>> allProdottiAssistenza() =>
-      (_db.select(_db.prodottiAssistenza)
-            ..orderBy([(p) => OrderingTerm.asc(p.name)]))
-          .get();
+      (_db.select(_db.prodottiAssistenza)..orderBy([(p) => OrderingTerm.asc(p.name)])).get();
 
   /// Assets of [customerId] — same [activeOnly] contract as [contractsForCustomer].
   Future<List<ProdottiAssistenzaData>> prodottiForCustomer(
     String customerId, {
     bool activeOnly = true,
-  }) => (_db.select(_db.prodottiAssistenza)..where(
-          (p) => activeOnly
-              ? p.customerId.equals(customerId) & p.isActive.equals(true)
-              : p.customerId.equals(customerId),
-        )..orderBy([(p) => OrderingTerm.asc(p.name)]))
-      .get();
+  }) =>
+      (_db.select(_db.prodottiAssistenza)
+            ..where(
+              (p) => activeOnly
+                  ? p.customerId.equals(customerId) & p.isActive.equals(true)
+                  : p.customerId.equals(customerId),
+            )
+            ..orderBy([(p) => OrderingTerm.asc(p.name)]))
+          .get();
 
   Future<List<Agent>> activeAgents() =>
       (_db.select(_db.agents)
@@ -264,17 +267,14 @@ class ReferenceCacheRepository {
   // carries `contractId`/`commessaId` as bare synced columns, and the row behind them was fetched
   // live. These three readers are what makes that row answerable offline.
 
-  Future<Contract?> contractById(String id) => (_db.select(
-    _db.contracts,
-  )..where((c) => c.id.equals(id))).getSingleOrNull();
+  Future<Contract?> contractById(String id) =>
+      (_db.select(_db.contracts)..where((c) => c.id.equals(id))).getSingleOrNull();
 
-  Future<CommesseData?> commessaById(String id) => (_db.select(
-    _db.commesse,
-  )..where((c) => c.id.equals(id))).getSingleOrNull();
+  Future<CommesseData?> commessaById(String id) =>
+      (_db.select(_db.commesse)..where((c) => c.id.equals(id))).getSingleOrNull();
 
   Future<ProdottiAssistenzaData?> prodottoAssistenzaById(String id) =>
-      (_db.select(_db.prodottiAssistenza)..where((p) => p.id.equals(id)))
-          .getSingleOrNull();
+      (_db.select(_db.prodottiAssistenza)..where((p) => p.id.equals(id))).getSingleOrNull();
 
   /// A ticket's mirrored change history, newest first — the Storico tab's offline source.
   ///

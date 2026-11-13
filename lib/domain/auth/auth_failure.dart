@@ -91,13 +91,11 @@ String authFailureMessage(AuthFailure failure) => switch (failure) {
     'Email o password errati. Controlla le credenziali e riprova.',
   AdditionalFactorRequired() =>
     'Serve una verifica aggiuntiva. Accedi dal browser per continuare.',
-  PasskeyNotRegistered() =>
-    'Nessuna passkey disponibile. Accedi con la password; potrai attivarla dalle impostazioni dopo l\'accesso.',
+  PasskeyNotRegistered() => 'Nessuna passkey disponibile. Accedi con la password; potrai attivarla dalle impostazioni dopo l\'accesso.',
   PasskeyUnavailable() => 'Questo dispositivo non supporta le passkey.',
   PasskeyCancelled() => '',
   PasskeyRegistrationFailed() => 'Impossibile attivare la passkey. Riprova.',
-  PasskeyVerificationFailed() =>
-    'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
+  PasskeyVerificationFailed() => 'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
   ServiceUnavailable() =>
     'Servizio temporaneamente non disponibile. Riprova tra poco.',
   AccountDisabled() =>

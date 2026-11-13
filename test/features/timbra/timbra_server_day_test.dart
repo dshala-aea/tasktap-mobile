@@ -27,30 +27,38 @@ class _CapturingClient extends WorklogApiClient {
 }
 
 void main() {
-  test('serverDayProvider uses the internal user Guid, not the OIDC sub', () async {
-    final client = _CapturingClient();
-    final user = AuthUser(
-      id: 'oidc-sub-123',
-      email: 'tech@example.test',
-      accessToken: 'access',
-      refreshToken: 'refresh',
-      expiresAt: DateTime.now().add(const Duration(hours: 1)),
-    );
-    final container = ProviderContainer(
-      overrides: [
-        worklogApiClientProvider.overrideWithValue(client),
-        currentUserProvider.overrideWithValue(user),
-        internalUserIdProvider.overrideWith((ref) async => 'internal-guid-456'),
-        businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
-      ],
-    );
-    addTearDown(container.dispose);
+  test(
+    'serverDayProvider uses the internal user Guid, not the OIDC sub',
+    () async {
+      final client = _CapturingClient();
+      final user = AuthUser(
+        id: 'oidc-sub-123',
+        email: 'tech@example.test',
+        accessToken: 'access',
+        refreshToken: 'refresh',
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      );
+      final container = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [
+          worklogApiClientProvider.overrideWithValue(client),
+          currentUserProvider.overrideWithValue(user),
+          internalUserIdProvider.overrideWith(
+            (ref) async => 'internal-guid-456',
+          ),
+          businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    // The id is a FutureProvider; warm it so serverDayProvider sees the resolved value.
-    await container.read(internalUserIdProvider.future);
-    await container.read(serverDayProvider.future);
+      // The id is a FutureProvider; warm it so serverDayProvider sees the resolved value.
+      container.listen(internalUserIdProvider, (_, _) {});
+      await container.read(internalUserIdProvider.future);
+      container.listen(serverDayProvider, (_, _) {});
+      await container.read(serverDayProvider.future);
 
-    expect(client.calls, 1);
-    expect(client.capturedUserId, 'internal-guid-456');
-  });
+      expect(client.calls, 1);
+      expect(client.capturedUserId, 'internal-guid-456');
+    },
+  );
 }

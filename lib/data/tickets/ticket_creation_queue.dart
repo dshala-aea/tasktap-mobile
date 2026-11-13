@@ -216,11 +216,7 @@ class TicketCreationQueue {
       // The corrected payload has never been sent, so the row is a genuinely unsent one — not a
       // failed send. `pendingSync` says that in the state's own words and clears the 404 sentence
       // `updateFields` deliberately left untouched.
-      await _repo.updateState(
-        id: id,
-        state: PendingTicketState.pendingSync,
-        clearError: true,
-      );
+      await _repo.updateState(id: id, state: PendingTicketState.pendingSync, clearError: true);
       return TicketCreationOutcome.queuedOffline(id);
     }
     return _attempt(id);

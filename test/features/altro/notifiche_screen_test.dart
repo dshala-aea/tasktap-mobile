@@ -88,7 +88,7 @@ Future<Widget> _buildScreen({
   await seed(notifiche, 'test-user');
   await seed(altreNotifiche, 'altra-persona');
 
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       notificheProvider.overrideWith((ref) => NotificheNotifier(db, Dio(), ref)),
       if (hasError) notificheHasErrorProvider.overrideWith((ref) => true),

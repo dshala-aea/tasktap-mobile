@@ -12,6 +12,7 @@ import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/entitlements/entitlement_providers.dart' show refreshEntitlements;
 import '../../data/smart_working/smart_working_request_api_client.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Statuses the server still lets the technician withdraw from.
@@ -34,7 +35,7 @@ class SmartWorkingListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final requestsAsync = ref.watch(mySmartWorkingRequestsProvider);
-    final loaded = requestsAsync.valueOrNull;
+    final loaded = requestsAsync.value;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -88,11 +89,7 @@ class _SmartWorkingListBody extends ConsumerWidget {
           await ref.refresh(mySmartWorkingRequestsProvider.future);
         } catch (_) {
           if (!context.mounted) return;
-          showAppToast(
-            context,
-            message: 'Impossibile aggiornare. Riprova.',
-            tone: ToastTone.error,
-          );
+          showAppToast(context, message: 'Impossibile aggiornare. Riprova.', tone: ToastTone.error);
         }
       },
       child: CustomScrollView(

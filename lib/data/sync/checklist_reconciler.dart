@@ -84,7 +84,10 @@ Future<Set<String>> ticketIdsWithLocalChecklist(AppDatabase db) async {
         readsFrom: {db.ticketAssets},
       )
       .get();
-  return {...fromControls.map((r) => r.read<String>('t')), ...fromCoverage.map((r) => r.read<String>('t'))};
+  return {
+    ...fromControls.map((r) => r.read<String>('t')),
+    ...fromCoverage.map((r) => r.read<String>('t')),
+  };
 }
 
 Future<void> applyChecklistBatch(AppDatabase db, ChecklistBatch b) {
@@ -94,20 +97,19 @@ Future<void> applyChecklistBatch(AppDatabase db, ChecklistBatch b) {
     if (auth.isNotEmpty) {
       // Answers the technician typed on a Bozza that still lives on this device: rows they refer
       // to must survive even if the server stops listing them.
-      final localDrafts = (await (db.select(db.draftReports)
-                ..where((r) => r.isLocalOnly.equals(true)))
-              .get())
-          .map((r) => r.id)
-          .toList();
+      final localDrafts = (await (db.select(
+        db.draftReports,
+      )..where((r) => r.isLocalOnly.equals(true))).get()).map((r) => r.id).toList();
       final answered = localDrafts.isEmpty
           ? <String>{}
-          : (await (db.select(db.reportControlli)..where((c) => c.reportId.isIn(localDrafts))).get())
-                .map((c) => c.controlId)
-                .toSet();
+          : (await (db.select(
+              db.reportControlli,
+            )..where((c) => c.reportId.isIn(localDrafts))).get()).map((c) => c.controlId).toSet();
 
       final incoming = {for (final c in b.ticketControls) c.id};
-      final existing =
-          await (db.select(db.ticketControls)..where((c) => c.ticketId.isIn(auth))).get();
+      final existing = await (db.select(
+        db.ticketControls,
+      )..where((c) => c.ticketId.isIn(auth))).get();
       for (final row in existing) {
         if (incoming.contains(row.id)) continue; // replaced by the insert below
         if (answered.contains(row.id)) {
@@ -122,75 +124,59 @@ Future<void> applyChecklistBatch(AppDatabase db, ChecklistBatch b) {
     }
 
     await db.batch((batch) {
-      batch.insertAll(
-        db.controlGroups,
-        [
-          for (final g in b.controlGroups)
-            ControlGroupsCompanion.insert(
-              id: g.id,
-              parentGroupId: Value(g.parentGroupId),
-              maintenanceTemplateVersionId: g.maintenanceTemplateVersionId,
-              name: g.name,
-              sortOrder: g.sortOrder,
-            ),
-        ],
-        mode: InsertMode.insertOrReplace,
-      );
-      batch.insertAll(
-        db.ticketControls,
-        [
-          for (final c in b.ticketControls)
-            TicketControlsCompanion.insert(
-              id: c.id,
-              ticketId: c.ticketId,
-              prodottoAssistenzaId: Value(c.prodottoAssistenzaId),
-              templateControlId: c.templateControlId,
-              controlLineageId: c.controlLineageId,
-              groupId: c.groupId,
-              label: c.label,
-              description: Value(c.description),
-              type: controlTypeToWire(c.type),
-              isRequired: Value(c.isRequired),
-              options: Value(c.options),
-              sortOrder: Value(c.sortOrder),
-              status: Value(c.status),
-              stringValue: Value(c.stringValue),
-              boolValue: Value(c.boolValue),
-              dateValue: Value(c.dateValue),
-              numberValue: Value(c.numberValue),
-              note: Value(c.note),
-            ),
-        ],
-        mode: InsertMode.insertOrReplace,
-      );
-      batch.insertAll(
-        db.ticketAssets,
-        [
-          for (final a in b.ticketAssets)
-            TicketAssetsCompanion.insert(
-              ticketId: a.ticketId,
-              prodottoAssistenzaId: a.prodottoAssistenzaId,
-              controllato: Value(a.controllato),
-              note: Value(a.note),
-              maintenanceTemplateVersionId: Value(a.maintenanceTemplateVersionId),
-            ),
-        ],
-        mode: InsertMode.insertOrReplace,
-      );
-      batch.insertAll(
-        db.assets,
-        [
-          for (final a in b.assets)
-            AssetsCompanion.insert(
-              id: a.id,
-              name: a.name,
-              serialNumber: Value(a.serialNumber),
-              matricola: Value(a.matricola),
-              librettoIdsJson: Value(jsonEncode(a.librettoIds)),
-            ),
-        ],
-        mode: InsertMode.insertOrReplace,
-      );
+      batch.insertAll(db.controlGroups, [
+        for (final g in b.controlGroups)
+          ControlGroupsCompanion.insert(
+            id: g.id,
+            parentGroupId: Value(g.parentGroupId),
+            maintenanceTemplateVersionId: g.maintenanceTemplateVersionId,
+            name: g.name,
+            sortOrder: g.sortOrder,
+          ),
+      ], mode: InsertMode.insertOrReplace);
+      batch.insertAll(db.ticketControls, [
+        for (final c in b.ticketControls)
+          TicketControlsCompanion.insert(
+            id: c.id,
+            ticketId: c.ticketId,
+            prodottoAssistenzaId: Value(c.prodottoAssistenzaId),
+            templateControlId: c.templateControlId,
+            controlLineageId: c.controlLineageId,
+            groupId: c.groupId,
+            label: c.label,
+            description: Value(c.description),
+            type: controlTypeToWire(c.type),
+            isRequired: Value(c.isRequired),
+            options: Value(c.options),
+            sortOrder: Value(c.sortOrder),
+            status: Value(c.status),
+            stringValue: Value(c.stringValue),
+            boolValue: Value(c.boolValue),
+            dateValue: Value(c.dateValue),
+            numberValue: Value(c.numberValue),
+            note: Value(c.note),
+          ),
+      ], mode: InsertMode.insertOrReplace);
+      batch.insertAll(db.ticketAssets, [
+        for (final a in b.ticketAssets)
+          TicketAssetsCompanion.insert(
+            ticketId: a.ticketId,
+            prodottoAssistenzaId: a.prodottoAssistenzaId,
+            controllato: Value(a.controllato),
+            note: Value(a.note),
+            maintenanceTemplateVersionId: Value(a.maintenanceTemplateVersionId),
+          ),
+      ], mode: InsertMode.insertOrReplace);
+      batch.insertAll(db.assets, [
+        for (final a in b.assets)
+          AssetsCompanion.insert(
+            id: a.id,
+            name: a.name,
+            serialNumber: Value(a.serialNumber),
+            matricola: Value(a.matricola),
+            librettoIdsJson: Value(jsonEncode(a.librettoIds)),
+          ),
+      ], mode: InsertMode.insertOrReplace);
     });
 
     // Bookkeeping for the re-request: remember what was left out (never reset an attempt counter),
@@ -198,7 +184,10 @@ Future<void> applyChecklistBatch(AppDatabase db, ChecklistBatch b) {
     for (final id in b.omittedTicketIds) {
       await db
           .into(db.checklistOmittedTickets)
-          .insert(ChecklistOmittedTicketsCompanion.insert(ticketId: id), mode: InsertMode.insertOrIgnore);
+          .insert(
+            ChecklistOmittedTicketsCompanion.insert(ticketId: id),
+            mode: InsertMode.insertOrIgnore,
+          );
     }
     if (auth.isNotEmpty) {
       await (db.delete(db.checklistOmittedTickets)..where((o) => o.ticketId.isIn(auth))).go();
@@ -211,11 +200,15 @@ Future<void> applyChecklistBatch(AppDatabase db, ChecklistBatch b) {
 
 /// Drops groups no checklist row uses (directly or as an ancestor of a used group).
 Future<void> _pruneGroups(AppDatabase db) async {
-  final used = (await db
-          .customSelect('SELECT DISTINCT group_id AS g FROM ticket_controls', readsFrom: {db.ticketControls})
-          .get())
-      .map((r) => r.read<String>('g'))
-      .toSet();
+  final used =
+      (await db
+              .customSelect(
+                'SELECT DISTINCT group_id AS g FROM ticket_controls',
+                readsFrom: {db.ticketControls},
+              )
+              .get())
+          .map((r) => r.read<String>('g'))
+          .toSet();
   final all = await db.select(db.controlGroups).get();
   final byId = {for (final g in all) g.id: g};
   final keep = <String>{};
@@ -235,7 +228,10 @@ Future<void> _pruneGroups(AppDatabase db) async {
 /// count, they still need their asset name).
 Future<void> _pruneAssets(AppDatabase db) async {
   final fromCoverage = await db
-      .customSelect('SELECT DISTINCT prodotto_assistenza_id AS a FROM ticket_assets', readsFrom: {db.ticketAssets})
+      .customSelect(
+        'SELECT DISTINCT prodotto_assistenza_id AS a FROM ticket_assets',
+        readsFrom: {db.ticketAssets},
+      )
       .get();
   final fromRows = await db
       .customSelect(
@@ -244,7 +240,10 @@ Future<void> _pruneAssets(AppDatabase db) async {
         readsFrom: {db.ticketControls},
       )
       .get();
-  final refs = {...fromCoverage.map((r) => r.read<String>('a')), ...fromRows.map((r) => r.read<String>('a'))};
+  final refs = {
+    ...fromCoverage.map((r) => r.read<String>('a')),
+    ...fromRows.map((r) => r.read<String>('a')),
+  };
   final all = await db.select(db.assets).get();
   // A libretto is an asset too, but it has no coverage row of its own (only templated/legacy
   // assets do) — it is only visible as another asset's `librettoIdsJson` member. Keep every id
@@ -293,23 +292,19 @@ Future<void> replaceStrumenti(
       await (db.delete(db.strumenti)..where((s) => s.id.isNotIn(keepIds))).go();
     }
     await db.batch(
-      (b) => b.insertAll(
-        db.strumenti,
-        [
-          for (final s in list)
-            StrumentiCompanion.insert(
-              id: s.id,
-              name: s.name,
-              matricola: s.matricola,
-              calibrationExpiry: Value(_label(s.calibrationExpiry)),
-              certificateReference: Value(s.certificateReference),
-              isMine: Value(s.isMine),
-              holderUserId: Value(s.holderUserId),
-              holderName: Value(s.holderName),
-            ),
-        ],
-        mode: InsertMode.insertOrReplace,
-      ),
+      (b) => b.insertAll(db.strumenti, [
+        for (final s in list)
+          StrumentiCompanion.insert(
+            id: s.id,
+            name: s.name,
+            matricola: s.matricola,
+            calibrationExpiry: Value(_label(s.calibrationExpiry)),
+            certificateReference: Value(s.certificateReference),
+            isMine: Value(s.isMine),
+            holderUserId: Value(s.holderUserId),
+            holderName: Value(s.holderName),
+          ),
+      ], mode: InsertMode.insertOrReplace),
     );
   });
 }
@@ -325,37 +320,31 @@ Future<void> replaceServerReportStrumenti(
   return db.transaction(() async {
     final ids = reportIdsInPayload.toSet();
     if (ids.isEmpty) return;
-    final local = (await (db.select(db.draftReports)
-              ..where((r) => r.id.isIn(ids) & r.isLocalOnly.equals(true)))
-            .get())
-        .map((r) => r.id)
-        .toSet();
+    final local = (await (db.select(
+      db.draftReports,
+    )..where((r) => r.id.isIn(ids) & r.isLocalOnly.equals(true))).get()).map((r) => r.id).toSet();
     final replace = ids.difference(local);
     if (replace.isEmpty) return;
-    await (db.delete(db.reportStrumenti)
-          ..where((s) => s.reportId.isIn(replace) & s.isLocal.equals(false)))
-        .go();
+    await (db.delete(
+      db.reportStrumenti,
+    )..where((s) => s.reportId.isIn(replace) & s.isLocal.equals(false))).go();
     await db.batch(
-      (b) => b.insertAll(
-        db.reportStrumenti,
-        [
-          for (final s in rows.where((s) => replace.contains(s.reportId)))
-            ReportStrumentiCompanion.insert(
-              id: s.id,
-              reportId: s.reportId,
-              strumentoId: Value(s.strumentoId),
-              name: s.name,
-              matricola: s.matricola,
-              calibrationExpiry: Value(_label(s.calibrationExpiry)),
-              certificateReference: Value(s.certificateReference),
-              expiredAtUse: Value(s.expiredAtUse),
-              expiredAcknowledged: Value(s.expiredAcknowledged),
-              usageDescription: Value(s.usageDescription),
-              outcome: Value(s.outcome),
-            ),
-        ],
-        mode: InsertMode.insertOrReplace,
-      ),
+      (b) => b.insertAll(db.reportStrumenti, [
+        for (final s in rows.where((s) => replace.contains(s.reportId)))
+          ReportStrumentiCompanion.insert(
+            id: s.id,
+            reportId: s.reportId,
+            strumentoId: Value(s.strumentoId),
+            name: s.name,
+            matricola: s.matricola,
+            calibrationExpiry: Value(_label(s.calibrationExpiry)),
+            certificateReference: Value(s.certificateReference),
+            expiredAtUse: Value(s.expiredAtUse),
+            expiredAcknowledged: Value(s.expiredAcknowledged),
+            usageDescription: Value(s.usageDescription),
+            outcome: Value(s.outcome),
+          ),
+      ], mode: InsertMode.insertOrReplace),
     );
   });
 }

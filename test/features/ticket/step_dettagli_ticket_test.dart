@@ -107,7 +107,7 @@ void main() {
     bool prodottiEditable = true,
   }) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(mockDio),

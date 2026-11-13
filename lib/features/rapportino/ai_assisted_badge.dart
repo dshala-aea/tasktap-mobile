@@ -17,12 +17,7 @@ class AiAssistedBadge extends StatelessWidget {
     return Semantics(
       label: 'Assistito da AI',
       excludeSemantics: true,
-      child: AppBadge(
-        label: 'AI',
-        small: true,
-        outlined: true,
-        fgColor: context.colors.accentInk,
-      ),
+      child: AppBadge(label: 'AI', small: true, outlined: true, fgColor: context.colors.accentInk),
     );
   }
 }

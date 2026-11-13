@@ -1,17 +1,19 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+
 import 'firebase_options.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'core/location/location_service.dart';
 import 'core/security/biometric_lock.dart';
 import 'data/sync/sync_service.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
-import 'package:sqlite3/open.dart';
 
 import 'core/config/env.dart';
 import 'core/crash_reporting/crash_reporter.dart';
@@ -34,11 +36,6 @@ import 'features/altro/impostazioni_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Android resolves package:sqlite3 to libsqlite3.so unless told otherwise; point it at the
-  // SQLCipher library shipped by sqlcipher_flutter_libs before anything opens the DB. iOS links
-  // SQLCipher through its pod, so no override is needed there.
-  open.overrideFor(OperatingSystem.android, openCipherOnAndroid);
 
   // ── Crash reporting (Sentry) ────────────────────────────────────────────────
   //
@@ -146,12 +143,16 @@ Future<void> runTaskTapApp() async {
         // `flutterfire configure` actually generated and keeps in sync going forward; relying on
         // google-services.json/GoogleService-Info.plist alone works on Android today but
         // silently has nothing to find on a platform whose native config file isn't present.
-        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
         // Must be registered here, before runApp, and with a top-level/static function — the OS
         // can spawn a fresh isolate to run this handler while the app is backgrounded/terminated,
         // which has no access to anything set up after this point. It was defined but never
         // actually wired to FirebaseMessaging, so background/terminated pushes never reached it.
-        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+        FirebaseMessaging.onBackgroundMessage(
+          firebaseMessagingBackgroundHandler,
+        );
       },
       initNotifications: () => NotificationService.instance.initialize(),
     );
@@ -188,6 +189,7 @@ Future<void> runTaskTapApp() async {
 
   runApp(
     ProviderScope(
+      retry: (_, _) => null,
       overrides: [
         // Bind the core GPS gate to the Impostazioni setting. Declared in core so
         // core/location does not import a feature; bound here, once, so no call site has to
@@ -236,7 +238,7 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     final service = NotificationService.instance;
     _deepLinks = DeepLinkDrainer(
       take: service.consumePendingDeepLink,
-      isReady: () => ref.read(authStateProvider).valueOrNull != null,
+      isReady: () => ref.read(authStateProvider).value != null,
       push: _router.push,
       clear: service.clearPendingDeepLink,
     );
@@ -245,7 +247,9 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // frame so the router is mounted; if auth is still loading, the auth listener drains later.
     WidgetsBinding.instance.addPostFrameCallback((_) => _deepLinks?.drain());
     // System notification dialog, once per install, after the first frame (never blocks bootstrap).
-    WidgetsBinding.instance.addPostFrameCallback((_) => _askPushPermissionAtLaunch());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _askPushPermissionAtLaunch(),
+    );
   }
 
   Future<void> _askPushPermissionAtLaunch() async {
@@ -255,7 +259,9 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       ask: service.ensurePermission,
       // A refusal must turn the in-app switch off (it defaults to on); a grant leaves it alone.
       onDone: (_) async {
-        if (mounted) await ref.read(impostazioniProvider.notifier).reconcilePushWithOs();
+        if (mounted) {
+          await ref.read(impostazioniProvider.notifier).reconcilePushWithOs();
+        }
       },
     ).run();
   }
@@ -275,18 +281,21 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // `NotificationService.isAvailable` — see its doc comment for why the
     // FIREBASE_ENABLED dart-define alone isn't a safe enough check.
     ref.listen(authStateProvider, (previous, next) {
-      final user = next.valueOrNull;
+      final user = next.value;
       if (NotificationService.isAvailable && user != null) {
         NotificationService.instance.registerDeviceToken(user.accessToken);
         // A push tapped before sign-in resolved (cold start) is parked; deliver it after the
         // frame so it does not land in the same tick as the router's own auth redirect.
-        WidgetsBinding.instance.addPostFrameCallback((_) => _deepLinks?.drain());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _deepLinks?.drain(),
+        );
       }
       // Session ended (or a different user signed in): a parked intent belongs to nobody now.
-      final signedOut = next is AsyncData && next.valueOrNull == null;
-      final userChanged = previous?.valueOrNull != null &&
+      final signedOut = next is AsyncData && next.value == null;
+      final userChanged =
+          previous?.value != null &&
           user != null &&
-          previous!.valueOrNull!.id != user.id;
+          previous!.value!.id != user.id;
       if (signedOut || userChanged) _deepLinks?.reset();
     });
 
@@ -305,8 +314,13 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       };
       NotificationService.instance.onForegroundBanner = (title, body) {
         final context = rootNavigatorKey.currentContext;
-        final text = [title, body].whereType<String>().where((s) => s.trim().isNotEmpty).join(' — ');
-        if (context != null && text.isNotEmpty) showAppToast(context, message: text);
+        final text = [
+          title,
+          body,
+        ].whereType<String>().where((s) => s.trim().isNotEmpty).join(' — ');
+        if (context != null && text.isNotEmpty) {
+          showAppToast(context, message: text);
+        }
       };
     }
 
@@ -344,29 +358,31 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       // real behind the block worth showing.
       builder: (context, child) {
         final isDeactivated = ref.watch(
-          cachedEntitlementProvider.select((e) => e.valueOrNull?.isAccountDeactivated ?? false),
+          cachedEntitlementProvider.select(
+            (e) => e.value?.isAccountDeactivated ?? false,
+          ),
         );
 
         // Outermost: if kiosk/auth loading never finishes, the router never leaves its initial
         // route, so this has to sit above the lock and the router's navigator.
         return StartupWatchdog(
           child: BiometricLock(
-          enabled: biometricLock,
-          // Themed backdrop, not transparent: SuspendedBanner now paints its own safe area (see
-          // its own doc comment) and returns SizedBox.shrink() when the tenant isn't suspended —
-          // with nothing behind that empty state, the status-bar strip would fall back to
-          // whatever the platform default is rather than matching the page underneath.
-          child: ColoredBox(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            child: isDeactivated
-                ? const AccountDeactivatedScreen()
-                : Column(
-                    children: [
-                      const SuspendedBanner(),
-                      Expanded(child: child ?? const SizedBox.shrink()),
-                    ],
-                  ),
-          ),
+            enabled: biometricLock,
+            // Themed backdrop, not transparent: SuspendedBanner now paints its own safe area (see
+            // its own doc comment) and returns SizedBox.shrink() when the tenant isn't suspended —
+            // with nothing behind that empty state, the status-bar strip would fall back to
+            // whatever the platform default is rather than matching the page underneath.
+            child: ColoredBox(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: isDeactivated
+                  ? const AccountDeactivatedScreen()
+                  : Column(
+                      children: [
+                        const SuspendedBanner(),
+                        Expanded(child: child ?? const SizedBox.shrink()),
+                      ],
+                    ),
+            ),
           ),
         );
       },

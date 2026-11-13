@@ -27,7 +27,7 @@ class _FakeLocation extends ILocationService {
 
 Future<void> _pump(WidgetTester tester, _FakeLocation fake) async {
   await tester.pumpWidget(
-    ProviderScope(
+    ProviderScope(retry: (_, _) => null, 
       overrides: [locationServiceProvider.overrideWithValue(fake)],
       child: MaterialApp(
         home: Consumer(

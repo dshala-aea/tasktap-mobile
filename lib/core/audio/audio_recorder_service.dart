@@ -98,10 +98,7 @@ class RecordAudioRecorderService implements AudioRecorderService {
   /// Where takes are written. Injectable so tests do not need the platform channel.
   final Future<Directory> Function() _tempDirectory;
 
-  static const RecordConfig config = RecordConfig(
-    encoder: AudioEncoder.aacLc,
-    numChannels: 1,
-  );
+  static const RecordConfig config = RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1);
 
   final AudioRecorder _recorder;
   StreamController<Duration>? _elapsed;

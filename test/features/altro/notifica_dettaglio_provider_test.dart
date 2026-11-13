@@ -22,6 +22,7 @@ DioException _error(int status) {
 
 ProviderContainer _container(MockDio dio) {
   final container = ProviderContainer(
+    retry: (_, _) => null,
     overrides: [dioProvider.overrideWithValue(dio)],
   );
   addTearDown(container.dispose);
@@ -31,7 +32,8 @@ ProviderContainer _container(MockDio dio) {
 void main() {
   test('a 404 becomes NotificaNonDisponibile', () async {
     final dio = MockDio();
-    when(() => dio.get<dynamic>('/api/notifications/n1')).thenThrow(_error(404));
+    when(() => dio.get<dynamic>('/api/notifications/n1'))
+        .thenThrow(_error(404));
 
     await expectLater(
       _container(dio).read(notificaDettaglioProvider('n1').future),
@@ -39,19 +41,24 @@ void main() {
     );
   });
 
-  test("a 403 (another user's notification) becomes NotificaNonDisponibile", () async {
-    final dio = MockDio();
-    when(() => dio.get<dynamic>('/api/notifications/n1')).thenThrow(_error(403));
+  test(
+    "a 403 (another user's notification) becomes NotificaNonDisponibile",
+    () async {
+      final dio = MockDio();
+      when(() => dio.get<dynamic>('/api/notifications/n1'))
+          .thenThrow(_error(403));
 
-    await expectLater(
-      _container(dio).read(notificaDettaglioProvider('n1').future),
-      throwsA(isA<NotificaNonDisponibile>()),
-    );
-  });
+      await expectLater(
+        _container(dio).read(notificaDettaglioProvider('n1').future),
+        throwsA(isA<NotificaNonDisponibile>()),
+      );
+    },
+  );
 
   test('a 500 propagates so the page can retry', () async {
     final dio = MockDio();
-    when(() => dio.get<dynamic>('/api/notifications/n1')).thenThrow(_error(500));
+    when(() => dio.get<dynamic>('/api/notifications/n1'))
+        .thenThrow(_error(500));
 
     await expectLater(
       _container(dio).read(notificaDettaglioProvider('n1').future),

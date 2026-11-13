@@ -5,7 +5,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
+import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart'
+    show internalUserIdPrefsKey;
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart' show absenceStatusLabel;
 import 'package:tasktap_mobile/data/smart_working/smart_working_request_api_client.dart';
 
@@ -99,9 +100,7 @@ void main() {
       expect(decided.decidedAt, DateTime.utc(2026, 9, 10, 8, 30));
       expect(decided.decisionReason, 'ok');
 
-      final pending = SmartWorkingRequestDto.fromJson(
-        _row(reason: null),
-      );
+      final pending = SmartWorkingRequestDto.fromJson(_row(reason: null));
       expect(pending.reason, isNull);
       expect(pending.decidedByUserId, isNull);
       expect(pending.decidedAt, isNull);
@@ -145,9 +144,8 @@ void main() {
       SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'user-1'});
       final adapter = _Adapter(body: jsonEncode([_row()]));
       final container = ProviderContainer(
-        overrides: [
-          smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter)),
-        ],
+        retry: (_, _) => null,
+        overrides: [smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter))],
       );
       addTearDown(container.dispose);
       // Keep the autoDispose provider alive across the await; a bare `read(.future)` can be
@@ -155,6 +153,7 @@ void main() {
       final sub = container.listen(mySmartWorkingRequestsProvider, (_, _) {});
       addTearDown(sub.close);
 
+      container.listen(mySmartWorkingRequestsProvider, (_, _) {});
       final items = await container.read(mySmartWorkingRequestsProvider.future);
 
       expect(adapter.captured!.method, 'GET');
@@ -175,9 +174,8 @@ void main() {
       // an unknown id takes: an absent key, and a key persisted as an empty string.
       final adapter = _Adapter(body: jsonEncode([_row()]));
       final container = ProviderContainer(
-        overrides: [
-          smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter)),
-        ],
+        retry: (_, _) => null,
+        overrides: [smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter))],
       );
       addTearDown(container.dispose);
       final sub = container.listen(mySmartWorkingRequestsProvider, (_, _) {});
@@ -205,20 +203,21 @@ void main() {
       SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'user-a'});
       final adapter = _Adapter(body: jsonEncode(<dynamic>[]));
       final container = ProviderContainer(
-        overrides: [
-          smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter)),
-        ],
+        retry: (_, _) => null,
+        overrides: [smartWorkingRequestApiClientProvider.overrideWithValue(_client(adapter))],
       );
       addTearDown(container.dispose);
       final sub = container.listen(mySmartWorkingRequestsProvider, (_, _) {});
       addTearDown(sub.close);
 
+      container.listen(mySmartWorkingRequestsProvider, (_, _) {});
       await container.read(mySmartWorkingRequestsProvider.future);
       expect(adapter.captured!.queryParameters, {'userId': 'user-a'});
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(internalUserIdPrefsKey, 'user-b');
       container.invalidate(mySmartWorkingRequestsProvider);
+      container.listen(mySmartWorkingRequestsProvider, (_, _) {});
       await container.read(mySmartWorkingRequestsProvider.future);
 
       expect(adapter.captured!.queryParameters, {'userId': 'user-b'});
@@ -247,18 +246,12 @@ void main() {
 
       // A LOCAL DateTime: the form builds its dates from a picker, and the wire carries the day
       // the technician picked, not the UTC day of the instant that picker produced.
-      await _client(adapter).create(
-        startDate: DateTime(2026, 9, 14),
-        endDate: DateTime(2026, 9, 18),
-        reason: '',
-      );
+      await _client(adapter)
+          .create(startDate: DateTime(2026, 9, 14), endDate: DateTime(2026, 9, 18), reason: '');
 
       expect(adapter.captured!.method, 'POST');
       expect(adapter.captured!.path, '/api/smart-working-requests');
-      expect(adapter.captured!.data, {
-        'startDate': '2026-09-14',
-        'endDate': '2026-09-18',
-      });
+      expect(adapter.captured!.data, {'startDate': '2026-09-14', 'endDate': '2026-09-18'});
     });
 
     test('create_SendsTheReasonWhenPresent', () async {
@@ -288,10 +281,7 @@ void main() {
       final adapter = _Adapter(body: '');
 
       await expectLater(
-        _client(adapter).create(
-          startDate: DateTime(2026, 9, 14),
-          endDate: DateTime(2026, 9, 18),
-        ),
+        _client(adapter).create(startDate: DateTime(2026, 9, 14), endDate: DateTime(2026, 9, 18)),
         completes,
       );
       expect(adapter.captured!.path, '/api/smart-working-requests');
@@ -302,13 +292,8 @@ void main() {
       final adapter = _Adapter(status: 400, body: jsonEncode({'detail': detail}));
 
       await expectLater(
-        _client(adapter).create(
-          startDate: DateTime(2026, 9, 18),
-          endDate: DateTime(2026, 9, 14),
-        ),
-        throwsA(
-          isA<SmartWorkingValidationError>().having((e) => e.detail, 'detail', detail),
-        ),
+        _client(adapter).create(startDate: DateTime(2026, 9, 18), endDate: DateTime(2026, 9, 14)),
+        throwsA(isA<SmartWorkingValidationError>().having((e) => e.detail, 'detail', detail)),
       );
     });
 
@@ -359,10 +344,7 @@ void main() {
       final adapter = _Adapter(status: 403, body: '');
       final client = _client(adapter);
 
-      await expectLater(
-        client.approve('sw-1'),
-        throwsA(isA<SmartWorkingPermissionError>()),
-      );
+      await expectLater(client.approve('sw-1'), throwsA(isA<SmartWorkingPermissionError>()));
     });
 
     test('a_400_detail_becomes_the_validation_error', () async {

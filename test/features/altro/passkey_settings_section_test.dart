@@ -56,7 +56,7 @@ class _FakePasskeyEnroller extends PasskeyEnroller {
 }
 
 Widget _wrap(_FakePasskeyEnroller enroller, {bool supported = true}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       passkeyEnrollerProvider.overrideWithValue(enroller),
       passkeySupportedProvider.overrideWith((ref) async => supported),

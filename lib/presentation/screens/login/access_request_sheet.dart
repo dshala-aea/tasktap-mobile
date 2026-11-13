@@ -12,7 +12,10 @@ import '../../../core/widgets/inline_alert.dart';
 import '../../../core/widgets/screen_header.dart';
 import '../../../data/access_requests/access_request_api_client.dart';
 
-Future<void> showAccessRequestSheet(BuildContext context, {String initialEmail = ''}) {
+Future<void> showAccessRequestSheet(
+  BuildContext context, {
+  String initialEmail = '',
+}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -30,7 +33,8 @@ class _AccessRequestSheet extends ConsumerStatefulWidget {
   final String initialEmail;
 
   @override
-  ConsumerState<_AccessRequestSheet> createState() => _AccessRequestSheetState();
+  ConsumerState<_AccessRequestSheet> createState() =>
+      _AccessRequestSheetState();
 }
 
 class _AccessRequestSheetState extends ConsumerState<_AccessRequestSheet> {
@@ -66,7 +70,8 @@ class _AccessRequestSheetState extends ConsumerState<_AccessRequestSheet> {
   String? _validateEmail(String? value) {
     final email = value?.trim() ?? '';
     if (email.isEmpty) return 'Inserisci la tua email.';
-    if (email.length > kAccessRequestMaxEmailLength || !_emailShape.hasMatch(email)) {
+    if (email.length > kAccessRequestMaxEmailLength ||
+        !_emailShape.hasMatch(email)) {
       return 'Inserisci un indirizzo email valido.';
     }
     return null;
@@ -99,7 +104,11 @@ class _AccessRequestSheetState extends ConsumerState<_AccessRequestSheet> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = humanErrorMessage(error, azione: 'inviare la richiesta', workIsSafe: false);
+        _error = humanErrorMessage(
+          error,
+          azione: 'inviare la richiesta',
+          workIsSafe: false,
+        );
       });
     }
   }
@@ -108,9 +117,13 @@ class _AccessRequestSheetState extends ConsumerState<_AccessRequestSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+          ),
           child: ListView(
             shrinkWrap: true,
             padding: const EdgeInsets.fromLTRB(
@@ -130,7 +143,12 @@ class _AccessRequestSheetState extends ConsumerState<_AccessRequestSheet> {
     return [
       Row(
         children: [
-          Expanded(child: Text('Richiedi accesso', style: AppTextStyles.headlineMedium)),
+          Expanded(
+            child: Text(
+              'Richiedi accesso',
+              style: AppTextStyles.headlineMedium,
+            ),
+          ),
           HeaderIconBtn(
             icon: LucideIcons.x,
             label: 'Chiudi',
@@ -141,7 +159,9 @@ class _AccessRequestSheetState extends ConsumerState<_AccessRequestSheet> {
       const SizedBox(height: AppSpacing.xs),
       Text(
         'Non hai ancora un account? Lasciaci i tuoi dati e ti contatteremo per attivarlo.',
-        style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
+        style: AppTextStyles.bodyMedium.copyWith(
+          color: context.colors.inkFaint,
+        ),
       ),
       const SizedBox(height: AppSpacing.lg),
       Form(
@@ -238,7 +258,11 @@ class _AccessRequestSheetState extends ConsumerState<_AccessRequestSheet> {
             color: context.colors.green.withAlpha(20),
             shape: BoxShape.circle,
           ),
-          child: Icon(LucideIcons.checkCircle2, color: context.colors.green, size: 28),
+          child: Icon(
+            LucideIcons.checkCircle2,
+            color: context.colors.green,
+            size: 28,
+          ),
         ),
       ),
       const SizedBox(height: AppSpacing.base),

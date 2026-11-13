@@ -98,7 +98,7 @@ Widget _buildScreen(
   _FakeSmartWorkingRequestApiClient fake, {
   required _MockEntitlementService service,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       smartWorkingRequestApiClientProvider.overrideWithValue(fake),
       // Cancel goes through ensureOnlineOrWarn, the same guard the sibling create flow uses.

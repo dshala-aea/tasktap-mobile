@@ -5,8 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/ai/ai_api_client.dart';
 import '../../data/local/app_database.dart';
-import '../../data/reports/import_server_report.dart'
-    show controlRowId, controlSnapshotsForTicket;
+import '../../data/reports/import_server_report.dart' show controlRowId, controlSnapshotsForTicket;
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider;

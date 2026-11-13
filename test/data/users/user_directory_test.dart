@@ -23,34 +23,47 @@ void main() {
   test('userDisplayName_prefers_displayName_then_fullName_then_parts', () {
     expect(userDisplayName({'displayName': 'Mario Rossi'}), 'Mario Rossi');
     expect(userDisplayName({'fullName': 'Mario Rossi'}), 'Mario Rossi');
-    expect(userDisplayName({'firstName': 'Mario', 'lastName': 'Rossi'}), 'Mario Rossi');
-    expect(userDisplayName({'firstName': '', 'lastName': ''}), 'Utente senza nome');
+    expect(
+      userDisplayName({'firstName': 'Mario', 'lastName': 'Rossi'}),
+      'Mario Rossi',
+    );
+    expect(
+      userDisplayName({'firstName': '', 'lastName': ''}),
+      'Utente senza nome',
+    );
   });
 
-  test('userNameByIdProvider_maps_ids_and_falls_back_to_empty_on_error', () async {
-    final rows = [
-      {'id': 'u1', 'fullName': 'Mario Rossi'},
-      {'id': 'u2', 'firstName': 'Anna', 'lastName': 'Bianchi'},
-      {'fullName': 'No id'},
-    ];
+  test(
+    'userNameByIdProvider_maps_ids_and_falls_back_to_empty_on_error',
+    () async {
+      final rows = [
+        {'id': 'u1', 'fullName': 'Mario Rossi'},
+        {'id': 'u2', 'firstName': 'Anna', 'lastName': 'Bianchi'},
+        {'fullName': 'No id'},
+      ];
 
-    final ok = ProviderContainer(
-      overrides: [adminApiClientProvider.overrideWithValue(_FakeAdminApi(rows))],
-    );
-    addTearDown(ok.dispose);
-    expect(await ok.read(userNameByIdProvider.future), {
-      'u1': 'Mario Rossi',
-      'u2': 'Anna Bianchi',
-    });
+      final ok = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [
+          adminApiClientProvider.overrideWithValue(_FakeAdminApi(rows)),
+        ],
+      );
+      addTearDown(ok.dispose);
+      expect(await ok.read(userNameByIdProvider.future), {
+        'u1': 'Mario Rossi',
+        'u2': 'Anna Bianchi',
+      });
 
-    final failed = ProviderContainer(
-      overrides: [
-        adminApiClientProvider.overrideWithValue(
-          _FakeAdminApi(const [], error: Exception('403')),
-        ),
-      ],
-    );
-    addTearDown(failed.dispose);
-    expect(await failed.read(userNameByIdProvider.future), isEmpty);
-  });
+      final failed = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [
+          adminApiClientProvider.overrideWithValue(
+            _FakeAdminApi(const [], error: Exception('403')),
+          ),
+        ],
+      );
+      addTearDown(failed.dispose);
+      expect(await failed.read(userNameByIdProvider.future), isEmpty);
+    },
+  );
 }

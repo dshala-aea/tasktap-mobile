@@ -12,6 +12,7 @@ import '../../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../new_ticket_form_state.dart';
 import '../ticket_api_client.dart';
 import 'blamed_field_notice.dart';
+
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -94,8 +95,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
     // "there are no technicians" — the provider's fallback can only be trusted once a sync has
     // filled it.
     final colleaguesUnknown =
-        !ref.watch(isOnlineProvider) &&
-        ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+        !ref.watch(isOnlineProvider) && ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(

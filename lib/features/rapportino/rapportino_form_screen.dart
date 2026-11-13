@@ -2,7 +2,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../core/widgets/widgets.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,6 +25,7 @@ import 'steps/step_ore.dart';
 import 'steps/step_riepilogo.dart';
 import 'steps/step_strumenti.dart';
 import '../../presentation/providers/strumenti_selection_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -130,9 +133,9 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
               .watch(cachedTicketControlsProvider(ticketId))
               .maybeWhen(
                 data: (groups) => controlliCompletionFor(
-                  requiredControlIds: flattenTicketControls(
-                    groups,
-                  ).map((f) => f.control.id).toList(),
+                  requiredControlIds: flattenTicketControls(groups)
+                      .map((f) => f.control.id)
+                      .toList(),
                   recordedRows: editorState.controlloRows,
                 ),
                 orElse: () => false,
@@ -179,7 +182,9 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Semantics(
-              label: editorState.isSaving ? 'Salvataggio in corso' : 'Rapporto di intervento salvato',
+              label: editorState.isSaving
+                  ? 'Salvataggio in corso'
+                  : 'Rapporto di intervento salvato',
               liveRegion: true,
               child: AnimatedSwitcher(
                 duration: MediaQuery.of(context).disableAnimations

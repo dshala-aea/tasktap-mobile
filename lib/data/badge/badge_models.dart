@@ -29,7 +29,8 @@ enum BadgeScanResult {
     if (v == null) return BadgeScanResult.unknown;
     final wanted = v.toLowerCase();
     for (final r in BadgeScanResult.values) {
-      if (r != BadgeScanResult.unknown && r.name.toLowerCase() == wanted) return r;
+      if (r != BadgeScanResult.unknown && r.name.toLowerCase() == wanted)
+        return r;
     }
     return BadgeScanResult.unknown;
   }
@@ -48,7 +49,8 @@ enum BadgeScanAction {
     if (v == null) return BadgeScanAction.unknown;
     final wanted = v.toLowerCase();
     for (final a in BadgeScanAction.values) {
-      if (a != BadgeScanAction.unknown && a.name.toLowerCase() == wanted) return a;
+      if (a != BadgeScanAction.unknown && a.name.toLowerCase() == wanted)
+        return a;
     }
     return BadgeScanAction.unknown;
   }
@@ -90,7 +92,11 @@ class BadgeCard {
 
 /// The worker a scan resolved to (null on the outcome when the token identified nobody).
 class BadgeWorker {
-  const BadgeWorker({required this.displayName, this.photoUrl, required this.employerName});
+  const BadgeWorker({
+    required this.displayName,
+    this.photoUrl,
+    required this.employerName,
+  });
 
   final String displayName;
   final String? photoUrl;

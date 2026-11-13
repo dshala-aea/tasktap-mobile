@@ -103,12 +103,11 @@ void main() {
       .insert(ChecklistOmittedTicketsCompanion.insert(ticketId: ticketId));
 
   Future<void> seedCache({String ticketId = 'ticket-1', String label = 'Dal cache'}) =>
-      TicketControlsCacheRepository(db).cacheControls(ticketId, [
-        _group('cached', 'Cache', label),
-      ]);
+      TicketControlsCacheRepository(db).cacheControls(ticketId, [_group('cached', 'Cache', label)]);
 
   ProviderContainer container({bool online = false}) {
     final c = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(online),
@@ -125,26 +124,26 @@ void main() {
       for (final c in g.controls) c.label,
   ];
 
-  test(
-    'offline, a synced ticket with no omission marker answers from the mirror — never the API, '
-    'and without the technician having opened this ticket before',
-    () async {
-      await seedSyncedTicket();
-      await seedMirror();
-
-      final groups = await container().read(cachedTicketControlsProvider('ticket-1').future);
-
-      expect(labels(groups), ['Dal mirror']);
-    },
-  );
-
-  test('offline, an empty mirror for a synced ticket is a definite "no controls", not an error', () async {
+  test('offline, a synced ticket with no omission marker answers from the mirror — never the API, '
+      'and without the technician having opened this ticket before', () async {
     await seedSyncedTicket();
+    await seedMirror();
 
     final groups = await container().read(cachedTicketControlsProvider('ticket-1').future);
 
-    expect(groups, isEmpty);
+    expect(labels(groups), ['Dal mirror']);
   });
+
+  test(
+    'offline, an empty mirror for a synced ticket is a definite "no controls", not an error',
+    () async {
+      await seedSyncedTicket();
+
+      final groups = await container().read(cachedTicketControlsProvider('ticket-1').future);
+
+      expect(groups, isEmpty);
+    },
+  );
 
   test('offline, an authoritative mirror beats the older online cache', () async {
     await seedSyncedTicket();
@@ -174,8 +173,11 @@ void main() {
     await seedSyncedTicket();
     await seedOmitted();
 
-    expect(
-      () => container().read(cachedTicketControlsProvider('ticket-1').future),
+    final c = container();
+    c.listen(cachedTicketControlsProvider('ticket-1'), (_, _) {});
+    c.listen(cachedTicketControlsProvider('ticket-1'), (_, _) {});
+    await expectLater(
+      c.read(cachedTicketControlsProvider('ticket-1').future),
       throwsA(isA<TicketDetailOfflineException>()),
     );
   });
@@ -193,9 +195,8 @@ void main() {
     await seedSyncedTicket();
     await seedMirror();
 
-    final groups = await container(
-      online: true,
-    ).read(cachedTicketControlsProvider('ticket-1').future);
+    final groups = await container(online: true)
+        .read(cachedTicketControlsProvider('ticket-1').future);
 
     expect(labels(groups), ['Dal mirror']);
   });

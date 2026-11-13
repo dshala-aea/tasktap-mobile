@@ -8,6 +8,7 @@ import '../../core/theme/app_rack.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/gdpr/gdpr_api_client.dart';
 import '../../data/sync/connectivity_provider.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';

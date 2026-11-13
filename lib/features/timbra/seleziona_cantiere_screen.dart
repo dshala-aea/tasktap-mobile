@@ -80,7 +80,7 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
     // Same split as the Cantieri tab: "nothing synced here" is a fact about the phone and only
     // holds before the first completed sync. Once data has landed, an empty picker means the
     // technician has no cantiere in scope — a different problem, with a different remedy.
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,

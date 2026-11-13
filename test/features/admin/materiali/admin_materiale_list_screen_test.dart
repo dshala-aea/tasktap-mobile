@@ -20,7 +20,7 @@ import 'package:tasktap_mobile/features/admin/materiali/admin_materiale_list_scr
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 Widget _buildScreen(AppDatabase db, {Entitlement? entitlement}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       if (entitlement != null)
@@ -47,7 +47,7 @@ Widget _buildRoutedScreen(AppDatabase db) {
     ],
   );
 
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [appDatabaseProvider.overrideWithValue(db)],
     child: MaterialApp.router(routerConfig: router),
   );

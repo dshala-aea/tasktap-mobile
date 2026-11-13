@@ -131,7 +131,7 @@ class _AdminSquadraListScreenState extends ConsumerState<AdminSquadraListScreen>
     // Only ask for the member projection once the squadre are actually here: a failed or still
     // loading list cannot use it, and firing it alongside every error would be a wasted read.
     final users = squadreAsync.hasValue
-        ? ref.watch(allUsersProvider(true)).valueOrNull ?? const []
+        ? ref.watch(allUsersProvider(true)).value ?? const []
         : const <Map<String, dynamic>>[];
 
     // One bulk fetch for the whole list, not one per row. `squadraId` is the derived field
@@ -145,7 +145,7 @@ class _AdminSquadraListScreenState extends ConsumerState<AdminSquadraListScreen>
       memberNames.putIfAbsent(squadraId, () => []).add(userDisplayName(u));
     }
 
-    final rows = squadreAsync.valueOrNull ?? const <Map<String, dynamic>>[];
+    final rows = squadreAsync.value ?? const <Map<String, dynamic>>[];
     final leads = <String>{
       for (final s in rows)
         if (_text(s['capSquadraNome']) != null) _text(s['capSquadraNome'])!,

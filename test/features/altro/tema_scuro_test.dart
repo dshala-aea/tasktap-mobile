@@ -51,7 +51,7 @@ void main() {
 
   testWidgets('defaults to light', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    await tester.pumpWidget(ProviderScope(child: app()));
+    await tester.pumpWidget(ProviderScope(retry: (_, _) => null, child: app()));
     await tester.pumpAndSettle();
 
     expect(paletteOf(tester), AppPalette.light);
@@ -60,7 +60,7 @@ void main() {
   testWidgets('a persisted preference is honoured on launch', (tester) async {
     SharedPreferences.setMockInitialValues({'settings.tema_scuro': true});
     await warmPrefs(tester);
-    await tester.pumpWidget(ProviderScope(child: app()));
+    await tester.pumpWidget(ProviderScope(retry: (_, _) => null, child: app()));
     await tester.pumpAndSettle();
 
     expect(
@@ -75,7 +75,7 @@ void main() {
     late WidgetRef capturedRef;
 
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         child: Consumer(
           builder: (context, ref, _) {
             capturedRef = ref;
@@ -98,7 +98,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({'settings.tema_scuro': true});
     await warmPrefs(tester);
-    await tester.pumpWidget(ProviderScope(child: app()));
+    await tester.pumpWidget(ProviderScope(retry: (_, _) => null, child: app()));
     await tester.pumpAndSettle();
 
     // The end of the chain: a widget reading context.colors under the dark theme paints dark ink.

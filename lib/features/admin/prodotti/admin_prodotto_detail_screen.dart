@@ -114,12 +114,8 @@ class _ProdottoDetailBody extends ConsumerWidget {
     final isActive = prodotto['isActive'] as bool? ?? true;
     final status = _statusOf(isActive: isActive, warranty: warranty, today: today);
 
-    final customer = customerId == null
-        ? null
-        : ref.watch(customerByIdProvider(customerId)).valueOrNull;
-    final location = locationId == null
-        ? null
-        : ref.watch(locationByIdProvider(locationId)).valueOrNull;
+    final customer = customerId == null ? null : ref.watch(customerByIdProvider(customerId)).value;
+    final location = locationId == null ? null : ref.watch(locationByIdProvider(locationId)).value;
     final customerName = customer?.companyName.trim();
     final locationName = location?.name.trim();
 
@@ -151,8 +147,8 @@ class _ProdottoDetailBody extends ConsumerWidget {
       if (externalId.isNotEmpty) DetailFact(label: 'ID gestionale', value: externalId),
     ];
 
-    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? const {};
-    final tickets = ref.watch(adminProdottoTicketsProvider(id)).valueOrNull ?? const [];
+    final statusMap = ref.watch(ticketStatusMapProvider).value ?? const {};
+    final tickets = ref.watch(adminProdottoTicketsProvider(id)).value ?? const [];
     final events = [
       for (final ticket in tickets)
         DetailActivityEvent(

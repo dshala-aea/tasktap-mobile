@@ -11,6 +11,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/magazzino/magazzino_api_client.dart';
 import '../../magazzino/magazzino_providers.dart';
 import '../../ticket/steps/step_assegnazione.dart' show techniciansProvider;
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -121,7 +122,7 @@ class _AdminMagazzinoFormScreenState extends ConsumerState<AdminMagazzinoFormScr
   @override
   Widget build(BuildContext context) {
     final techniciansAsync = ref.watch(techniciansProvider);
-    final technicians = techniciansAsync.valueOrNull ?? const <Map<String, dynamic>>[];
+    final technicians = techniciansAsync.value ?? const <Map<String, dynamic>>[];
 
     return Scaffold(
       backgroundColor: context.colors.bg2,

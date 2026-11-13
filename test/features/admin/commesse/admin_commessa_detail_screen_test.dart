@@ -69,7 +69,7 @@ void main() {
   tearDown(() async => db.close());
 
   Widget buildHarness({bool isOnline = true}) {
-    return ProviderScope(
+    return ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),

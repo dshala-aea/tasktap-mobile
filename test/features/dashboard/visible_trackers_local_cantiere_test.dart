@@ -12,7 +12,8 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
+import 'package:tasktap_mobile/data/sync/sync_service.dart'
+    show appDatabaseProvider;
 import 'package:tasktap_mobile/data/worklogs/active_tracker_api_client.dart';
 import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart';
 import 'package:tasktap_mobile/features/timbra/timbra_providers.dart';
@@ -49,7 +50,10 @@ Future<void> _punch(
 
 /// Reads [localCantiereTimersProvider] once its stream has emitted.
 Future<List<ActiveTracker>> _local(AppDatabase db) async {
-  final c = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+  final c = ProviderContainer(
+    retry: (_, _) => null,
+    overrides: [appDatabaseProvider.overrideWithValue(db)],
+  );
   addTearDown(c.dispose);
   return c.read(localCantiereTimersProvider.future);
 }
@@ -63,26 +67,40 @@ void main() {
   });
   tearDown(() => db.close());
 
-  test('an open check-in becomes a cantiere tracker carrying the site name', () async {
-    await _insertCantiere(db, 'c1', 'Cantiere Via Roma');
-    await _punch(db, id: 'p1', type: 'ingresso', at: _start, cantiereId: 'c1');
+  test(
+    'an open check-in becomes a cantiere tracker carrying the site name',
+    () async {
+      await _insertCantiere(db, 'c1', 'Cantiere Via Roma');
+      await _punch(
+        db,
+        id: 'p1',
+        type: 'ingresso',
+        at: _start,
+        cantiereId: 'c1',
+      );
 
-    final trackers = await _local(db);
+      final trackers = await _local(db);
 
-    expect(trackers, hasLength(1));
-    final tracker = trackers.single;
-    expect(tracker.kind, ActiveTrackerKind.cantiere);
-    expect(tracker.id, 'p1');
-    expect(tracker.entityId, 'c1');
-    expect(tracker.label, 'Cantiere Via Roma');
-    expect(tracker.startedAtUtc, _start);
-    expect(tracker.startedAtUtc.isUtc, isTrue);
-  });
+      expect(trackers, hasLength(1));
+      final tracker = trackers.single;
+      expect(tracker.kind, ActiveTrackerKind.cantiere);
+      expect(tracker.id, 'p1');
+      expect(tracker.entityId, 'c1');
+      expect(tracker.label, 'Cantiere Via Roma');
+      expect(tracker.startedAtUtc, _start);
+      expect(tracker.startedAtUtc.isUtc, isTrue);
+    },
+  );
 
   test('a closed interval is not running and is not listed', () async {
     await _insertCantiere(db, 'c1', 'Cantiere Via Roma');
     await _punch(db, id: 'p1', type: 'ingresso', at: _start, cantiereId: 'c1');
-    await _punch(db, id: 'p2', type: 'uscita', at: _start.add(const Duration(hours: 3)));
+    await _punch(
+      db,
+      id: 'p2',
+      type: 'uscita',
+      at: _start.add(const Duration(hours: 3)),
+    );
 
     expect(await _local(db), isEmpty);
   });
@@ -106,7 +124,12 @@ void main() {
     await _insertCantiere(db, 'c1', 'Primo');
     await _insertCantiere(db, 'c2', 'Secondo');
     await _punch(db, id: 'p1', type: 'ingresso', at: _start, cantiereId: 'c1');
-    await _punch(db, id: 'p2', type: 'uscita', at: _start.add(const Duration(hours: 1)));
+    await _punch(
+      db,
+      id: 'p2',
+      type: 'uscita',
+      at: _start.add(const Duration(hours: 1)),
+    );
     await _punch(
       db,
       id: 'p3',
@@ -128,7 +151,13 @@ void main() {
 
   test('the visible list shows the local session instead of the server one for that site', () async {
     await _insertCantiere(db, 'c1', 'Cantiere Via Roma');
-    await _punch(db, id: 'p-local', type: 'ingresso', at: _start, cantiereId: 'c1');
+    await _punch(
+      db,
+      id: 'p-local',
+      type: 'ingresso',
+      at: _start,
+      cantiereId: 'c1',
+    );
 
     final serverCantiere = ActiveTracker(
       kind: ActiveTrackerKind.cantiere,
@@ -146,16 +175,25 @@ void main() {
     );
 
     final c = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
-        activeTrackersProvider.overrideWith((ref) => Stream.value([serverCantiere, otherSite])),
-        todaySessionsProvider.overrideWith((ref) => Stream.value(const <WorkSession>[])),
-        localTicketTimersProvider.overrideWith((ref) => Stream.value(const <ActiveTracker>[])),
+        activeTrackersProvider.overrideWith(
+          (ref) => Stream.value([serverCantiere, otherSite]),
+        ),
+        todaySessionsProvider.overrideWith(
+          (ref) => Stream.value(const <WorkSession>[]),
+        ),
+        localTicketTimersProvider.overrideWith(
+          (ref) => Stream.value(const <ActiveTracker>[]),
+        ),
       ],
     );
     addTearDown(c.dispose);
     c.listen(visibleTrackersProvider, (_, _) {});
+    c.listen(activeTrackersProvider, (_, _) {});
     await c.read(activeTrackersProvider.future);
+    c.listen(localCantiereTimersProvider, (_, _) {});
     await c.read(localCantiereTimersProvider.future);
     await pumpEventQueue();
 

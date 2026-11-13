@@ -98,8 +98,8 @@ class TicketMobileSessionResult {
             ? DateTime.parse(json['endTime'] as String)
             : null,
         isActive: json['isActive'] as bool? ?? false,
-        clockDisagreementSeconds:
-            (json['clockDisagreementSeconds'] as num?)?.toInt(),
+        clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)
+            ?.toInt(),
       );
 }
 

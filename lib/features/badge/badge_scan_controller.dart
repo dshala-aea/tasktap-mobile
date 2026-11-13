@@ -15,6 +15,7 @@ import 'dart:convert' show utf8;
 
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/badge/badge_api_client.dart';
@@ -51,10 +52,13 @@ class BadgeScanEntry {
 }
 
 /// Clock seam, overridden in tests.
-final badgeScanClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+final badgeScanClockProvider = Provider<DateTime Function()>(
+  (ref) => DateTime.now,
+);
 
 /// True while a scan request is in flight for the cantiere (drives the "Verifica in corso" line).
-final badgeScanInFlightProvider = StateProvider.autoDispose.family<bool, String>((ref, id) => false);
+final badgeScanInFlightProvider = StateProvider.autoDispose
+    .family<bool, String>((ref, id) => false);
 
 class _Handled {
   _Handled(this.at, this.clientScanId, {required this.answered});
@@ -66,7 +70,11 @@ class _Handled {
   bool answered;
 }
 
-class BadgeScanController extends AutoDisposeFamilyNotifier<List<BadgeScanEntry>, String> {
+class BadgeScanController extends Notifier<List<BadgeScanEntry>> {
+  BadgeScanController(this.arg);
+
+  final String arg;
+
   // Handled codes keyed by the SHA-256 of the scanned string, so no raw token is retained here.
   // Private to this notifier, never exposed or logged, cleared on dispose.
   final Map<String, _Handled> _handled = {};
@@ -75,7 +83,7 @@ class BadgeScanController extends AutoDisposeFamilyNotifier<List<BadgeScanEntry>
   static const _uuid = Uuid();
 
   @override
-  List<BadgeScanEntry> build(String cantiereId) {
+  List<BadgeScanEntry> build() {
     ref.onDispose(() {
       _disposed = true;
       _handled.clear();
@@ -103,7 +111,11 @@ class BadgeScanController extends AutoDisposeFamilyNotifier<List<BadgeScanEntry>
     }
     // A retry of an unanswered attempt keeps its id; a new code or a re-scan after the
     // suppression window (entry pruned) gets a fresh one.
-    final mark = _Handled(now, prior?.clientScanId ?? _uuid.v4(), answered: false);
+    final mark = _Handled(
+      now,
+      prior?.clientScanId ?? _uuid.v4(),
+      answered: false,
+    );
     _handled[key] = mark;
     _inFlight = true;
     ref.read(badgeScanInFlightProvider(arg).notifier).state = true;
@@ -130,4 +142,6 @@ class BadgeScanController extends AutoDisposeFamilyNotifier<List<BadgeScanEntry>
 }
 
 final badgeScanControllerProvider = NotifierProvider.autoDispose
-    .family<BadgeScanController, List<BadgeScanEntry>, String>(BadgeScanController.new);
+    .family<BadgeScanController, List<BadgeScanEntry>, String>(
+      BadgeScanController.new,
+    );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -17,6 +19,7 @@ import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
 import 'id_plate_hero_comp.dart';
 import 'work_queue_section.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -32,7 +35,8 @@ class DashboardScreen extends StatelessWidget {
   /// Keeps the running clocks honest about other devices: refresh on focus/resume and a 15s
   /// foreground poll. See WorkLogLiveRefresh.
   @override
-  Widget build(BuildContext context) => const WorkLogLiveRefresh(child: _DashboardView());
+  Widget build(BuildContext context) =>
+      const WorkLogLiveRefresh(child: _DashboardView());
 }
 
 class _DashboardView extends ConsumerWidget {
@@ -117,7 +121,10 @@ class _DashboardView extends ConsumerWidget {
                   ),
                   child: trackers.isEmpty
                       ? const _ClockInPrompt(key: ValueKey('idle'))
-                      : ActiveTrackerStrip(key: const ValueKey('active'), trackers: trackers),
+                      : ActiveTrackerStrip(
+                          key: const ValueKey('active'),
+                          trackers: trackers,
+                        ),
                 ),
               ),
             ),
@@ -212,7 +219,9 @@ class _DashboardView extends ConsumerWidget {
             ),
 
             // Bottom padding so the last card clears the floating bottom nav.
-            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: context.navClearance),
+            ),
           ],
         ),
       ),
@@ -258,7 +267,11 @@ class _ClockInPrompt extends ConsumerWidget {
           padding: const EdgeInsets.all(AppSpacing.base),
           child: Row(
             children: [
-              const Icon(LucideIcons.scanLine, size: 18, color: AppColors.WHITE),
+              const Icon(
+                LucideIcons.scanLine,
+                size: 18,
+                color: AppColors.WHITE,
+              ),
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
@@ -271,7 +284,11 @@ class _ClockInPrompt extends ConsumerWidget {
                   ),
                 ),
               ),
-              Icon(LucideIcons.chevronRight, size: 16, color: AppColors.WHITE.withAlpha(179)),
+              Icon(
+                LucideIcons.chevronRight,
+                size: 16,
+                color: AppColors.WHITE.withAlpha(179),
+              ),
             ],
           ),
         ),
@@ -295,7 +312,10 @@ class _ClockInPrompt extends ConsumerWidget {
               const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.WHITE),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.WHITE,
+                ),
               )
             else
               const Icon(LucideIcons.clock, size: 18, color: AppColors.WHITE),
@@ -310,7 +330,11 @@ class _ClockInPrompt extends ConsumerWidget {
               ),
             ),
             const Spacer(),
-            Icon(LucideIcons.chevronRight, size: 16, color: AppColors.WHITE.withAlpha(179)),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: AppColors.WHITE.withAlpha(179),
+            ),
           ],
         ),
       ),
@@ -332,7 +356,9 @@ class _ClockInPrompt extends ConsumerWidget {
   /// the call directly and reading its own outcome right back out ties the toast to the tap that
   /// caused it, not to ambient state this instance never touched.
   Future<void> _punchIn(BuildContext context, WidgetRef ref) async {
-    await ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider));
+    await ref
+        .read(punchNotifierProvider.notifier)
+        .punch(ref.read(timbraStateProvider));
     if (!context.mounted) return;
     final result = ref.read(punchNotifierProvider);
     if (result is AsyncError) {

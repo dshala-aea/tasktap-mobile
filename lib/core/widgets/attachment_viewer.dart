@@ -11,6 +11,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../data/attachments/attachment_content_cache.dart';
 import 'app_toast.dart';
 import 'screen_header.dart';
+
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -163,7 +164,7 @@ class AttachmentThumbnail extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final file = ref.watch(attachmentFileProvider(attachment)).valueOrNull;
+    final file = ref.watch(attachmentFileProvider(attachment)).value;
     if (file == null) return placeholder;
     return Image.file(
       file,
@@ -263,9 +264,7 @@ class _FullscreenImageViewer extends StatelessWidget {
         Icon(LucideIcons.imageOff, size: 48, color: AppColors.WHITE.withAlpha(150)),
         const SizedBox(height: 12),
         Text(
-          offline
-              ? 'Immagine non disponibile offline'
-              : 'Impossibile caricare l\'immagine',
+          offline ? 'Immagine non disponibile offline' : 'Impossibile caricare l\'immagine',
           style: TextStyle(color: AppColors.WHITE.withAlpha(200), fontFamily: 'Archivo'),
         ),
       ],

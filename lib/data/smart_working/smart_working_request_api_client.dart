@@ -97,21 +97,18 @@ class SmartWorkingRequestDto {
   /// know still renders instead of taking the list down.
   String get statusLabel => absenceStatusLabel(status);
 
-  factory SmartWorkingRequestDto.fromJson(Map<String, dynamic> json) =>
-      SmartWorkingRequestDto(
-        id: _requireId(json['id']),
-        requestedByUserId: json['requestedByUserId'] as String? ?? '',
-        createdByUserId: json['createdByUserId'] as String? ?? '',
-        startDate: parseDateOnlyOrThrow(json['startDate']),
-        endDate: parseDateOnlyOrThrow(json['endDate']),
-        reason: json['reason'] as String?,
-        status: _requireStatus(json['status']),
-        decidedByUserId: json['decidedByUserId'] as String?,
-        decidedAt: json['decidedAt'] is String
-            ? DateTime.tryParse(json['decidedAt'] as String)
-            : null,
-        decisionReason: json['decisionReason'] as String?,
-      );
+  factory SmartWorkingRequestDto.fromJson(Map<String, dynamic> json) => SmartWorkingRequestDto(
+    id: _requireId(json['id']),
+    requestedByUserId: json['requestedByUserId'] as String? ?? '',
+    createdByUserId: json['createdByUserId'] as String? ?? '',
+    startDate: parseDateOnlyOrThrow(json['startDate']),
+    endDate: parseDateOnlyOrThrow(json['endDate']),
+    reason: json['reason'] as String?,
+    status: _requireStatus(json['status']),
+    decidedByUserId: json['decidedByUserId'] as String?,
+    decidedAt: json['decidedAt'] is String ? DateTime.tryParse(json['decidedAt'] as String) : null,
+    decisionReason: json['decisionReason'] as String?,
+  );
 }
 
 /// Thrown on a 400 whose body carries `detail` (the server's Italian, actionable prose — e.g. "la
@@ -213,20 +210,17 @@ class SmartWorkingRequestApiClient {
   ///
   /// `requestedByUserId` is never sent: null means "myself" and the server resolves it, explicitly
   /// not trusting a client-supplied self-id.
-  Future<void> create({
-    required DateTime startDate,
-    required DateTime endDate,
-    String? reason,
-  }) => _guarded(() async {
-    await _dio.post<dynamic>(
-      '/api/smart-working-requests',
-      data: {
-        'startDate': formatDateOnly(startDate)!,
-        'endDate': formatDateOnly(endDate)!,
-        if (reason != null && reason.isNotEmpty) 'reason': reason,
-      },
-    );
-  });
+  Future<void> create({required DateTime startDate, required DateTime endDate, String? reason}) =>
+      _guarded(() async {
+        await _dio.post<dynamic>(
+          '/api/smart-working-requests',
+          data: {
+            'startDate': formatDateOnly(startDate)!,
+            'endDate': formatDateOnly(endDate)!,
+            if (reason != null && reason.isNotEmpty) 'reason': reason,
+          },
+        );
+      });
 
   /// POST /api/smart-working-requests/{id}/cancel.
   Future<void> cancel(String id) => _guarded(() async {

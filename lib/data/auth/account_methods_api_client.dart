@@ -53,6 +53,8 @@ class AccountMethodsApiClient {
   }
 }
 
-final accountMethodsApiClientProvider = Provider<AccountMethodsApiClient>((ref) {
+final accountMethodsApiClientProvider = Provider<AccountMethodsApiClient>((
+  ref,
+) {
   return AccountMethodsApiClient(ref.watch(dioProvider));
 });

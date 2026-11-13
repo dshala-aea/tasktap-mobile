@@ -61,10 +61,7 @@ Future<void> recordRetainedOwner(
   }
 }
 
-Future<void> _write(
-  String sub,
-  Future<SharedPreferences> Function() prefsLoader,
-) async {
+Future<void> _write(String sub, Future<SharedPreferences> Function() prefsLoader) async {
   final prefs = await prefsLoader();
   final internalId = prefs.getString(internalUserIdPrefsKey);
   await prefs.setString(sessionRetainedOwnerSubKey, sub);

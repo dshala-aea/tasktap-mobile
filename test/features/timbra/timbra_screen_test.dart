@@ -10,12 +10,14 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
-import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart' show nowProvider;
+import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart'
+    show nowProvider;
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -118,7 +120,7 @@ Widget _buildApp(
   ILocationService? locationService,
   List<Override> extraOverrides = const [],
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       timbraSyncServiceProvider.overrideWithValue(_makeNoopSyncService()),
@@ -131,7 +133,9 @@ Widget _buildApp(
       // PunchNotifier._captureGpsSilently) on every punch/pause. DisabledLocationService is the
       // same "no position, never prompts" behavior the app itself falls back to whenever the
       // technician has GPS turned off, so this is a realistic default, not just a test workaround.
-      locationServiceProvider.overrideWithValue(locationService ?? const DisabledLocationService()),
+      locationServiceProvider.overrideWithValue(
+        locationService ?? const DisabledLocationService(),
+      ),
       ...extraOverrides,
     ],
     child: const MaterialApp(home: TimbraScreen()),
@@ -171,15 +175,18 @@ void main() {
     await _teardownTimer(tester);
   });
 
-  testWidgets('offers a back control — this route is pushed on the root navigator', (tester) async {
-    // Defect: the screen sits on the root navigator, so the app's tab bar is not on screen and
-    // the header declared no leading control. Android's system gesture was the only way out.
-    await tester.pumpWidget(_buildApp(db));
-    await tester.pump();
+  testWidgets(
+    'offers a back control — this route is pushed on the root navigator',
+    (tester) async {
+      // Defect: the screen sits on the root navigator, so the app's tab bar is not on screen and
+      // the header declared no leading control. Android's system gesture was the only way out.
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump();
 
-    expect(find.bySemanticsLabel('Indietro'), findsOneWidget);
-    await _teardownTimer(tester);
-  });
+      expect(find.bySemanticsLabel('Indietro'), findsOneWidget);
+      await _teardownTimer(tester);
+    },
+  );
 
   testWidgets('shows Nessuna timbratura oggi when no sessions', (tester) async {
     await tester.pumpWidget(_buildApp(db));
@@ -191,7 +198,9 @@ void main() {
     await _teardownTimer(tester);
   });
 
-  testWidgets('punch button tap puts the first stretch on the day', (tester) async {
+  testWidgets('punch button tap puts the first stretch on the day', (
+    tester,
+  ) async {
     await tester.pumpWidget(_buildApp(db));
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -228,7 +237,9 @@ void main() {
   // corrected by the office never appeared, so the total undercounted and the technician had no
   // way to see it was wrong. The row now comes from the server's day, merged with this phone's
   // own unsent punches, and it says where it came from.
-  testWidgets('a punch this phone never made is in the day, and says so', (tester) async {
+  testWidgets('a punch this phone never made is in the day, and says so', (
+    tester,
+  ) async {
     final clock = DateTime.utc(2026, 7, 10, 7); // 09:00 Rome
     await tester.pumpWidget(
       _buildApp(
@@ -268,9 +279,15 @@ void main() {
   // (a rejected opener would double the day, and nothing will retry it), so before this notice
   // existed the only trace was a toast that scrolled away. Seeded through the real repository so
   // the test exercises the same marker and window the app uses.
-  testWidgets('a refused punch is named on screen and opens its details', (tester) async {
+  testWidgets('a refused punch is named on screen and opens its details', (
+    tester,
+  ) async {
     final repo = WorkSessionRepository(db);
-    await repo.addEvent(id: 'refused', eventTime: DateTime.now().toUtc(), eventType: 'ingresso');
+    await repo.addEvent(
+      id: 'refused',
+      eventTime: DateTime.now().toUtc(),
+      eventType: 'ingresso',
+    );
     await repo.markSyncFailed('refused');
 
     await tester.pumpWidget(_buildApp(db));
@@ -319,7 +336,9 @@ void main() {
       await _teardownTimer(tester);
     });
 
-    testWidgets('tapping PAUSA records a Pausa entry and flips to RIPRENDI', (tester) async {
+    testWidgets('tapping PAUSA records a Pausa entry and flips to RIPRENDI', (
+      tester,
+    ) async {
       await tester.pumpWidget(_buildApp(db));
       await tester.pump(const Duration(milliseconds: 50));
 
@@ -337,27 +356,30 @@ void main() {
       await _teardownTimer(tester);
     });
 
-    testWidgets('tapping RIPRENDI records a Ripresa entry and flips back to PAUSA', (tester) async {
-      await tester.pumpWidget(_buildApp(db));
-      await tester.pump(const Duration(milliseconds: 50));
+    testWidgets(
+      'tapping RIPRENDI records a Ripresa entry and flips back to PAUSA',
+      (tester) async {
+        await tester.pumpWidget(_buildApp(db));
+        await tester.pump(const Duration(milliseconds: 50));
 
-      await tester.tap(find.text('INIZIA TURNO'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+        await tester.tap(find.text('INIZIA TURNO'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
 
-      await tester.tap(find.text('PAUSA'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+        await tester.tap(find.text('PAUSA'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
 
-      await tester.tap(find.text('RIPRENDI'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+        await tester.tap(find.text('RIPRENDI'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
 
-      // Two worked stretches now — the one before the pause and the one after it.
-      expect(find.text('Turno'), findsNWidgets(2));
-      expect(find.text('PAUSA'), findsOneWidget);
-      await _teardownTimer(tester);
-    });
+        // Two worked stretches now — the one before the pause and the one after it.
+        expect(find.text('Turno'), findsNWidgets(2));
+        expect(find.text('PAUSA'), findsOneWidget);
+        await _teardownTimer(tester);
+      },
+    );
 
     testWidgets('disappears again once the shift ends', (tester) async {
       await tester.pumpWidget(_buildApp(db));
@@ -385,36 +407,47 @@ void main() {
   /// instead is the opposite failure: the controls take about 400dp, so on a 640dp viewport the
   /// session list gets a few pixels and shows nothing at all.
   group('layout adapts to the height it is given', () {
-    testWidgets('a tall phone holds the controls still and scrolls only the sessions', (
-      tester,
-    ) async {
-      await tester.binding.setSurfaceSize(const Size(390, 844));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+    testWidgets(
+      'a tall phone holds the controls still and scrolls only the sessions',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      await tester.pumpWidget(_buildApp(db));
-      await tester.pump(const Duration(milliseconds: 50));
+        await tester.pumpWidget(_buildApp(db));
+        await tester.pump(const Duration(milliseconds: 50));
 
-      // The punch control is not inside anything that scrolls, so it cannot leave the screen.
-      expect(
-        find.ancestor(of: find.text('INIZIA TURNO'), matching: find.byType(SingleChildScrollView)),
-        findsNothing,
-      );
-      await _teardownTimer(tester);
-    });
+        // The punch control is not inside anything that scrolls, so it cannot leave the screen.
+        expect(
+          find.ancestor(
+            of: find.text('INIZIA TURNO'),
+            matching: find.byType(SingleChildScrollView),
+          ),
+          findsNothing,
+        );
+        await _teardownTimer(tester);
+      },
+    );
 
-    testWidgets('a short phone scrolls the page rather than crushing the list', (tester) async {
-      // A squeezed session card is worse than a scroll: the day's total is the one number on it
-      // anybody is looking for, and at a few pixels tall nothing renders at all.
-      await tester.binding.setSurfaceSize(const Size(320, 560));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+    testWidgets(
+      'a short phone scrolls the page rather than crushing the list',
+      (tester) async {
+        // A squeezed session card is worse than a scroll: the day's total is the one number on it
+        // anybody is looking for, and at a few pixels tall nothing renders at all.
+        await tester.binding.setSurfaceSize(const Size(320, 560));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      await tester.pumpWidget(_buildApp(db));
-      await tester.pump(const Duration(milliseconds: 50));
+        await tester.pumpWidget(_buildApp(db));
+        await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
-      expect(tester.takeException(), isNull, reason: 'no overflow at the smallest supported size');
-      await _teardownTimer(tester);
-    });
+        expect(find.byType(SingleChildScrollView), findsOneWidget);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'no overflow at the smallest supported size',
+        );
+        await _teardownTimer(tester);
+      },
+    );
   });
 
   // ── Status-First Hero (2026-08-30) ────────────────────────────────────────
@@ -476,35 +509,36 @@ void main() {
       actions: [action],
     );
 
-    testWidgets('renders the server reason above the punch button when ClockIn is refused', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _buildApp(
-          db,
-          extraOverrides: [
-            giornataProvider.overrideWith(
-              (ref) async => giornataWith(
-                const GiornataActionDto(
-                  action: 'ClockIn',
-                  enabled: false,
-                  reasonCode: 'payroll_locked',
-                  reason: "Il periodo è chiuso per le buste paga: chiedi all'amministrazione.",
+    testWidgets(
+      'renders the server reason above the punch button when ClockIn is refused',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildApp(
+            db,
+            extraOverrides: [
+              giornataProvider.overrideWith(
+                (ref) async => giornataWith(
+                  const GiornataActionDto(
+                    action: 'ClockIn',
+                    enabled: false,
+                    reasonCode: 'payroll_locked',
+                    reason: "Il periodo è chiuso per le buste paga: chiedi all'amministrazione.",
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      );
-      // Let giornataProvider's future resolve before asserting on its dependents.
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.pump(const Duration(milliseconds: 50));
+            ],
+          ),
+        );
+        // Let giornataProvider's future resolve before asserting on its dependents.
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.pump(const Duration(milliseconds: 50));
 
-      // findsOneWidget also proves it is not duplicated under the dimmed button anymore —
-      // _PunchButton no longer renders its own copy of the reason (see its doc comment).
-      expect(find.textContaining('chiuso per le buste paga'), findsOneWidget);
-      await _teardownTimer(tester);
-    });
+        // findsOneWidget also proves it is not duplicated under the dimmed button anymore —
+        // _PunchButton no longer renders its own copy of the reason (see its doc comment).
+        expect(find.textContaining('chiuso per le buste paga'), findsOneWidget);
+        await _teardownTimer(tester);
+      },
+    );
 
     testWidgets('does not render when ClockIn is allowed', (tester) async {
       await tester.pumpWidget(
@@ -512,8 +546,9 @@ void main() {
           db,
           extraOverrides: [
             giornataProvider.overrideWith(
-              (ref) async =>
-                  giornataWith(const GiornataActionDto(action: 'ClockIn', enabled: true)),
+              (ref) async => giornataWith(
+                const GiornataActionDto(action: 'ClockIn', enabled: true),
+              ),
             ),
           ],
         ),
@@ -537,11 +572,15 @@ void main() {
     // the smart-working flag too: the method alone no longer decides, so its assertions live
     // beside the flag's own, in one place.
 
-    testWidgets('hides the header QR icon when method is buttonOnly', (tester) async {
+    testWidgets('hides the header QR icon when method is buttonOnly', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _buildApp(
           db,
-          extraOverrides: [effectiveClockInMethodProvider.overrideWithValue('ButtonOnly')],
+          extraOverrides: [
+            effectiveClockInMethodProvider.overrideWithValue('ButtonOnly'),
+          ],
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
@@ -554,36 +593,48 @@ void main() {
       await _teardownTimer(tester);
     });
 
-    testWidgets('shows both the punch button and the QR header icon when method is both', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _buildApp(db, extraOverrides: [effectiveClockInMethodProvider.overrideWithValue('Both')]),
-      );
-      await tester.pump(const Duration(milliseconds: 100));
+    testWidgets(
+      'shows both the punch button and the QR header icon when method is both',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildApp(
+            db,
+            extraOverrides: [
+              effectiveClockInMethodProvider.overrideWithValue('Both'),
+            ],
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('INIZIA TURNO'), findsOneWidget);
-      expect(find.bySemanticsLabel('Timbra con QR'), findsOneWidget);
+        expect(find.text('INIZIA TURNO'), findsOneWidget);
+        expect(find.bySemanticsLabel('Timbra con QR'), findsOneWidget);
 
-      await _teardownTimer(tester);
-    });
+        await _teardownTimer(tester);
+      },
+    );
 
-    testWidgets('shows both by default (no override) — existing behavior unchanged', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildApp(db));
-      await tester.pump(const Duration(milliseconds: 100));
+    testWidgets(
+      'shows both by default (no override) — existing behavior unchanged',
+      (tester) async {
+        await tester.pumpWidget(_buildApp(db));
+        await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('INIZIA TURNO'), findsOneWidget);
-      expect(find.bySemanticsLabel('Timbra con QR'), findsOneWidget);
+        expect(find.text('INIZIA TURNO'), findsOneWidget);
+        expect(find.bySemanticsLabel('Timbra con QR'), findsOneWidget);
 
-      await _teardownTimer(tester);
-    });
+        await _teardownTimer(tester);
+      },
+    );
   });
 
   group('business-zone time (device zone irrelevant)', () {
-    List<Override> zoneOverrides(DateTime clockInstant, {List<WorkSession>? sessions}) => [
-      businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome', clock: () => clockInstant)),
+    List<Override> zoneOverrides(
+      DateTime clockInstant, {
+      List<WorkSession>? sessions,
+    }) => [
+      businessTimeProvider.overrideWithValue(
+        BusinessTime('Europe/Rome', clock: () => clockInstant),
+      ),
       nowProvider.overrideWith((ref) => Stream.value(clockInstant)),
       if (sessions != null)
         todaySessionsProvider.overrideWith((ref) => Stream.value(sessions)),
@@ -617,7 +668,10 @@ void main() {
 
     testWidgets('small clock shows Rome time with seconds', (tester) async {
       await tester.pumpWidget(
-        _buildApp(db, extraOverrides: zoneOverrides(DateTime.utc(2026, 7, 10, 20, 15, 30))),
+        _buildApp(
+          db,
+          extraOverrides: zoneOverrides(DateTime.utc(2026, 7, 10, 20, 15, 30)),
+        ),
       );
       await tester.pump();
       await tester.pump();
@@ -627,7 +681,10 @@ void main() {
 
     testWidgets('date subtitle uses the Rome calendar date', (tester) async {
       await tester.pumpWidget(
-        _buildApp(db, extraOverrides: zoneOverrides(DateTime.utc(2026, 7, 10, 22, 30))),
+        _buildApp(
+          db,
+          extraOverrides: zoneOverrides(DateTime.utc(2026, 7, 10, 22, 30)),
+        ),
       );
       await tester.pump();
       await tester.pump();
@@ -643,7 +700,9 @@ void main() {
   // "Non risulti in servizio" even though the local day says the shift is open — and the finish
   // button stayed disabled. The day must be re-read when the screen refreshes and after a punch.
   group('server-day freshness', () {
-    testWidgets('a live refresh clears a stale not_clocked_in guard', (tester) async {
+    testWidgets('a live refresh clears a stale not_clocked_in guard', (
+      tester,
+    ) async {
       final repo = WorkSessionRepository(db);
       await repo.addEvent(
         id: 'open-shift',
@@ -699,7 +758,9 @@ void main() {
       await _teardownTimer(tester);
     });
 
-    testWidgets('a local punch invalidates the guard immediately', (tester) async {
+    testWidgets('a local punch invalidates the guard immediately', (
+      tester,
+    ) async {
       var calls = 0;
       await tester.pumpWidget(
         _buildApp(

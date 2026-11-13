@@ -24,8 +24,7 @@ import 'user_signature_api_client.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 class UserSignatureCache {
-  UserSignatureCache({required Future<Directory> Function() rootLoader})
-    : _rootLoader = rootLoader;
+  UserSignatureCache({required Future<Directory> Function() rootLoader}) : _rootLoader = rootLoader;
 
   final Future<Directory> Function() _rootLoader;
 

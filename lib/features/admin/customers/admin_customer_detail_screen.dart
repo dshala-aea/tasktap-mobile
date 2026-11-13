@@ -50,7 +50,7 @@ class AdminCustomerDetailScreen extends ConsumerWidget {
       ),
       data: (customer) {
         if (customer == null) {
-          final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+          final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
           return DetailScaffold.unavailable(
             screenTitle: 'Cliente',
             icon: neverSynced ? LucideIcons.cloudOff : LucideIcons.users,
@@ -96,7 +96,7 @@ Future<void> _deleteCustomer(BuildContext context, WidgetRef ref, String custome
 /// True when an async list should keep its section on screen: still loading, failed, or holding
 /// at least one row. Only "loaded and empty" hides a section, per the prototype rule.
 bool _hasSectionData<T>(AsyncValue<List<T>> value) =>
-    value.isLoading || value.hasError || (value.valueOrNull?.isNotEmpty ?? false);
+    value.isLoading || value.hasError || (value.value?.isNotEmpty ?? false);
 
 bool _present(String? value) => value != null && value.trim().isNotEmpty;
 
@@ -163,10 +163,10 @@ class _CustomerDetailBody extends ConsumerWidget {
         const PopupMenuItem(value: _CustomerAction.nuovoContratto, child: Text('Nuovo contratto')),
     ];
 
-    final overview = overviewAsync.valueOrNull;
-    final locations = locationsAsync.valueOrNull;
-    final contacts = contactsAsync.valueOrNull;
-    final contracts = contractsAsync.valueOrNull;
+    final overview = overviewAsync.value;
+    final locations = locationsAsync.value;
+    final contacts = contactsAsync.value;
+    final contracts = contractsAsync.value;
     final sediCount = overview?.sediAttive ?? locations?.length;
     final contrattiCount = overview?.contratti ?? contracts?.length;
 
@@ -342,19 +342,19 @@ class _CustomerDetailBody extends ConsumerWidget {
 
     addGroup(
       'Sedi',
-      locationsAsync.valueOrNull?.length,
+      locationsAsync.value?.length,
       _locationsContent(context, ref, locationsAsync),
       visible: _hasSectionData(locationsAsync),
     );
     addGroup(
       'Referenti',
-      contactsAsync.valueOrNull?.length,
+      contactsAsync.value?.length,
       _contactsContent(context, ref, contactsAsync, online: online),
       visible: _hasSectionData(contactsAsync),
     );
     addGroup(
       'Asset',
-      prodottiAsync.valueOrNull?.length,
+      prodottiAsync.value?.length,
       _prodottiContent(context, ref, prodottiAsync),
       visible: _hasSectionData(prodottiAsync),
     );
@@ -413,9 +413,7 @@ class _CustomerDetailBody extends ConsumerWidget {
                       )
                     : null,
               ),
-              onTap: canReadLocation
-                  ? () => context.push('/altro/sedi/${locations[i].id}')
-                  : null,
+              onTap: canReadLocation ? () => context.push('/altro/sedi/${locations[i].id}') : null,
             ),
         ],
       ),

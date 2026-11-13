@@ -16,7 +16,9 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/account_methods_api_client.dart';
 import '../../providers/auth_providers.dart';
 import '../../../domain/auth/auth_failure.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+
 import 'access_request_sheet.dart';
 
 /// Login screen — native username/password sign-in.
@@ -100,7 +102,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// the server stays the authority on whether the account exists.
   static final _emailShape = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-  static bool _looksLikeEmail(String value) => _emailShape.hasMatch(value.trim());
+  static bool _looksLikeEmail(String value) =>
+      _emailShape.hasMatch(value.trim());
 
   Future<void> _onContinue() async {
     if (_isCheckingMethods || !_looksLikeEmail(_usernameCtrl.text)) return;
@@ -156,7 +159,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // that removes the button, and a second attempt would open a second native sheet.
     if (ref.read(loginProvider).isLoading) return;
     ref.read(loginProvider.notifier).clearError();
-    await ref.read(loginProvider.notifier).signInWithPasskey(_usernameCtrl.text.trim());
+    await ref
+        .read(loginProvider.notifier)
+        .signInWithPasskey(_usernameCtrl.text.trim());
     if (ref.read(loginProvider).failure == null) {
       await _rememberEmail();
     }
@@ -171,7 +176,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _onRequestAccess() {
-    unawaited(showAccessRequestSheet(context, initialEmail: _usernameCtrl.text.trim()));
+    unawaited(
+      showAccessRequestSheet(context, initialEmail: _usernameCtrl.text.trim()),
+    );
   }
 
   @override
@@ -180,7 +187,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isLoading = loginState.isLoading;
     final failure = loginState.failure;
     // Fails closed while the gate is loading or errored, so the password path is the only offer.
-    final passkeySupported = ref.watch(passkeySupportedProvider).valueOrNull ?? false;
+    final passkeySupported = ref.watch(passkeySupportedProvider).value ?? false;
 
     return Scaffold(
       backgroundColor: context.colors.bg1,
@@ -223,7 +230,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ? 'Verifico come accedere…'
                             : 'Inserisci la tua email per continuare.')
                       : 'Scegli come accedere.',
-                  style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: context.colors.inkFaint,
+                  ),
                 ),
 
                 const SizedBox(height: AppSpacing.xxl),
@@ -258,22 +267,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         builder: (context, value, _) => AppButton(
           label: 'Continua',
           isLoading: _isCheckingMethods,
-          onPressed: _looksLikeEmail(value.text) && !_isCheckingMethods ? _onContinue : null,
+          onPressed: _looksLikeEmail(value.text) && !_isCheckingMethods
+              ? _onContinue
+              : null,
         ),
       ),
       const SizedBox(height: AppSpacing.sm),
       Center(
-        child: TextButton(onPressed: _onRequestAccess, child: const Text('Richiedi accesso')),
+        child: TextButton(
+          onPressed: _onRequestAccess,
+          child: const Text('Richiedi accesso'),
+        ),
       ),
     ];
   }
 
-  List<Widget> _methodStep(bool isLoading, AuthFailure? failure, bool passkeySupported) {
+  List<Widget> _methodStep(
+    bool isLoading,
+    AuthFailure? failure,
+    bool passkeySupported,
+  ) {
     final methods = _methods ?? AccountMethods.fallback;
     final hasPassword = methods.hasPassword;
     final hasPasskey = methods.hasPasskey;
     final accountUnknown = !hasPassword && !hasPasskey;
-    final passkeyOnlyUnsupported = hasPasskey && !hasPassword && !passkeySupported;
+    final passkeyOnlyUnsupported =
+        hasPasskey && !hasPassword && !passkeySupported;
 
     return [
       // The email stays visible (and inside the AutofillGroup) so the pair reads as one
@@ -293,7 +312,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       const SizedBox(height: AppSpacing.base),
       if (accountUnknown) ...[
         InlineAlert(
-          message: 'Account non trovato. Controlla l\'email o richiedi accesso.',
+          message:
+              'Account non trovato. Controlla l\'email o richiedi accesso.',
           icon: LucideIcons.alertCircle,
         ),
       ] else if (passkeyOnlyUnsupported) ...[
@@ -315,7 +335,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: AppSpacing.base),
         ],
         if (failure != null) ...[
-          InlineAlert(message: authFailureMessage(failure), icon: LucideIcons.alertCircle),
+          InlineAlert(
+            message: authFailureMessage(failure),
+            icon: LucideIcons.alertCircle,
+          ),
           const SizedBox(height: AppSpacing.base),
         ],
         if (failure != null && failure is! InvalidCredentials) ...[
@@ -337,11 +360,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.base),
-          AppButton(label: 'Accedi', onPressed: isLoading ? null : _onLogin, isLoading: isLoading),
+          AppButton(
+            label: 'Accedi',
+            onPressed: isLoading ? null : _onLogin,
+            isLoading: isLoading,
+          ),
         ],
         if (hasPasskey && passkeySupported && !isLoading) ...[
           const SizedBox(height: AppSpacing.sm),
-          OutlinedButton(onPressed: _onPasskey, child: const Text('Accedi con passkey')),
+          OutlinedButton(
+            onPressed: _onPasskey,
+            child: const Text('Accedi con passkey'),
+          ),
         ],
       ],
       const SizedBox(height: AppSpacing.base),
@@ -367,7 +397,10 @@ class _TaskTapLogo extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
           decoration: BoxDecoration(
             color: AppColors.Y,
             borderRadius: BorderRadius.circular(AppSpacing.sm),

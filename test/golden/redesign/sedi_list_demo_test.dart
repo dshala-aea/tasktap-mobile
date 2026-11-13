@@ -16,6 +16,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart' show BusinessTime;
@@ -155,7 +156,7 @@ Future<void> _captureFiltersSheet(WidgetTester tester, AppDatabase db) async {
 
   const key = ValueKey<String>('sedi-filters-capture');
   await tester.pumpWidget(
-    ProviderScope(
+    ProviderScope(retry: (_, _) => null, 
       overrides: _overrides(db),
       child: RepaintBoundary(
         key: key,
@@ -202,9 +203,8 @@ Future<void> _captureFiltersSheet(WidgetTester tester, AppDatabase db) async {
 
   final directory = Directory(redesignOutputDirectory);
   if (!directory.existsSync()) directory.createSync(recursive: true);
-  File(
-    '${directory.path}/sedi_list_filters.png',
-  ).writeAsBytesSync(bytes, flush: true);
+  File('${directory.path}/sedi_list_filters.png')
+      .writeAsBytesSync(bytes, flush: true);
   // ignore: avoid_print
   print(
     'redesign capture: ${File('${directory.path}/sedi_list_filters.png').absolute.path}',

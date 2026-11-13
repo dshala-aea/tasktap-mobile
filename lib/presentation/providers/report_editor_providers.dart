@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
@@ -561,8 +562,8 @@ class ReportEditorState {
           : (customerSignatureAbsenceReason ?? this.customerSignatureAbsenceReason),
       customerSignatureAbsenceNote:
           clearCustomerSignatureAbsence || clearCustomerSignatureAbsenceNote
-              ? null
-              : (customerSignatureAbsenceNote ?? this.customerSignatureAbsenceNote),
+          ? null
+          : (customerSignatureAbsenceNote ?? this.customerSignatureAbsenceNote),
       technicianSignatureLocalPath: clearTechnicianSignature
           ? null
           : (technicianSignatureLocalPath ?? this.technicianSignatureLocalPath),
@@ -1167,9 +1168,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// Drops a local answer (the technician cleared it): nothing is sent for that control, and a
   /// blank never wipes what the server already holds.
   Future<void> removeControllo(String rowId) async {
-    state = state.copyWith(
-      controlloRows: state.controlloRows.where((c) => c.id != rowId).toList(),
-    );
+    state = state.copyWith(controlloRows: state.controlloRows.where((c) => c.id != rowId).toList());
     await _repo.deleteControllo(rowId);
   }
 

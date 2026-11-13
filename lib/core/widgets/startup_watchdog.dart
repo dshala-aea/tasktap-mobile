@@ -108,7 +108,11 @@ class _StartupFailureScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.cloud_off_outlined, size: 56, color: theme.colorScheme.primary),
+                  Icon(
+                    Icons.cloud_off_outlined,
+                    size: 56,
+                    color: theme.colorScheme.primary,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'Impossibile avviare TaskTap',
@@ -123,7 +127,10 @@ class _StartupFailureScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
-                  FilledButton(onPressed: onRetry, child: const Text('Riprova')),
+                  FilledButton(
+                    onPressed: onRetry,
+                    child: const Text('Riprova'),
+                  ),
                 ],
               ),
             ),

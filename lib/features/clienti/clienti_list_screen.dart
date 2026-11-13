@@ -115,10 +115,10 @@ class _ClientiListBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final customersAsync = ref.watch(allClientiCustomersProvider);
-    final allCustomers = customersAsync.valueOrNull ?? const <Customer>[];
+    final allCustomers = customersAsync.value ?? const <Customer>[];
     final openTicketCounts = ref.watch(customerOpenTicketCountsProvider);
     final contractCounts =
-        ref.watch(activeContractCountsByCustomerProvider).valueOrNull ??
+        ref.watch(activeContractCountsByCustomerProvider).value ??
         const <String, int>{};
     final businessTime = ref.watch(businessTimeProvider);
 
@@ -145,8 +145,7 @@ class _ClientiListBody extends ConsumerWidget {
     }).toList();
 
     final activeCount = filtered.where((c) => c.isActive).length;
-    final neverSynced =
-        ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     final groups = <ListGroupData>[
       if (filtered.any((c) => c.isActive))
@@ -366,8 +365,7 @@ class _ClientiFilterSheetState extends ConsumerState<_ClientiFilterSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final customers =
-        ref.watch(allClientiCustomersProvider).valueOrNull ?? const [];
+    final customers = ref.watch(allClientiCustomersProvider).value ?? const [];
     final cities = {
       for (final c in customers)
         if (c.city != null && c.city!.trim().isNotEmpty) c.city!.trim(),

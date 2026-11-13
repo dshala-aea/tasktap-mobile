@@ -55,7 +55,7 @@ class _FailingAdminApiClient extends AdminApiClient {
 }
 
 Widget _buildView(AdminApiClient api, {bool? online, Set<String> capabilities = const {}}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       adminApiClientProvider.overrideWithValue(api),
       if (online != null) isOnlineProvider.overrideWithValue(online),

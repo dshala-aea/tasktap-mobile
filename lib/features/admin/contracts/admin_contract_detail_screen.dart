@@ -150,15 +150,11 @@ class _ContractDetailBody extends ConsumerWidget {
       today: businessTime.businessToday(),
     );
 
-    final customer = customerId == null
-        ? null
-        : ref.watch(customerByIdProvider(customerId)).valueOrNull;
-    final location = locationId == null
-        ? null
-        : ref.watch(locationByIdProvider(locationId)).valueOrNull;
-    final tickets = ref.watch(_contractTicketsProvider(contractId)).valueOrNull ?? const <Ticket>[];
-    final scheduleCount = ref.watch(_contractScheduleCountProvider(contractId)).valueOrNull ?? 0;
-    final statusNames = ref.watch(ticketStatusMapProvider).valueOrNull ?? const <int, String>{};
+    final customer = customerId == null ? null : ref.watch(customerByIdProvider(customerId)).value;
+    final location = locationId == null ? null : ref.watch(locationByIdProvider(locationId)).value;
+    final tickets = ref.watch(_contractTicketsProvider(contractId)).value ?? const <Ticket>[];
+    final scheduleCount = ref.watch(_contractScheduleCountProvider(contractId)).value ?? 0;
+    final statusNames = ref.watch(ticketStatusMapProvider).value ?? const <int, String>{};
     final entitlement = ref.watch(cachedEntitlementProvider).value;
     final canWrite = capabilityHeld(entitlement, 'contratti.contract.write');
     final canSchedule = capabilityHeld(entitlement, 'pianificazione.schedule.write');
@@ -552,7 +548,7 @@ class _GeneraScheduleDialogState extends ConsumerState<_GeneraScheduleDialog> {
   @override
   Widget build(BuildContext context) {
     final techniciansAsync = ref.watch(techniciansProvider);
-    final technicians = techniciansAsync.valueOrNull ?? [];
+    final technicians = techniciansAsync.value ?? [];
 
     return Dialog(
       backgroundColor: Colors.transparent,

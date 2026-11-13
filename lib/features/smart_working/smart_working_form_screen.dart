@@ -10,6 +10,7 @@ import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/smart_working/smart_working_request_api_client.dart';
 import '../admin/admin_widgets.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -21,8 +22,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 // this app — there is no `.arb` in this repo.
 // ══════════════════════════════════════════════════════════════════════════════
 const String _kSmartWorkingEndBeforeStart = 'La data di fine non può precedere la data di inizio.';
-const String _kSmartWorkingRangeTooLong =
-    'Il periodo richiesto è troppo lungo (massimo un anno).';
+const String _kSmartWorkingRangeTooLong = 'Il periodo richiesto è troppo lungo (massimo un anno).';
 const String _kSmartWorkingBackdated =
     'Non è possibile richiedere smart working per una data passata.';
 
@@ -208,22 +208,14 @@ class _SmartWorkingFormScreenState extends ConsumerState<SmartWorkingFormScreen>
     try {
       await ref
           .read(smartWorkingRequestApiClientProvider)
-          .create(
-            startDate: _startDate,
-            endDate: _endDate,
-            reason: reason.isEmpty ? null : reason,
-          );
+          .create(startDate: _startDate, endDate: _endDate, reason: reason.isEmpty ? null : reason);
 
       // Through the container, not `ref`: on the back-tap path the element is gone after the await
       // and `ref.invalidate` would throw. See [_refreshList].
       _refreshList(container);
 
       if (!mounted) return;
-      showAppToast(
-        context,
-        message: 'Richiesta di smart working inviata',
-        tone: ToastTone.success,
-      );
+      showAppToast(context, message: 'Richiesta di smart working inviata', tone: ToastTone.success);
       context.pop(true);
     } on SmartWorkingValidationError catch (e) {
       // The server's `detail` is the whole explanation of what to change (a date the tenant's zone

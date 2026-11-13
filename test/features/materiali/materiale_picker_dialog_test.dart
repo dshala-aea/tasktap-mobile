@@ -22,7 +22,7 @@ Widget _build({
   required bool online,
   required ValueChanged<MaterialePickerResult?> onResult,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(dio),

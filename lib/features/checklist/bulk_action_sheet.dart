@@ -95,7 +95,10 @@ class _BulkActionSheetState extends ConsumerState<BulkActionSheet> {
       });
       return;
     }
-    final executor = BulkExecutor(ref.read(reportEditorProvider(widget.reportId).notifier), widget.reportId);
+    final executor = BulkExecutor(
+      ref.read(reportEditorProvider(widget.reportId).notifier),
+      widget.reportId,
+    );
     await executor.apply(plan);
     if (!mounted) return;
     final skipped = plan.skippedNonBoolean + plan.notApplicable + plan.problems.length;
@@ -115,7 +118,9 @@ class _BulkActionSheetState extends ConsumerState<BulkActionSheet> {
   Widget build(BuildContext context) {
     final all = bulkLineageOptions(widget.tree, widget.scopeAssetIds);
     final options = _needsBoolean ? all.where((o) => o.isBoolean).toList() : all;
-    final pairs = options.where((o) => _lineages.contains(o.lineageId)).fold<int>(0, (s, o) => s + o.assetCount);
+    final pairs = options
+        .where((o) => _lineages.contains(o.lineageId))
+        .fold<int>(0, (s, o) => s + o.assetCount);
     final canApply = _lineages.isNotEmpty && (_mode != _Mode.note || _note.text.trim().isNotEmpty);
     return SafeArea(
       child: Padding(
@@ -124,11 +129,19 @@ class _BulkActionSheetState extends ConsumerState<BulkActionSheet> {
           shrinkWrap: true,
           padding: const EdgeInsets.all(AppSpacing.pagePadding),
           children: [
-            Text('Azioni in blocco',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17, color: context.colors.ink)),
+            Text(
+              'Azioni in blocco',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 17,
+                color: context.colors.ink,
+              ),
+            ),
             const SizedBox(height: AppSpacing.xs),
-            Text('${widget.scopeAssetIds.length} asset mostrati',
-                style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
+            Text(
+              '${widget.scopeAssetIds.length} asset mostrati',
+              style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+            ),
             const SizedBox(height: AppSpacing.md),
             Wrap(
               spacing: AppSpacing.sm,
@@ -156,7 +169,9 @@ class _BulkActionSheetState extends ConsumerState<BulkActionSheet> {
                 title: Text(o.label),
                 subtitle: Text('${o.assetCount} asset'),
                 value: _lineages.contains(o.lineageId),
-                onChanged: (v) => setState(() => v == true ? _lineages.add(o.lineageId) : _lineages.remove(o.lineageId)),
+                onChanged: (v) => setState(
+                  () => v == true ? _lineages.add(o.lineageId) : _lineages.remove(o.lineageId),
+                ),
               ),
             const SizedBox(height: AppSpacing.sm),
             AppTextField.multiline(

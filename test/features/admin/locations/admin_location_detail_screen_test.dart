@@ -48,7 +48,7 @@ Entitlement _entitlement({bool canWrite = true}) => Entitlement(
 );
 
 Widget _buildDetail({required AppDatabase db, String locationId = 'loc-1', bool canWrite = true}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),

@@ -61,11 +61,7 @@ Future<void> startTicketTimer(WidgetRef ref, String ticketId) async {
     // through the batch upsert instead, which stamps a separate send-time reading.
     started = await ref
         .read(ticketWorkflowApiClientProvider)
-        .startTimer(
-          ticketId,
-          clientId: clientId,
-          deviceUtc: DateTime.now().toUtc(),
-        );
+        .startTimer(ticketId, clientId: clientId, deviceUtc: DateTime.now().toUtc());
   } on TicketWorkflowFailure catch (e) {
     if (e.cause?.response != null) rethrow;
     await locally();

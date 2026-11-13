@@ -177,9 +177,7 @@ Map<String, String> decodeExtensionValues(String? raw) {
   try {
     final decoded = jsonDecode(raw);
     if (decoded is Map<String, dynamic>) {
-      return decoded.map(
-        (key, value) => MapEntry(key, value?.toString() ?? ''),
-      );
+      return decoded.map((key, value) => MapEntry(key, value?.toString() ?? ''));
     }
   } catch (_) {
     // Not JSON (or not an object) — treat as "no values recorded".

@@ -24,6 +24,7 @@ import 'day_rail.dart';
 import 'day_rail_view.dart';
 import 'timbra_providers.dart';
 import 'work_log_live_refresh.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -94,7 +95,7 @@ class TimbraScreen extends ConsumerWidget {
     final coverage = localFailure != null
         ? DayCoverage.unknown
         : (serverResolved ? DayCoverage.complete : DayCoverage.phoneOnly);
-    final rejected = ref.watch(syncFailedSessionsProvider).valueOrNull ?? const <WorkSession>[];
+    final rejected = ref.watch(syncFailedSessionsProvider).value ?? const <WorkSession>[];
     final punchGuard = ref.watch(punchGuardProvider);
     final pauseGuard = ref.watch(pauseGuardProvider);
     final clockDisagreement = ref.watch(timbraClockDisagreementProvider);
@@ -243,7 +244,9 @@ class TimbraScreen extends ConsumerWidget {
                           _DayHead(shiftState: shiftState, day: day),
                           const SizedBox(height: AppSpacing.md),
                           ...banners,
-                          Expanded(child: DayRailView(day: day, coverage: coverage)),
+                          Expanded(
+                            child: DayRailView(day: day, coverage: coverage),
+                          ),
                         ],
                       );
                     },
@@ -330,7 +333,7 @@ class _DayHead extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final ticking = ref.watch(nowProvider).valueOrNull ?? DateTime.now();
+    final ticking = ref.watch(nowProvider).value ?? DateTime.now();
     final worked = day.workedAt(day.isOpen ? ticking : day.now);
     final paused = day.pausedAt(day.isOpen ? ticking : day.now);
     // Above the system font's own default the caption goes UNDER the figure instead of beside it.
@@ -454,7 +457,7 @@ class _LiveClock extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final businessTime = ref.watch(businessTimeProvider);
-    final now = ref.watch(nowProvider).valueOrNull ?? businessTime.nowInstant();
+    final now = ref.watch(nowProvider).value ?? businessTime.nowInstant();
     final timeStr = businessTime.formatInZone(now, 'HH:mm:ss');
     // A semantics label, NOT a live region. The label changes every second, so a live region here
     // makes TalkBack read the wall clock aloud on every tick and renders the screen unusable with a
@@ -790,10 +793,7 @@ class _SmartWorkingChip extends StatelessWidget {
         child: ExcludeSemantics(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.xs),
-            decoration: BoxDecoration(
-              color: v.statusGoodBg,
-              borderRadius: AppRack.freeShape,
-            ),
+            decoration: BoxDecoration(color: v.statusGoodBg, borderRadius: AppRack.freeShape),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -970,10 +970,7 @@ class _PunchKeyState extends State<_PunchKey> {
               duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
               height: _deckKeyHeight(context),
               alignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: AppRack.freeShape,
-                color: fillColor,
-              ),
+              decoration: BoxDecoration(borderRadius: AppRack.freeShape, color: fillColor),
               child: widget.isLoading
                   ? const SizedBox(
                       width: 22,

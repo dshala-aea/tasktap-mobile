@@ -75,11 +75,7 @@ class MaterialeQtyField extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            QtyStepButton(
-              icon: LucideIcons.minus,
-              label: 'Diminuisci quantità',
-              onTap: onMinus,
-            ),
+            QtyStepButton(icon: LucideIcons.minus, label: 'Diminuisci quantità', onTap: onMinus),
             const SizedBox(width: 6),
             SizedBox(
               width: 76,
@@ -103,20 +99,13 @@ class MaterialeQtyField extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            QtyStepButton(
-              icon: LucideIcons.plus,
-              label: 'Aumenta quantità',
-              onTap: onPlus,
-            ),
+            QtyStepButton(icon: LucideIcons.plus, label: 'Aumenta quantità', onTap: onPlus),
           ],
         ),
         if (errorText != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              errorText!,
-              style: TextStyle(fontSize: 12, color: context.colors.red),
-            ),
+            child: Text(errorText!, style: TextStyle(fontSize: 12, color: context.colors.red)),
           ),
       ],
     );

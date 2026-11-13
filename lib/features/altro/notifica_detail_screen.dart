@@ -68,12 +68,9 @@ class _NotificaDetailScreenState extends ConsumerState<NotificaDetailScreen> {
                         ? const UnavailableState(
                             icon: LucideIcons.bellOff,
                             titolo: 'Notifica non disponibile',
-                            motivo:
-                                'Potrebbe essere stata eliminata o non appartenere al tuo account.',
+                            motivo: 'Potrebbe essere stata eliminata o non appartenere al tuo account.',
                           )
-                        : ErrorState(
-                            onRetry: () => ref.invalidate(provider),
-                          ),
+                        : ErrorState(onRetry: () => ref.invalidate(provider)),
                     data: (n) => _NotificaBody(notifica: n),
                   ),
             ),

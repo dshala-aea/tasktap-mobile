@@ -41,7 +41,7 @@ void main() {
   late void Function(String) emit;
   late DateTime now;
 
-  Widget app(_FakeApi api) => ProviderScope(
+  Widget app(_FakeApi api) => ProviderScope(retry: (_, _) => null, 
     overrides: [
       badgeApiClientProvider.overrideWithValue(api),
       badgeScanClockProvider.overrideWithValue(() => now),
@@ -115,7 +115,7 @@ void main() {
   testWidgets('keeps the screen awake while scanning and releases it on leave', (t) async {
     final wake = _FakeWakelock();
     await t.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           badgeWakelockProvider.overrideWithValue(wake),
           badgeApiClientProvider.overrideWithValue(_FakeApi(const {})),

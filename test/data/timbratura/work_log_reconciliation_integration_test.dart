@@ -53,8 +53,10 @@ AppDatabase _makeDb() {
 /// `pumpEventQueue()` flushes that queue so the assertions below see the write that just
 /// happened, matching how a real widget watching this provider would pick it up.
 Future<void> _awaitTodaySessions(ProviderContainer container) async {
+  container.listen(todaySessionsProvider, (_, _) {});
   await container.read(todaySessionsProvider.future);
   await pumpEventQueue();
+  container.listen(todaySessionsProvider, (_, _) {});
   await container.read(todaySessionsProvider.future);
 }
 
@@ -80,10 +82,14 @@ void main() {
       serverTrackers = [];
       db = _makeDb();
       container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(
-            TimbraSyncService(repo: _StubRepoForSync(), apiClient: _NoopApiClient()),
+            TimbraSyncService(
+              repo: _StubRepoForSync(),
+              apiClient: _NoopApiClient(),
+            ),
           ),
           workLogReconcilerProvider.overrideWith(
             (ref) => WorkLogReconciler(
@@ -92,9 +98,12 @@ void main() {
             ),
           ),
           // No other kind of tracker is running server-side for this scenario.
-          activeTrackersProvider.overrideWith((ref) => Stream.value(const <ActiveTracker>[])),
+          activeTrackersProvider.overrideWith(
+            (ref) => Stream.value(const <ActiveTracker>[]),
+          ),
         ],
       );
+      container.listen(todaySessionsProvider, (_, _) {});
     });
 
     tearDown(() async {
@@ -102,41 +111,39 @@ void main() {
       await db.close();
     });
 
-    test(
-      'timbraStateProvider still shows on-shift before reconciliation runs (reproduces the bug)',
-      () async {
-        final repo = container.read(workSessionRepositoryProvider);
-        await repo.addEvent(
-          id: 'mobile-open-shift',
-          eventTime: _earlierToday(const Duration(hours: 2)),
-          eventType: 'ingresso',
-        );
-        await repo.markSynced(['mobile-open-shift']);
-        await _awaitTodaySessions(container);
+    test('timbraStateProvider still shows on-shift before reconciliation runs (reproduces the bug)', () async {
+      final repo = container.read(workSessionRepositoryProvider);
+      await repo.addEvent(
+        id: 'mobile-open-shift',
+        eventTime: _earlierToday(const Duration(hours: 2)),
+        eventType: 'ingresso',
+      );
+      await repo.markSynced(['mobile-open-shift']);
+      await _awaitTodaySessions(container);
 
-        expect(container.read(timbraStateProvider).isOnShift, isTrue);
-      },
-    );
+      expect(container.read(timbraStateProvider).isOnShift, isTrue);
+    });
 
-    test(
-      'after reconciliation, timbraStateProvider reflects the server-confirmed clock-out',
-      () async {
-        final repo = container.read(workSessionRepositoryProvider);
-        await repo.addEvent(
-          id: 'mobile-open-shift',
-          eventTime: _earlierToday(const Duration(hours: 2)),
-          eventType: 'ingresso',
-        );
-        await repo.markSynced(['mobile-open-shift']);
-        await _awaitTodaySessions(container);
-        expect(container.read(timbraStateProvider).isOnShift, isTrue, reason: 'sanity check');
+    test('after reconciliation, timbraStateProvider reflects the server-confirmed clock-out', () async {
+      final repo = container.read(workSessionRepositoryProvider);
+      await repo.addEvent(
+        id: 'mobile-open-shift',
+        eventTime: _earlierToday(const Duration(hours: 2)),
+        eventType: 'ingresso',
+      );
+      await repo.markSynced(['mobile-open-shift']);
+      await _awaitTodaySessions(container);
+      expect(
+        container.read(timbraStateProvider).isOnShift,
+        isTrue,
+        reason: 'sanity check',
+      );
 
-        await container.read(workLogReconcilerProvider).reconcile();
-        await _awaitTodaySessions(container);
+      await container.read(workLogReconcilerProvider).reconcile();
+      await _awaitTodaySessions(container);
 
-        expect(container.read(timbraStateProvider).isOnShift, isFalse);
-      },
-    );
+      expect(container.read(timbraStateProvider).isOnShift, isFalse);
+    });
 
     test(
       'after reconciliation, the dashboard drops the stale attendance tracker too '
@@ -151,7 +158,9 @@ void main() {
         await repo.markSynced(['mobile-open-shift']);
         await _awaitTodaySessions(container);
         expect(
-          container.read(visibleTrackersProvider).any((t) => t.kind == ActiveTrackerKind.attendance),
+          container
+              .read(visibleTrackersProvider)
+              .any((t) => t.kind == ActiveTrackerKind.attendance),
           isTrue,
           reason: 'sanity check: attendance tracker shown while locally still on shift',
         );
@@ -160,33 +169,38 @@ void main() {
         await _awaitTodaySessions(container);
 
         expect(
-          container.read(visibleTrackersProvider).any((t) => t.kind == ActiveTrackerKind.attendance),
+          container
+              .read(visibleTrackersProvider)
+              .any((t) => t.kind == ActiveTrackerKind.attendance),
           isFalse,
         );
       },
     );
 
-    test('reconciling twice in a row converges — second run is a no-op', () async {
-      final repo = container.read(workSessionRepositoryProvider);
-      await repo.addEvent(
-        id: 'mobile-open-shift',
-        eventTime: _earlierToday(const Duration(hours: 2)),
-        eventType: 'ingresso',
-      );
-      await repo.markSynced(['mobile-open-shift']);
-      await _awaitTodaySessions(container);
+    test(
+      'reconciling twice in a row converges — second run is a no-op',
+      () async {
+        final repo = container.read(workSessionRepositoryProvider);
+        await repo.addEvent(
+          id: 'mobile-open-shift',
+          eventTime: _earlierToday(const Duration(hours: 2)),
+          eventType: 'ingresso',
+        );
+        await repo.markSynced(['mobile-open-shift']);
+        await _awaitTodaySessions(container);
 
-      await container.read(workLogReconcilerProvider).reconcile();
-      await _awaitTodaySessions(container);
-      final afterFirst = await repo.getTodaySessions();
+        await container.read(workLogReconcilerProvider).reconcile();
+        await _awaitTodaySessions(container);
+        final afterFirst = await repo.getTodaySessions();
 
-      await container.read(workLogReconcilerProvider).reconcile();
-      await _awaitTodaySessions(container);
-      final afterSecond = await repo.getTodaySessions();
+        await container.read(workLogReconcilerProvider).reconcile();
+        await _awaitTodaySessions(container);
+        final afterSecond = await repo.getTodaySessions();
 
-      expect(afterSecond.length, afterFirst.length);
-      expect(container.read(timbraStateProvider).isOnShift, isFalse);
-    });
+        expect(afterSecond.length, afterFirst.length);
+        expect(container.read(timbraStateProvider).isOnShift, isFalse);
+      },
+    );
 
     test('a clock started on another device shows up: timbra state and dashboard follow', () async {
       final started = _earlierToday(const Duration(hours: 1));
@@ -200,7 +214,11 @@ void main() {
         ),
       ];
       await _awaitTodaySessions(container);
-      expect(container.read(timbraStateProvider).isOnShift, isFalse, reason: 'sanity check');
+      expect(
+        container.read(timbraStateProvider).isOnShift,
+        isFalse,
+        reason: 'sanity check',
+      );
 
       await container.read(workLogReconcilerProvider).reconcile();
       await _awaitTodaySessions(container);
@@ -208,7 +226,10 @@ void main() {
       final state = container.read(timbraStateProvider);
       expect(state.isOnShift, isTrue);
       expect(state.isOnPause, isFalse);
-      expect(state.shiftStartTime!.difference(started).inSeconds.abs(), lessThan(1));
+      expect(
+        state.shiftStartTime!.difference(started).inSeconds.abs(),
+        lessThan(1),
+      );
     });
 
     test('a break started elsewhere flips the timbra buttons to Riprendi (isOnPause)', () async {
@@ -231,7 +252,10 @@ void main() {
       final state = container.read(timbraStateProvider);
       expect(state.isOnShift, isTrue);
       expect(state.isOnPause, isTrue);
-      expect(state.pauseStartTime!.difference(breakStart).inSeconds.abs(), lessThan(1));
+      expect(
+        state.pauseStartTime!.difference(breakStart).inSeconds.abs(),
+        lessThan(1),
+      );
     });
 
     test('a punch made offline stays queued and is not overwritten by the server view', () async {

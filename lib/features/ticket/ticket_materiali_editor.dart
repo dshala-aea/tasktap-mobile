@@ -440,11 +440,13 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
   Future<List<MaterialeSearchResult>> _searchMirror(String query) async {
     final AppDatabase db = ref.read(appDatabaseProvider);
     final rows =
-        await (db.select(db.materiali)..where(
-              (m) =>
-                  m.isActive.equals(true) &
-                  (m.name.like('%$query%') | m.code.like('%$query%')),
-            )..orderBy([(m) => OrderingTerm.asc(m.name)])..limit(20))
+        await (db.select(db.materiali)
+              ..where(
+                (m) =>
+                    m.isActive.equals(true) & (m.name.like('%$query%') | m.code.like('%$query%')),
+              )
+              ..orderBy([(m) => OrderingTerm.asc(m.name)])
+              ..limit(20))
             .get();
     return rows
         .map(

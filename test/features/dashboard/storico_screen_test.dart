@@ -23,7 +23,7 @@ GoRouter _router() => GoRouter(
 );
 
 Widget _buildStorico(AppDatabase db) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       hasSyncedAtLeastOnceProvider.overrideWith((ref) => Stream.value(true)),

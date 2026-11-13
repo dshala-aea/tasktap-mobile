@@ -50,10 +50,7 @@ class AiReportContextCard extends StatelessWidget {
           // AiValue wraps (it is a plain Text in a Column), unlike AiKvRow's value — which is a
           // bare Text inside a Row and would overflow on a long ticket title.
           AiValue(context.ticketLabel),
-          if (under.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            AiHelper(under.join(' · ')),
-          ],
+          if (under.isNotEmpty) ...[const SizedBox(height: 6), AiHelper(under.join(' · '))],
         ],
       ),
     );

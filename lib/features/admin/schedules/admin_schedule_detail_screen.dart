@@ -63,7 +63,7 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
         if (schedule == null) {
           // Missing on a synced device means the schedule is gone (deleted, or reassigned out
           // of this user's visibility) — not that the mirror is still waiting to arrive.
-          final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+          final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
           return DetailScaffold.unavailable(
             screenTitle: 'Pianificazione',
             icon: neverSynced ? LucideIcons.cloudOff : LucideIcons.calendarDays,
@@ -150,31 +150,29 @@ class _ScheduleDetailBody extends ConsumerWidget {
         : _capitalise(formatWorkDate(date, 'd MMM', locale: 'it'));
     final dayTone = date == today || date == tomorrow ? DetailStatusTone.info : null;
 
-    final directAssigneeName = ref.watch(colleagueNameProvider(schedule.userId)).valueOrNull;
+    final directAssigneeName = ref.watch(colleagueNameProvider(schedule.userId)).value;
     // A squadra-only schedule has no direct assignee — `schedule.userId` is the all-zeros GUID
     // the server sends for "nobody directly assigned". The squadra's own name is not synced, but
     // its members are, via `ScheduleAssignees`, so show who they are instead of a blank.
-    final assignees = ref.watch(scheduleAssigneesProvider(scheduleId)).valueOrNull ?? const [];
+    final assignees = ref.watch(scheduleAssigneesProvider(scheduleId)).value ?? const [];
     final teamMemberIds = assignees.where((a) => a.isTeam).map((a) => a.userId).toList();
     final teamMemberNames = teamMemberIds
-        .map((id) => ref.watch(colleagueNameProvider(id)).valueOrNull)
+        .map((id) => ref.watch(colleagueNameProvider(id)).value)
         .whereType<String>()
         .toList();
     final assigneeName =
         directAssigneeName ??
         (teamMemberNames.isEmpty ? null : 'Squadra: ${teamMemberNames.join(', ')}');
 
-    final location = ref.watch(locationByIdProvider(schedule.locationId)).valueOrNull;
+    final location = ref.watch(locationByIdProvider(schedule.locationId)).value;
     final ticket = schedule.ticketId == null
         ? null
-        : ref.watch(ticketByIdProvider(schedule.ticketId!)).valueOrNull;
+        : ref.watch(ticketByIdProvider(schedule.ticketId!)).value;
     final customerId = location?.customerId ?? ticket?.customerId;
-    final customer = customerId == null
-        ? null
-        : ref.watch(customerByIdProvider(customerId)).valueOrNull;
+    final customer = customerId == null ? null : ref.watch(customerByIdProvider(customerId)).value;
     final contract = ticket?.contractId == null
         ? null
-        : ref.watch(_contractByIdProvider(ticket!.contractId!)).valueOrNull;
+        : ref.watch(_contractByIdProvider(ticket!.contractId!)).value;
 
     final statusName = scheduleStatusName(schedule.statusId);
     final locationName = location?.name;

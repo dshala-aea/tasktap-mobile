@@ -59,7 +59,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Widget wrap(Widget child) => ProviderScope(
+  Widget wrap(Widget child) => ProviderScope(retry: (_, _) => null, 
     overrides: [
       dioProvider.overrideWithValue(mockDio),
       appDatabaseProvider.overrideWithValue(db),

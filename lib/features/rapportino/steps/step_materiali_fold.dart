@@ -2,9 +2,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import '../../../core/widgets/widgets.dart';
 import '../../materiali/materiale_picker_dialog.dart';
 import '../../materiali/materiale_qty_field.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +23,7 @@ import '../../checklist/asset_checklist_entry_card.dart';
 import '../../checklist/checklist_providers.dart';
 import '../../ticket/control_group_accordion.dart';
 import '../../ticket/ticket_detail_api_client.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -181,7 +184,11 @@ class StepMaterialiFold extends ConsumerWidget {
     );
   }
 
-  Future<void> _showAddMaterialeDialog(BuildContext context, WidgetRef ref, String? ticketId) async {
+  Future<void> _showAddMaterialeDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String? ticketId,
+  ) async {
     final result = await showMaterialePickerDialog(context, ticketId: ticketId);
     if (result == null || !context.mounted) return;
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
@@ -339,7 +346,7 @@ class _MaterialeQtyStepperState extends ConsumerState<_MaterialeQtyStepper> {
     // material until the report reloads.
     final resolvedName = row.freeTextName != null || row.materialeId == null
         ? null
-        : ref.watch(materialeNameProvider(row.materialeId!)).valueOrNull;
+        : ref.watch(materialeNameProvider(row.materialeId!)).value;
     // An imported row can point at a catalog entry this device has not synced yet: say so
     // instead of showing a bare GUID (the id is still kept and submitted).
     final displayName =
@@ -383,9 +390,7 @@ class _MaterialeQtyStepperState extends ConsumerState<_MaterialeQtyStepper> {
               QtyStepButton(
                 icon: LucideIcons.minus,
                 label: 'Diminuisci quantità',
-                onTap: row.quantity > 1
-                    ? () => widget.onQtyChanged(row.quantity - 1)
-                    : null,
+                onTap: row.quantity > 1 ? () => widget.onQtyChanged(row.quantity - 1) : null,
               ),
               const SizedBox(width: 6),
               SizedBox(
@@ -549,7 +554,7 @@ class StepControlli extends ConsumerWidget {
     final hasAssets =
         ticket != null &&
         ticket.isNotEmpty &&
-        (ref.watch(ticketChecklistProvider(ticket)).valueOrNull?.hasAssetChecklists ?? false);
+        (ref.watch(ticketChecklistProvider(ticket)).value?.hasAssetChecklists ?? false);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,

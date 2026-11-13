@@ -121,9 +121,9 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
   @override
   Widget build(BuildContext context) {
     final magazziniAsync = ref.watch(magazziniProvider);
-    final allMagazzini = magazziniAsync.valueOrNull ?? const <MagazzinoDto>[];
+    final allMagazzini = magazziniAsync.value ?? const <MagazzinoDto>[];
     final colleaguesById = {
-      for (final c in ref.watch(allColleaguesProvider).valueOrNull ?? const <Colleague>[])
+      for (final c in ref.watch(allColleaguesProvider).value ?? const <Colleague>[])
         c.id: c.displayName,
     };
 
@@ -244,8 +244,7 @@ class _AdminMagazzinoListScreenState extends ConsumerState<AdminMagazzinoListScr
                   child: Padding(
                     padding: const EdgeInsets.only(top: AppSpacing.sm),
                     child: const InlineAlert(
-                      message:
-                          'Impossibile aggiornare. I dati mostrati potrebbero non essere aggiornati.',
+                      message: 'Impossibile aggiornare. I dati mostrati potrebbero non essere aggiornati.',
                       icon: LucideIcons.alertCircle,
                     ),
                   ),

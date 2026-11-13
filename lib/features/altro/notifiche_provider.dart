@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/config/env.dart';
@@ -135,13 +136,9 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
   /// [apiBaseUrl] exists so unit tests can exercise [refresh] — `Env.apiBaseUrl` is a
   /// `String.fromEnvironment` constant that is empty under `flutter test`, which would otherwise
   /// turn every refresh into the "unconfigured build" early return. Production callers omit it.
-  NotificheNotifier(
-    this._db,
-    this._dio,
-    this._ref, {
-    String? apiBaseUrl,
-  }) : _apiBaseUrl = apiBaseUrl ?? Env.apiBaseUrl,
-       super(const []) {
+  NotificheNotifier(this._db, this._dio, this._ref, {String? apiBaseUrl})
+    : _apiBaseUrl = apiBaseUrl ?? Env.apiBaseUrl,
+      super(const []) {
     _loadFromCache();
   }
 
@@ -292,10 +289,11 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
         // One predicate: `DeleteStatement.where` replaces rather than ANDs, so the ownership
         // filter must live in the same closure as the id filter.
         await (_db.delete(_db.appNotifications)..where(
-          (t) => keep.isEmpty
-              ? t.userId.equals(userId)
-              : t.userId.equals(userId) & t.id.isNotIn(keep.toList()),
-        )).go();
+              (t) => keep.isEmpty
+                  ? t.userId.equals(userId)
+                  : t.userId.equals(userId) & t.id.isNotIn(keep.toList()),
+            ))
+            .go();
       }
 
       // Reload from cache.
@@ -368,10 +366,7 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
 
     // Captured before the write: these are the rows this call changes, so they are exactly the
     // ones a server read-all has to acknowledge.
-    final unreadIds = state
-        .where((n) => !n.letta)
-        .map((n) => n.id)
-        .toList();
+    final unreadIds = state.where((n) => !n.letta).map((n) => n.id).toList();
 
     // Update Drift — only this user's rows.
     await (_db.update(
@@ -405,14 +400,13 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
       // settled. Re-read and remove only those, so a marker a concurrent tap added meanwhile
       // survives.
       final current = await _pendingReadIds(userId);
-      await _setPendingReadIds(
-        userId,
-        current.difference(unreadIds.toSet()),
-      );
+      await _setPendingReadIds(userId, current.difference(unreadIds.toSet()));
     } on DioException catch (e) {
       // A 404 here is NOT "already applied" — it means the route is missing, nothing was marked,
       // and claiming success would make the list lie about the server. Keep the markers.
-      debugPrint('NotificheNotifier.segnaLette sync failed: ${e.response?.statusCode ?? e.message}');
+      debugPrint(
+        'NotificheNotifier.segnaLette sync failed: ${e.response?.statusCode ?? e.message}',
+      );
     } catch (e) {
       debugPrint('NotificheNotifier.segnaLette sync failed: $e');
     }
@@ -437,24 +431,19 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
 
     // Update state.
     if (mounted) {
-      state = state.map((n) => n.id == id ? n.copyWith(letta: true) : n).toList();
+      state = state
+          .map((n) => n.id == id ? n.copyWith(letta: true) : n)
+          .toList();
     }
 
     // Written before the request — see this file's pending-marker comment.
-    await _setPendingReadIds(userId, {
-      ...await _pendingReadIds(userId),
-      id,
-    });
+    await _setPendingReadIds(userId, {...await _pendingReadIds(userId), id});
 
     // Sync to backend (best-effort). Same rule as every other flush — see
     // [_flushPendingReads]: 2xx or 404 settles this id, anything else keeps its marker.
     if (_apiBaseUrl.isEmpty) return;
     try {
-      await _flushPendingReads(
-        NotificationApiClient(_dio),
-        userId,
-        {id},
-      );
+      await _flushPendingReads(NotificationApiClient(_dio), userId, {id});
     } catch (e) {
       debugPrint('NotificheNotifier.segnaLetta sync failed: $e');
     }
@@ -507,17 +496,17 @@ class NotificaNonDisponibile implements Exception {
 /// The detail page takes only an id — a push tap or a refresh must work without
 /// the list ever having been loaded — so this fetches from the server instead of
 /// reading [notificheProvider]'s cache.
-final notificaDettaglioProvider =
-    FutureProvider.autoDispose.family<AppNotifica, String>((ref, id) async {
-  final dio = ref.watch(dioProvider);
-  try {
-    final dto = await NotificationApiClient(dio).getNotification(id);
-    return AppNotifica.fromDto(dto);
-  } on DioException catch (e) {
-    final status = e.response?.statusCode;
-    if (status == 404 || status == 403) {
-      throw const NotificaNonDisponibile();
-    }
-    rethrow;
-  }
-});
+final notificaDettaglioProvider = FutureProvider.autoDispose
+    .family<AppNotifica, String>((ref, id) async {
+      final dio = ref.watch(dioProvider);
+      try {
+        final dto = await NotificationApiClient(dio).getNotification(id);
+        return AppNotifica.fromDto(dto);
+      } on DioException catch (e) {
+        final status = e.response?.statusCode;
+        if (status == 404 || status == 403) {
+          throw const NotificaNonDisponibile();
+        }
+        rethrow;
+      }
+    });

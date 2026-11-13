@@ -40,7 +40,7 @@ class _FakeAbsenceRequestApiClient extends AbsenceRequestApiClient {
 }
 
 Widget _buildScreen(_FakeAbsenceRequestApiClient fake) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       absenceRequestApiClientProvider.overrideWithValue(fake),
       isOnlineProvider.overrideWithValue(true),

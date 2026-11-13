@@ -5,14 +5,18 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
-import 'package:tasktap_mobile/core/time/business_time_providers.dart' show businessTimeProvider;
+import 'package:tasktap_mobile/core/time/business_time_providers.dart'
+    show businessTimeProvider;
 import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
-import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart' show nowProvider;
+import 'package:tasktap_mobile/data/sync/sync_service.dart'
+    show appDatabaseProvider;
+import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart'
+    show nowProvider;
 import 'package:tasktap_mobile/features/ticket/ticket_providers.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_timer_hero.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_workflow_api_client.dart';
@@ -67,7 +71,11 @@ class _ScriptedWorkflowClient extends TicketWorkflowApiClient {
   }
 
   @override
-  Future<int?> stopTimer(String ticketId, {String? clientId, DateTime? deviceUtc}) async {
+  Future<int?> stopTimer(
+    String ticketId, {
+    String? clientId,
+    DateTime? deviceUtc,
+  }) async {
     stops++;
     final f = failure;
     if (f != null) throw f;
@@ -94,7 +102,7 @@ void main() {
     bool settle = true,
   }) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: overrides,
         child: const MaterialApp(home: Scaffold(body: _TimerHarness())),
       ),
@@ -108,7 +116,9 @@ void main() {
     }
   }
 
-  testWidgets('offline timer shows the reason without hiding the action', (tester) async {
+  testWidgets('offline timer shows the reason without hiding the action', (
+    tester,
+  ) async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -132,37 +142,46 @@ void main() {
     expect(find.text('Avvia intervento'), findsOneWidget);
   });
 
-  testWidgets('offline with a readable mirror says only that it is offline', (tester) async {
+  testWidgets('offline with a readable mirror says only that it is offline', (
+    tester,
+  ) async {
     await pumpHero(
       tester,
       overrides: [
         isOnlineProvider.overrideWithValue(false),
-        ticketWorklogsProvider('t1').overrideWith((ref) async => const <TicketWorkLogDto>[]),
+        ticketWorklogsProvider('t1')
+            .overrideWith((ref) async => const <TicketWorkLogDto>[]),
       ],
     );
 
     expect(
-      find.text('Offline: il timer funziona e verrà inviato appena torni online.'),
+      find.text(
+        'Offline: il timer funziona e verrà inviato appena torni online.',
+      ),
       findsOneWidget,
     );
     expect(find.textContaining('non ancora sincronizzate'), findsNothing);
   });
 
-  testWidgets('offline action stays enabled so the offline queue can run', (tester) async {
+  testWidgets('offline action stays enabled so the offline queue can run', (
+    tester,
+  ) async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
 
     late DetailAction action;
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
           isOnlineProvider.overrideWithValue(false),
         ],
         child: MaterialApp(
-          home: Scaffold(body: _ActionProbe(onAction: (value) => action = value)),
+          home: Scaffold(
+            body: _ActionProbe(onAction: (value) => action = value),
+          ),
         ),
       ),
     );
@@ -172,13 +191,16 @@ void main() {
     expect(action.onPressed, isNotNull);
   });
 
-  testWidgets('idle timer says no timer is active and offers a start', (tester) async {
+  testWidgets('idle timer says no timer is active and offers a start', (
+    tester,
+  ) async {
     await pumpHero(
       tester,
       overrides: [
         isOnlineProvider.overrideWithValue(true),
         businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
-        ticketWorklogsProvider('t1').overrideWith((ref) async => const <TicketWorkLogDto>[]),
+        ticketWorklogsProvider('t1')
+            .overrideWith((ref) async => const <TicketWorkLogDto>[]),
       ],
     );
 
@@ -193,7 +215,9 @@ void main() {
       overrides: [
         isOnlineProvider.overrideWithValue(true),
         businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
-        nowProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 7, 10, 8, 5))),
+        nowProvider.overrideWith(
+          (ref) => Stream.value(DateTime.utc(2026, 7, 10, 8, 5)),
+        ),
         ticketWorklogsProvider('t1').overrideWith((ref) async => [_running()]),
       ],
       settle: false,
@@ -204,17 +228,22 @@ void main() {
     expect(find.text('Avvia intervento'), findsNothing);
   });
 
-  testWidgets('a timer running for another technician cannot be closed', (tester) async {
+  testWidgets('a timer running for another technician cannot be closed', (
+    tester,
+  ) async {
     late DetailAction action;
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           internalUserIdProvider.overrideWith((ref) async => 'u2'),
           isOnlineProvider.overrideWithValue(true),
-          ticketWorklogsProvider('t1').overrideWith((ref) async => [_running()]),
+          ticketWorklogsProvider('t1')
+              .overrideWith((ref) async => [_running()]),
         ],
         child: MaterialApp(
-          home: Scaffold(body: _ActionProbe(onAction: (value) => action = value)),
+          home: Scaffold(
+            body: _ActionProbe(onAction: (value) => action = value),
+          ),
         ),
       ),
     );
@@ -226,17 +255,23 @@ void main() {
     expect(action.onPressed, isNull);
   });
 
-  testWidgets('a closed ticket offers no start until it is reopened', (tester) async {
+  testWidgets('a closed ticket offers no start until it is reopened', (
+    tester,
+  ) async {
     late DetailAction action;
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           isOnlineProvider.overrideWithValue(true),
-          ticketWorklogsProvider('t1').overrideWith((ref) async => const <TicketWorkLogDto>[]),
+          ticketWorklogsProvider('t1')
+              .overrideWith((ref) async => const <TicketWorkLogDto>[]),
         ],
         child: MaterialApp(
           home: Scaffold(
-            body: _ActionProbe(isClosed: true, onAction: (value) => action = value),
+            body: _ActionProbe(
+              isClosed: true,
+              onAction: (value) => action = value,
+            ),
           ),
         ),
       ),
@@ -245,22 +280,31 @@ void main() {
 
     expect(action.label, 'Avvia intervento');
     expect(action.enabled, isFalse);
-    expect(action.disabledReason, 'Intervento chiuso: riaprilo dallo stato qui sopra.');
+    expect(
+      action.disabledReason,
+      'Intervento chiuso: riaprilo dallo stato qui sopra.',
+    );
     expect(action.onPressed, isNull);
   });
 
-  testWidgets('a closed ticket still lets a running timer be stopped', (tester) async {
+  testWidgets('a closed ticket still lets a running timer be stopped', (
+    tester,
+  ) async {
     late DetailAction action;
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           internalUserIdProvider.overrideWith((ref) async => 'u1'),
           isOnlineProvider.overrideWithValue(true),
-          ticketWorklogsProvider('t1').overrideWith((ref) async => [_running()]),
+          ticketWorklogsProvider('t1')
+              .overrideWith((ref) async => [_running()]),
         ],
         child: MaterialApp(
           home: Scaffold(
-            body: _ActionProbe(isClosed: true, onAction: (value) => action = value),
+            body: _ActionProbe(
+              isClosed: true,
+              onAction: (value) => action = value,
+            ),
           ),
         ),
       ),
@@ -272,34 +316,41 @@ void main() {
     expect(action.onPressed, isNotNull);
   });
 
-  testWidgets('an offline running timer still ticks and carries the offline note', (tester) async {
-    await pumpHero(
-      tester,
-      overrides: [
-        isOnlineProvider.overrideWithValue(false),
-        businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
-        nowProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 7, 10, 8, 5))),
-        ticketWorklogsProvider('t1').overrideWith((ref) async => [_running()]),
-      ],
-      settle: false,
-    );
+  testWidgets(
+    'an offline running timer still ticks and carries the offline note',
+    (tester) async {
+      await pumpHero(
+        tester,
+        overrides: [
+          isOnlineProvider.overrideWithValue(false),
+          businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
+          nowProvider.overrideWith(
+            (ref) => Stream.value(DateTime.utc(2026, 7, 10, 8, 5)),
+          ),
+          ticketWorklogsProvider('t1')
+              .overrideWith((ref) async => [_running()]),
+        ],
+        settle: false,
+      );
 
-    // The mirrored running entry keeps ticking offline; the note is below it, not instead of it.
-    expect(find.text('05:00'), findsOneWidget);
-    expect(
-      find.text('Offline: il timer funziona e verrà inviato appena torni online.'),
-      findsOneWidget,
-    );
-  });
+      // The mirrored running entry keeps ticking offline; the note is below it, not instead of it.
+      expect(find.text('05:00'), findsOneWidget);
+      expect(
+        find.text(
+          'Offline: il timer funziona e verrà inviato appena torni online.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('loading says the timer is being checked', (tester) async {
     await pumpHero(
       tester,
       overrides: [
         isOnlineProvider.overrideWithValue(true),
-        ticketWorklogsProvider(
-          't1',
-        ).overrideWith((ref) => Completer<List<TicketWorkLogDto>>().future),
+        ticketWorklogsProvider('t1')
+            .overrideWith((ref) => Completer<List<TicketWorkLogDto>>().future),
       ],
     );
 
@@ -307,7 +358,9 @@ void main() {
     expect(find.text('Nessun timer attivo'), findsNothing);
   });
 
-  testWidgets('the action starts the clock and refreshes the worklogs', (tester) async {
+  testWidgets('the action starts the clock and refreshes the worklogs', (
+    tester,
+  ) async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -321,7 +374,8 @@ void main() {
         isOnlineProvider.overrideWithValue(true),
         businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
         ticketWorkflowApiClientProvider.overrideWithValue(client),
-        ticketWorklogsProvider('t1').overrideWith((ref) async => const <TicketWorkLogDto>[]),
+        ticketWorklogsProvider('t1')
+            .overrideWith((ref) async => const <TicketWorkLogDto>[]),
       ],
     );
 
@@ -344,7 +398,9 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(true),
         businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
-        nowProvider.overrideWith((ref) => Stream.value(DateTime.utc(2026, 7, 10, 8, 5))),
+        nowProvider.overrideWith(
+          (ref) => Stream.value(DateTime.utc(2026, 7, 10, 8, 5)),
+        ),
         ticketWorkflowApiClientProvider.overrideWithValue(client),
         ticketWorklogsProvider('t1').overrideWith((ref) async => [_running()]),
       ],
@@ -359,7 +415,9 @@ void main() {
     expect(client.starts, 0);
   });
 
-  testWidgets('a workflow failure is shown instead of swallowed', (tester) async {
+  testWidgets('a workflow failure is shown instead of swallowed', (
+    tester,
+  ) async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
@@ -381,7 +439,8 @@ void main() {
         isOnlineProvider.overrideWithValue(true),
         businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome')),
         ticketWorkflowApiClientProvider.overrideWithValue(client),
-        ticketWorklogsProvider('t1').overrideWith((ref) async => const <TicketWorkLogDto>[]),
+        ticketWorklogsProvider('t1')
+            .overrideWith((ref) async => const <TicketWorkLogDto>[]),
       ],
     );
 

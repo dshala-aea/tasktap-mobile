@@ -83,7 +83,7 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
     final reportId = report['id'] as String?;
     final List<ReportAllegatiData> allegati = reportId == null
         ? const []
-        : ref.watch(rapportinoAllegatiProvider(reportId)).valueOrNull ?? const [];
+        : ref.watch(rapportinoAllegatiProvider(reportId)).value ?? const [];
     final signatureIds = {
       report['customerSignatureAllegatoId'],
       report['technicianSignatureAllegatoId'],
@@ -98,19 +98,17 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
 
     final customer = customerId == null
         ? null
-        : ref.watch(customerByIdProvider(customerId)).valueOrNull?.companyName;
+        : ref.watch(customerByIdProvider(customerId)).value?.companyName;
     final location = locationId == null
         ? null
-        : ref.watch(locationByIdProvider(locationId)).valueOrNull?.name;
-    final ticket = ticketId == null
-        ? null
-        : ref.watch(ticketByIdProvider(ticketId)).valueOrNull?.title;
+        : ref.watch(locationByIdProvider(locationId)).value?.name;
+    final ticket = ticketId == null ? null : ref.watch(ticketByIdProvider(ticketId)).value?.title;
     final cantiere = cantiereId == null
         ? null
-        : ref.watch(cantiereByIdProvider(cantiereId)).valueOrNull?.name;
+        : ref.watch(cantiereByIdProvider(cantiereId)).value?.name;
     final technician = insertedUserId == null
         ? null
-        : ref.watch(colleagueNameProvider(insertedUserId)).valueOrNull;
+        : ref.watch(colleagueNameProvider(insertedUserId)).value;
 
     final period = _periodLabel(report);
     final ore = _hoursLabel(report);
@@ -281,9 +279,7 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
                   label: _busy ? 'Download in corso...' : 'Scarica XML fattura',
                   icon: _busy ? null : const Icon(LucideIcons.download, size: 14),
                   variant: DetailHeroButtonVariant.secondary,
-                  onPressed: _busy || transitionBlockedReason != null
-                      ? null
-                      : _downloadFatturaXml,
+                  onPressed: _busy || transitionBlockedReason != null ? null : _downloadFatturaXml,
                   disabledReason: transitionBlockedReason,
                 ),
               ],
@@ -574,12 +570,7 @@ class _ActionWithReason extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DetailHeroButton(
-          label: label,
-          icon: icon,
-          variant: variant,
-          onPressed: onPressed,
-        ),
+        DetailHeroButton(label: label, icon: icon, variant: variant, onPressed: onPressed),
         if (disabledReason != null) ...[
           const SizedBox(height: AppSpacing.xs),
           Text(

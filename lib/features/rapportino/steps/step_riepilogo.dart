@@ -5,8 +5,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -34,6 +36,7 @@ import '../../../core/router/app_router.dart';
 import '../report_submission_destination.dart';
 import '../../../domain/checklist/checklist_items.dart' show ChecklistFilter;
 import '../../checklist/checklist_warning_panel.dart';
+
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -156,7 +159,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     _hasNavigated = true;
 
     final state = ref.read(reportEditorProvider(widget.reportId));
-    final tickets = ref.read(allTicketsProvider).valueOrNull ?? const <Ticket>[];
+    final tickets = ref.read(allTicketsProvider).value ?? const <Ticket>[];
     final ticket = state.ticketId == null
         ? null
         : tickets.where((t) => t.id == state.ticketId).firstOrNull;
@@ -295,7 +298,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   static String _customerLabel(WidgetRef ref, ReportEditorState state) {
     final id = state.customerId;
     if (id != null && id.isNotEmpty) {
-      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[]) {
+      for (final c in ref.watch(allCustomersProvider).value ?? const <Customer>[]) {
         if (c.id == id) return c.companyName;
       }
     }
@@ -308,13 +311,13 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   static String? _riferimento(WidgetRef ref, ReportEditorState state) {
     final ticketId = state.ticketId;
     if (ticketId != null && ticketId.isNotEmpty) {
-      for (final t in ref.watch(allTicketsProvider).valueOrNull ?? const <Ticket>[]) {
+      for (final t in ref.watch(allTicketsProvider).value ?? const <Ticket>[]) {
         if (t.id == ticketId) return 'Ticket · ${t.title}';
       }
     }
     final cantiereId = state.cantiereId;
     if (cantiereId != null && cantiereId.isNotEmpty) {
-      for (final c in ref.watch(allCantieriProvider).valueOrNull ?? const <CantieriData>[]) {
+      for (final c in ref.watch(allCantieriProvider).value ?? const <CantieriData>[]) {
         if (c.id == cantiereId) return 'Cantiere · ${c.name}';
       }
     }

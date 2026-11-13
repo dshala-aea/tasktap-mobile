@@ -130,21 +130,13 @@ class UnsentWorkCounter {
             ))
             .get();
 
-    final tickets =
-        await (_db.select(_db.pendingTickets)..where(
-              (t) => t.state
-                  .equals(PendingTicketState.submitted.toPersistedString())
-                  .not(),
-            ))
-            .get();
+    final tickets = await (_db.select(
+      _db.pendingTickets,
+    )..where((t) => t.state.equals(PendingTicketState.submitted.toPersistedString()).not())).get();
 
-    final attachments =
-        await (_db.select(_db.pendingTicketAttachments)..where(
-              (a) => a.state
-                  .equals(PendingTicketState.submitted.toPersistedString())
-                  .not(),
-            ))
-            .get();
+    final attachments = await (_db.select(
+      _db.pendingTicketAttachments,
+    )..where((a) => a.state.equals(PendingTicketState.submitted.toPersistedString()).not())).get();
 
     // No day window: a punch from last week that never left the phone is exactly what a
     // technician must be told about before it is wiped.
@@ -168,10 +160,9 @@ class UnsentWorkCounter {
     // here is unsent whether it is a start that never left the phone or a close queued after a stop
     // (see `TicketTimerRepository.stop`). `syncError` rows count too — a permanent refusal leaves
     // them on the device, so a wipe still takes them.
-    final timers =
-        await (_db.select(_db.ticketTimers)
-              ..where((t) => t.isPendingSync.equals(true)))
-            .get();
+    final timers = await (_db.select(
+      _db.ticketTimers,
+    )..where((t) => t.isPendingSync.equals(true))).get();
 
     return UnsentWorkBreakdown(
       draftReports: drafts.length,

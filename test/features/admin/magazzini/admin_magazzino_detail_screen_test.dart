@@ -169,7 +169,7 @@ Widget _screen({
     ],
   );
 
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       magazzinoApiClientProvider.overrideWithValue(api),

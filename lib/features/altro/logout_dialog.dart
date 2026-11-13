@@ -17,10 +17,7 @@ import 'logout_flow.dart';
 /// says a day's work is.
 ///
 /// Returns the chosen [LogoutIntent], or null when the dialog was dismissed.
-Future<LogoutIntent?> showUnsentWorkLogoutDialog(
-  BuildContext context, {
-  required int unsentCount,
-}) {
+Future<LogoutIntent?> showUnsentWorkLogoutDialog(BuildContext context, {required int unsentCount}) {
   final plural = unsentCount != 1;
   final items = plural ? '$unsentCount elementi' : '1 elemento';
   final verb = plural ? 'verranno persi' : 'verrà perso';
@@ -152,11 +149,7 @@ class _LogoutProgressDialogState extends State<_LogoutProgressDialog> {
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           children: [
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
             const SizedBox(width: 14),
             Expanded(
               child: Text(

@@ -118,9 +118,7 @@ class MaterialeSourceResolver extends ChangeNotifier {
     bool stale() => _disposed || generation != _generation;
 
     Future<List<GiacenzaDto>> query(String q) async {
-      final page = await _ref
-          .read(magazzinoApiClientProvider)
-          .getGiacenze(q: q, pageSize: 100);
+      final page = await _ref.read(magazzinoApiClientProvider).getGiacenze(q: q, pageSize: 100);
       return page.elementi.where((g) => g.materialeId == id).toList()
         ..sort((a, b) => b.quantita.compareTo(a.quantita));
     }
@@ -324,11 +322,8 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
     if (match != null && widget.showSource) _resolveSources(_picked!);
   }
 
-  Future<void> _resolveSources(_PickedMateriale m) => _source.resolve(
-    id: m.id,
-    name: m.name,
-    code: m.code,
-  );
+  Future<void> _resolveSources(_PickedMateriale m) =>
+      _source.resolve(id: m.id, name: m.name, code: m.code);
 
   void _bumpQty(double delta) {
     final next = (_qty + delta).clamp(1, 999999).toDouble();
@@ -486,10 +481,7 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
                           initialValue: _uom,
                           hint: const Text('pz'),
                           items: [
-                            const DropdownMenuItem<String?>(
-                              value: null,
-                              child: Text('Nessuna'),
-                            ),
+                            const DropdownMenuItem<String?>(value: null, child: Text('Nessuna')),
                             for (final u in materialeSelectOptions(kUnitOfMeasureOptions, _uom))
                               DropdownMenuItem<String?>(value: u, child: Text(u)),
                           ],
@@ -505,17 +497,11 @@ class _MaterialePickerDialogState extends ConsumerState<MaterialePickerDialog> {
             Row(
               children: [
                 Expanded(
-                  child: AppButton.ghost(
-                    label: 'Annulla',
-                    onPressed: () => Navigator.pop(context),
-                  ),
+                  child: AppButton.ghost(label: 'Annulla', onPressed: () => Navigator.pop(context)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: AppButton(
-                    label: 'Aggiungi',
-                    onPressed: _canAdd ? _submit : null,
-                  ),
+                  child: AppButton(label: 'Aggiungi', onPressed: _canAdd ? _submit : null),
                 ),
               ],
             ),
@@ -567,7 +553,10 @@ class MaterialeSourceSection extends StatelessWidget {
         children: [
           const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
           const SizedBox(width: 8),
-          Text('Verifica giacenze…', style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
+          Text(
+            'Verifica giacenze…',
+            style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+          ),
         ],
       );
     }
@@ -579,7 +568,9 @@ class MaterialeSourceSection extends StatelessWidget {
           Text(error!, style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
           const SizedBox(height: 6),
           DropdownButtonFormField<String?>(
-            key: ValueKey('offline-source|$selectedMagazzinoId|${(offlineMagazzini ?? const []).length}'),
+            key: ValueKey(
+              'offline-source|$selectedMagazzinoId|${(offlineMagazzini ?? const []).length}',
+            ),
             initialValue: selectedMagazzinoId,
             hint: const Text('Nessun magazzino'),
             items: [
@@ -657,7 +648,7 @@ class MaterialeLookupField extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final materialiAsync = ref.watch(allMaterialiProvider);
-    final catalogo = materialiAsync.valueOrNull ?? const <MaterialiData>[];
+    final catalogo = materialiAsync.value ?? const <MaterialiData>[];
 
     return AppLookupField(
       label: 'Materiale',
@@ -667,7 +658,7 @@ class MaterialeLookupField extends ConsumerWidget {
       items: [for (final m in catalogo) LookupItem(id: m.id, name: m.name, subtitle: m.code)],
       emptyCacheHint: materialiAsync.isLoading
           ? 'Catalogo in caricamento…'
-          : ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+          : ref.watch(hasSyncedAtLeastOnceProvider).value == false
           ? 'Catalogo non ancora scaricato su questo telefono: scrivi il nome per registrarlo '
                 'comunque.'
           : 'Nessun materiale a catalogo: scrivi il nome per registrarlo comunque.',
@@ -697,7 +688,7 @@ class _FabbisognoSuggestions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(ticketMaterialiProvider(ticketId));
-    final planned = async.valueOrNull ?? const <TicketMaterialeDto>[];
+    final planned = async.value ?? const <TicketMaterialeDto>[];
     if (planned.isEmpty) return const SizedBox.shrink();
 
     return Padding(

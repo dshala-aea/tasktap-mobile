@@ -118,7 +118,12 @@ class AiFailure implements Exception {
 /// differently to a 409 (stale idempotency-key version: mint a fresh key and let the technician
 /// retry) than to any other failure, which a plain [AiFailure] can't express.
 class AiConversationException implements Exception {
-  const AiConversationException(this.statusCode, this.message, {this.code, this.offline = false});
+  const AiConversationException(
+    this.statusCode,
+    this.message, {
+    this.code,
+    this.offline = false,
+  });
 
   final int? statusCode;
   final String message;
@@ -137,11 +142,13 @@ class AiConversationException implements Exception {
   bool get isTurnInProgress => statusCode == 409 && code == 'turn_in_progress';
 
   /// 409: the draft moved on under this request. Refetch it (GET), then retry with the same key.
-  bool get isConcurrentUpdate => statusCode == 409 && code == 'concurrent_update';
+  bool get isConcurrentUpdate =>
+      statusCode == 409 && code == 'concurrent_update';
 
   /// 409: the draft or the conversation hit a hard cap; retrying cannot help.
   bool get isDraftTooLarge => statusCode == 409 && code == 'draft_too_large';
-  bool get isTurnLimitExceeded => statusCode == 409 && code == 'turn_limit_exceeded';
+  bool get isTurnLimitExceeded =>
+      statusCode == 409 && code == 'turn_limit_exceeded';
 
   /// 422: the turn text (or raw transcript) is over the server's per-turn character cap. The
   /// technician can shorten it and send again.
@@ -192,10 +199,15 @@ AiFactSource _parseFactSource(Object? s) => switch (s) {
 /// How a turn's text reached the client (request `source`, and each turn of a resumed session).
 enum AiTurnSource { typed, voice }
 
-AiTurnSource _parseTurnSource(Object? s) => s == 'Voice' ? AiTurnSource.voice : AiTurnSource.typed;
+AiTurnSource _parseTurnSource(Object? s) =>
+    s == 'Voice' ? AiTurnSource.voice : AiTurnSource.typed;
 
 class AiConversationSessionDto {
-  const AiConversationSessionDto({required this.sessionId, this.ticketId, this.cantiereId});
+  const AiConversationSessionDto({
+    required this.sessionId,
+    this.ticketId,
+    this.cantiereId,
+  });
 
   final String sessionId;
   final String? ticketId;
@@ -246,7 +258,9 @@ class AiCandidateFact {
     return AiCandidateFact(
       field: json['field'] as String? ?? '',
       state: _parseResolutionState(json['state']),
-      source: _parseFactSource(provenance is Map ? provenance['sourceType'] : null),
+      source: _parseFactSource(
+        provenance is Map ? provenance['sourceType'] : null,
+      ),
       conflictOperatorValue: shown is String ? shown : null,
     );
   }
@@ -273,15 +287,16 @@ class AiDraftWorkerRef {
   final double? km;
   final String? vehicle;
 
-  factory AiDraftWorkerRef.fromJson(Map<String, dynamic> json) => AiDraftWorkerRef(
-    userId: json['userId'] as String? ?? '',
-    fullName: json['fullName'] as String? ?? '',
-    hours: asDouble(json['hours']),
-    state: _parseResolutionState(json['state']),
-    source: _parseFactSource(json['source']),
-    km: asDouble(json['km']),
-    vehicle: json['vehicle'] is String ? json['vehicle'] as String : null,
-  );
+  factory AiDraftWorkerRef.fromJson(Map<String, dynamic> json) =>
+      AiDraftWorkerRef(
+        userId: json['userId'] as String? ?? '',
+        fullName: json['fullName'] as String? ?? '',
+        hours: asDouble(json['hours']),
+        state: _parseResolutionState(json['state']),
+        source: _parseFactSource(json['source']),
+        km: asDouble(json['km']),
+        vehicle: json['vehicle'] is String ? json['vehicle'] as String : null,
+      );
 }
 
 class AiDraftMaterialUsage {
@@ -306,15 +321,16 @@ class AiDraftMaterialUsage {
   /// No verified catalogue id: the name is what the technician said.
   final bool isFreeText;
 
-  factory AiDraftMaterialUsage.fromJson(Map<String, dynamic> json) => AiDraftMaterialUsage(
-    materialId: json['materialId'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    quantity: asDoubleOr0(json['quantity']),
-    state: _parseResolutionState(json['state']),
-    source: _parseFactSource(json['source']),
-    unit: json['unit'] is String ? json['unit'] as String : null,
-    isFreeText: json['isFreeText'] == true,
-  );
+  factory AiDraftMaterialUsage.fromJson(Map<String, dynamic> json) =>
+      AiDraftMaterialUsage(
+        materialId: json['materialId'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        quantity: asDoubleOr0(json['quantity']),
+        state: _parseResolutionState(json['state']),
+        source: _parseFactSource(json['source']),
+        unit: json['unit'] is String ? json['unit'] as String : null,
+        isFreeText: json['isFreeText'] == true,
+      );
 }
 
 /// One instrument the operator said they used, as the draft holds it — mirrors backend
@@ -345,16 +361,17 @@ class AiDraftStrumentoUsage {
   final bool expiredAcknowledged;
   final AiFactSource source;
 
-  factory AiDraftStrumentoUsage.fromJson(Map<String, dynamic> json) => AiDraftStrumentoUsage(
-    strumentoId: json['strumentoId'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    matricola: json['matricola'] as String?,
-    usageDescription: json['usageDescription'] as String?,
-    outcome: json['outcome'] as String?,
-    state: _parseResolutionState(json['state']),
-    expiredAcknowledged: json['expiredAcknowledged'] == true,
-    source: _parseFactSource(json['source']),
-  );
+  factory AiDraftStrumentoUsage.fromJson(Map<String, dynamic> json) =>
+      AiDraftStrumentoUsage(
+        strumentoId: json['strumentoId'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        matricola: json['matricola'] as String?,
+        usageDescription: json['usageDescription'] as String?,
+        outcome: json['outcome'] as String?,
+        state: _parseResolutionState(json['state']),
+        expiredAcknowledged: json['expiredAcknowledged'] == true,
+        source: _parseFactSource(json['source']),
+      );
 }
 
 class AiDraftControlAnswer {
@@ -374,14 +391,17 @@ class AiDraftControlAnswer {
   final DateTime? dateValue;
   final AiResolutionState state;
 
-  factory AiDraftControlAnswer.fromJson(Map<String, dynamic> json) => AiDraftControlAnswer(
-    ticketControlId: json['ticketControlId'] as String? ?? '',
-    stringValue: json['stringValue'] as String?,
-    boolValue: json['boolValue'] as bool?,
-    numberValue: asDouble(json['numberValue']),
-    dateValue: json['dateValue'] is String ? DateTime.tryParse(json['dateValue'] as String) : null,
-    state: _parseResolutionState(json['state']),
-  );
+  factory AiDraftControlAnswer.fromJson(Map<String, dynamic> json) =>
+      AiDraftControlAnswer(
+        ticketControlId: json['ticketControlId'] as String? ?? '',
+        stringValue: json['stringValue'] as String?,
+        boolValue: json['boolValue'] as bool?,
+        numberValue: asDouble(json['numberValue']),
+        dateValue: json['dateValue'] is String
+            ? DateTime.tryParse(json['dateValue'] as String)
+            : null,
+        state: _parseResolutionState(json['state']),
+      );
 
   /// A short human-readable answer, for a one-line list row.
   String describe() {
@@ -409,12 +429,13 @@ class AiDraftActivity {
   final AiResolutionState state;
   final AiFactSource source;
 
-  factory AiDraftActivity.fromJson(Map<String, dynamic> json) => AiDraftActivity(
-    description: json['description'] as String? ?? '',
-    hours: asDouble(json['hours']),
-    state: _parseResolutionState(json['state']),
-    source: _parseFactSource(json['source']),
-  );
+  factory AiDraftActivity.fromJson(Map<String, dynamic> json) =>
+      AiDraftActivity(
+        description: json['description'] as String? ?? '',
+        hours: asDouble(json['hours']),
+        state: _parseResolutionState(json['state']),
+        source: _parseFactSource(json['source']),
+      );
 }
 
 /// The copilot's structured draft — mirrors backend `ReportDraftDto` (Orchestration/ReportDraftDto.cs).
@@ -451,10 +472,14 @@ class AiCopilotDraftDto {
   );
 
   bool get hasBlockingOpenItems => openItems.any(
-    (f) => f.state == AiResolutionState.ambiguous || f.state == AiResolutionState.conflict,
+    (f) =>
+        f.state == AiResolutionState.ambiguous ||
+        f.state == AiResolutionState.conflict,
   );
 
-  factory AiCopilotDraftDto.fromJson(Map<String, dynamic> json) => AiCopilotDraftDto(
+  factory AiCopilotDraftDto.fromJson(
+    Map<String, dynamic> json,
+  ) => AiCopilotDraftDto(
     diagnosi: json['diagnosi'] as String?,
     soluzione: json['soluzione'] as String?,
     customerSignoffText: json['customerSignoffText'] as String?,
@@ -480,7 +505,10 @@ class AiCopilotDraftDto {
 }
 
 class AiConversationTurnResult {
-  const AiConversationTurnResult({required this.assistantReplyText, required this.draft});
+  const AiConversationTurnResult({
+    required this.assistantReplyText,
+    required this.draft,
+  });
 
   final String assistantReplyText;
   final AiCopilotDraftDto draft;
@@ -532,7 +560,14 @@ class AiConfirmedEdit {
   final Object? value;
   final bool remove;
 
-  static const Set<String> wireKeys = {'kind', 'id', 'name', 'property', 'value', 'remove'};
+  static const Set<String> wireKeys = {
+    'kind',
+    'id',
+    'name',
+    'property',
+    'value',
+    'remove',
+  };
 
   Map<String, dynamic> toJson() => {
     'kind': kind,
@@ -543,14 +578,15 @@ class AiConfirmedEdit {
     'remove': remove,
   };
 
-  factory AiConfirmedEdit.fromJson(Map<String, dynamic> json) => AiConfirmedEdit(
-    kind: json['kind'] as String? ?? '',
-    id: json['id'] as String?,
-    name: json['name'] as String?,
-    property: json['property'] as String?,
-    value: json['value'],
-    remove: json['remove'] == true,
-  );
+  factory AiConfirmedEdit.fromJson(Map<String, dynamic> json) =>
+      AiConfirmedEdit(
+        kind: json['kind'] as String? ?? '',
+        id: json['id'] as String?,
+        name: json['name'] as String?,
+        property: json['property'] as String?,
+        value: json['value'],
+        remove: json['remove'] == true,
+      );
 
   @override
   bool operator ==(Object other) =>
@@ -589,13 +625,14 @@ class AiConversationTurn {
 
   bool get isOperator => role == 'Operator';
 
-  factory AiConversationTurn.fromJson(Map<String, dynamic> json) => AiConversationTurn(
-    turnId: json['turnId'] as String? ?? '',
-    role: json['role'] as String? ?? '',
-    text: json['text'] as String? ?? '',
-    source: _parseTurnSource(json['source']),
-    at: DateTime.tryParse(json['at'] as String? ?? '')?.toUtc(),
-  );
+  factory AiConversationTurn.fromJson(Map<String, dynamic> json) =>
+      AiConversationTurn(
+        turnId: json['turnId'] as String? ?? '',
+        role: json['role'] as String? ?? '',
+        text: json['text'] as String? ?? '',
+        source: _parseTurnSource(json['source']),
+        at: DateTime.tryParse(json['at'] as String? ?? '')?.toUtc(),
+      );
 }
 
 /// `GET /api/ai/conversations/{id}`: the durable draft plus what was said, enough to resume on
@@ -624,7 +661,9 @@ class AiConversationDetailDto {
     return AiConversationDetailDto(
       sessionId: json['sessionId'] as String? ?? '',
       ticketId: json['ticketId'] as String?,
-      draft: AiCopilotDraftDto.fromJson((json['draft'] as Map<String, dynamic>?) ?? const {}),
+      draft: AiCopilotDraftDto.fromJson(
+        (json['draft'] as Map<String, dynamic>?) ?? const {},
+      ),
       turns: ((json['turns'] as List<dynamic>?) ?? [])
           .whereType<Map<String, dynamic>>()
           .map(AiConversationTurn.fromJson)
@@ -657,14 +696,20 @@ class AiResolvedStaff {
   final double kmTraveled;
   final String? vehicle;
 
-  static const Set<String> wireKeys = {'userId', 'hoursWorked', 'kmTraveled', 'vehicle'};
+  static const Set<String> wireKeys = {
+    'userId',
+    'hoursWorked',
+    'kmTraveled',
+    'vehicle',
+  };
 
-  factory AiResolvedStaff.fromJson(Map<String, dynamic> json) => AiResolvedStaff(
-    userId: json['userId'] as String? ?? '',
-    hoursWorked: asDouble(json['hoursWorked']),
-    kmTraveled: asDoubleOr0(json['kmTraveled']),
-    vehicle: json['vehicle'] as String?,
-  );
+  factory AiResolvedStaff.fromJson(Map<String, dynamic> json) =>
+      AiResolvedStaff(
+        userId: json['userId'] as String? ?? '',
+        hoursWorked: asDouble(json['hoursWorked']),
+        kmTraveled: asDoubleOr0(json['kmTraveled']),
+        vehicle: json['vehicle'] as String?,
+      );
 }
 
 /// One resolved material line. Mirror of backend `AiResolvedMaterial`.
@@ -697,13 +742,14 @@ class AiResolvedMaterial {
     'notes',
   };
 
-  factory AiResolvedMaterial.fromJson(Map<String, dynamic> json) => AiResolvedMaterial(
-    materialeId: json['materialeId'] as String?,
-    freeTextName: json['freeTextName'] as String?,
-    quantity: asDoubleOr0(json['quantity']),
-    unitOfMeasure: json['unitOfMeasure'] as String?,
-    notes: json['notes'] as String?,
-  );
+  factory AiResolvedMaterial.fromJson(Map<String, dynamic> json) =>
+      AiResolvedMaterial(
+        materialeId: json['materialeId'] as String?,
+        freeTextName: json['freeTextName'] as String?,
+        quantity: asDoubleOr0(json['quantity']),
+        unitOfMeasure: json['unitOfMeasure'] as String?,
+        notes: json['notes'] as String?,
+      );
 }
 
 /// One resolved checklist answer. Mirror of backend `AiResolvedControl`.
@@ -737,16 +783,17 @@ class AiResolvedControl {
     'note',
   };
 
-  factory AiResolvedControl.fromJson(Map<String, dynamic> json) => AiResolvedControl(
-    ticketControlId: json['ticketControlId'] as String? ?? '',
-    stringValue: json['stringValue'] as String?,
-    boolValue: json['boolValue'] as bool?,
-    dateValue: json['dateValue'] != null
-        ? DateTime.tryParse(json['dateValue'] as String)
-        : null,
-    numberValue: asDouble(json['numberValue']),
-    note: json['note'] as String?,
-  );
+  factory AiResolvedControl.fromJson(Map<String, dynamic> json) =>
+      AiResolvedControl(
+        ticketControlId: json['ticketControlId'] as String? ?? '',
+        stringValue: json['stringValue'] as String?,
+        boolValue: json['boolValue'] as bool?,
+        dateValue: json['dateValue'] != null
+            ? DateTime.tryParse(json['dateValue'] as String)
+            : null,
+        numberValue: asDouble(json['numberValue']),
+        note: json['note'] as String?,
+      );
 }
 
 /// One resolved instrument line. Mirror of backend `AiResolvedStrumento`.
@@ -790,19 +837,20 @@ class AiResolvedStrumento {
     'outcome',
   };
 
-  factory AiResolvedStrumento.fromJson(Map<String, dynamic> json) => AiResolvedStrumento(
-    strumentoId: json['strumentoId'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    matricola: json['matricola'] as String? ?? '',
-    // A civil date: it must land as `DateTime.utc(y, m, d)` like every other calendar label in
-    // the app. `DateTime.tryParse` returns a LOCAL twin, which compares unequal to the expiry the
-    // Strumenti step reads for the same instrument.
-    calibrationExpiry: parseDateOnly(json['calibrationExpiry']),
-    expiredAtUse: json['expiredAtUse'] == true,
-    expiredAcknowledged: json['expiredAcknowledged'] == true,
-    usageDescription: json['usageDescription'] as String?,
-    outcome: json['outcome'] as String?,
-  );
+  factory AiResolvedStrumento.fromJson(Map<String, dynamic> json) =>
+      AiResolvedStrumento(
+        strumentoId: json['strumentoId'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        matricola: json['matricola'] as String? ?? '',
+        // A civil date: it must land as `DateTime.utc(y, m, d)` like every other calendar label in
+        // the app. `DateTime.tryParse` returns a LOCAL twin, which compares unequal to the expiry the
+        // Strumenti step reads for the same instrument.
+        calibrationExpiry: parseDateOnly(json['calibrationExpiry']),
+        expiredAtUse: json['expiredAtUse'] == true,
+        expiredAcknowledged: json['expiredAcknowledged'] == true,
+        usageDescription: json['usageDescription'] as String?,
+        outcome: json['outcome'] as String?,
+      );
 }
 
 /// What `POST /api/ai/conversations/{id}/confirm` returns: the draft resolved against real tenant
@@ -1032,7 +1080,8 @@ class AiApiClient {
         data: {'ticketId': ?ticketId, 'cantiereId': ?cantiereId},
       );
       final data = response.data;
-      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      if (data == null)
+        throw const AiFailure('Risposta vuota dal servizio AI.');
       return AiConversationSessionDto.fromJson(data);
     } on DioException catch (e) {
       throw _translateConversation(e);
@@ -1057,9 +1106,12 @@ class AiApiClient {
   /// GET /api/ai/conversations/{id} — the draft, the turns and the expiry.
   Future<AiConversationDetailDto> getConversation(String sessionId) async {
     try {
-      final response = await _dio.get<Map<String, dynamic>>('/api/ai/conversations/$sessionId');
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/ai/conversations/$sessionId',
+      );
       final data = response.data;
-      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      if (data == null)
+        throw const AiFailure('Risposta vuota dal servizio AI.');
       return AiConversationDetailDto.fromJson(data);
     } on DioException catch (e) {
       throw _translateConversation(e);
@@ -1100,7 +1152,8 @@ class AiApiClient {
         ),
       );
       final data = response.data;
-      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      if (data == null)
+        throw const AiFailure('Risposta vuota dal servizio AI.');
       return AiConversationTurnResult.fromJson(data);
     } on DioException catch (e) {
       throw _translateConversation(e);
@@ -1123,14 +1176,18 @@ class AiApiClient {
   );
 
   /// POST /api/ai/conversations/{id}/turns — one operator utterance.
-  Future<AiConversationTurnResult> sendTurn(String sessionId, String text) async {
+  Future<AiConversationTurnResult> sendTurn(
+    String sessionId,
+    String text,
+  ) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/ai/conversations/$sessionId/turns',
         data: {'text': text},
       );
       final data = response.data;
-      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      if (data == null)
+        throw const AiFailure('Risposta vuota dal servizio AI.');
       return AiConversationTurnResult.fromJson(data);
     } on DioException catch (e) {
       throw _translateConversation(e);
@@ -1155,7 +1212,8 @@ class AiApiClient {
         options: Options(headers: {'Idempotency-Key': idempotencyKey}),
       );
       final data = response.data;
-      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      if (data == null)
+        throw const AiFailure('Risposta vuota dal servizio AI.');
       return AiConversationConfirmResponse.fromJson(data);
     } on DioException catch (e) {
       throw _translateConversation(e);
@@ -1172,7 +1230,10 @@ class AiApiClient {
   ///
   /// [idempotencyKey] must be generated once per recording and reused on every retry: the server
   /// then returns the same `audioRef` instead of storing the audio twice.
-  Future<AiVoiceCapture> uploadVoiceCapture(File audio, {required String idempotencyKey}) async {
+  Future<AiVoiceCapture> uploadVoiceCapture(
+    File audio, {
+    required String idempotencyKey,
+  }) async {
     try {
       final form = FormData.fromMap({
         'audio': await MultipartFile.fromFile(
@@ -1191,7 +1252,8 @@ class AiApiClient {
         ),
       );
       final data = response.data;
-      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      if (data == null)
+        throw const AiFailure('Risposta vuota dal servizio AI.');
       return AiVoiceCapture.fromJson(data);
     } on DioException catch (e) {
       throw _translateVoiceUpload(e);
@@ -1211,7 +1273,8 @@ class AiApiClient {
       );
     }
     if (status == null &&
-        (e.type == DioExceptionType.sendTimeout || e.type == DioExceptionType.receiveTimeout)) {
+        (e.type == DioExceptionType.sendTimeout ||
+            e.type == DioExceptionType.receiveTimeout)) {
       return const AiVoiceUploadException(
         AiVoiceUploadError.timeout,
         'La trascrizione sta impiegando troppo tempo. La registrazione è salvata: riprova.',
@@ -1322,13 +1385,16 @@ class AiApiClient {
       'La registrazione non è più disponibile sul server: registrala di nuovo o scrivi '
           'l\'aggiornamento.',
     'too_many_edits' => 'Troppe modifiche in una volta: riprova.',
-    'edit_reference_not_found' =>
-      'Una modifica riguarda una voce che non esiste più o non appartiene a questo ticket.',
-    'edit_value_invalid' || 'edit_property_unknown' || 'edit_kind_unknown' || 'edit_id_required' =>
-      'Una modifica fatta nel rapporto di intervento non è stata accettata dal server.',
-    'edit_sync_extras_not_allowed' => 'Le modifiche non possono essere inviate insieme alla voce.',
-    _ => 'Il server ha rifiutato l\'aggiornamento. Riprova; se il problema resta, continua a mano '
-        'nel rapporto di intervento.',
+    'edit_reference_not_found' => 'Una modifica riguarda una voce che non esiste più o non appartiene a questo ticket.',
+    'edit_value_invalid' ||
+    'edit_property_unknown' ||
+    'edit_kind_unknown' ||
+    'edit_id_required' => 'Una modifica fatta nel rapporto di intervento non è stata accettata dal server.',
+    'edit_sync_extras_not_allowed' =>
+      'Le modifiche non possono essere inviate insieme alla voce.',
+    _ =>
+      'Il server ha rifiutato l\'aggiornamento. Riprova; se il problema resta, continua a mano '
+          'nel rapporto di intervento.',
   };
 
   static Exception _translate(DioException e) {
@@ -1402,26 +1468,27 @@ class AiApiClient {
     }
 
     if (status == 403) {
-      return AiConversationException(status, 'Non hai i permessi per questa conversazione.');
+      return AiConversationException(
+        status,
+        'Non hai i permessi per questa conversazione.',
+      );
     }
 
     if (status == 409) {
       // ProblemDetails carries the stable code under `code`; older shapes used `error`.
       final rawCode = map?['code'] ?? map?['error'];
       final code = rawCode is String ? rawCode : null;
-      return AiConversationException(
-        status,
-        switch (code) {
-          'turn_in_progress' => 'L\'aggiornamento precedente è ancora in elaborazione.',
-          'concurrent_update' => 'La bozza è stata modificata da un altro dispositivo.',
-          'draft_too_large' =>
-            'La bozza è diventata troppo grande: apri il rapporto di intervento e completalo a mano.',
-          'turn_limit_exceeded' =>
-            'Questa conversazione ha raggiunto il limite di aggiornamenti.',
-          _ => 'La bozza è cambiata da quando hai provato a confermare — riprova.',
-        },
-        code: code,
-      );
+      return AiConversationException(status, switch (code) {
+        'turn_in_progress' =>
+          'L\'aggiornamento precedente è ancora in elaborazione.',
+        'concurrent_update' =>
+          'La bozza è stata modificata da un altro dispositivo.',
+        'draft_too_large' => 'La bozza è diventata troppo grande: apri il rapporto di intervento e completalo a mano.',
+        'turn_limit_exceeded' =>
+          'Questa conversazione ha raggiunto il limite di aggiornamenti.',
+        _ =>
+          'La bozza è cambiata da quando hai provato a confermare — riprova.',
+      }, code: code);
     }
 
     if (status == 400) {
@@ -1440,7 +1507,10 @@ class AiApiClient {
           errors is Map &&
           errors.entries.any(
             (e) =>
-                ['text', 'rawtranscript'].contains(e.key.toString().toLowerCase()) &&
+                [
+                  'text',
+                  'rawtranscript',
+                ].contains(e.key.toString().toLowerCase()) &&
                 '${e.value}'.contains('exceed'),
           );
       if (tooLong) {
@@ -1460,7 +1530,10 @@ class AiApiClient {
       );
     }
 
-    return AiConversationException(status, 'Il servizio AI non ha risposto. Riprova più tardi.');
+    return AiConversationException(
+      status,
+      'Il servizio AI non ha risposto. Riprova più tardi.',
+    );
   }
 }
 

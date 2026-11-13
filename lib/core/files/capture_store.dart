@@ -113,10 +113,7 @@ class CaptureStore {
 /// wrong, or is refused by a stricter MIME allow-list). [fallback] is for the call sites that know
 /// what kind of file they asked for: a camera/gallery pick with `imageQuality` set is re-encoded
 /// to JPEG by the plugin, so an extensionless or unknown-named pick is still `image/jpeg`.
-String contentTypeForFileName(
-  String fileName, {
-  String fallback = 'application/octet-stream',
-}) {
+String contentTypeForFileName(String fileName, {String fallback = 'application/octet-stream'}) {
   switch (p.extension(fileName).toLowerCase()) {
     case '.jpg':
     case '.jpeg':

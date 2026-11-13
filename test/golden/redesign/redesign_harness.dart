@@ -39,6 +39,7 @@ import 'package:alchemist/alchemist.dart' show loadFonts;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
 
@@ -94,7 +95,7 @@ Future<void> captureRedesign(
   final captureKey = ValueKey<String>('redesign-capture-$screenName');
 
   await tester.pumpWidget(
-    ProviderScope(
+    ProviderScope(retry: (_, _) => null, 
       overrides: overrides,
       child: RepaintBoundary(
         key: captureKey,

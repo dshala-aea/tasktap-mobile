@@ -10,6 +10,7 @@ import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -24,7 +25,8 @@ class ListaView extends ConsumerWidget {
     this.onTapTicket,
     this.reverseDays = false,
     this.emptyTitle = 'Nessun intervento',
-    this.emptyBody = 'Non ci sono interventi pianificati nel periodo selezionato.',
+    this.emptyBody =
+        'Non ci sono interventi pianificati nel periodo selezionato.',
     this.bottomPadding,
   });
 
@@ -52,7 +54,7 @@ class ListaView extends ConsumerWidget {
       // downloaded", and saying "non ci sono interventi" turns a missing sync into news about the
       // technician's week. `== false`, never `!= true`: an unanswered check must not be read as
       // "never synced".
-      if (ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false) {
+      if (ref.watch(hasSyncedAtLeastOnceProvider).value == false) {
         return const EmptyState(
           icon: LucideIcons.cloudOff,
           title: 'Calendario non ancora scaricato',
@@ -69,10 +71,12 @@ class ListaView extends ConsumerWidget {
     }
 
     final grouped = groupSchedulesByDay(schedules);
-    final entries = reverseDays ? grouped.entries.toList().reversed : grouped.entries;
+    final entries = reverseDays
+        ? grouped.entries.toList().reversed
+        : grouped.entries;
     final dayFmt = DateFormat('EEEE d MMMM', 'it');
     final teamScheduleIds =
-        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
+        ref.watch(teamAssignedScheduleIdsProvider).value ?? const {};
 
     final children = <Widget>[];
     for (final entry in entries) {
@@ -148,9 +152,12 @@ class _ScheduleListRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final where = ref
         .watch(
-          scheduleWhereProvider((ticketId: schedule.ticketId, locationId: schedule.locationId)),
+          scheduleWhereProvider((
+            ticketId: schedule.ticketId,
+            locationId: schedule.locationId,
+          )),
         )
-        .valueOrNull;
+        .value;
     // An all-day schedule has no meaningful time-of-day to show as a subtitle — see the same
     // gate in `ScheduleInfoSheet` (calendario/widgets/schedule_info_sheet.dart) and `_EventBlock`
     // (giorno_view.dart).

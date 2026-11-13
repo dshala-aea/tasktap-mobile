@@ -56,6 +56,7 @@ ProviderContainer _buildContainer({
   double? gpsLongitude,
 }) {
   return ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       dictationCapabilityProvider.overrideWith(
@@ -106,9 +107,7 @@ Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
-      home: Scaffold(
-        body: StepDettagli(reportId: _reportId),
-      ),
+      home: Scaffold(body: StepDettagli(reportId: _reportId)),
     ),
   );
 }

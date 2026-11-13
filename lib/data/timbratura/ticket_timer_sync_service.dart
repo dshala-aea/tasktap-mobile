@@ -116,7 +116,8 @@ class TicketTimerSyncService {
       for (final result in results) {
         await _repo.markSynced(result.clientId, result.ticketWorkLogId);
         final seconds = result.clockDisagreementSeconds;
-        if (seconds != null) _onClockDisagreement?.call(result.ticketId, seconds);
+        if (seconds != null)
+          _onClockDisagreement?.call(result.ticketId, seconds);
       }
     } catch (e) {
       if (_isPermanent(e)) {
@@ -124,7 +125,9 @@ class TicketTimerSyncService {
         return;
       }
       _batchFailures++;
-      final backoff = Duration(seconds: 30 * (1 << (_batchFailures - 1).clamp(0, 6)));
+      final backoff = Duration(
+        seconds: 30 * (1 << (_batchFailures - 1).clamp(0, 6)),
+      );
       _batchRetryAt = _clock().add(backoff);
       debugPrint(
         'TicketTimerSyncService: transient failure (${_describe(e)}); '
@@ -179,7 +182,10 @@ class TicketTimerSyncService {
   /// The server answered and refused: this exact request will never be accepted, so retrying it
   /// unattended is pointless and hiding it is worse.
   Future<void> _handleRefusedBatch(List<TicketTimer> rows, Object error) async {
-    final message = humanErrorMessage(error, azione: 'inviare le ore del ticket');
+    final message = humanErrorMessage(
+      error,
+      azione: 'inviare le ore del ticket',
+    );
     for (final row in rows) {
       await _repo.markSyncError(row.id, message);
     }
@@ -195,8 +201,9 @@ class TicketTimerSyncService {
     }
   }
 
-  static String _describe(Object e) =>
-      e is DioException ? '${e.response?.statusCode ?? e.type.name}' : e.runtimeType.toString();
+  static String _describe(Object e) => e is DioException
+      ? '${e.response?.statusCode ?? e.type.name}'
+      : e.runtimeType.toString();
 
   static bool _isPermanent(Object e) =>
       e is DioException && e.response != null && !_isTransient(e);

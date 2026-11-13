@@ -42,7 +42,7 @@ Map<String, dynamic> _emptySyncPayload() => {
 /// - A provided in-memory Drift DB.
 /// - Stub Dio that returns an empty sync payload.
 Widget _buildAuthenticatedApp(MockAuthRepository repo, AppDatabase db, MockDio mockDio) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),

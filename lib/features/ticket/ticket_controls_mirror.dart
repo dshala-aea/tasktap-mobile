@@ -51,8 +51,7 @@ List<TicketControlGroupDto> ticketControlGroupsFromMirror({
     final group = groupById[id]!;
     // A parent that never arrived makes its child a root rather than losing it — same rule as the
     // repository's own asset tree.
-    final parent =
-        group.parentGroupId != null && groupById.containsKey(group.parentGroupId)
+    final parent = group.parentGroupId != null && groupById.containsKey(group.parentGroupId)
         ? group.parentGroupId
         : null;
     (children[parent] ??= []).add(group);
@@ -118,14 +117,14 @@ TicketControlDto _toDto(TicketControlRow row) => TicketControlDto(
   prodottoAssistenzaId: row.prodottoAssistenzaId,
 );
 
-List<TicketControlDto> _sortedControls(List<TicketControlDto>? list) =>
-    [...?list]..sort((a, b) {
-      final c = a.sortOrder.compareTo(b.sortOrder);
-      return c != 0 ? c : naturalCompare(a.label, b.label);
-    });
+List<TicketControlDto> _sortedControls(List<TicketControlDto>? list) => [...?list]
+  ..sort((a, b) {
+    final c = a.sortOrder.compareTo(b.sortOrder);
+    return c != 0 ? c : naturalCompare(a.label, b.label);
+  });
 
-List<ControlGroupRow> _sortedGroups(List<ControlGroupRow>? list) =>
-    [...?list]..sort((a, b) {
-      final c = a.sortOrder.compareTo(b.sortOrder);
-      return c != 0 ? c : naturalCompare(a.name, b.name);
-    });
+List<ControlGroupRow> _sortedGroups(List<ControlGroupRow>? list) => [...?list]
+  ..sort((a, b) {
+    final c = a.sortOrder.compareTo(b.sortOrder);
+    return c != 0 ? c : naturalCompare(a.name, b.name);
+  });

@@ -448,4 +448,3 @@ Future<String?> createCantiereReportDraft(
 
   return reportId;
 }
-

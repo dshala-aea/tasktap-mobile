@@ -79,7 +79,7 @@ class _AdminMagazzinoDetailScreenState extends ConsumerState<AdminMagazzinoDetai
         ? null
         : ref
               .watch(techniciansProvider)
-              .valueOrNull
+              .value
               ?.cast<Map<String, dynamic>>()
               .where((t) => t['id'] == assignedId)
               .map((t) => t['displayName'] as String? ?? t['email'] as String? ?? assignedId)

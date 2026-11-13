@@ -19,7 +19,8 @@ class ApnsDiagnostics {
 
   static const MethodChannel channel = MethodChannel('tasktap/push_diag');
 
-  static Future<Object?> _defaultInvoke() => channel.invokeMethod<Object?>('apnsStatus');
+  static Future<Object?> _defaultInvoke() =>
+      channel.invokeMethod<Object?>('apnsStatus');
 
   final Future<Object?> Function() _invokeStatus;
   final bool _isIOS;
@@ -38,7 +39,9 @@ class ApnsDiagnostics {
       final registered = raw['registered'];
       final error = raw['error'];
       return {
-        'push.apns_error': error is String && error.isNotEmpty ? _cap(error) : 'none',
+        'push.apns_error': error is String && error.isNotEmpty
+            ? _cap(error)
+            : 'none',
         'push.apns_registered': registered is bool ? '$registered' : 'unknown',
       };
     } catch (_) {

@@ -61,8 +61,7 @@ const freeTextMaterialNote = 'Da verificare: materiale non trovato a catalogo.';
 
 bool _isRealId(String? id) => id != null && id.isNotEmpty && id != _emptyGuid;
 
-String _normaliseName(String? s) =>
-    (s ?? '').trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+String _normaliseName(String? s) => (s ?? '').trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
 bool _same(Object? a, Object? b) {
   if (a is num && b is num) return a.toDouble() == b.toDouble();
@@ -196,9 +195,7 @@ class AiEditBatch {
       for (final e in (json['edits'] as List<dynamic>? ?? const []))
         if (e is Map<String, dynamic>) AiConfirmedEdit.fromJson(e),
     ];
-    final derived = [
-      for (final d in (json['derived'] as List<dynamic>? ?? const [])) d == true,
-    ];
+    final derived = [for (final d in (json['derived'] as List<dynamic>? ?? const [])) d == true];
     return AiEditBatch(
       key: json['key'] as String? ?? _uuid.v4(),
       edits: edits,
@@ -375,7 +372,10 @@ _DraftLines _linesOfDraft(AiCopilotDraftDto d) {
     final key = _controlKey(c.ticketControlId);
     present.add(key);
     final hasAnswer =
-        c.stringValue != null || c.boolValue != null || c.numberValue != null || c.dateValue != null;
+        c.stringValue != null ||
+        c.boolValue != null ||
+        c.numberValue != null ||
+        c.dateValue != null;
     if (!_applicable(c.state) || !hasAnswer) continue;
     lines.add(
       _Line(
@@ -515,8 +515,9 @@ class AiDraftFeed {
   /// Whether [reportId] was handed to the submission queue or sent (not merely signed): the AI
   /// draft behind it has then been used.
   Future<bool> reportWasSubmitted(String reportId) async {
-    final r = await (_db.select(_db.draftReports)..where((t) => t.id.equals(reportId)))
-        .getSingleOrNull();
+    final r = await (_db.select(
+      _db.draftReports,
+    )..where((t) => t.id.equals(reportId))).getSingleOrNull();
     if (r == null) return false;
     return r.stato != 'Bozza' ||
         DraftSubmissionState.fromString(r.submissionState) != DraftSubmissionState.draft;
@@ -645,12 +646,11 @@ class AiDraftFeed {
       if (s.userId.isEmpty) continue;
       out.add(
         _Line(
-            _Kind.worker,
-            _workerKey(s.userId),
-            id: s.userId,
-            values: {'hours': s.hoursWorked, 'km': s.kmTraveled, 'vehicle': s.vehicle},
-          )
-          ..rowId = s.id,
+          _Kind.worker,
+          _workerKey(s.userId),
+          id: s.userId,
+          values: {'hours': s.hoursWorked, 'km': s.kmTraveled, 'vehicle': s.vehicle},
+        )..rowId = s.id,
       );
     }
     final materials = await (_db.select(
@@ -661,13 +661,12 @@ class AiDraftFeed {
       if (key == null) continue;
       out.add(
         _Line(
-            _Kind.material,
-            key,
-            id: _isRealId(m.materialeId) ? m.materialeId : null,
-            name: m.freeTextName,
-            values: {'quantity': m.quantity, 'unit': m.unitOfMeasure},
-          )
-          ..rowId = m.id,
+          _Kind.material,
+          key,
+          id: _isRealId(m.materialeId) ? m.materialeId : null,
+          name: m.freeTextName,
+          values: {'quantity': m.quantity, 'unit': m.unitOfMeasure},
+        )..rowId = m.id,
       );
     }
     final controls = await (_db.select(
@@ -676,17 +675,16 @@ class AiDraftFeed {
     for (final c in controls) {
       out.add(
         _Line(
-            _Kind.control,
-            _controlKey(c.controlId),
-            id: c.controlId,
-            values: {
-              'stringValue': c.stringValue,
-              'boolValue': c.boolValue,
-              'dateValue': _iso(c.dateValue),
-              'numberValue': c.numberValue,
-            },
-          )
-          ..rowId = c.id,
+          _Kind.control,
+          _controlKey(c.controlId),
+          id: c.controlId,
+          values: {
+            'stringValue': c.stringValue,
+            'boolValue': c.boolValue,
+            'dateValue': _iso(c.dateValue),
+            'numberValue': c.numberValue,
+          },
+        )..rowId = c.id,
       );
     }
     return out;
@@ -769,11 +767,7 @@ class AiDraftFeed {
         // Removed by hand after the technician added it: theirs, not re-added.
         if (state.synced.containsKey(line.key)) continue;
         await _insert(line, reportId, header.tenantId, now);
-        state.applied[line.key] = {
-          ...line.values,
-          '_id': ?line.id,
-          '_name': ?line.name,
-        };
+        state.applied[line.key] = {...line.values, '_id': ?line.id, '_name': ?line.name};
         changed = true;
       }
 
@@ -887,7 +881,9 @@ class AiDraftFeed {
             kmTraveled: u.containsKey('km')
                 ? Value((u['km'] as num?)?.toDouble() ?? 0)
                 : const Value.absent(),
-            vehicle: u.containsKey('vehicle') ? Value(u['vehicle'] as String?) : const Value.absent(),
+            vehicle: u.containsKey('vehicle')
+                ? Value(u['vehicle'] as String?)
+                : const Value.absent(),
             updatedAt: Value(now),
           ),
         );
@@ -897,7 +893,9 @@ class AiDraftFeed {
             quantity: u['quantity'] is num
                 ? Value((u['quantity'] as num).toDouble())
                 : const Value.absent(),
-            unitOfMeasure: u.containsKey('unit') ? Value(u['unit'] as String?) : const Value.absent(),
+            unitOfMeasure: u.containsKey('unit')
+                ? Value(u['unit'] as String?)
+                : const Value.absent(),
             updatedAt: Value(now),
           ),
         );
@@ -1093,7 +1091,8 @@ String? invalidEditReason(AiConfirmedEdit e) {
   final name = e.name;
   if (name != null && name.length > max) return 'nome oltre $max caratteri';
   final nameIdentifies =
-      e.kind == AiConfirmedEdit.kindActivity || (e.kind == AiConfirmedEdit.kindMaterial && e.id == null);
+      e.kind == AiConfirmedEdit.kindActivity ||
+      (e.kind == AiConfirmedEdit.kindMaterial && e.id == null);
   if (nameIdentifies && !_letterOrDigit.hasMatch(name ?? '')) return 'nome senza lettere o cifre';
   final v = e.value;
   if (v is num && (v.isNaN || v.isInfinite)) return 'numero non valido';
@@ -1265,10 +1264,8 @@ class AiEditSyncer {
   /// call, so the technician is told each time, never "nothing to sync"). A 400 isolates the
   /// refused edit by halving the batch: only that edit is dropped, recorded as unsendable and
   /// shown on the card; the rest still go. Any other failure leaves the queue persisted.
-  Future<AiCopilotDraftDto?> sync(
-    String sessionId, {
-    List<AiConfirmedEdit> extra = const [],
-  }) => _locked(sessionId, () => _sync(sessionId, extra));
+  Future<AiCopilotDraftDto?> sync(String sessionId, {List<AiConfirmedEdit> extra = const []}) =>
+      _locked(sessionId, () => _sync(sessionId, extra));
 
   /// The edits to ride in the next turn of [sessionId] (at most one request's worth). A queued
   /// batch, or more pending edits than one request holds, is flushed edits-only first. Never
@@ -1358,7 +1355,10 @@ class AiEditSyncer {
       throw const AiEditSyncBlockedException(_blockedMessage);
     }
     // Explicit actions are queued (and persisted) before anything already queued is sent.
-    final invalidExtra = [for (final e in extra) if (invalidEditReason(e) != null) e];
+    final invalidExtra = [
+      for (final e in extra)
+        if (invalidEditReason(e) != null) e,
+    ];
     if (invalidExtra.isNotEmpty) {
       throw AiConversationException(400, invalidEditReason(invalidExtra.first)!);
     }
@@ -1486,10 +1486,8 @@ class AiEditSyncer {
 final aiDraftFeedStoreProvider = Provider<AiDraftFeedStore>((ref) => AiDraftFeedStore());
 
 final aiDraftFeedProvider = Provider<AiDraftFeed>(
-  (ref) => AiDraftFeed(
-    db: ref.watch(appDatabaseProvider),
-    store: ref.watch(aiDraftFeedStoreProvider),
-  ),
+  (ref) =>
+      AiDraftFeed(db: ref.watch(appDatabaseProvider), store: ref.watch(aiDraftFeedStoreProvider)),
 );
 
 final aiEditSyncerProvider = Provider<AiEditSyncer>(

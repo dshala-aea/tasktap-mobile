@@ -17,7 +17,7 @@ import 'package:tasktap_mobile/features/admin/cantieri/admin_cantiere_list_scree
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
-Widget _buildScreen(AppDatabase db) => ProviderScope(
+Widget _buildScreen(AppDatabase db) => ProviderScope(retry: (_, _) => null, 
   overrides: [appDatabaseProvider.overrideWithValue(db)],
   child: const MaterialApp(home: AdminCantiereListScreen()),
 );

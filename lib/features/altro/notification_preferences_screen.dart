@@ -42,7 +42,9 @@ class NotificationPreferencesScreen extends ConsumerWidget {
         child: Column(
           children: [
             const ScreenHeader(title: 'Preferenze notifiche', showBack: true),
-            Expanded(child: online ? const _OnlineBody() : const _OfflineBody()),
+            Expanded(
+              child: online ? const _OnlineBody() : const _OfflineBody(),
+            ),
           ],
         ),
       ),
@@ -117,7 +119,9 @@ class _OnlineBody extends ConsumerWidget {
           SliverToBoxAdapter(child: _SectionTitle(title: group.title)),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.pagePadding,
+              ),
               child: AppCard(
                 padding: EdgeInsets.zero,
                 child: Column(
@@ -130,7 +134,11 @@ class _OnlineBody extends ConsumerWidget {
                         onToggle: () async {
                           final message = await notifier.toggle(rows[i].type);
                           if (message != null && context.mounted) {
-                            showAppToast(context, message: message, tone: ToastTone.error);
+                            showAppToast(
+                              context,
+                              message: message,
+                              tone: ToastTone.error,
+                            );
                           }
                         },
                       ),
@@ -194,7 +202,10 @@ class _PreferenceRow extends StatelessWidget {
       subtitle: label.subtitle.isEmpty ? null : label.subtitle,
       showDivider: showDivider,
       onTap: busy ? null : onToggle,
-      meta: AppToggle(value: pref.enabled, onChanged: busy ? null : (_) => onToggle()),
+      meta: AppToggle(
+        value: pref.enabled,
+        onChanged: busy ? null : (_) => onToggle(),
+      ),
     );
   }
 }

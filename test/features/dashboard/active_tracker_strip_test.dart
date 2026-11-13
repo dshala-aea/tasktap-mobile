@@ -147,7 +147,7 @@ void main() {
       requestOptions: RequestOptions(path: '/api/tickets/worklogs/mobile/sessions'),
     ));
 
-    return ProviderScope(
+    return ProviderScope(retry: (_, _) => null, 
       overrides: [
         workSessionRepositoryProvider.overrideWithValue(repo),
         dioProvider.overrideWithValue(mockDio),
@@ -204,7 +204,7 @@ void main() {
       ],
     );
 
-    return ProviderScope(
+    return ProviderScope(retry: (_, _) => null, 
       overrides: [
         workSessionRepositoryProvider.overrideWithValue(repo),
         dioProvider.overrideWithValue(MockDio()),

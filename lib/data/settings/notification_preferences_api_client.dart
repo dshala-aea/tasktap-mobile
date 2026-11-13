@@ -50,12 +50,13 @@ class NotificationPreferenceDto {
   /// switch (that is [enabled]); kept so a later "ripristina" affordance has it.
   final bool defaultEnabled;
 
-  NotificationPreferenceDto copyWith({bool? enabled}) => NotificationPreferenceDto(
-    type: type,
-    key: key,
-    enabled: enabled ?? this.enabled,
-    defaultEnabled: defaultEnabled,
-  );
+  NotificationPreferenceDto copyWith({bool? enabled}) =>
+      NotificationPreferenceDto(
+        type: type,
+        key: key,
+        enabled: enabled ?? this.enabled,
+        defaultEnabled: defaultEnabled,
+      );
 
   /// Returns null for a row without a usable ordinal: it could not be sent back, so listing it
   /// would offer a switch that cannot work. Everything else is tolerated.
@@ -79,9 +80,7 @@ class NotificationPreferenceDto {
   static List<NotificationPreferenceDto> parseList(Object? body) {
     final items = body is Map ? body['items'] : null;
     if (items is! List) return const [];
-    return [
-      for (final raw in items) ?tryParse(raw),
-    ];
+    return [for (final raw in items) ?tryParse(raw)];
   }
 }
 
@@ -120,7 +119,8 @@ class NotificationPreferencesApiClient {
         '/api/notifications/preferences',
         data: {
           'items': [
-            for (final entry in changes.entries) {'type': entry.key, 'enabled': entry.value},
+            for (final entry in changes.entries)
+              {'type': entry.key, 'enabled': entry.value},
           ],
         },
       ),
@@ -140,7 +140,10 @@ class NotificationPreferencesApiClient {
     }
   }
 
-  static NotificationPreferencesFailure _failureFor(DioException e, String fallback) {
+  static NotificationPreferencesFailure _failureFor(
+    DioException e,
+    String fallback,
+  ) {
     final status = ProblemDetails.statusOf(e);
     if (status == null) {
       return const NotificationPreferencesFailure(
@@ -169,6 +172,7 @@ class NotificationPreferencesApiClient {
   }
 }
 
-final notificationPreferencesApiClientProvider = Provider<NotificationPreferencesApiClient>((ref) {
-  return NotificationPreferencesApiClient(ref.watch(dioProvider));
-});
+final notificationPreferencesApiClientProvider =
+    Provider<NotificationPreferencesApiClient>((ref) {
+      return NotificationPreferencesApiClient(ref.watch(dioProvider));
+    });

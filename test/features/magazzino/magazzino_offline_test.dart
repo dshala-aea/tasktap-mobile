@@ -31,7 +31,10 @@ class _FakeApiClient extends MagazzinoApiClient {
   int calls = 0;
 
   @override
-  Future<List<MagazzinoDto>> getMagazzini({bool? isActive, String? tipo}) async {
+  Future<List<MagazzinoDto>> getMagazzini({
+    bool? isActive,
+    String? tipo,
+  }) async {
     calls++;
     final failure = error;
     if (failure != null) throw failure;
@@ -94,6 +97,7 @@ void main() {
     required bool online,
     required _FakeApiClient api,
   }) => ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       isOnlineProvider.overrideWithValue(online),
@@ -102,20 +106,24 @@ void main() {
   );
 
   group('magazziniProvider', () {
-    test('offline lists the mirror alphabetically and never calls the API', () async {
-      await seedMirror();
-      final api = _FakeApiClient(
-        error: StateError('the network must not be touched offline'),
-      );
-      final container = buildContainer(online: false, api: api);
-      addTearDown(container.dispose);
+    test(
+      'offline lists the mirror alphabetically and never calls the API',
+      () async {
+        await seedMirror();
+        final api = _FakeApiClient(
+          error: StateError('the network must not be touched offline'),
+        );
+        final container = buildContainer(online: false, api: api);
+        addTearDown(container.dispose);
 
-      final list = await container.read(magazziniProvider.future);
+        container.listen(magazziniProvider, (_, _) {});
+        final list = await container.read(magazziniProvider.future);
 
-      expect(api.calls, 0);
-      expect(list.map((m) => m.nome), ['Furgone Rossi', 'Sede Milano']);
-      expect(list.map((m) => m.tipo), ['Furgone', 'Sede']);
-    });
+        expect(api.calls, 0);
+        expect(list.map((m) => m.nome), ['Furgone Rossi', 'Sede Milano']);
+        expect(list.map((m) => m.tipo), ['Furgone', 'Sede']);
+      },
+    );
 
     test('offline with an empty mirror reports "not downloaded", never an empty tenant', () async {
       final api = _FakeApiClient();
@@ -124,6 +132,7 @@ void main() {
 
       // The picker renders an empty list as "Nessun magazzino disponibile." — a claim about the
       // tenant's stock that would be false here.
+      container.listen(magazziniProvider, (_, _) {});
       await expectLater(
         container.read(magazziniProvider.future),
         throwsA(isA<MagazziniOfflineException>()),
@@ -143,22 +152,26 @@ void main() {
       expect(api.calls, 0);
     });
 
-    test('online, a request that never arrived falls back to the mirror', () async {
-      await seedMirror();
-      final api = _FakeApiClient(
-        error: DioException(
-          requestOptions: RequestOptions(path: '/api/magazzini'),
-          type: DioExceptionType.connectionTimeout,
-        ),
-      );
-      final container = buildContainer(online: true, api: api);
-      addTearDown(container.dispose);
+    test(
+      'online, a request that never arrived falls back to the mirror',
+      () async {
+        await seedMirror();
+        final api = _FakeApiClient(
+          error: DioException(
+            requestOptions: RequestOptions(path: '/api/magazzini'),
+            type: DioExceptionType.connectionTimeout,
+          ),
+        );
+        final container = buildContainer(online: true, api: api);
+        addTearDown(container.dispose);
 
-      final list = await container.read(magazziniProvider.future);
+        container.listen(magazziniProvider, (_, _) {});
+        final list = await container.read(magazziniProvider.future);
 
-      expect(api.calls, 1);
-      expect(list.map((m) => m.nome), ['Furgone Rossi', 'Sede Milano']);
-    });
+        expect(api.calls, 1);
+        expect(list.map((m) => m.nome), ['Furgone Rossi', 'Sede Milano']);
+      },
+    );
 
     test('online, a 403 is about the account and is not papered over with the mirror', () async {
       await seedMirror();
@@ -174,6 +187,7 @@ void main() {
       );
       final container = buildContainer(online: true, api: api);
       addTearDown(container.dispose);
+      container.listen(magazziniProvider, (_, _) {});
 
       await expectLater(
         container.read(magazziniProvider.future),
@@ -187,6 +201,7 @@ void main() {
       final container = buildContainer(online: true, api: api);
       addTearDown(container.dispose);
 
+      container.listen(magazziniProvider, (_, _) {});
       final list = await container.read(magazziniProvider.future);
 
       expect(api.calls, 1);
@@ -195,20 +210,24 @@ void main() {
   });
 
   group('furgoneDiUserProvider', () {
-    test('offline resolves the technician\'s own van from the mirror', () async {
-      await seedMirror();
-      final api = _FakeApiClient(
-        error: StateError('the network must not be touched offline'),
-      );
-      final container = buildContainer(online: false, api: api);
-      addTearDown(container.dispose);
+    test(
+      'offline resolves the technician\'s own van from the mirror',
+      () async {
+        await seedMirror();
+        final api = _FakeApiClient(
+          error: StateError('the network must not be touched offline'),
+        );
+        final container = buildContainer(online: false, api: api);
+        addTearDown(container.dispose);
 
-      final van = await container.read(furgoneDiUserProvider('u1').future);
+        container.listen(furgoneDiUserProvider('u1'), (_, _) {});
+        final van = await container.read(furgoneDiUserProvider('u1').future);
 
-      expect(api.calls, 0);
-      expect(van?.id, 'w-van');
-      expect(van?.isFurgone, isTrue);
-    });
+        expect(api.calls, 0);
+        expect(van?.id, 'w-van');
+        expect(van?.isFurgone, isTrue);
+      },
+    );
 
     test('offline a technician with no van gets null, not an error', () async {
       await seedMirror();
@@ -216,6 +235,7 @@ void main() {
       final container = buildContainer(online: false, api: api);
       addTearDown(container.dispose);
 
+      container.listen(furgoneDiUserProvider('u2'), (_, _) {});
       final van = await container.read(furgoneDiUserProvider('u2').future);
 
       expect(van, isNull);
@@ -235,6 +255,7 @@ void main() {
       final container = buildContainer(online: true, api: api);
       addTearDown(container.dispose);
 
+      container.listen(furgoneDiUserProvider('u1'), (_, _) {});
       final van = await container.read(furgoneDiUserProvider('u1').future);
 
       expect(api.calls, 1);

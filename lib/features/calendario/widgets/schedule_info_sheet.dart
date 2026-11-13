@@ -47,9 +47,15 @@ class ScheduleInfoSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final where = ref
-        .watch(scheduleWhereProvider((ticketId: schedule.ticketId, locationId: schedule.locationId)))
-        .valueOrNull;
-    final tecnici = ref.watch(scheduleAssigneeNamesProvider(schedule.id)).valueOrNull ?? const [];
+        .watch(
+          scheduleWhereProvider((
+            ticketId: schedule.ticketId,
+            locationId: schedule.locationId,
+          )),
+        )
+        .value;
+    final tecnici =
+        ref.watch(scheduleAssigneeNamesProvider(schedule.id)).value ?? const [];
     // An all-day schedule has no meaningful time-of-day to show — timeStartMinutes/
     // timeEndMinutes on an all-day row are placeholder bounds, not a real range. Gate on
     // `allDay`, not on the minute values, so neither the visible text nor its layout implies
@@ -87,7 +93,11 @@ class ScheduleInfoSheet extends ConsumerWidget {
               StatusPill(stato: statusName),
               if (timeRange != null) ...[
                 const SizedBox(width: 12),
-                Icon(LucideIcons.clock, size: 14, color: context.colors.inkMuted),
+                Icon(
+                  LucideIcons.clock,
+                  size: 14,
+                  color: context.colors.inkMuted,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   timeRange,
@@ -100,9 +110,12 @@ class ScheduleInfoSheet extends ConsumerWidget {
               ],
             ],
           ),
-          if (where?.customerName != null) _InfoLine(label: 'Cliente', value: where!.customerName!),
-          if (where?.address != null) _InfoLine(label: 'Sede', value: where!.address!),
-          if (tecnici.isNotEmpty) _InfoLine(label: 'Tecnici', value: tecnici.join(', ')),
+          if (where?.customerName != null)
+            _InfoLine(label: 'Cliente', value: where!.customerName!),
+          if (where?.address != null)
+            _InfoLine(label: 'Sede', value: where!.address!),
+          if (tecnici.isNotEmpty)
+            _InfoLine(label: 'Tecnici', value: tecnici.join(', ')),
           // The sheet exposes no write affordance, so there is nothing to lock here — but a day
           // owned by a multi-day plan is a materialised occupancy row (the backend refuses every
           // write to it), and saying so stops a technician reading "nothing to edit" as a bug.
@@ -157,7 +170,11 @@ class _InfoLine extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             value,
-            style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.ink),
+            style: TextStyle(
+              fontFamily: 'Archivo',
+              fontSize: 14,
+              color: context.colors.ink,
+            ),
           ),
         ],
       ),

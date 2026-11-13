@@ -103,12 +103,9 @@ class VoiceCaptureController {
     await recorder.start();
     _recording = true;
     _finishing = null;
-    _sub = recorder.elapsed.listen(
-      (d) {
-        if (d >= maxRecordingLength) _finishAndNotify();
-      },
-      onDone: _finishAndNotify,
-    );
+    _sub = recorder.elapsed.listen((d) {
+      if (d >= maxRecordingLength) _finishAndNotify();
+    }, onDone: _finishAndNotify);
     return RecordingStartResult.started;
   }
 

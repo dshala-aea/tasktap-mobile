@@ -247,7 +247,7 @@ void main() {
     });
 
     Widget buildScreen() {
-      return ProviderScope(
+      return ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(mockDio),
@@ -320,71 +320,72 @@ void main() {
     // on empty text and otherwise do nothing — typing a genuinely new address silently went
     // nowhere, permanently blocking the wizard (locationId is a plain FK with no free-text
     // fallback). Now it creates a real Location for the selected client and selects it.
-    testWidgets('typing a new address for Sede creates and selects a real Location', (
-      tester,
-    ) async {
-      when(
-        () => mockDio.post<Map<String, dynamic>>(
-          '/api/locations',
-          data: any(named: 'data'),
-        ),
-      ).thenAnswer(
-        (_) async => Response<Map<String, dynamic>>(
-          data: {'id': 'loc-new'},
-          statusCode: 200,
-          requestOptions: RequestOptions(path: '/api/locations'),
-        ),
-      );
+    testWidgets(
+      'typing a new address for Sede creates and selects a real Location',
+      (tester) async {
+        when(
+          () => mockDio.post<Map<String, dynamic>>(
+            '/api/locations',
+            data: any(named: 'data'),
+          ),
+        ).thenAnswer(
+          (_) async => Response<Map<String, dynamic>>(
+            data: {'id': 'loc-new'},
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/api/locations'),
+          ),
+        );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            appDatabaseProvider.overrideWithValue(db),
-            dioProvider.overrideWithValue(mockDio),
-            isOnlineProvider.overrideWithValue(true),
-          ],
-          child: const MaterialApp(home: NewTicketFormScreen()),
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          ProviderScope(retry: (_, _) => null, 
+            overrides: [
+              appDatabaseProvider.overrideWithValue(db),
+              dioProvider.overrideWithValue(mockDio),
+              isOnlineProvider.overrideWithValue(true),
+            ],
+            child: const MaterialApp(home: NewTicketFormScreen()),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      // Choose the client first — createLocation needs a customerId to attach the new sede to.
-      await tester.tap(find.byKey(const ValueKey('cliente-null')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Acme Srl').last);
-      await tester.pumpAndSettle();
+        // Choose the client first — createLocation needs a customerId to attach the new sede to.
+        await tester.tap(find.byKey(const ValueKey('cliente-null')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Acme Srl').last);
+        await tester.pumpAndSettle();
 
-      // Type a brand new address into Sede instead of picking 'Sede Milano' from the suggestions.
-      await tester.enterText(
-        find.descendant(
-          of: find.byKey(const ValueKey('sede-null')),
-          matching: find.byType(TextFormField),
-        ),
-        'Via Nuova 5',
-      );
-      // Debounced 900ms (step_cliente_sede.dart) so a create isn't fired per keystroke — advance
-      // the fake clock past it, then let the create + best-effort sync chain settle.
-      await tester.pump(const Duration(milliseconds: 950));
-      await tester.pumpAndSettle();
+        // Type a brand new address into Sede instead of picking 'Sede Milano' from the suggestions.
+        await tester.enterText(
+          find.descendant(
+            of: find.byKey(const ValueKey('sede-null')),
+            matching: find.byType(TextFormField),
+          ),
+          'Via Nuova 5',
+        );
+        // Debounced 900ms (step_cliente_sede.dart) so a create isn't fired per keystroke — advance
+        // the fake clock past it, then let the create + best-effort sync chain settle.
+        await tester.pump(const Duration(milliseconds: 950));
+        await tester.pumpAndSettle();
 
-      final captured =
-          verify(
-                () => mockDio.post<Map<String, dynamic>>(
-                  '/api/locations',
-                  data: captureAny(named: 'data'),
-                ),
-              ).captured.single
-              as Map;
-      expect(captured['customerId'], 'cust-1');
-      expect(captured['name'], 'Via Nuova 5');
+        final captured =
+            verify(
+                  () => mockDio.post<Map<String, dynamic>>(
+                    '/api/locations',
+                    data: captureAny(named: 'data'),
+                  ),
+                ).captured.single
+                as Map;
+        expect(captured['customerId'], 'cust-1');
+        expect(captured['name'], 'Via Nuova 5');
 
-      // The wizard only unblocks once a real locationId is selected — proves the new sede was
-      // actually selected, not just posted.
-      expect(avantiButton(tester).onPressed, isNotNull);
+        // The wizard only unblocks once a real locationId is selected — proves the new sede was
+        // actually selected, not just posted.
+        expect(avantiButton(tester).onPressed, isNotNull);
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -455,7 +456,7 @@ void main() {
     // push) so a successful pop(true) is observable, instead of popping the
     // MaterialApp's lone root route.
     Widget buildLauncher({required bool isOnline}) {
-      return ProviderScope(
+      return ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(mockDio),
@@ -812,9 +813,7 @@ void main() {
         300,
       );
       tester
-          .widget<AppButton>(
-            find.widgetWithText(AppButton, 'Salva correzione'),
-          )
+          .widget<AppButton>(find.widgetWithText(AppButton, 'Salva correzione'))
           .onPressed!();
       await tester.pumpAndSettle();
     }
@@ -839,7 +838,7 @@ void main() {
         );
 
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               dioProvider.overrideWithValue(mockDio),
@@ -890,89 +889,99 @@ void main() {
           ),
         );
 
-        expect(find.textContaining('Ticket creato con successo'), findsOneWidget);
+        expect(
+          find.textContaining('Ticket creato con successo'),
+          findsOneWidget,
+        );
         await flushSnackBarTimer(tester);
       },
     );
 
-    testWidgets('a repair never re-sends a template the catalogue no longer offers', (tester) async {
-      // The row was queued when its template was still on offer; the catalogue has since retired it,
-      // so the picker no longer shows it — but the id is still sitting in the row this repair
-      // re-sends, and a repair writes the form's values back over the row. Left alone, the server
-      // answers that template with a 400 whose body carries no `field`, and the create queue can only
-      // classify a 404-with-field as repairable: the row would retry forever. So the send must drop
-      // it, and the row must not keep it either.
-      await db
-          .into(db.maintenanceTemplates)
-          .insert(
-            MaintenanceTemplatesCompanion.insert(
-              id: 'tpl-live',
-              origin: 'System',
-              name: 'Caldaia',
-              latestPublishedVersion: const Value(1),
-            ),
-          );
-      await seedRepairRow();
-      await (db.update(db.pendingTickets)..where((r) => r.id.equals('pt-repair'))).write(
-        const PendingTicketsCompanion(maintenanceTemplateId: Value('tpl-gone')),
-      );
-      final stale = await db.select(db.pendingTickets).getSingle();
-      expect(
-        stale.maintenanceTemplateId,
-        'tpl-gone',
-        reason: 'the row really does carry the retired id, so the drop below is not vacuous',
-      );
+    testWidgets(
+      'a repair never re-sends a template the catalogue no longer offers',
+      (tester) async {
+        // The row was queued when its template was still on offer; the catalogue has since retired it,
+        // so the picker no longer shows it — but the id is still sitting in the row this repair
+        // re-sends, and a repair writes the form's values back over the row. Left alone, the server
+        // answers that template with a 400 whose body carries no `field`, and the create queue can only
+        // classify a 404-with-field as repairable: the row would retry forever. So the send must drop
+        // it, and the row must not keep it either.
+        await db
+            .into(db.maintenanceTemplates)
+            .insert(
+              MaintenanceTemplatesCompanion.insert(
+                id: 'tpl-live',
+                origin: 'System',
+                name: 'Caldaia',
+                latestPublishedVersion: const Value(1),
+              ),
+            );
+        await seedRepairRow();
+        await (db.update(
+          db.pendingTickets,
+        )..where((r) => r.id.equals('pt-repair'))).write(
+          const PendingTicketsCompanion(
+            maintenanceTemplateId: Value('tpl-gone'),
+          ),
+        );
+        final stale = await db.select(db.pendingTickets).getSingle();
+        expect(
+          stale.maintenanceTemplateId,
+          'tpl-gone',
+          reason: 'the row really does carry the retired id, so the drop below is not vacuous',
+        );
 
-      when(
-        () => mockDio.post<Map<String, dynamic>>(
-          '/api/tickets',
-          data: any(named: 'data'),
-        ),
-      ).thenAnswer(
-        (_) async => Response<Map<String, dynamic>>(
-          data: {'id': 'server-ticket-1'},
-          statusCode: 200,
-          requestOptions: RequestOptions(path: '/api/tickets'),
-        ),
-      );
+        when(
+          () => mockDio.post<Map<String, dynamic>>(
+            '/api/tickets',
+            data: any(named: 'data'),
+          ),
+        ).thenAnswer(
+          (_) async => Response<Map<String, dynamic>>(
+            data: {'id': 'server-ticket-1'},
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/api/tickets'),
+          ),
+        );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            appDatabaseProvider.overrideWithValue(db),
-            dioProvider.overrideWithValue(mockDio),
-            isOnlineProvider.overrideWithValue(true),
-          ],
-          child: MaterialApp(home: NewTicketFormScreen(repairRow: stale)),
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          ProviderScope(retry: (_, _) => null, 
+            overrides: [
+              appDatabaseProvider.overrideWithValue(db),
+              dioProvider.overrideWithValue(mockDio),
+              isOnlineProvider.overrideWithValue(true),
+            ],
+            child: MaterialApp(home: NewTicketFormScreen(repairRow: stale)),
+          ),
+        );
+        await tester.pumpAndSettle();
 
-      await walkRepairToSave(tester);
+        await walkRepairToSave(tester);
 
-      final posted =
-          verify(
-                () => mockDio.post<Map<String, dynamic>>(
-                  '/api/tickets',
-                  data: captureAny(named: 'data'),
-                ),
-              ).captured.single
-              as Map;
-      expect(
-        posted.containsKey('maintenanceTemplateId'),
-        isFalse,
-        reason: 'a template the catalogue does not offer is left to the server to resolve, not sent',
-      );
+        final posted =
+            verify(
+                  () => mockDio.post<Map<String, dynamic>>(
+                    '/api/tickets',
+                    data: captureAny(named: 'data'),
+                  ),
+                ).captured.single
+                as Map;
+        expect(
+          posted.containsKey('maintenanceTemplateId'),
+          isFalse,
+          reason: 'a template the catalogue does not offer is left to the server to resolve, not sent',
+        );
 
-      final row = await db.select(db.pendingTickets).getSingle();
-      expect(
-        row.maintenanceTemplateId,
-        isNull,
-        reason: 'nor kept on the row, where the next sweep would send it straight from the row',
-      );
+        final row = await db.select(db.pendingTickets).getSingle();
+        expect(
+          row.maintenanceTemplateId,
+          isNull,
+          reason: 'nor kept on the row, where the next sweep would send it straight from the row',
+        );
 
-      await flushSnackBarTimer(tester);
-    });
+        await flushSnackBarTimer(tester);
+      },
+    );
 
     testWidgets(
       'a repair made offline is queued, not sent — and promises the automatic send',
@@ -980,7 +989,7 @@ void main() {
         final rejected = await seedRepairRow();
 
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               dioProvider.overrideWithValue(mockDio),
@@ -1078,6 +1087,7 @@ void main() {
         );
 
         final container = ProviderContainer(
+          retry: (_, _) => null,
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             dioProvider.overrideWithValue(mockDio),

@@ -204,13 +204,12 @@ final localCantiereTimersProvider = StreamProvider.autoDispose<List<ActiveTracke
 });
 
 final visibleTrackersProvider = Provider.autoDispose<List<ActiveTracker>>((ref) {
-  final remote = ref.watch(activeTrackersProvider).valueOrNull ?? const <ActiveTracker>[];
+  final remote = ref.watch(activeTrackersProvider).value ?? const <ActiveTracker>[];
   final timbra = ref.watch(timbraStateProvider);
-  final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? const <WorkSession>[];
-  final localTicketTimers =
-      ref.watch(localTicketTimersProvider).valueOrNull ?? const <ActiveTracker>[];
+  final sessions = ref.watch(todaySessionsProvider).value ?? const <WorkSession>[];
+  final localTicketTimers = ref.watch(localTicketTimersProvider).value ?? const <ActiveTracker>[];
   final localCantiereTimers =
-      ref.watch(localCantiereTimersProvider).valueOrNull ?? const <ActiveTracker>[];
+      ref.watch(localCantiereTimersProvider).value ?? const <ActiveTracker>[];
 
   // A ticket clock the server already reports is in `remote`; the mirror holds the same session
   // under the id the server gave it after its upload, so deduplicating by id keeps it from being
@@ -241,8 +240,9 @@ final visibleTrackersProvider = Provider.autoDispose<List<ActiveTracker>>((ref) 
       kind: ActiveTrackerKind.attendance,
       id: serverAttendance?.id ?? 'local-attendance',
       // Same convention as the server row: on a break the timer counts the break.
-      startedAtUtc: (onBreak ? timbra.pauseStartTime ?? timbra.shiftStartTime! : timbra.shiftStartTime!)
-          .toUtc(),
+      startedAtUtc:
+          (onBreak ? timbra.pauseStartTime ?? timbra.shiftStartTime! : timbra.shiftStartTime!)
+              .toUtc(),
       shiftStartedAtUtc: timbra.shiftStartTime!.toUtc(),
       state: onBreak ? ActiveTrackerState.onBreak : ActiveTrackerState.working,
       label: serverAttendance?.label,

@@ -1706,7 +1706,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
             child: const Text('Abbandona e ricomincia'),
           ),
         ]),
-      if (_sessionId != null && (ref.watch(aiQuotaProvider).valueOrNull?.exhausted ?? false))
+      if (_sessionId != null && (ref.watch(aiQuotaProvider).value?.exhausted ?? false))
         banner(
           context.colors.amber,
           'Crediti AI esauriti: puoi finire questa bozza, per nuove bozze servono crediti.',

@@ -11,7 +11,7 @@ import 'package:tasktap_mobile/presentation/screens/login/access_request_sheet.d
 class MockAccessRequestApiClient extends Mock implements AccessRequestApiClient {}
 
 Widget _host(MockAccessRequestApiClient client, {String initialEmail = 'tech@tasktap.io'}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [accessRequestApiClientProvider.overrideWithValue(client)],
     child: MaterialApp(
       theme: buildAppTheme(),

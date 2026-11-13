@@ -41,8 +41,8 @@ final _allMirroredCustomersProvider = StreamProvider.autoDispose<List<Customer>>
 /// `Con ticket` / `Senza ticket` chips and the `Solo con ticket aperti` toggle cannot disagree
 /// about what an open ticket is.
 final locationOpenTicketCountsProvider = Provider.autoDispose<Map<String, int>>((ref) {
-  final tickets = ref.watch(ticketsProvider).valueOrNull ?? const <Ticket>[];
-  final closedStatusIds = ref.watch(closedTicketStatusIdsProvider).valueOrNull ?? const <int>{};
+  final tickets = ref.watch(ticketsProvider).value ?? const <Ticket>[];
+  final closedStatusIds = ref.watch(closedTicketStatusIdsProvider).value ?? const <int>{};
   final counts = <String, int>{};
   for (final ticket in tickets) {
     if (ticketIsClosed(ticket, closedStatusIds)) continue;
@@ -57,7 +57,7 @@ final locationOpenTicketCountsProvider = Provider.autoDispose<Map<String, int>>(
 /// A ticket's activity is the newest of its creation, last update and closure; closed tickets
 /// still count as activity. Only the synced mirror is read, same limitation as the open counts.
 final locationLastActivityProvider = Provider.autoDispose<Map<String, DateTime>>((ref) {
-  final tickets = ref.watch(ticketsProvider).valueOrNull ?? const <Ticket>[];
+  final tickets = ref.watch(ticketsProvider).value ?? const <Ticket>[];
   final latest = <String, DateTime>{};
   for (final ticket in tickets) {
     final at = _ticketActivityAt(ticket);
@@ -249,9 +249,9 @@ class _AdminLocationListBody extends ConsumerWidget {
     final locationsAsync = ref.watch(adminLocationsProvider);
     final customersAsync = ref.watch(allCustomersProvider);
     final mirroredCustomersAsync = ref.watch(_allMirroredCustomersProvider);
-    final allLocations = locationsAsync.valueOrNull ?? const <Location>[];
-    final customers = customersAsync.valueOrNull ?? const <Customer>[];
-    final mirroredCustomers = mirroredCustomersAsync.valueOrNull ?? customers;
+    final allLocations = locationsAsync.value ?? const <Location>[];
+    final customers = customersAsync.value ?? const <Customer>[];
+    final mirroredCustomers = mirroredCustomersAsync.value ?? customers;
     final customersById = {for (final c in mirroredCustomers) c.id: c};
     final openTicketCounts = ref.watch(locationOpenTicketCountsProvider);
     final lastActivityByLocation = ref.watch(locationLastActivityProvider);
@@ -307,7 +307,7 @@ class _AdminLocationListBody extends ConsumerWidget {
     );
     final withTickets = filtered.where(hasOpenTickets).length;
 
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
     final hasActiveFilter =
         q.isNotEmpty || activeFilters.status != _SedeStatusFilter.tutti || activeFilters.hasFacets;
 

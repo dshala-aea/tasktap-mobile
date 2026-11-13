@@ -46,9 +46,10 @@ class SecureLocalDatabaseKeyStore implements LocalDatabaseKeyStore {
     final existing = await _store.read(keyName);
     if (existing != null && _hexKey.hasMatch(existing)) return existing;
 
-    final key = List<int>.generate(32, (_) => Random.secure().nextInt(256))
-        .map((b) => b.toRadixString(16).padLeft(2, '0'))
-        .join();
+    final key = List<int>.generate(
+      32,
+      (_) => Random.secure().nextInt(256),
+    ).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     await _store.write(keyName, key);
     return key;
   }

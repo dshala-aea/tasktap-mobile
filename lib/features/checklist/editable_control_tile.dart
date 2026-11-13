@@ -59,7 +59,10 @@ class EditableControlTile extends ConsumerWidget {
                 if (control.isRequired)
                   Padding(
                     padding: const EdgeInsets.only(left: 4),
-                    child: Text('*', style: TextStyle(color: c.red, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      '*',
+                      style: TextStyle(color: c.red, fontWeight: FontWeight.bold),
+                    ),
                   ),
               ],
             ),

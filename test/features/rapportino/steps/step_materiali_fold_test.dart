@@ -48,6 +48,7 @@ ProviderContainer _buildContainer({
   List<MaterialeRow> materialeRows = const [],
 }) {
   final container = ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(dio ?? MockDio()),
@@ -76,7 +77,9 @@ Widget _buildStep(ProviderContainer container) {
       // StepMaterialiFold no longer bounds its own height — it now sits inside the compartment
       // sheet's ambient SingleChildScrollView (see openCompartmentSheet), so tests host it the
       // same way rather than a bare, height-bounded Scaffold body.
-      home: Scaffold(body: SingleChildScrollView(child: StepMaterialiFold(reportId: _reportId))),
+      home: Scaffold(
+        body: SingleChildScrollView(child: StepMaterialiFold(reportId: _reportId)),
+      ),
     ),
   );
 }
@@ -307,9 +310,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('typing into a Number control writes numberValue, not stringValue', (
-      tester,
-    ) async {
+    testWidgets('typing into a Number control writes numberValue, not stringValue', (tester) async {
       final dio = MockDio();
       when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
         (_) async => _okResponse({
@@ -370,9 +371,7 @@ void main() {
   group('Controlli checklist — empty / not applicable', () {
     testWidgets('says honestly that no controls are planned for this ticket', (tester) async {
       final dio = MockDio();
-      when(
-        () => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls'),
-      ).thenAnswer(
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
         (_) async => _okResponse({
           'groups': <dynamic>[],
           'assetProgress': <dynamic>[],
@@ -492,9 +491,8 @@ void main() {
     testWidgets('a cached checklist is viewable and answerable while offline', (tester) async {
       // Seed the cache as if a previous online fetch already happened, before this device lost
       // connectivity mid-draft.
-      await TicketControlsCacheRepository(db).cacheControls(_ticketId, [
-        TicketControlGroupDto.fromJson(controlsPayload()),
-      ]);
+      await TicketControlsCacheRepository(db)
+          .cacheControls(_ticketId, [TicketControlGroupDto.fromJson(controlsPayload())]);
 
       final container = _buildContainer(db: db, isOnline: false);
       addTearDown(container.dispose);
@@ -521,9 +519,8 @@ void main() {
 
     testWidgets('an answer recorded offline is persisted as a normal draft controllo row — '
         'the same table SubmissionQueue reads to build the submit payload', (tester) async {
-      await TicketControlsCacheRepository(db).cacheControls(_ticketId, [
-        TicketControlGroupDto.fromJson(controlsPayload()),
-      ]);
+      await TicketControlsCacheRepository(db)
+          .cacheControls(_ticketId, [TicketControlGroupDto.fromJson(controlsPayload())]);
 
       final container = _buildContainer(db: db, isOnline: false);
       addTearDown(container.dispose);
@@ -671,44 +668,41 @@ void main() {
     // search box had nothing to search, and no amount of typing would ever surface a match. The
     // fix (_MaterialeLookupField) watches the provider live instead, the same way
     // _FabbisognoSuggestions already watches ticketMaterialiProvider.
-    testWidgets(
-      'catalog search surfaces a materiale that is not part of the ticket fabbisogno '
-      '(the "extra materiale" case)',
-      (tester) async {
-        await db
-            .into(db.materiali)
-            .insert(
-              MaterialiCompanion.insert(
-                id: 'mat-catalog-1',
-                tenantId: 'tenant-1',
-                createdAt: DateTime.utc(2026, 1, 1),
-                code: 'ART-500',
-                name: 'Vite autofilettante',
-                unitOfMeasure: const Value('pz'),
-              ),
-            );
+    testWidgets('catalog search surfaces a materiale that is not part of the ticket fabbisogno '
+        '(the "extra materiale" case)', (tester) async {
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-catalog-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              code: 'ART-500',
+              name: 'Vite autofilettante',
+              unitOfMeasure: const Value('pz'),
+            ),
+          );
 
-        // No ticket linked — and so no fabbisogno — to isolate that this suggestion comes from
-        // the full catalog search, not from the (separately tested) fabbisogno chips.
-        final container = _buildContainer(db: db, ticketId: null);
-        addTearDown(container.dispose);
-        await tester.pumpWidget(_buildStep(container));
-        await tester.pumpAndSettle();
+      // No ticket linked — and so no fabbisogno — to isolate that this suggestion comes from
+      // the full catalog search, not from the (separately tested) fabbisogno chips.
+      final container = _buildContainer(db: db, ticketId: null);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Aggiungi materiale'));
-        await tester.pumpAndSettle();
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
 
-        // Focusing the field with nothing typed shows the whole (unfiltered) catalog — proving
-        // the stream actually reached the dialog, not just that a typed query happens to match.
-        await tester.tap(find.byType(TextFormField));
-        await tester.pumpAndSettle();
+      // Focusing the field with nothing typed shows the whole (unfiltered) catalog — proving
+      // the stream actually reached the dialog, not just that a typed query happens to match.
+      await tester.tap(find.byType(TextFormField));
+      await tester.pumpAndSettle();
 
-        expect(find.text('Vite autofilettante'), findsOneWidget);
+      expect(find.text('Vite autofilettante'), findsOneWidget);
 
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pumpAndSettle();
-      },
-    );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
 
     testWidgets('the chosen giacenza magazzino is stored on the report material row', (
       tester,
@@ -789,9 +783,7 @@ void main() {
       expect(find.text('Documento (PDF)'), findsOneWidget);
     });
 
-    testWidgets('a non-image allegato renders a document tile, not a broken image', (
-      tester,
-    ) async {
+    testWidgets('a non-image allegato renders a document tile, not a broken image', (tester) async {
       final container = _buildContainer(db: db, ticketId: null);
       addTearDown(container.dispose);
       await tester.pumpWidget(_buildStep(container));
@@ -838,18 +830,12 @@ void main() {
       await tester.enterText(find.byKey(const Key('materiale-qty-field')), '2,5');
       await tester.pump();
 
-      expect(
-        container.read(reportEditorProvider(_reportId)).materialeRows.single.quantity,
-        2.5,
-      );
+      expect(container.read(reportEditorProvider(_reportId)).materialeRows.single.quantity, 2.5);
 
       await tester.tap(find.byIcon(LucideIcons.plus));
       await tester.pumpAndSettle();
 
-      expect(
-        container.read(reportEditorProvider(_reportId)).materialeRows.single.quantity,
-        3.5,
-      );
+      expect(container.read(reportEditorProvider(_reportId)).materialeRows.single.quantity, 3.5);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

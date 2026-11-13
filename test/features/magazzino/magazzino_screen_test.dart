@@ -38,7 +38,7 @@ Widget _buildMagazzino({
   // rewriting each one; the explicit "denied" cases below override this.
   Entitlement? cachedEntitlement,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),

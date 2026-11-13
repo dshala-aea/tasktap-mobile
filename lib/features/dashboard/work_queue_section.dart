@@ -12,6 +12,7 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_freshness_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'dashboard_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -44,7 +45,7 @@ class WorkQueueSection extends ConsumerWidget {
       // that has nothing — wishing them a good day on the strength of a missing download is the
       // wrong sentence, and a field technician cannot tell the two apart from the screen.
       // `== false`, never `!= true`: an unanswered check must not be read as "never synced".
-      if (ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false) {
+      if (ref.watch(hasSyncedAtLeastOnceProvider).value == false) {
         return const Padding(
           padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: EmptyState(
@@ -72,9 +73,7 @@ class WorkQueueSection extends ConsumerWidget {
     // job. It used to arrive as an ordinary schedule and land in Da fare, with a card inviting the
     // technician to start work that does not exist.
     if (q.absences.isNotEmpty) {
-      todaySections.add(
-        _CompactTier(title: 'ASSENZA', schedules: q.absences, tier: _Tier.assenza),
-      );
+      todaySections.add(_CompactTier(title: 'ASSENZA', schedules: q.absences, tier: _Tier.assenza));
     }
 
     for (final schedule in q.live) {
@@ -163,7 +162,12 @@ extension on _Tier {
 // ── Row content (shared between the focus card and the compact row) ─────────────
 
 class _RowContent {
-  const _RowContent({required this.title, required this.subtitle, required this.timeLabel, required this.customerLabel});
+  const _RowContent({
+    required this.title,
+    required this.subtitle,
+    required this.timeLabel,
+    required this.customerLabel,
+  });
   final String title;
   final String subtitle;
   final String? customerLabel;
@@ -183,11 +187,7 @@ final _weekdayFmt = DateFormat('EEE d', 'it');
 /// one ordinary row per day, so naming each row's own day is what makes the run readable.
 String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
-String _scheduleDayLabel(
-  DateTime activityDate,
-  int timeStartMinutes, {
-  required bool allDay,
-}) {
+String _scheduleDayLabel(DateTime activityDate, int timeStartMinutes, {required bool allDay}) {
   final time = '${_twoDigits(timeStartMinutes ~/ 60)}:${_twoDigits(timeStartMinutes % 60)}';
 
   final now = DateTime.now();
@@ -201,9 +201,9 @@ String _scheduleDayLabel(
 }
 
 _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
-  final location = ref.watch(locationByIdProvider(schedule.locationId)).valueOrNull;
+  final location = ref.watch(locationByIdProvider(schedule.locationId)).value;
   final customerName = location != null
-      ? ref.watch(customerByIdProvider(location.customerId)).valueOrNull?.companyName
+      ? ref.watch(customerByIdProvider(location.customerId)).value?.companyName
       : null;
   final subtitle = [
     location?.address,

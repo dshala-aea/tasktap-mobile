@@ -92,7 +92,7 @@ class CantiereDayLedger extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final events =
-        (ref.watch(todayCantiereEventsProvider).valueOrNull ?? [])
+        (ref.watch(todayCantiereEventsProvider).value ?? [])
             .where((e) => e.cantiereId == cantiereId)
             .toList()
           ..sort((a, b) => a.eventTime.compareTo(b.eventTime));

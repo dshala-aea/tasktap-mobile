@@ -59,11 +59,15 @@ class BadgeError extends BadgeViewState {
 
 /// How often the token is rotated while the screen is visible. Well inside the server's token
 /// lifetime; overridden in tests.
-final badgeRefreshIntervalProvider = Provider<Duration>((ref) => const Duration(seconds: 25));
+final badgeRefreshIntervalProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 25),
+);
 
 /// How long before the token's server-side expiry a shown QR is pulled from the screen if no
 /// fresh one has arrived (a refresh may be stuck on a slow network). Overridden in tests.
-final badgeExpiryMarginProvider = Provider<Duration>((ref) => const Duration(seconds: 5));
+final badgeExpiryMarginProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 5),
+);
 
 /// Keeps the screen awake while the badge is on display. A seam because the plugin has no
 /// platform in widget tests; every call swallows platform errors so a missing channel can never
@@ -86,11 +90,13 @@ class BadgeWakelock {
   }
 }
 
-final badgeWakelockProvider = Provider<BadgeWakelock>((ref) => const BadgeWakelock());
+final badgeWakelockProvider = Provider<BadgeWakelock>(
+  (ref) => const BadgeWakelock(),
+);
 
 // ── Controller ────────────────────────────────────────────────────────────────
 
-class BadgeController extends AutoDisposeNotifier<BadgeViewState> {
+class BadgeController extends Notifier<BadgeViewState> {
   Timer? _timer;
   Timer? _expiryTimer;
   _LifecycleObserver? _observer;
@@ -168,7 +174,9 @@ class BadgeController extends AutoDisposeNotifier<BadgeViewState> {
     if (next is BadgeReady) {
       final margin = ref.read(badgeExpiryMarginProvider);
       final life = Duration(seconds: next.card.expiresInSeconds) - margin;
-      final after = life < const Duration(seconds: 5) ? const Duration(seconds: 5) : life;
+      final after = life < const Duration(seconds: 5)
+          ? const Duration(seconds: 5)
+          : life;
       _expiryTimer = Timer(after, () {
         if (_disposed || !identical(state, next)) return;
         // The token is about to die and nothing fresher arrived: never show it.
@@ -225,4 +233,6 @@ class _LifecycleObserver with WidgetsBindingObserver {
 }
 
 final badgeControllerProvider =
-    NotifierProvider.autoDispose<BadgeController, BadgeViewState>(BadgeController.new);
+    NotifierProvider.autoDispose<BadgeController, BadgeViewState>(
+      BadgeController.new,
+    );

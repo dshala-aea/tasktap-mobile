@@ -50,7 +50,7 @@ Widget _app({
   Object? smartWorkingError,
   AbsenceRequestApiClient? absenceApi,
   SmartWorkingRequestApiClient? smartWorkingApi,
-}) => ProviderScope(
+}) => ProviderScope(retry: (_, _) => null, 
   overrides: [
     absenceApprovalQueueProvider.overrideWith((ref) async {
       if (absenceError != null) throw absenceError;
@@ -253,7 +253,7 @@ void main() {
       addTearDown(online.dispose);
 
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             absenceApprovalQueueProvider.overrideWith((ref) async => [_absence()]),
             userNameByIdProvider.overrideWith((ref) async => const {'u1': 'Mario Rossi'}),
@@ -290,7 +290,7 @@ void main() {
       var reads = 0;
 
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             absenceApprovalQueueProvider.overrideWith((ref) async {
               reads++;
@@ -323,7 +323,7 @@ void main() {
       addTearDown(online.dispose);
 
       await tester.pumpWidget(
-        ProviderScope(
+        ProviderScope(retry: (_, _) => null, 
           overrides: [
             absenceApprovalQueueProvider.overrideWith((ref) async => [_absence()]),
             userNameByIdProvider.overrideWith((ref) async => const {'u1': 'Mario Rossi'}),

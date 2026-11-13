@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../data/settings/notification_preferences_api_client.dart';
 
@@ -161,7 +161,8 @@ const Map<int, NotificationPrefLabel> kNotificationPrefLabels = {
 /// What to draw for one server row. Falls back to the enum [NotificationPreferenceDto.key] so an
 /// ordinal added server-side still renders.
 NotificationPrefLabel labelFor(NotificationPreferenceDto dto) =>
-    kNotificationPrefLabels[dto.type] ?? NotificationPrefLabel(PrefGroup.altro, dto.key, '');
+    kNotificationPrefLabels[dto.type] ??
+    NotificationPrefLabel(PrefGroup.altro, dto.key, '');
 
 /// Groups in display order, each with its rows in the server's (enum) order. Empty groups are
 /// omitted.
@@ -170,8 +171,8 @@ List<(PrefGroup, List<NotificationPreferenceDto>)> groupPreferences(
 ) {
   return [
     for (final group in PrefGroup.values)
-      if (items.where((i) => labelFor(i).group == group).toList() case final rows
-          when rows.isNotEmpty)
+      if (items.where((i) => labelFor(i).group == group).toList()
+          case final rows when rows.isNotEmpty)
         (group, rows),
   ];
 }
@@ -214,8 +215,10 @@ class NotificationPreferencesState {
   }
 }
 
-class NotificationPreferencesNotifier extends StateNotifier<NotificationPreferencesState> {
-  NotificationPreferencesNotifier(this._api) : super(const NotificationPreferencesState()) {
+class NotificationPreferencesNotifier
+    extends StateNotifier<NotificationPreferencesState> {
+  NotificationPreferencesNotifier(this._api)
+    : super(const NotificationPreferencesState()) {
     load();
   }
 
@@ -255,14 +258,22 @@ class NotificationPreferencesNotifier extends StateNotifier<NotificationPreferen
       state = state.copyWith(
         items: fromServer == null
             ? state.items
-            : _replace(state.items, type, (i) => i.copyWith(enabled: fromServer.enabled)),
+            : _replace(
+                state.items,
+                type,
+                (i) => i.copyWith(enabled: fromServer.enabled),
+              ),
         pending: {...state.pending}..remove(type),
       );
       return null;
     } on NotificationPreferencesFailure catch (e) {
       if (!mounted) return e.message;
       state = state.copyWith(
-        items: _replace(state.items, type, (i) => i.copyWith(enabled: before.enabled)),
+        items: _replace(
+          state.items,
+          type,
+          (i) => i.copyWith(enabled: before.enabled),
+        ),
         pending: {...state.pending}..remove(type),
       );
       return e.message;
@@ -280,4 +291,8 @@ final notificationPreferencesProvider =
     StateNotifierProvider.autoDispose<
       NotificationPreferencesNotifier,
       NotificationPreferencesState
-    >((ref) => NotificationPreferencesNotifier(ref.watch(notificationPreferencesApiClientProvider)));
+    >(
+      (ref) => NotificationPreferencesNotifier(
+        ref.watch(notificationPreferencesApiClientProvider),
+      ),
+    );

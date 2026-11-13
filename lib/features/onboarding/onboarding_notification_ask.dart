@@ -12,7 +12,9 @@ final notificationAvailableProvider = Provider<bool>((ref) {
 });
 
 /// The OS notification ask, behind a provider for the same reason.
-final onboardingNotificationAskProvider = Provider<Future<bool> Function()>((ref) {
+final onboardingNotificationAskProvider = Provider<Future<bool> Function()>((
+  ref,
+) {
   return () => NotificationService.instance.ensurePermission();
 });
 

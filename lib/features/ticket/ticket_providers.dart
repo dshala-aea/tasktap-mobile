@@ -2,6 +2,7 @@ import 'package:dio/dio.dart' show DioException;
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../data/attachments/attachment_content_cache.dart'
@@ -75,9 +76,7 @@ final ticketStatusMapProvider = StreamProvider.autoDispose<Map<int, String>>((
 /// `isClosed` or a stable display order is needed (unlike `ticketStatusMapProvider`,
 /// whose `Map&lt;int, String&gt;` shape discards both columns and whose iteration
 /// order is whatever SQLite happens to return, not a meaningful sequence).
-final ticketStatusesProvider = StreamProvider.autoDispose<List<TicketStatuse>>((
-  ref,
-) {
+final ticketStatusesProvider = StreamProvider<List<TicketStatuse>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(
     db.ticketStatuses,
@@ -688,7 +687,7 @@ final ticketTimerBusyProvider = StateProvider.autoDispose.family<bool, String>(
 /// entry list can never disagree about whether a clock is going.
 final runningTicketWorklogProvider = Provider.autoDispose
     .family<TicketWorkLogDto?, String>((ref, ticketId) {
-      final entries = ref.watch(ticketWorklogsProvider(ticketId)).valueOrNull;
+      final entries = ref.watch(ticketWorklogsProvider(ticketId)).value;
       if (entries == null) return null;
       for (final e in entries) {
         if (e.isRunning) return e;

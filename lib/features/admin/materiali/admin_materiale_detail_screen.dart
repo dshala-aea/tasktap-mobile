@@ -63,7 +63,7 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
         if (materiale == null) {
           // Missing on a synced device means the catalogue no longer holds this id; saying
           // "not synced" there sent the user to wait for an update that would never come.
-          return ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false
+          return ref.watch(hasSyncedAtLeastOnceProvider).value == false
               ? const DetailScaffold.unavailable(
                   screenTitle: 'Materiale',
                   icon: LucideIcons.cloudOff,

@@ -50,8 +50,7 @@ class ServerReportNotMirroredException implements Exception {
 /// Row id the Controlli step uses for the answer to one checklist item
 /// (step_materiali_fold.dart `_rowId`). Any other scheme makes the first edit insert a second
 /// row for the same TicketControl.
-String controlRowId(String reportId, String ticketControlId) =>
-    'ctrl-$reportId-$ticketControlId';
+String controlRowId(String reportId, String ticketControlId) => 'ctrl-$reportId-$ticketControlId';
 
 /// The label and asset of each of [ticketId]'s checklist items, as this device's sync mirror knows
 /// them, keyed by TicketControl id. Empty when there is nothing to read — no ticket, no mirror yet.
@@ -71,8 +70,7 @@ Future<Map<String, ({String? controlLabel, String? assetId})>> controlSnapshotsF
   try {
     final rows = await ChecklistReadRepository(db).getTicketControlRows(ticketId);
     return {
-      for (final row in rows)
-        row.id: (controlLabel: row.label, assetId: row.prodottoAssistenzaId),
+      for (final row in rows) row.id: (controlLabel: row.label, assetId: row.prodottoAssistenzaId),
     };
   } catch (e) {
     debugPrint('importServerReport: checklist read failed ($e); answers keep no snapshot');
@@ -102,8 +100,9 @@ Future<void> importServerReportFromMirror({
   required AppDatabase db,
   required String reportId,
 }) async {
-  final local = await (db.select(db.draftReports)..where((r) => r.id.equals(reportId)))
-      .getSingleOrNull();
+  final local = await (db.select(
+    db.draftReports,
+  )..where((r) => r.id.equals(reportId))).getSingleOrNull();
   if (local == null) throw const ServerReportNotMirroredException();
   if (local.isLocalOnly) return;
   if (local.stato != 'Bozza') throw const ServerReportNotEditableException();
@@ -111,8 +110,9 @@ Future<void> importServerReportFromMirror({
 
   final now = DateTime.now().toUtc();
   await db.transaction(() async {
-    final controlli =
-        await (db.select(db.reportControlli)..where((c) => c.reportId.equals(reportId))).get();
+    final controlli = await (db.select(
+      db.reportControlli,
+    )..where((c) => c.reportId.equals(reportId))).get();
     for (final c in controlli) {
       final keyed = controlRowId(reportId, c.controlId);
       if (c.id == keyed) continue;
@@ -177,8 +177,9 @@ Future<void> importServerReport({
   Future<void> Function()? refreshLookups,
 }) async {
   if (!overwriteLocal) {
-    final local = await (db.select(db.draftReports)..where((r) => r.id.equals(reportId)))
-        .getSingleOrNull();
+    final local = await (db.select(
+      db.draftReports,
+    )..where((r) => r.id.equals(reportId))).getSingleOrNull();
     if (local != null && local.isLocalOnly) return;
   }
 

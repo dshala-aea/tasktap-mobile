@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -9,7 +10,7 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/pending_sync_count_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show lastSyncProvider;
 
-Widget _wrap(List<Override> overrides) => ProviderScope(
+Widget _wrap(List<Override> overrides) => ProviderScope(retry: (_, _) => null, 
   overrides: overrides,
   child: const MaterialApp(home: Scaffold(body: OfflineSyncBanner())),
 );

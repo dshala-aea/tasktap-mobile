@@ -29,7 +29,7 @@ Widget _buildList({
   required MockAuthRepository repo,
   Entitlement? cachedEntitlement,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),

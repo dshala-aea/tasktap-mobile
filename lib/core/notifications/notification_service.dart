@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/env.dart';
 import '../router/app_router.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'apns_diagnostics.dart';
@@ -99,6 +100,7 @@ class NotificationService {
     unawaited(_warmToken());
 
     // Listen for token refreshes.
+    // ignore: deprecated_member_use
     _messaging.onTokenRefresh.listen((newToken) {
       _currentToken = newToken;
       debugPrint('FCM token refreshed: $newToken');
@@ -120,13 +122,20 @@ class NotificationService {
     // aborts `initialize()`, and the bootstrap turns that into "push unavailable" — for a
     // cold-start deep link that is merely absent. Nothing below depends on the result.
     try {
-      final initialMessage = await _messaging.getInitialMessage().timeout(_coldStartBudget);
+      final initialMessage = await _messaging.getInitialMessage().timeout(
+        _coldStartBudget,
+      );
       if (initialMessage != null) {
         _handleNotificationTap(initialMessage);
       }
     } catch (e, st) {
       debugPrint('FCM getInitialMessage failed: $e');
-      reportPushFailure(PushStage.initialMessage, e, stackTrace: st, onceKey: 'initial-message');
+      reportPushFailure(
+        PushStage.initialMessage,
+        e,
+        stackTrace: st,
+        onceKey: 'initial-message',
+      );
     }
 
     // Foreground presentation is an Apple-only concern: on iOS a notification that arrives while
@@ -297,7 +306,10 @@ class NotificationService {
       reportPushEvent(
         PushStage.deviceRegistration,
         'registered with the backend (HTTP ${response.statusCode})',
-        tags: {'fcm.token': maskToken(token), 'push.http_status': '${response.statusCode}'},
+        tags: {
+          'fcm.token': maskToken(token),
+          'push.http_status': '${response.statusCode}',
+        },
         onceKey: 'registered:${maskToken(token)}',
       );
     } on DioException catch (e, st) {
@@ -309,7 +321,10 @@ class NotificationService {
         PushStage.deviceRegistration,
         'POST /api/devices → HTTP ${status ?? 'no response'}${body.isEmpty ? '' : ': $body'}',
         stackTrace: st,
-        tags: {'push.http_status': '${status ?? 'none'}', 'fcm.token': maskToken(token)},
+        tags: {
+          'push.http_status': '${status ?? 'none'}',
+          'fcm.token': maskToken(token),
+        },
         onceKey: 'register-failed:${status ?? 'no-response'}',
       );
     } catch (e, st) {
@@ -434,7 +449,9 @@ class NotificationService {
     // notification for a backgrounded app), so the technician was never told at the moment it
     // happened. iOS presents it itself via setForegroundNotificationPresentationOptions above —
     // a banner here as well would show it twice.
-    if (Platform.isAndroid) onForegroundBanner?.call(notification.title, notification.body);
+    if (Platform.isAndroid) {
+      onForegroundBanner?.call(notification.title, notification.body);
+    }
   }
 
   /// Asks the UI to tell the user about a push that arrived while the app is open (Android only).
@@ -487,14 +504,19 @@ class NotificationService {
         // The normal first run on iOS: permission has not been asked yet, so APNs has not issued
         // anything and there is nothing to warm. Reported as a breadcrumb only — it is the
         // expected state, not a fault, but it explains a session with no token at all.
-        pushBreadcrumb('token warm-up skipped: notification permission not granted yet');
+        pushBreadcrumb(
+          'token warm-up skipped: notification permission not granted yet',
+        );
         return;
       }
       _currentToken = await _tryGetToken();
       debugPrint('FCM token: $_currentToken');
 
       if (_currentToken != null) {
-        pushBreadcrumb('token issued ${maskToken(_currentToken)}', stage: PushStage.tokenFetch);
+        pushBreadcrumb(
+          'token issued ${maskToken(_currentToken)}',
+          stage: PushStage.tokenFetch,
+        );
       }
 
       // A token that arrives after the login-time registration has nobody to hand it to:
@@ -512,7 +534,10 @@ class NotificationService {
         PushStage.tokenFetch,
         e,
         stackTrace: st,
-        tags: {'push.apns_token': await _apnsTokenState(), ...await _apnsDiagnostics.tags()},
+        tags: {
+          'push.apns_token': await _apnsTokenState(),
+          ...await _apnsDiagnostics.tags(),
+        },
         onceKey: 'warm-token-failed',
       );
     }
@@ -544,6 +569,7 @@ class NotificationService {
   /// APNs state, which is the one field that tells the two Apple causes apart (see
   /// [_apnsTokenState]).
   Future<String?> _tryGetToken() => fetchAndReportToken(
+    // ignore: deprecated_member_use
     () => _messaging.getToken(),
     isIOS: Platform.isIOS,
     readApnsToken: () => _messaging.getAPNSToken(),
@@ -576,7 +602,10 @@ class NotificationService {
       apnsWait: apnsWait,
       apnsPollInterval: apnsPollInterval,
       delay: delay,
-      onApnsPending: () => pushBreadcrumb('apns token pending, waiting', stage: PushStage.tokenFetch),
+      onApnsPending: () => pushBreadcrumb(
+        'apns token pending, waiting',
+        stage: PushStage.tokenFetch,
+      ),
       onApnsResolved: (waited) => pushBreadcrumb(
         'token issued after waiting ${waited.inMilliseconds / 1000}s for the APNs token',
         stage: PushStage.tokenFetch,
@@ -616,7 +645,10 @@ class NotificationService {
   Future<String> _apnsTokenState() =>
       _apnsState(Platform.isIOS, () => _messaging.getAPNSToken());
 
-  static Future<String> _apnsState(bool isIOS, Future<String?> Function() read) async {
+  static Future<String> _apnsState(
+    bool isIOS,
+    Future<String?> Function() read,
+  ) async {
     if (!isIOS) return 'n/a';
     try {
       final apns = await read().timeout(const Duration(seconds: 2));
@@ -647,7 +679,9 @@ class NotificationService {
     if (body == null) return '';
     final text = body is String ? body : body.toString();
     final collapsed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return collapsed.length <= 200 ? collapsed : '${collapsed.substring(0, 200)}…';
+    return collapsed.length <= 200
+        ? collapsed
+        : '${collapsed.substring(0, 200)}…';
   }
 
   /// How long to wait for the APNs device token before a missing FCM token is called a fault.
@@ -672,7 +706,9 @@ class NotificationService {
     Duration interval = apnsTokenPollInterval,
     Future<void> Function(Duration) delay = _realDelay,
   }) async {
-    final polls = interval <= Duration.zero ? 0 : timeout.inMicroseconds ~/ interval.inMicroseconds;
+    final polls = interval <= Duration.zero
+        ? 0
+        : timeout.inMicroseconds ~/ interval.inMicroseconds;
     for (var i = 0; ; i++) {
       try {
         final token = await read();
@@ -685,7 +721,8 @@ class NotificationService {
     }
   }
 
-  static bool _isApnsNotSet(Object error) => error.toString().contains('apns-token-not-set');
+  static bool _isApnsNotSet(Object error) =>
+      error.toString().contains('apns-token-not-set');
 
   /// [fetch], bounded and recorded — the testable half of [_tryGetToken].
   ///
@@ -874,7 +911,11 @@ class DeepLinkIntent {
       if (entity.resolveRoute() != null) return entity;
     }
     if (type != null && kNotificationTypeRoutes.containsKey(type)) {
-      return DeepLinkIntent(entityType: type, entityId: '', notificationType: type);
+      return DeepLinkIntent(
+        entityType: type,
+        entityId: '',
+        notificationType: type,
+      );
     }
     if (notificationId != null && notificationId.isNotEmpty) {
       return DeepLinkIntent(
@@ -903,12 +944,14 @@ class DeepLinkIntent {
       'Cantiere' => AppRoutes.cantieriDetailPath(entityId),
       // A submitted request belongs to the approver's worklist; a decision belongs to the
       // requester's own history. Same entity type, different destination.
-      'AbsenceRequest' => notificationType == 'AbsenceRequestSubmitted'
-          ? AppRoutes.approvazioni(tab: 'assenze')
-          : AppRoutes.altroFerie,
-      'SmartWorkingRequest' => notificationType == 'AbsenceRequestSubmitted'
-          ? AppRoutes.approvazioni(tab: 'smart-working')
-          : AppRoutes.altroSmartWorking,
+      'AbsenceRequest' =>
+        notificationType == 'AbsenceRequestSubmitted'
+            ? AppRoutes.approvazioni(tab: 'assenze')
+            : AppRoutes.altroFerie,
+      'SmartWorkingRequest' =>
+        notificationType == 'AbsenceRequestSubmitted'
+            ? AppRoutes.approvazioni(tab: 'smart-working')
+            : AppRoutes.altroSmartWorking,
       // WorkLog, ProdottoAssistenza, User, Magazzino, Tenant, License: admin-side, no mobile screen.
       _ => kNotificationTypeRoutes[entityType],
     };

@@ -23,6 +23,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
@@ -70,11 +71,13 @@ void main() {
   /// The minimal valid /me body, with `smartWorkingToday` added only when a test passes it.
   Map<String, dynamic> meBody({Object? smartWorkingToday = _absent}) => {
     ...authMeBody(),
-    if (!identical(smartWorkingToday, _absent)) 'smartWorkingToday': smartWorkingToday,
+    if (!identical(smartWorkingToday, _absent))
+      'smartWorkingToday': smartWorkingToday,
   };
 
   void stub(Response<Map<String, dynamic>> response) {
-    when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) async => response);
+    when(() => dio.get<Map<String, dynamic>>(any()))
+        .thenAnswer((_) async => response);
   }
 
   setUp(() {
@@ -82,7 +85,11 @@ void main() {
     db = AppDatabase(NativeDatabase.memory());
     repo = EntitlementRepository(db);
     dio = MockDio();
-    service = EntitlementService(dio: dio, repository: repo, currentSessionId: () => session);
+    service = EntitlementService(
+      dio: dio,
+      repository: repo,
+      currentSessionId: () => session,
+    );
   });
 
   tearDown(() => db.close());
@@ -102,15 +109,18 @@ void main() {
       expect(repo.smartWorkingTodayFor('user-a'), isFalse);
     });
 
-    test('refresh_WhenTheFieldIsAbsent_ReplacesAPreviousTrueWithUnknown', () async {
-      // A previous answer must not survive: an old server (or a trimmed body) answers the whole
-      // question, and its silence means "not known today", not "whatever it was yesterday".
-      repo.setSmartWorkingToday(true, ownerId: 'user-a');
-      stub(ok(meBody()));
+    test(
+      'refresh_WhenTheFieldIsAbsent_ReplacesAPreviousTrueWithUnknown',
+      () async {
+        // A previous answer must not survive: an old server (or a trimmed body) answers the whole
+        // question, and its silence means "not known today", not "whatever it was yesterday".
+        repo.setSmartWorkingToday(true, ownerId: 'user-a');
+        stub(ok(meBody()));
 
-      expect(await service.refresh(), isTrue);
-      expect(repo.smartWorkingTodayFor('user-a'), isNull);
-    });
+        expect(await service.refresh(), isTrue);
+        expect(repo.smartWorkingTodayFor('user-a'), isNull);
+      },
+    );
 
     test('a value that is not a bool is unknown, not a guess', () async {
       repo.setSmartWorkingToday(true, ownerId: 'user-a');
@@ -124,26 +134,30 @@ void main() {
       stub(ok(meBody(smartWorkingToday: true)));
       await service.refresh();
 
-      when(
-        () => dio.get<Map<String, dynamic>>(any()),
-      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/api/Auth/me')));
+      when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(
+        DioException(requestOptions: RequestOptions(path: '/api/Auth/me')),
+      );
 
       expect(await service.refresh(), isFalse);
       expect(repo.smartWorkingTodayFor('user-a'), isTrue);
     });
 
-    test('an answer for a session that ended in flight never sets the flag', () async {
-      final gate = Completer<Response<Map<String, dynamic>>>();
-      when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) => gate.future);
+    test(
+      'an answer for a session that ended in flight never sets the flag',
+      () async {
+        final gate = Completer<Response<Map<String, dynamic>>>();
+        when(() => dio.get<Map<String, dynamic>>(any()))
+            .thenAnswer((_) => gate.future);
 
-      final pending = service.refresh();
-      session = null; // signed out while the request was in flight
-      gate.complete(ok(meBody(smartWorkingToday: true)));
+        final pending = service.refresh();
+        session = null; // signed out while the request was in flight
+        gate.complete(ok(meBody(smartWorkingToday: true)));
 
-      expect(await pending, isFalse);
-      expect(repo.smartWorkingTodayFor('user-a'), isNull);
-      expect(repo.smartWorkingTodayFor(null), isNull);
-    });
+        expect(await pending, isFalse);
+        expect(repo.smartWorkingTodayFor('user-a'), isNull);
+        expect(repo.smartWorkingTodayFor(null), isNull);
+      },
+    );
 
     test('coldStart_FromTheDriftCache_ReportsUnknown', () async {
       stub(ok(meBody(smartWorkingToday: true)));
@@ -156,15 +170,18 @@ void main() {
       expect(cold.smartWorkingTodayFor('user-a'), isNull);
     });
 
-    test('the answer is not handed to anyone but the session that produced it', () async {
-      stub(ok(meBody(smartWorkingToday: true)));
-      await service.refresh();
+    test(
+      'the answer is not handed to anyone but the session that produced it',
+      () async {
+        stub(ok(meBody(smartWorkingToday: true)));
+        await service.refresh();
 
-      expect(repo.smartWorkingTodayFor('user-a'), isTrue);
-      expect(repo.smartWorkingTodayFor('user-b'), isNull);
-      // No identifiable session (a service built without the guard) reads unknown too.
-      expect(repo.smartWorkingTodayFor(null), isNull);
-    });
+        expect(repo.smartWorkingTodayFor('user-a'), isTrue);
+        expect(repo.smartWorkingTodayFor('user-b'), isNull);
+        // No identifiable session (a service built without the guard) reads unknown too.
+        expect(repo.smartWorkingTodayFor(null), isNull);
+      },
+    );
   });
 
   group('smartWorkingTodayProvider', () {
@@ -175,6 +192,7 @@ void main() {
       Override? serviceOverride,
     }) {
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           authStateProvider.overrideWith((ref) => auth),
@@ -182,6 +200,7 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
+      container.listen(authStateProvider, (_, _) {});
       return container;
     }
 
@@ -192,13 +211,17 @@ void main() {
           .read(entitlementRepositoryProvider)
           .setSmartWorkingToday(true, ownerId: 'user-a');
 
+      container.listen(authStateProvider, (_, _) {});
       await container.read(authStateProvider.future);
 
       expect(container.read(smartWorkingTodayProvider), isNull);
     });
 
     test('signedIn_reportsWhatTheServerLastSaid', () async {
-      final container = containerWith(auth: Stream<AuthUser?>.value(_user('user-a')));
+      final container = containerWith(
+        auth: Stream<AuthUser?>.value(_user('user-a')),
+      );
+      container.listen(authStateProvider, (_, _) {});
       await container.read(authStateProvider.future);
 
       expect(container.read(smartWorkingTodayProvider), isNull);
@@ -245,6 +268,7 @@ void main() {
           ),
         ),
       );
+      container.listen(authStateProvider, (_, _) {});
       await container.read(authStateProvider.future);
 
       late WidgetRef widgetRef;

@@ -61,8 +61,7 @@ class SessionEnder {
   /// like the rest of the wipe (a failure here must not skip the Drift/prefs wipe).
   final Future<void> Function() _wipePendingVoice;
 
-  static Future<void> _wipeAppPendingVoice() async =>
-      (await PendingRecordingStore.forApp()).wipe();
+  static Future<void> _wipeAppPendingVoice() async => (await PendingRecordingStore.forApp()).wipe();
 
   final IAuthRepository _repo;
   final AppDatabase _db;

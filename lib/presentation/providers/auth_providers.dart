@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/time/business_time_providers.dart';
@@ -60,7 +61,7 @@ final authStateProvider = StreamProvider<AuthUser?>((ref) {
 ///
 /// Returns null while loading or when unauthenticated.
 final currentUserProvider = Provider<AuthUser?>((ref) {
-  return ref.watch(authStateProvider).valueOrNull;
+  return ref.watch(authStateProvider).value;
 });
 
 /// The signed-in user's INTERNAL database Guid (`Users.Id` on the backend) — never the Zitadel

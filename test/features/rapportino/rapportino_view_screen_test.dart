@@ -293,7 +293,7 @@ Widget _buildView({
   ReportPdfShare? share,
   Entitlement? entitlement,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       if (dio != null) dioProvider.overrideWithValue(dio),
@@ -325,7 +325,7 @@ Widget _buildRoutedView({required AppDatabase db, String reportId = 'report-1'})
       ),
     ],
   );
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       isOnlineProvider.overrideWithValue(true),

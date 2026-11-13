@@ -13,9 +13,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
-import 'package:tasktap_mobile/core/time/business_time_providers.dart' show businessTimeProvider;
+import 'package:tasktap_mobile/core/time/business_time_providers.dart'
+    show businessTimeProvider;
 import 'package:tasktap_mobile/data/local/app_database.dart';
-import 'package:tasktap_mobile/data/sync/connectivity_provider.dart' show isOnlineProvider;
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart'
+    show isOnlineProvider;
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart'
@@ -44,6 +46,7 @@ void main() {
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
     container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [appDatabaseProvider.overrideWithValue(db)],
     );
   });
@@ -66,6 +69,7 @@ void main() {
             ),
           );
 
+      container.listen(cantiereByIdProvider('c1'), (_, _) {});
       final result = await container.read(cantiereByIdProvider('c1').future);
 
       expect(result?.name, 'Cantiere Test');
@@ -127,6 +131,7 @@ void main() {
     setUp(() {
       fakeGeocoder = _FakeGeocodingService();
       geoContainer = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           geocodingServiceProvider.overrideWithValue(fakeGeocoder),
@@ -195,28 +200,25 @@ void main() {
       },
     );
 
-    test(
-      'returns null without calling the geocoder when the cantiere has no address',
-      () async {
-        await db
-            .into(db.cantieri)
-            .insert(
-              CantieriCompanion.insert(
-                id: 'c-no-address',
-                tenantId: 'tenant1',
-                createdAt: DateTime.utc(2026, 8, 31),
-                name: 'Cantiere senza indirizzo',
-              ),
-            );
+    test('returns null without calling the geocoder when the cantiere has no address', () async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'c-no-address',
+              tenantId: 'tenant1',
+              createdAt: DateTime.utc(2026, 8, 31),
+              name: 'Cantiere senza indirizzo',
+            ),
+          );
 
-        final result = await geoContainer.read(
-          cantiereGeocodedLocationProvider('c-no-address').future,
-        );
+      final result = await geoContainer.read(
+        cantiereGeocodedLocationProvider('c-no-address').future,
+      );
 
-        expect(result, isNull);
-        expect(fakeGeocoder.geocodedAddresses, isEmpty);
-      },
-    );
+      expect(result, isNull);
+      expect(fakeGeocoder.geocodedAddresses, isEmpty);
+    });
 
     test(
       'returns null and writes nothing when the geocoder finds no match',
@@ -262,6 +264,7 @@ void main() {
 
     setUp(() {
       offlineContainer = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           isOnlineProvider.overrideWithValue(false),
@@ -303,43 +306,55 @@ void main() {
           ),
         );
 
-    test('the mirror provider returns one site\'s shifts, newest first', () async {
-      await insertMirrorRow(id: 'w-old', workDate: DateTime.utc(2026, 10, 20));
-      await insertMirrorRow(id: 'w-new', workDate: DateTime.utc(2026, 10, 22));
-      await insertMirrorRow(id: 'w-other-site', cantiereId: 'site-2');
+    test(
+      'the mirror provider returns one site\'s shifts, newest first',
+      () async {
+        await insertMirrorRow(
+          id: 'w-old',
+          workDate: DateTime.utc(2026, 10, 20),
+        );
+        await insertMirrorRow(
+          id: 'w-new',
+          workDate: DateTime.utc(2026, 10, 22),
+        );
+        await insertMirrorRow(id: 'w-other-site', cantiereId: 'site-2');
 
-      final rows = await offlineContainer.read(
-        cantiereWorkLogMirrorProvider('site-1').future,
-      );
+        final rows = await offlineContainer.read(
+          cantiereWorkLogMirrorProvider('site-1').future,
+        );
 
-      expect(
-        rows.map((r) => r.id),
-        ['w-new', 'w-old'],
-        reason: 'the detail screen lists the newest shift first',
-      );
-    });
+        expect(rows.map((r) => r.id), [
+          'w-new',
+          'w-old',
+        ], reason: 'the detail screen lists the newest shift first');
+      },
+    );
 
-    test('answers from the mirror while offline, shaped like the server DTO', () async {
-      await insertMirrorRow(
-        startUtc: DateTime.utc(2026, 10, 22, 6),
-        endUtc: DateTime.utc(2026, 10, 22, 10, 30),
-        clientId: 'device-key-1',
-      );
+    test(
+      'answers from the mirror while offline, shaped like the server DTO',
+      () async {
+        await insertMirrorRow(
+          startUtc: DateTime.utc(2026, 10, 22, 6),
+          endUtc: DateTime.utc(2026, 10, 22, 10, 30),
+          clientId: 'device-key-1',
+        );
 
-      final logs = await offlineContainer.read(
-        cantiereWorklogsProvider((userId: 'user-1', cantiereId: 'site-1')).future,
-      );
+        final logs = await offlineContainer.read(
+          cantiereWorklogsProvider((userId: 'user-1', cantiereId: 'site-1'))
+              .future,
+        );
 
-      expect(logs, hasLength(1));
-      expect(logs.single.workDate, DateTime.utc(2026, 10, 22));
-      expect(
-        logs.single.startTime,
-        '08:00:00',
-        reason: 'the true instant wins over the stored time-of-day',
-      );
-      expect(logs.single.endTime, '12:30:00');
-      expect(logs.single.duration, const Duration(hours: 4, minutes: 30));
-    });
+        expect(logs, hasLength(1));
+        expect(logs.single.workDate, DateTime.utc(2026, 10, 22));
+        expect(
+          logs.single.startTime,
+          '08:00:00',
+          reason: 'the true instant wins over the stored time-of-day',
+        );
+        expect(logs.single.endTime, '12:30:00');
+        expect(logs.single.duration, const Duration(hours: 4, minutes: 30));
+      },
+    );
 
     test('a shift only in the outbox is still readable, and a mirrored one is not doubled', () async {
       // One shift the server already knows (mirror), identified by the device key it was queued
@@ -367,7 +382,8 @@ void main() {
       await punch('punch-queued-out', 'uscita', DateTime.utc(2026, 10, 23, 9));
 
       final logs = await offlineContainer.read(
-        cantiereWorklogsProvider((userId: 'user-1', cantiereId: 'site-1')).future,
+        cantiereWorklogsProvider((userId: 'user-1', cantiereId: 'site-1'))
+            .future,
       );
 
       expect(
@@ -383,7 +399,8 @@ void main() {
       await insertMirrorRow();
 
       final logs = await offlineContainer.read(
-        cantiereWorklogsProvider((userId: 'user-2', cantiereId: 'site-1')).future,
+        cantiereWorklogsProvider((userId: 'user-2', cantiereId: 'site-1'))
+            .future,
       );
 
       expect(

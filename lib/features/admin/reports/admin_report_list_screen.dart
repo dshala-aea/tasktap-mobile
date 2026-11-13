@@ -13,6 +13,7 @@ import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../admin_api_client.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -201,9 +202,9 @@ class _AdminReportListBody extends ConsumerWidget {
       dateTo: filter.periodTo,
     );
     final reportsAsync = ref.watch(adminReportsProvider(statoFilter));
-    final customerNames = ref.watch(_allCustomerNamesProvider).valueOrNull ?? const {};
+    final customerNames = ref.watch(_allCustomerNamesProvider).value ?? const {};
 
-    final data = reportsAsync.valueOrNull;
+    final data = reportsAsync.value;
     final rawRows = data?.rows ?? const <Map<String, dynamic>>[];
     final fromMirror = data?.fromMirror ?? false;
 
@@ -446,7 +447,7 @@ class _ReportFilterSheetState extends ConsumerState<_ReportFilterSheet> {
   @override
   Widget build(BuildContext context) {
     final dateFmt = DateFormat('dd/MM/yyyy');
-    final customerNames = ref.watch(_allCustomerNamesProvider).valueOrNull ?? const {};
+    final customerNames = ref.watch(_allCustomerNamesProvider).value ?? const {};
 
     final customerIds = <String>{
       for (final r in widget.reports)
@@ -464,15 +465,13 @@ class _ReportFilterSheetState extends ConsumerState<_ReportFilterSheet> {
 
     // The sheet resolves only the ids this page of reports actually carries.
     final locations =
-        ref
-            .watch(_locationsForReportsProvider(_idsKey(widget.reports, 'locationId')))
-            .valueOrNull ??
+        ref.watch(_locationsForReportsProvider(_idsKey(widget.reports, 'locationId'))).value ??
         const <Location>[];
     final tickets =
-        ref.watch(_ticketsForReportsProvider(_idsKey(widget.reports, 'ticketId'))).valueOrNull ??
+        ref.watch(_ticketsForReportsProvider(_idsKey(widget.reports, 'ticketId'))).value ??
         const <Ticket>[];
     final cantieri =
-        ref.watch(_cantieriForReportsProvider(_idsKey(widget.reports, 'cantiereId'))).valueOrNull ??
+        ref.watch(_cantieriForReportsProvider(_idsKey(widget.reports, 'cantiereId'))).value ??
         const <CantieriData>[];
 
     return Padding(
@@ -497,9 +496,8 @@ class _ReportFilterSheetState extends ConsumerState<_ReportFilterSheet> {
             const SizedBox(height: 4),
             Text(
               'Restringi per stato, contesto e periodo.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: context.colors.inkMuted),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: context.colors.inkMuted),
             ),
             const SizedBox(height: 16),
             AppFieldShell(
@@ -761,9 +759,8 @@ class _FilterChoice extends StatelessWidget {
           ),
           child: Text(
             label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: active ? context.colors.surface : context.colors.inkMuted,
-            ),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: active ? context.colors.surface : context.colors.inkMuted),
           ),
         ),
       ),
@@ -800,9 +797,8 @@ class _DateField extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted),
+                    style: Theme.of(context).textTheme.labelSmall
+                        ?.copyWith(color: context.colors.inkMuted),
                   ),
                   Text(
                     value,

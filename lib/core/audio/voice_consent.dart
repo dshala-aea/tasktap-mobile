@@ -22,8 +22,7 @@ const String voiceConsentVersion = 'v1';
 /// migrating it would fabricate an audit entry. Users re-consent once after this update.
 const String voiceConsentStorageKey = 'voice_recording_consents_v1';
 
-String get voiceConsentTextHash =>
-    sha256.convert(utf8.encode(voiceConsentText)).toString();
+String get voiceConsentTextHash => sha256.convert(utf8.encode(voiceConsentText)).toString();
 
 class VoiceConsentRecord {
   const VoiceConsentRecord({

@@ -463,6 +463,7 @@ class AdminApiClient {
     required DateTime activityDate,
     required int timeStartMinutes,
     required int timeEndMinutes,
+
     /// Everyone directly assigned (ADR-0022 §1). Replaces the scalar `userId`. Null is "this
     /// request says nothing about direct assignment" (leave it alone); an empty list is "clear
     /// it" — which is why the all-zeros-GUID sentinel is gone, a list can say it directly.

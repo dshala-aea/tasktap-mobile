@@ -14,7 +14,8 @@ final absenceApprovalQueueProvider = FutureProvider.autoDispose<List<AbsenceRequ
 });
 
 /// The tenant-wide pending smart-working requests — the same worklist for the other entity.
-final smartWorkingApprovalQueueProvider =
-    FutureProvider.autoDispose<List<SmartWorkingRequestDto>>((ref) {
-      return ref.watch(smartWorkingRequestApiClientProvider).fetchPendingForApproval();
-    });
+final smartWorkingApprovalQueueProvider = FutureProvider.autoDispose<List<SmartWorkingRequestDto>>((
+  ref,
+) {
+  return ref.watch(smartWorkingRequestApiClientProvider).fetchPendingForApproval();
+});

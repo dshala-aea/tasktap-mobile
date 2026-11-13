@@ -62,6 +62,7 @@ final _twoRuns = StaffRow(
 
 ProviderContainer _buildContainer({required AppDatabase db, required List<StaffRow> staffRows}) {
   return ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       reportEditorProvider(_reportId).overrideWith(
@@ -82,7 +83,9 @@ ProviderContainer _buildContainer({required AppDatabase db, required List<StaffR
 Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(home: Scaffold(body: StepOre(reportId: _reportId))),
+    child: const MaterialApp(
+      home: Scaffold(body: StepOre(reportId: _reportId)),
+    ),
   );
 }
 

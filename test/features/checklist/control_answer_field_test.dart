@@ -29,7 +29,7 @@ void main() {
 
   Future<ProviderContainer> pump(WidgetTester tester, ChecklistControl c) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           reportEditorProvider('r1').overrideWith(
             (ref) => ReportEditorNotifier(

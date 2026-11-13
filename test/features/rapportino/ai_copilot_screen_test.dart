@@ -268,7 +268,7 @@ Widget _wrap(AiApiClient client, {String? ticketId, String? cantiereId, AppDatab
     ],
   );
 
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       aiApiClientProvider.overrideWithValue(client),
       appDatabaseProvider.overrideWithValue(database),

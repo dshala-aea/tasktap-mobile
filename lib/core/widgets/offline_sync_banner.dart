@@ -21,14 +21,14 @@ class OfflineSyncBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isOnline = ref.watch(connectivityProvider).valueOrNull ?? true;
-    final counts = ref.watch(pendingSyncCountProvider).valueOrNull ?? (pending: 0, failed: 0);
+    final isOnline = ref.watch(connectivityProvider).value ?? true;
+    final counts = ref.watch(pendingSyncCountProvider).value ?? (pending: 0, failed: 0);
 
     // Same failed-wins-over-pending precedence either way — offline just also surfaces whichever
     // count applies, instead of hiding it: offline is exactly the state where the queue grows.
     final String? label;
     if (!isOnline) {
-      final lastSync = ref.watch(lastSyncProvider).valueOrNull;
+      final lastSync = ref.watch(lastSyncProvider).value;
       final parts = <String>[
         'Offline',
         if (counts.failed > 0)

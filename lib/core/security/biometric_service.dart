@@ -43,16 +43,13 @@ class BiometricService implements IBiometricService {
     try {
       return await _auth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(
-          // Biometrics only — no PIN/pattern fallback. The point of this lock is that the phone
-          // may be handed around a site; a device passcode a colleague has watched being typed
-          // would defeat it.
-          biometricOnly: true,
-          // Keep the lock up while the OS prompt is showing, so the app behind it is never
-          // briefly visible in the task switcher.
-          stickyAuth: true,
-          useErrorDialogs: true,
-        ),
+        // Biometrics only — no PIN/pattern fallback. The point of this lock is that the phone
+        // may be handed around a site; a device passcode a colleague has watched being typed
+        // would defeat it.
+        biometricOnly: true,
+        // Keep the lock up while the OS prompt is showing, so the app behind it is never
+        // briefly visible in the task switcher.
+        persistAcrossBackgrounding: true,
       );
     } on PlatformException {
       // Includes lockout after too many failures, and a device where enrolment was removed

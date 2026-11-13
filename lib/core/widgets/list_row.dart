@@ -63,14 +63,21 @@ class ListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final stripeColor = strapped ? AppColors.Y : (ledgeColor ?? Colors.transparent);
+    final stripeColor = strapped
+        ? AppColors.Y
+        : (ledgeColor ?? Colors.transparent);
 
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: 11,
+        ),
         decoration: BoxDecoration(
-          border: showDivider ? Border(bottom: BorderSide(color: c.borderLight)) : null,
+          border: showDivider
+              ? Border(bottom: BorderSide(color: c.borderLight))
+              : null,
         ),
         // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: a caller may size
         // this row from a SliverChildBuilderDelegate item with no bounded height for `stretch` to
@@ -111,7 +118,11 @@ class ListRow extends StatelessWidget {
                         subtitle!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: c.inkMuted),
+                        style: TextStyle(
+                          fontFamily: 'Archivo',
+                          fontSize: 12,
+                          color: c.inkMuted,
+                        ),
                       ),
                     ],
                     if (detail != null) ...[
@@ -120,7 +131,11 @@ class ListRow extends StatelessWidget {
                         detail!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: c.inkFaint),
+                        style: TextStyle(
+                          fontFamily: 'Archivo',
+                          fontSize: 12,
+                          color: c.inkFaint,
+                        ),
                       ),
                     ],
                   ],
@@ -130,7 +145,10 @@ class ListRow extends StatelessWidget {
               // genuinely needs the row's full height — a `meta` badge/stamp (StatusPill, a LEAD
               // AppBadge) has its own compact intrinsic height and doesn't want that stretch, but
               // still inherits it as any other Row child would without this.
-              if (meta != null) ...[const SizedBox(width: 12), Center(child: meta!)],
+              if (meta != null) ...[
+                const SizedBox(width: 12),
+                Center(child: meta!),
+              ],
               if (onTap != null) ...[
                 const SizedBox(width: 6),
                 Icon(LucideIcons.chevronRight, size: 16, color: c.inkDisabled),

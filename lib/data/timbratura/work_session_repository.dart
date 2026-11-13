@@ -151,10 +151,9 @@ class WorkSessionRepository implements IWorkSessionRepository {
   /// "the last event" mean "the punch that happened last". Adding `id` as a tiebreak looks safer
   /// and is not: ids are random UUIDs, so it reorders same-instant pairs and can put a pausa before
   /// the ingresso it followed.
-  SimpleSelectStatement<$WorkSessionsTable, WorkSession> _allQuery() =>
-      _db.select(_db.workSessions)
-        ..where((s) => s.notes.isNull() | s.notes.equals(syncFailedMarker).not())
-        ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
+  SimpleSelectStatement<$WorkSessionsTable, WorkSession> _allQuery() => _db.select(_db.workSessions)
+    ..where((s) => s.notes.isNull() | s.notes.equals(syncFailedMarker).not())
+    ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
 
   /// Every unsynced row, with no day window at all — the upload queue.
   SimpleSelectStatement<$WorkSessionsTable, WorkSession> _pendingQuery() =>
@@ -250,9 +249,7 @@ class WorkSessionRepository implements IWorkSessionRepository {
   }
 
   @override
-  Stream<List<WorkSession>> watchSyncFailedSessions({
-    Duration within = const Duration(days: 7),
-  }) {
+  Stream<List<WorkSession>> watchSyncFailedSessions({Duration within = const Duration(days: 7)}) {
     final since = _clock().toUtc().subtract(within);
     return (_db.select(_db.workSessions)
           ..where((s) => s.notes.equals(syncFailedMarker) & s.eventTime.isBiggerOrEqualValue(since))

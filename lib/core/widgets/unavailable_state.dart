@@ -89,7 +89,12 @@ class UnavailableState extends StatelessWidget {
             titolo: offlineTitle,
             motivo: offlineBody,
           )
-        : UnavailableState(key: key, icon: icon, titolo: errorTitle, motivo: errorBody);
+        : UnavailableState(
+            key: key,
+            icon: icon,
+            titolo: errorTitle,
+            motivo: errorBody,
+          );
   }
 
   /// Same as the plain constructor, wrapped in the horizontal page padding a tab's own content
@@ -109,7 +114,10 @@ class UnavailableState extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 40),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: 40,
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
           child: VetroStateCard(

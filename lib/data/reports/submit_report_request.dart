@@ -203,11 +203,7 @@ class SubmitReportRequest {
 /// the phone's own id for the tap. The id is what makes a retried submit a no-op instead of a
 /// double-billed second set of hours.
 class SubmitReportSegmentDto {
-  const SubmitReportSegmentDto({
-    required this.startTime,
-    required this.endTime,
-    this.clientId,
-  });
+  const SubmitReportSegmentDto({required this.startTime, required this.endTime, this.clientId});
 
   final DateTime startTime;
   final DateTime endTime;

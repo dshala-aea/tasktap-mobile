@@ -120,6 +120,7 @@ void main() {
       SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'user-1'});
       final adapter = _Adapter(body: jsonEncode([_row()]));
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           absenceRequestApiClientProvider.overrideWithValue(_client(adapter)),
           isOnlineProvider.overrideWithValue(true),
@@ -131,6 +132,7 @@ void main() {
       final sub = container.listen(myAbsenceRequestsProvider, (_, _) {});
       addTearDown(sub.close);
 
+      container.listen(myAbsenceRequestsProvider, (_, _) {});
       final result = await container.read(myAbsenceRequestsProvider.future);
 
       expect(adapter.captured!.method, 'GET');
@@ -154,6 +156,7 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           absenceRequestApiClientProvider.overrideWithValue(_client(adapter)),
           isOnlineProvider.overrideWithValue(true),
@@ -164,6 +167,7 @@ void main() {
       final sub = container.listen(myAbsenceRequestsProvider, (_, _) {});
       addTearDown(sub.close);
 
+      container.listen(myAbsenceRequestsProvider, (_, _) {});
       final result = await container.read(myAbsenceRequestsProvider.future);
 
       expect(adapter.captured, isNull, reason: 'no request may go out unscoped');
@@ -210,20 +214,14 @@ void main() {
       final adapter = _Adapter(body: 'null');
       final client = _client(adapter);
 
-      await expectLater(
-        client.fetchPendingForApproval(),
-        throwsA(isA<FormatException>()),
-      );
+      await expectLater(client.fetchPendingForApproval(), throwsA(isA<FormatException>()));
     });
 
     test('a_403_becomes_the_permission_error', () async {
       final adapter = _Adapter(status: 403, body: '');
       final client = _client(adapter);
 
-      await expectLater(
-        client.approve('ar-1'),
-        throwsA(isA<AbsenceRequestPermissionError>()),
-      );
+      await expectLater(client.approve('ar-1'), throwsA(isA<AbsenceRequestPermissionError>()));
     });
 
     test('a_400_detail_becomes_the_validation_error', () async {

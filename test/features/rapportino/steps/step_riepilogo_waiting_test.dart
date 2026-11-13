@@ -26,8 +26,7 @@ class _NoSignature implements UserSignatureApiClient {
   @override
   Future<Uint8List?> fetchSavedSignatureContent() async => null;
   @override
-  Future<UserSignatureUploadResult> uploadSignature(Uint8List bytes) =>
-      throw UnimplementedError();
+  Future<UserSignatureUploadResult> uploadSignature(Uint8List bytes) => throw UnimplementedError();
 }
 
 /// Every send fails with "nothing answered", the shape a device with no usable network produces.
@@ -74,6 +73,7 @@ void main() {
           ),
         );
     final container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(online),
@@ -97,7 +97,9 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: StepRiepilogo(reportId: _reportId))),
+        child: const MaterialApp(
+          home: Scaffold(body: StepRiepilogo(reportId: _reportId)),
+        ),
       ),
     );
     await tester.pump(const Duration(milliseconds: 200));
@@ -151,6 +153,7 @@ void main() {
       recheckOnline: () async => false,
     );
     final container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(cachedOnline),
@@ -165,7 +168,9 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: StepRiepilogo(reportId: _reportId))),
+        child: const MaterialApp(
+          home: Scaffold(body: StepRiepilogo(reportId: _reportId)),
+        ),
       ),
     );
     await tester.pump(const Duration(milliseconds: 200));
@@ -233,6 +238,7 @@ void main() {
           ),
         );
     final container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         isOnlineProvider.overrideWithValue(true),
@@ -256,7 +262,9 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: StepRiepilogo(reportId: _reportId))),
+        child: const MaterialApp(
+          home: Scaffold(body: StepRiepilogo(reportId: _reportId)),
+        ),
       ),
     );
     await tester.pump(const Duration(milliseconds: 200));

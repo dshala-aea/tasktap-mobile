@@ -50,7 +50,11 @@ Future<bool> confirmDeleteDialog(
             const SizedBox(height: 8),
             Text(
               message,
-              style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: ctx.colors.inkMuted),
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 14,
+                color: ctx.colors.inkMuted,
+              ),
             ),
             const SizedBox(height: 20),
             Row(

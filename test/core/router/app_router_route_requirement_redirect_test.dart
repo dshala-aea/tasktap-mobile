@@ -90,7 +90,7 @@ Widget _buildApp({
   final kioskStore = MockKioskStore();
   when(() => kioskStore.read()).thenAnswer((_) async => null);
 
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),

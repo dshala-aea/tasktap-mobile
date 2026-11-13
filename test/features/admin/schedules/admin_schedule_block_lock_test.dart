@@ -79,14 +79,14 @@ Future<void> _seedSchedule(
 }
 
 Widget _buildDetail({required AppDatabase db, String scheduleId = 'sched-1'}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [appDatabaseProvider.overrideWithValue(db)],
     child: MaterialApp(home: AdminScheduleDetailScreen(scheduleId: scheduleId)),
   );
 }
 
 Widget _buildSheet({required AppDatabase db, required Schedule schedule}) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [appDatabaseProvider.overrideWithValue(db)],
     child: MaterialApp(
       home: Scaffold(body: ScheduleInfoSheet(schedule: schedule)),
@@ -124,7 +124,7 @@ void main() {
   // ── Admin form harness ──────────────────────────────────────────────────────
 
   Widget buildForm({required String scheduleId}) {
-    return ProviderScope(
+    return ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),

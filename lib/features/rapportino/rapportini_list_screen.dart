@@ -218,7 +218,7 @@ class _RapportiniListBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final draftsAsync = ref.watch(rapportiniListProvider);
-    final allDrafts = draftsAsync.valueOrNull ?? const <DraftReport>[];
+    final allDrafts = draftsAsync.value ?? const <DraftReport>[];
     final businessTime = ref.watch(businessTimeProvider);
     final canWrite = capabilityHeld(
       ref.watch(cachedEntitlementProvider).value,
@@ -231,10 +231,10 @@ class _RapportiniListBody extends ConsumerWidget {
     // silently drop a name the report still references (the view screen resolves names unfiltered
     // too). The sheet's Cliente/Sede pickers keep their active-only streams.
     final customersById = {
-      for (final c in ref.watch(adminCustomersProvider).valueOrNull ?? const <Customer>[]) c.id: c,
+      for (final c in ref.watch(adminCustomersProvider).value ?? const <Customer>[]) c.id: c,
     };
     final locationsById = {
-      for (final l in ref.watch(adminLocationsProvider).valueOrNull ?? const <Location>[]) l.id: l,
+      for (final l in ref.watch(adminLocationsProvider).value ?? const <Location>[]) l.id: l,
     };
 
     final filtered = allDrafts.where((draft) {
@@ -245,7 +245,7 @@ class _RapportiniListBody extends ConsumerWidget {
 
     final daInviareCount = filtered.where(_isDaInviare).length;
     final hasActiveFilter = query.trim().isNotEmpty || !filters.isEmpty;
-    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).valueOrNull == false;
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     final loading = draftsAsync.isLoading && !draftsAsync.hasValue;
     final unavailable = draftsAsync.hasError && !draftsAsync.hasValue;
@@ -551,12 +551,7 @@ class _RapportinoRow extends ConsumerWidget {
       secondary: secondary.isEmpty ? null : secondary,
       status: statusLabel,
       statusTone: _toneFor(statusLabel),
-      onTap: () => _open(
-        context,
-        ref,
-        opensEditor: opensEditor,
-        canWriteReports: canWriteReports,
-      ),
+      onTap: () => _open(context, ref, opensEditor: opensEditor, canWriteReports: canWriteReports),
     );
 
     Widget row = ListDocumentRow(data: data);
@@ -778,9 +773,9 @@ class _RapportinoFilterSheetState extends ConsumerState<_RapportinoFilterSheet> 
 
   @override
   Widget build(BuildContext context) {
-    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[];
-    final allLocations = ref.watch(allLocationsProvider).valueOrNull ?? const <Location>[];
-    final colleagues = ref.watch(allColleaguesProvider).valueOrNull ?? const <Colleague>[];
+    final customers = ref.watch(allCustomersProvider).value ?? const <Customer>[];
+    final allLocations = ref.watch(allLocationsProvider).value ?? const <Location>[];
+    final colleagues = ref.watch(allColleaguesProvider).value ?? const <Colleague>[];
 
     final locations = _customerId == null
         ? allLocations

@@ -131,6 +131,7 @@ void main() {
       ),
     );
     final container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [
         passkeySupportProvider.overrideWithValue(PasskeySupport(availability: available)),
       ],

@@ -34,7 +34,9 @@ String? provenanceLabel(AiFactSource source, AiResolutionState state) {
       return state == AiResolutionState.resolvedBySystem ? 'Dal ticket' : 'Dal ticket: conferma';
     case AiFactSource.taskTapTool:
     case AiFactSource.derived:
-      return state == AiResolutionState.resolvedBySystem ? 'Verificato da TaskTap' : 'Non verificato';
+      return state == AiResolutionState.resolvedBySystem
+          ? 'Verificato da TaskTap'
+          : 'Non verificato';
   }
 }
 

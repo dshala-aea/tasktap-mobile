@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show FontLoader, rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
@@ -31,7 +32,8 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
-import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart' show nowProvider;
+import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart'
+    show nowProvider;
 import 'package:tasktap_mobile/features/timbra/timbra_providers.dart'
     show
         TimbraGuard,
@@ -49,7 +51,12 @@ const _kReviewDir = '.impeccable/review';
 /// Rome is UTC+2 in July, so these UTC instants print as the wall clock in the comment.
 DateTime _utc(int h, int m) => DateTime.utc(2026, 7, 10, h - 2, m);
 
-WorkSession _event(String id, DateTime at, String type, {bool pending = false}) =>
+WorkSession _event(
+  String id,
+  DateTime at,
+  String type, {
+  bool pending = false,
+}) =>
     WorkSession(id: id, eventTime: at, eventType: type, isPendingSync: pending);
 
 DayWorkLogEntry _row(
@@ -96,7 +103,8 @@ class _FakeRepo implements IWorkSessionRepository {
       sessions.where((s) => s.isPendingSync).toList();
 
   @override
-  Future<int> getPendingCount() async => sessions.where((s) => s.isPendingSync).length;
+  Future<int> getPendingCount() async =>
+      sessions.where((s) => s.isPendingSync).length;
 
   @override
   Future<void> addEvent({
@@ -150,7 +158,9 @@ Future<void> _loadFonts() async {
     final entry = family as Map<String, dynamic>;
     final loader = FontLoader(entry['family'] as String);
     for (final font in entry['fonts'] as List) {
-      loader.addFont(rootBundle.load((font as Map<String, dynamic>)['asset'] as String));
+      loader.addFont(
+        rootBundle.load((font as Map<String, dynamic>)['asset'] as String),
+      );
     }
     await loader.load();
   }
@@ -177,9 +187,11 @@ Future<void> _render(
   required List<WorkSession> sessions,
   required DateTime now,
   List<DayWorkLogEntry> serverRows = const [],
+
   /// The server's day does not answer (no signal, a 5xx). Distinct from [serverRows] being empty:
   /// an unanswered day may not read as "nothing happened today".
   bool serverFailed = false,
+
   /// This phone's own session table cannot be read. A different failure from [serverFailed]: here
   /// nobody knows what today holds, so the rail may not claim the day is empty.
   bool localReadFails = false,
@@ -195,16 +207,23 @@ Future<void> _render(
   addTearDown(tester.view.reset);
 
   await tester.pumpWidget(
-    ProviderScope(
+    ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         workSessionRepositoryProvider.overrideWithValue(_FakeRepo(sessions)),
         timbraSyncServiceProvider.overrideWithValue(
-          TimbraSyncService(repo: _FakeRepo(sessions), apiClient: _NoopApiClient()),
+          TimbraSyncService(
+            repo: _FakeRepo(sessions),
+            apiClient: _NoopApiClient(),
+          ),
         ),
         worklogApiClientProvider.overrideWithValue(_NoopApiClient()),
-        locationServiceProvider.overrideWithValue(const DisabledLocationService()),
-        businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome', clock: () => now)),
+        locationServiceProvider.overrideWithValue(
+          const DisabledLocationService(),
+        ),
+        businessTimeProvider.overrideWithValue(
+          BusinessTime('Europe/Rome', clock: () => now),
+        ),
         nowProvider.overrideWith((ref) => Stream.value(now)),
         todaySessionsProvider.overrideWith(
           (ref) => localReadFails
@@ -212,7 +231,8 @@ Future<void> _render(
               : Stream.value(sessions),
         ),
         serverDayProvider.overrideWith(
-          (ref) async => serverFailed ? throw StateError('no signal') : serverRows,
+          (ref) async =>
+              serverFailed ? throw StateError('no signal') : serverRows,
         ),
         ...overrides,
       ],
@@ -328,7 +348,12 @@ void main() {
   });
 
   testWidgets('phone — an unpunched day', (tester) async {
-    await _render(tester, 'phone-empty-day', sessions: const [], now: _utc(9, 0));
+    await _render(
+      tester,
+      'phone-empty-day',
+      sessions: const [],
+      now: _utc(9, 0),
+    );
   });
 
   testWidgets('phone — an unsent punch beside a server row', (tester) async {
@@ -343,7 +368,9 @@ void main() {
         _event('b', _utc(12, 0), 'fine', pending: true),
       ],
       now: _utc(17, 0),
-      serverRows: [_row('srv-1', start: _utc(13, 0), end: _utc(16, 0), sorgente: 'totem')],
+      serverRows: [
+        _row('srv-1', start: _utc(13, 0), end: _utc(16, 0), sorgente: 'totem'),
+      ],
     );
   });
 
@@ -400,12 +427,18 @@ void main() {
           kind: DayWorkLogKind.shortBreak,
           sorgente: 'totem',
         ),
-        _row('srv-3', start: _utc(12, 20), end: _utc(16, 30), sorgente: 'totem'),
+        _row(
+          'srv-3',
+          start: _utc(12, 20),
+          end: _utc(16, 30),
+          sorgente: 'totem',
+        ),
       ],
     );
   });
 
-  testWidgets('phone — a day the projection refuses', (tester) async {    await _render(
+  testWidgets('phone — a day the projection refuses', (tester) async {
+    await _render(
       tester,
       'phone-blocked',
       sessions: [_event('a', _utc(8, 0), 'ingresso')],
