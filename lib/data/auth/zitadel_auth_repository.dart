@@ -821,6 +821,13 @@ class ZitadelAuthRepository implements IAuthRepository {
     }
 
     final msg = e.toString().toLowerCase();
+    if (e is TimeoutException || msg.contains('timeout')) {
+      // A hung provider call is an unreachable identity provider, not a dead refresh token.
+      // Classifying it as SessionExpired (or as an unclassified error that callers might treat
+      // as terminal) would sign the technician out on a slow network; keep the offline-first
+      // fallback that _restore() and AuthInterceptor already implement.
+      return const NetworkError();
+    }
     if (msg.contains('cancel')) {
       // User dismissed the browser — not a real error; surface benignly.
       return const UnknownAuthError('Accesso annullato');
