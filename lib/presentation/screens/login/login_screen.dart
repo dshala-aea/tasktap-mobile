@@ -16,6 +16,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../providers/auth_providers.dart';
 import '../../../domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'access_request_sheet.dart';
 
 /// Login screen — native username/password sign-in.
 ///
@@ -139,6 +140,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     await ref.read(loginProvider.notifier).signIn();
   }
 
+  void _onRequestAccess() {
+    unawaited(showAccessRequestSheet(context, initialEmail: _usernameCtrl.text.trim()));
+  }
+
   @override
   Widget build(BuildContext context) {
     final loginState = ref.watch(loginProvider);
@@ -222,6 +227,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           onPressed: _looksLikeEmail(value.text) ? _onContinue : null,
         ),
       ),
+      const SizedBox(height: AppSpacing.sm),
+      Center(
+        child: TextButton(
+          onPressed: _onRequestAccess,
+          child: const Text('Richiedi accesso'),
+        ),
+      ),
     ];
   }
 
@@ -286,6 +298,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: const Text('Accedi con passkey'),
         ),
       ],
+      const SizedBox(height: AppSpacing.base),
+      Center(
+        child: TextButton(
+          onPressed: isLoading ? null : _onRequestAccess,
+          child: const Text('Richiedi accesso'),
+        ),
+      ),
     ];
   }
 }

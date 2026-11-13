@@ -50,6 +50,13 @@ TextField _passwordTextField(WidgetTester tester) => tester.widget<TextField>(
   find.descendant(of: _passwordField, matching: find.byType(TextField)),
 );
 
+TextField _accessRequestEmailTextField(WidgetTester tester) => tester.widget<TextField>(
+  find.descendant(
+    of: find.byKey(const ValueKey('access-request-email')),
+    matching: find.byType(TextField),
+  ),
+);
+
 String? _usernameText(WidgetTester tester) => _usernameTextField(tester).controller?.text;
 
 Future<void> _goToMethodStep(
@@ -347,6 +354,34 @@ void main() {
       await tester.tap(_browserFallbackButton);
       await tester.pumpAndSettle();
       verify(() => repo.signIn()).called(1);
+    });
+  });
+
+  group('access request', () {
+    testWidgets('the email step offers Richiedi accesso', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Richiedi accesso'), findsOneWidget);
+    });
+
+    testWidgets('the method step still offers Richiedi accesso', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+      await _goToMethodStep(tester);
+
+      expect(find.text('Richiedi accesso'), findsOneWidget);
+    });
+
+    testWidgets('opens the form with the email already typed', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(_usernameField, 'tech@tasktap.io');
+      await tester.tap(find.text('Richiedi accesso'));
+      await tester.pumpAndSettle();
+
+      expect(_accessRequestEmailTextField(tester).controller?.text, 'tech@tasktap.io');
     });
   });
 }
