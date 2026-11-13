@@ -17,6 +17,7 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/auth/auth_failure.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../sync/connectivity_provider.dart';
 
@@ -27,7 +28,14 @@ import '../sync/connectivity_provider.dart';
 /// timbra_sync_watcher.dart's doc comment for why this matters.
 VoidCallback initAuthReconnectWatcher(WidgetRef ref) {
   final connectivity = ref.read(connectivityProvider.notifier);
-  return connectivity.onReconnect(() {
-    ref.read(authRepositoryProvider).refreshSession();
+  return connectivity.onReconnect(() async {
+    final result = await ref.read(authRepositoryProvider).refreshSession();
+    // A confirmed SessionExpired is the same ending the 401 interceptor uses: drop credentials
+    // and keep the local data, so the next sign-in can resume the queue (same account) or ask
+    // explicitly before discarding it (different account). Network/unknown failures leave the
+    // session untouched so the offline-first path can continue.
+    if (result.failure is SessionExpired) {
+      await ref.read(sessionEnderProvider).endForced();
+    }
   });
 }
