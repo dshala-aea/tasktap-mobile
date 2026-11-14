@@ -10,18 +10,21 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart' show WorkSession;
+import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart'
+    show reconciledOrphanMarker;
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart'
     show DayWorkLogEntry, DayWorkLogKind;
 import 'package:tasktap_mobile/features/timbra/day_rail.dart';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-WorkSession _event(String id, DateTime at, String type, {bool pending = false}) => WorkSession(
-  id: id,
-  eventTime: at,
-  eventType: type,
-  isPendingSync: pending,
-);
+WorkSession _event(
+  String id,
+  DateTime at,
+  String type, {
+  bool pending = false,
+  String? notes,
+}) => WorkSession(id: id, eventTime: at, eventType: type, isPendingSync: pending, notes: notes);
 
 DayWorkLogEntry _row(
   String id, {
@@ -388,6 +391,158 @@ void main() {
 
       expect(day.entries.where((e) => e.origin == RailOrigin.server), isEmpty);
       expect(day.entries, hasLength(3));
+    });
+  });
+
+  group('reconciler mirrors', () {
+    // The shape reported from the field: the reconciler had backfilled ingresso 09:20, pausa 13:08
+    // and ripresa 14:16 from the server's own active shift, while the server also returned the
+    // detailed rows those instants came from. The rail drew both and added both: 11h 09m "worked"
+    // on a 6h 41m day.
+    final shiftStart = DateTime.utc(2026, 11, 12, 8, 20); // 09:20 Rome (CET)
+    final breakStart = DateTime.utc(2026, 11, 12, 12, 8); // 13:08
+    final breakEnd = DateTime.utc(2026, 11, 12, 13, 16); // 14:16
+    final now = DateTime.utc(2026, 11, 12, 15, 1); // 16:01
+
+    WorkSession mirror(String id, DateTime at, String type) =>
+        _event(id, at, type, pending: true, notes: reconciledOrphanMarker);
+
+    test('mirrored shift events are not drawn as phone punches, so the day is not doubled', () {
+      final day = buildDayRail(
+        localEvents: [
+          mirror('mirror-in', shiftStart, 'ingresso'),
+          mirror('mirror-pausa', breakStart, 'pausa'),
+          mirror('mirror-ripresa', breakEnd, 'ripresa'),
+        ],
+        serverRows: [
+          _row('app-1', start: shiftStart, end: DateTime.utc(2026, 11, 12, 8, 35), sorgente: 'app'),
+          _row(
+            'app-2',
+            start: DateTime.utc(2026, 11, 12, 8, 35),
+            end: DateTime.utc(2026, 11, 12, 8, 36),
+            kind: DayWorkLogKind.shortBreak,
+            sorgente: 'app',
+          ),
+          _row(
+            'app-3',
+            start: DateTime.utc(2026, 11, 12, 8, 36),
+            end: DateTime.utc(2026, 11, 12, 8, 37),
+            sorgente: 'app',
+          ),
+          _row(
+            'totem-1',
+            start: DateTime.utc(2026, 11, 12, 8, 37),
+            end: DateTime.utc(2026, 11, 12, 8, 42),
+            kind: DayWorkLogKind.shortBreak,
+            sorgente: 'totem',
+          ),
+          _row(
+            'totem-2',
+            start: DateTime.utc(2026, 11, 12, 8, 42),
+            end: DateTime.utc(2026, 11, 12, 10, 22),
+            sorgente: 'totem',
+          ),
+          _row(
+            'totem-3',
+            start: DateTime.utc(2026, 11, 12, 10, 22),
+            end: DateTime.utc(2026, 11, 12, 10, 35),
+            kind: DayWorkLogKind.shortBreak,
+            sorgente: 'totem',
+          ),
+          _row(
+            'totem-4',
+            start: DateTime.utc(2026, 11, 12, 10, 35),
+            end: breakStart,
+            sorgente: 'totem',
+          ),
+          _row(
+            'totem-5',
+            start: breakStart,
+            end: breakEnd,
+            kind: DayWorkLogKind.longBreak,
+            sorgente: 'totem',
+          ),
+          _row('totem-6', start: breakEnd, open: true, sorgente: 'totem'),
+        ],
+        now: now,
+      );
+
+      expect(day.entries.where((e) => e.origin == RailOrigin.phone), isEmpty);
+      expect(day.entries.where((e) => e.pending), isEmpty);
+      expect(day.entries, hasLength(9));
+      // 15 + 1 + 1 + 5 + 100 + 13 + 93 + 105, with the short breaks paid (counted as worked).
+      expect(day.worked, const Duration(minutes: 333));
+      expect(day.paused, const Duration(minutes: 87));
+      expect(day.worked, lessThanOrEqualTo(now.difference(shiftStart)));
+    });
+  });
+
+  group('overlapping sources', () {
+    // Two sources can describe overlapping time: a punch this phone queued offline and a totem
+    // row for the same stretch, or an office correction over a phone interval. The mirror filter
+    // above removes the common case; these guard the arithmetic when a genuine overlap remains.
+    test('overlapping work and breaks are counted once, not summed', () {
+      final day = buildDayRail(
+        localEvents: [
+          _event('in', _t8, 'ingresso'), // 06:00
+          _event('pausa', _t12, 'pausa'), // 10:00
+          _event('ripresa', _t13, 'ripresa'), // 11:00
+          _event('fine', _t17, 'fine'), // 15:00
+        ],
+        serverRows: [
+          _row('srv-work', start: _t13, end: _t17), // 11:00–15:00
+          _row(
+            'srv-break',
+            start: _t12.add(const Duration(minutes: 30)),
+            end: _t13.add(const Duration(minutes: 30)),
+            kind: DayWorkLogKind.longBreak,
+          ),
+        ],
+        now: DateTime.utc(2026, 7, 10, 18),
+      );
+
+      // Phone work 06–10 + 11–15; the server work row adds nothing new inside 11–15.
+      expect(day.worked, const Duration(hours: 8));
+      // Phone break 10–11 and server break 10:30–11:30 cover 10–11:30 once.
+      expect(day.paused, const Duration(minutes: 90));
+    });
+
+    test('a long stretch still covers a later start, so no false gap is invented', () {
+      final day = buildDayRail(
+        localEvents: [
+          _event('in', _t8, 'ingresso'), // 06:00
+          _event('fine', DateTime.utc(2026, 7, 10, 12), 'fine'), // 14:00
+        ],
+        serverRows: [
+          _row('srv-work', start: _t12, end: DateTime.utc(2026, 7, 10, 10)), // 10:00–12:00
+          _row(
+            'srv-break',
+            start: DateTime.utc(2026, 7, 10, 10, 30),
+            end: DateTime.utc(2026, 7, 10, 11),
+            kind: DayWorkLogKind.longBreak,
+          ),
+        ],
+        now: DateTime.utc(2026, 7, 10, 18),
+      );
+
+      expect(day.gaps, isEmpty);
+    });
+
+    test('the axis ends at the latest end, not at the last start', () {
+      final now = DateTime.utc(2026, 7, 10, 14);
+      final day = buildDayRail(
+        localEvents: [_event('in', _t8, 'ingresso', pending: true)], // 06:00, still open
+        serverRows: [
+          _row(
+            'srv',
+            start: _t12,
+            end: DateTime.utc(2026, 7, 10, 12),
+          ), // 10:00–12:00, starts later
+        ],
+        now: now,
+      );
+
+      expect(day.axisEnd, now);
     });
   });
 }

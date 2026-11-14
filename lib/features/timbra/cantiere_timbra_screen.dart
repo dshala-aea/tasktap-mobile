@@ -52,6 +52,8 @@ import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
+import '../../data/timbratura/cantiere_session_repository.dart'
+    show cantiereReconciledOrphanMarker;
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../presentation/providers/auth_providers.dart';
@@ -127,7 +129,10 @@ final todayCantiereEventsProvider = StreamProvider.autoDispose<List<CantierePunc
 /// True when at least one of today's local cantiere events has not yet been synced.
 final cantiereHasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
   final events = ref.watch(todayCantiereEventsProvider).value ?? [];
-  return events.any((e) => e.isPendingSync);
+  // The cantiere reconciler's mirrors are pending by construction but never uploaded: the server
+  // already holds them. Counting them leaves the same stuck "Non sincronizzato" state the Timbra
+  // provider had (and the same frozen punch guard).
+  return events.any((e) => e.isPendingSync && e.notes != cantiereReconciledOrphanMarker);
 });
 
 /// The first sync failure recorded against one of today's local cantiere events, if any.

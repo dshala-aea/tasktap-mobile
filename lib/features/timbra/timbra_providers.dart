@@ -91,7 +91,10 @@ final dayRailProvider = Provider.autoDispose<DayRail>((ref) {
 /// True when at least one of today's events has not yet been synced.
 final hasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
   final sessions = ref.watch(todaySessionsProvider).value ?? [];
-  return sessions.any((s) => s.isPendingSync);
+  // Reconciler-mirrored events are pending by construction but are never uploaded — the server
+  // already holds them. Counting them left a permanent "Non sincronizzato" state and a punch/pause
+  // guard stuck on hasPendingSync. Same filter as the sync, the reconciler and the work counter.
+  return sessions.any((s) => s.isPendingSync && s.notes != reconciledOrphanMarker);
 });
 
 /// Punches the server permanently refused (`409 active_session_exists`), newest first.

@@ -31,6 +31,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 import '../../data/local/app_database.dart' show WorkSession;
+import '../../data/timbratura/work_session_repository.dart' show reconciledOrphanMarker;
 import '../../data/timbratura/worklog_api_client.dart' show DayWorkLogEntry, DayWorkLogKind;
 
 /// What a stretch of the day was.
@@ -142,24 +143,14 @@ class DayRail {
   /// [worked] measured at an arbitrary instant, so a widget can re-derive it from its own ticking
   /// clock instead of rebuilding this whole object once a second. Only a running stretch changes
   /// between two instants; a closed day returns the same number forever.
-  Duration workedAt(DateTime at) {
-    var total = Duration.zero;
-    for (final e in entries) {
-      if (e.countsAsWorked) total += e.durationAt(at);
-    }
-    return total;
-  }
+  Duration workedAt(DateTime at) =>
+      _coveredDuration(entries.where((e) => e.countsAsWorked), at);
 
   /// [paused] measured at an arbitrary instant — see [workedAt].
-  Duration pausedAt(DateTime at) {
-    var total = Duration.zero;
-    for (final e in entries) {
-      if (e.kind != RailKind.work && e.kind != RailKind.unknown) {
-        total += e.durationAt(at);
-      }
-    }
-    return total;
-  }
+  Duration pausedAt(DateTime at) => _coveredDuration(
+    entries.where((e) => e.kind != RailKind.work && e.kind != RailKind.unknown),
+    at,
+  );
 
   /// True when at least one stretch has not reached the server yet.
   bool get hasPending => entries.any((e) => e.pending);
@@ -173,7 +164,56 @@ class DayRail {
   /// [axisEnd] measured at an arbitrary instant, for the same reason as [workedAt]: the rail keeps
   /// its own ticking clock, and an axis that stopped at the instant this object was built would
   /// leave a running stretch drawn past its own end (and clamped back to a full-height bar).
-  DateTime? axisEndAt(DateTime at) => entries.isEmpty ? null : entries.last.endOr(at);
+  ///
+  /// The latest END, not the last-started entry: with two sources an earlier-started stretch can
+  /// still be the one running (a phone shift left open under a later, closed totem row), and an
+  /// axis that trusted the last start would clip the running band.
+  DateTime? axisEndAt(DateTime at) {
+    DateTime? end;
+    for (final e in entries) {
+      final candidate = e.endOr(at);
+      if (end == null || candidate.isAfter(end)) end = candidate;
+    }
+    return end;
+  }
+}
+
+/// Wall-clock covered by [items] at [at], counting overlapping stretches once.
+///
+/// Entries come from two sources and may overlap — an offline phone punch and a totem row for the
+/// same minutes, an office correction over a phone interval. Summing durations then counts the same
+/// minutes twice (the defect that printed 11h09 on a 6h41 day), so merge the spans first.
+///
+/// A paid pause is deliberately in both [DayRail.workedAt] and [DayRail.pausedAt]: those answer
+/// two different questions ("worked" includes paid breaks; "paused" is all break time), not two
+/// halves of one total.
+Duration _coveredDuration(Iterable<RailEntry> items, DateTime at) {
+  final spans = items
+      .map((e) => (start: e.start, end: e.endOr(at)))
+      .where((s) => !s.end.isBefore(s.start))
+      .toList()
+    ..sort((a, b) => a.start.compareTo(b.start));
+
+  var total = Duration.zero;
+  DateTime? from;
+  DateTime? to;
+  for (final span in spans) {
+    if (from == null) {
+      from = span.start;
+      to = span.end;
+      continue;
+    }
+    final end = to!;
+    if (span.start.isAfter(end)) {
+      total += end.difference(from);
+      from = span.start;
+      to = span.end;
+    } else if (span.end.isAfter(end)) {
+      to = span.end;
+    }
+  }
+  if (from != null && to != null) total += to.difference(from);
+  return total;
 }
 
 // ── Builder ───────────────────────────────────────────────────────────────────
@@ -190,6 +230,11 @@ const _kRipresa = 'ripresa';
 /// including them would double the day, and nothing will ever retry them). [serverRows] is
 /// whatever the server answered, or an empty list when it could not be reached.
 ///
+/// Reconciler-mirrored events (`reconciledOrphanMarker`) are excluded here: they are this phone's
+/// local *copy* of the server's active shift, added so the punch control knows what the server
+/// already knows. They are not phone punches, the server already holds the row they mirror, and
+/// drawing them next to it counts the same day twice.
+///
 /// Offline is not a degraded mode here: with no server answer the phone's own events still form
 /// a complete line for every punch it made. What is lost offline is only what the phone never
 /// knew — which is exactly what it cannot know.
@@ -202,7 +247,13 @@ DayRail buildDayRail({
   final localIds = <String>{};
 
   // ── The phone's own stretches, reconstructed from its events ────────────────
-  final events = [...localEvents]..sort((a, b) => a.eventTime.compareTo(b.eventTime));
+  //
+  // The reconciler's mirrors are dropped before anything else. They carry fresh local ids and a
+  // coarser shape (one ingresso/pausa/ripresa from the server's active shift), so neither the
+  // clientId join nor the exact-boundary fallback below can absorb them; left in, they draw and
+  // count alongside the very server rows they were derived from and the day doubles.
+  final events = localEvents.where((e) => e.notes != reconciledOrphanMarker).toList()
+    ..sort((a, b) => a.eventTime.compareTo(b.eventTime));
 
   RailKind? openKind;
   DateTime? openStart;
@@ -332,16 +383,26 @@ DayRail buildDayRail({
 
   // ── The voids between them ──────────────────────────────────────────────────
   //
-  // A void is measured from where the previous stretch actually stopped — for an open one that is
-  // [now], not "no end". Two cases make this load-bearing: a phone stretch still running while a
-  // totem row starts later (the hour between them was recorded by nobody and must be named), and a
-  // server row that is open while a later row already exists.
+  // A void is measured from where the day is actually covered to where the next stretch starts —
+  // for an open one that is [now], not "no end". Two cases make this load-bearing: a phone stretch
+  // still running while a totem row starts later (the hour between them was recorded by nobody and
+  // must be named), and a server row that is open while a later row already exists.
+  //
+  // `coveredUntil` is the FURTHEST end seen so far, not the previous entry's own end: with two
+  // sources sorted by start, a long earlier stretch can cover a later, shorter one, and comparing
+  // against the short one would invent a void that has already been recorded.
   final gaps = <RailGap>[];
-  for (var i = 1; i < entries.length; i++) {
-    final previousEnd = entries[i - 1].endOr(now);
-    final nextStart = entries[i].start;
-    if (nextStart.isAfter(previousEnd)) {
-      gaps.add(RailGap(start: previousEnd, end: nextStart));
+  if (entries.isNotEmpty) {
+    var coveredUntil = entries.first.endOr(now);
+    for (var i = 1; i < entries.length; i++) {
+      final nextStart = entries[i].start;
+      final nextEnd = entries[i].endOr(now);
+      if (nextStart.isAfter(coveredUntil)) {
+        gaps.add(RailGap(start: coveredUntil, end: nextStart));
+        coveredUntil = nextEnd;
+      } else if (nextEnd.isAfter(coveredUntil)) {
+        coveredUntil = nextEnd;
+      }
     }
   }
 

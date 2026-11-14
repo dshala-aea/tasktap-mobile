@@ -370,6 +370,35 @@ void main() {
       expect(result.first.eventType, equals('ingresso'));
     });
 
+    test('hasPendingSyncProvider ignores reconciler mirrors', () async {
+      final repo = container.read(workSessionRepositoryProvider);
+      await repo.addEvent(
+        id: 'mirror',
+        eventTime: DateTime.now().toUtc(),
+        eventType: 'ingresso',
+      );
+      await repo.markReconciledOrphan('mirror');
+
+      container.listen(todaySessionsProvider, (_, _) {});
+      await container.read(todaySessionsProvider.future);
+
+      expect(container.read(hasPendingSyncProvider), isFalse);
+    });
+
+    test('hasPendingSyncProvider still reports a real unsent punch', () async {
+      final repo = container.read(workSessionRepositoryProvider);
+      await repo.addEvent(
+        id: 'real',
+        eventTime: DateTime.now().toUtc(),
+        eventType: 'ingresso',
+      );
+
+      container.listen(todaySessionsProvider, (_, _) {});
+      await container.read(todaySessionsProvider.future);
+
+      expect(container.read(hasPendingSyncProvider), isTrue);
+    });
+
     test('PunchNotifier: punch-in creates ingresso event', () async {
       final notifier = container.read(punchNotifierProvider.notifier);
       const initialState = TimbraState();
