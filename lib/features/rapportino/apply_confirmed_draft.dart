@@ -198,7 +198,10 @@ Future<String?> applyConfirmedDraft(
       title: Value(draft.title),
       insertedUserId: Value(draft.insertedUserId),
       locationId: Value(draft.locationId),
-      materialiNotRequired: Value(response.materialiNotRequired),
+      // "Nessun materiale" and a material row are mutually exclusive: the flag says the operator
+      // answered "none", so a response that carries rows has the flag off whatever the model
+      // wrote. The incremental path applies the same rule, so the two cannot disagree.
+      materialiNotRequired: Value(response.materialiNotRequired && response.materials.isEmpty),
       customerSignoffText: Value(response.customerSignoffText),
       details: Value(response.details),
       // Structured cause/fix, AI-fillable since 2026-11-16 (ruling D6 reversed for these two).
