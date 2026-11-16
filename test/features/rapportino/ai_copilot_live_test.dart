@@ -422,8 +422,15 @@ Future<void> _openPushed(WidgetTester tester) async {
 /// The step-1 microphone orb. It carries no tooltip and no visible label any more — it is a 120 pt
 /// disc drawn inside a `GestureDetector` — so its icon is the only stable handle, and that icon
 /// flips from the microphone to a stop square while a recording runs.
-Finder get _micIdle => find.byIcon(LucideIcons.mic);
-Finder get _micRecording => find.byIcon(LucideIcons.square);
+/// Scoped to the composer: a voice message in the thread also carries a microphone icon.
+Finder get _micIdle => find.descendant(
+  of: find.byKey(const ValueKey('ai-chat-composer')),
+  matching: find.byIcon(LucideIcons.mic),
+);
+Finder get _micRecording => find.descendant(
+  of: find.byKey(const ValueKey('ai-chat-composer')),
+  matching: find.byIcon(LucideIcons.square),
+);
 
 /// Is the composer's microphone taking taps? It is an `InkResponse` inside the round action, so the
 /// ink response is where "enabled" lives.

@@ -98,7 +98,7 @@ class _AiChatComposerState extends State<AiChatComposer> {
                           widget.onTextChanged();
                         },
                       )
-                    : GestureDetector(
+                    : InkWell(
                         key: const ValueKey('ai-chat-hint'),
                         onTap: widget.onToggleWriting,
                         child: Padding(
