@@ -1065,17 +1065,7 @@ void main() {
       );
     });
   });
-}
 
-class _AbandonAi extends AiApiClient {
-  _AbandonAi({required this.ok}) : super(Dio());
-  final bool ok;
-  final List<String> abandoned = [];
-  @override
-  Future<bool> tryAbandonConversation(String sessionId) async {
-    if (ok) abandoned.add(sessionId);
-    return ok;
-  }
   test('Compila writes the header fields the draft owns, never over a hand edit', () async {
     AiCopilotDraftDto draftWith(String? diagnosi) => AiCopilotDraftDto(
       diagnosi: diagnosi,
@@ -1104,5 +1094,15 @@ class _AbandonAi extends AiApiClient {
 
     expect((await h.header()).diagnosi, 'Scritta a mano');
   });
+}
 
+class _AbandonAi extends AiApiClient {
+  _AbandonAi({required this.ok}) : super(Dio());
+  final bool ok;
+  final List<String> abandoned = [];
+  @override
+  Future<bool> tryAbandonConversation(String sessionId) async {
+    if (ok) abandoned.add(sessionId);
+    return ok;
+  }
 }
