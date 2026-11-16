@@ -444,6 +444,7 @@ class AiCopilotDraftDto {
     this.diagnosi,
     this.soluzione,
     this.customerSignoffText,
+    this.materialiNotRequired = false,
     required this.workers,
     required this.materials,
     required this.controlli,
@@ -455,6 +456,11 @@ class AiCopilotDraftDto {
   final String? diagnosi;
   final String? soluzione;
   final String? customerSignoffText;
+
+  /// The technician confirmed no materials were used. The send gate accepts this in place of a
+  /// material row, so the chat's completion strip must read it the same way.
+  final bool materialiNotRequired;
+
   final List<AiDraftWorkerRef> workers;
   final List<AiDraftMaterialUsage> materials;
   final List<AiDraftControlAnswer> controlli;
@@ -471,6 +477,32 @@ class AiCopilotDraftDto {
     openItems: [],
   );
 
+  /// Copy with the fields the chat's completion model and its tests need. Nullable values cannot be
+  /// cleared through this (same limitation as `_draft` itself: the server draft is the truth).
+  AiCopilotDraftDto copyWith({
+    String? diagnosi,
+    String? soluzione,
+    String? customerSignoffText,
+    bool? materialiNotRequired,
+    List<AiDraftWorkerRef>? workers,
+    List<AiDraftMaterialUsage>? materials,
+    List<AiDraftControlAnswer>? controlli,
+    List<AiDraftStrumentoUsage>? strumenti,
+    List<AiDraftActivity>? activities,
+    List<AiCandidateFact>? openItems,
+  }) => AiCopilotDraftDto(
+    diagnosi: diagnosi ?? this.diagnosi,
+    soluzione: soluzione ?? this.soluzione,
+    customerSignoffText: customerSignoffText ?? this.customerSignoffText,
+    materialiNotRequired: materialiNotRequired ?? this.materialiNotRequired,
+    workers: workers ?? this.workers,
+    materials: materials ?? this.materials,
+    controlli: controlli ?? this.controlli,
+    strumenti: strumenti ?? this.strumenti,
+    activities: activities ?? this.activities,
+    openItems: openItems ?? this.openItems,
+  );
+
   bool get hasBlockingOpenItems => openItems.any(
     (f) =>
         f.state == AiResolutionState.ambiguous ||
@@ -483,6 +515,7 @@ class AiCopilotDraftDto {
     diagnosi: json['diagnosi'] as String?,
     soluzione: json['soluzione'] as String?,
     customerSignoffText: json['customerSignoffText'] as String?,
+    materialiNotRequired: json['materialiNotRequired'] as bool? ?? false,
     workers: ((json['workers'] as List<dynamic>?) ?? [])
         .map((w) => AiDraftWorkerRef.fromJson(w as Map<String, dynamic>))
         .toList(),

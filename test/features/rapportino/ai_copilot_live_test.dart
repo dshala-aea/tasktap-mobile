@@ -422,24 +422,43 @@ Future<void> _openPushed(WidgetTester tester) async {
 /// The step-1 microphone orb. It carries no tooltip and no visible label any more — it is a 120 pt
 /// disc drawn inside a `GestureDetector` — so its icon is the only stable handle, and that icon
 /// flips from the microphone to a stop square while a recording runs.
-Finder get _micIdle => find.byIcon(LucideIcons.mic);
-Finder get _micRecording => find.byIcon(LucideIcons.square);
+/// Scoped to the composer: a voice message in the thread also carries a microphone icon.
+Finder get _micIdle => find.descendant(
+  of: find.byKey(const ValueKey('ai-chat-composer')),
+  matching: find.byIcon(LucideIcons.mic),
+);
+Finder get _micRecording => find.descendant(
+  of: find.byKey(const ValueKey('ai-chat-composer')),
+  matching: find.byIcon(LucideIcons.square),
+);
 
-/// Is the orb taking taps? The step disables it by handing `_MicOrb` a null callback rather than by
-/// replacing the widget, so the gesture detector is where "enabled" lives.
-bool _micEnabled(WidgetTester tester) =>
-    tester
-        .widget<GestureDetector>(
-          find.ancestor(of: _micIdle, matching: find.byType(GestureDetector)).first,
-        )
-        .onTap !=
+/// Is the composer's microphone taking taps? It is an `InkResponse` inside the round action, so the
+/// ink response is where "enabled" lives.
+bool _micEnabled(WidgetTester tester) => tester
+    .widget<InkResponse>(
+      find.descendant(
+        of: find.byKey(const ValueKey('ai-chat-mic')),
+        matching: find.byType(InkResponse),
+      ),
+    )
+    .onTap !=
     null;
 
-/// The one action of step 1: the same `_send` the chat's paper-plane called. Found by key, not by
-/// label — the label changes with the state ("Generazione in corso…", "Genera di nuovo il rapporto"
-/// once a draft exists) while the action does not.
-AppButton _generateButton(WidgetTester tester) =>
-    tester.widget<AppButton>(find.byKey(const ValueKey('ai-generate')));
+/// Is the composer's send action taking taps? Same shape as the microphone above.
+bool _sendEnabled(WidgetTester tester) => tester
+    .widget<InkResponse>(
+      find.descendant(
+        of: find.byKey(const ValueKey('ai-chat-send')),
+        matching: find.byType(InkResponse),
+      ),
+    )
+    .onTap !=
+    null;
+
+/// The Descrivi screen's one action: the explicit move to the review. Always enabled while a
+/// session exists — missing items are an indicator, not a gate.
+AppButton _controllaButton(WidgetTester tester) =>
+    tester.widget<AppButton>(find.byKey(const ValueKey('ai-controlla')));
 
 /// Taps the orb to start a recording. Nothing may `pumpAndSettle` again until the recording ends:
 /// the orb's halos animate for as long as `recording` is true, so the settle loop would spin until
@@ -528,9 +547,9 @@ Future<void> _typeAndGenerate(WidgetTester tester, String text) async {
   final field = find.byKey(const ValueKey('ai-description-field'));
   await _reveal(tester, field);
   await tester.enterText(field, text);
-  // The footer's button only enables once the parent has heard about the text.
+  // The send action only enables once the parent has heard about the text.
   await tester.pump();
-  await tester.tap(find.byKey(const ValueKey('ai-generate')));
+  await tester.tap(find.byKey(const ValueKey('ai-chat-send')));
   await tester.pumpAndSettle();
 }
 
@@ -540,6 +559,9 @@ Future<void> _typeAndGenerate(WidgetTester tester, String text) async {
 Future<void> _compile(WidgetTester tester, _FakeAi ai, AiCopilotDraftDto draft) async {
   ai.turnScript.add(AiConversationTurnResult(assistantReplyText: 'Ok.', draft: draft));
   await _typeAndGenerate(tester, 'Ho finito il lavoro');
+  // A compiled turn no longer jumps to the review: the technician moves to Controlla themselves.
+  await tester.tap(find.byKey(const ValueKey('ai-controlla')));
+  await tester.pumpAndSettle();
 }
 
 Future<void> _failOneTypedTurn(_FakeAi ai, WidgetTester tester) async {
@@ -718,10 +740,9 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('ai-describe-again')));
         await tester.pumpAndSettle();
 
-        // The label says this is a second attempt: the draft is still there, and the screen must not
-        // read as a fresh start on top of it.
-        expect(find.text('Genera di nuovo il rapporto'), findsOneWidget);
-        expect(find.text('Genera il rapporto'), findsNothing);
+        // The conversation is still there, and the move to the review is explicit.
+        expect(find.text('Ho finito il lavoro'), findsOneWidget);
+        expect(find.byKey(const ValueKey('ai-controlla')), findsOneWidget);
         await _unmount(tester);
       },
     );
@@ -1046,8 +1067,8 @@ void main() {
       await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Ancora');
       await tester.pump();
       expect(
-        _generateButton(tester).onPressed,
-        isNull,
+        _sendEnabled(tester),
+        isFalse,
         reason: 'no credits: the only way forward is the manual report',
       );
 
@@ -1184,9 +1205,9 @@ void main() {
       await _reveal(tester, find.byKey(const ValueKey('ai-description-field')));
       await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Secondo');
       await tester.pump();
-      // The unsent turn is the footer's one action, so the next send is not merely disabled — it is
-      // not offered at all until the turn goes through or is discarded.
-      expect(find.byKey(const ValueKey('ai-generate')), findsNothing);
+      // The unsent turn is retried from its own bubble; the composer's send is disabled until the
+      // turn goes through or is discarded.
+      expect(_sendEnabled(tester), isFalse);
       expect(tester.widget<AppButton>(find.byKey(const ValueKey('ai-retry'))).onPressed, isNotNull);
       // GONE: 'the microphone is disabled too'. `AiDescribeStep` receives only the 404
       // `voiceDisabled` flag; a failed turn does not stop the orb taking taps.
@@ -1282,13 +1303,13 @@ void main() {
       await _tapToggleWriting(tester);
       await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Ho iniziato');
       await tester.pump();
-      // Generation is available up to the moment the microphone opens, so the assertion below is
-      // about the recording and not about an empty field.
-      expect(_generateButton(tester).onPressed, isNotNull);
+      // Sending is available up to the moment the microphone opens, so the assertion below is about
+      // the recording and not about an empty field.
+      expect(_sendEnabled(tester), isTrue);
 
       await _startRecording(tester);
 
-      expect(_generateButton(tester).onPressed, isNull);
+      expect(_sendEnabled(tester), isFalse);
       // Revealing the orb scrolled the list back up, so the toggle may no longer be built; bring it
       // back with fixed pumps, since the running recording never settles.
       final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
