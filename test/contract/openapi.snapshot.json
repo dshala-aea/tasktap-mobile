@@ -25387,6 +25387,8 @@
         "required": [
           "title",
           "details",
+          "diagnosi",
+          "soluzione",
           "materialiNotRequired",
           "customerSignoffText",
           "ticketId",
@@ -25410,6 +25412,18 @@
               "string"
             ],
             "description": "Free description; the operator may clear it."
+          },
+          "diagnosi": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "soluzione": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "materialiNotRequired": {
             "type": "boolean",

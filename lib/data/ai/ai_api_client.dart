@@ -870,6 +870,8 @@ class AiConversationConfirmResponse {
   const AiConversationConfirmResponse({
     required this.title,
     this.details,
+    this.diagnosi,
+    this.soluzione,
     this.materialiNotRequired = false,
     this.customerSignoffText,
     this.ticketId,
@@ -884,6 +886,8 @@ class AiConversationConfirmResponse {
 
   final String title;
   final String? details;
+  final String? diagnosi;
+  final String? soluzione;
   final bool materialiNotRequired;
   final String? customerSignoffText;
   final String? ticketId;
@@ -898,6 +902,8 @@ class AiConversationConfirmResponse {
   static const Set<String> wireKeys = {
     'title',
     'details',
+    'diagnosi',
+    'soluzione',
     'materialiNotRequired',
     'customerSignoffText',
     'ticketId',
@@ -914,6 +920,8 @@ class AiConversationConfirmResponse {
       AiConversationConfirmResponse(
         title: json['title'] as String? ?? '',
         details: json['details'] as String?,
+        diagnosi: json['diagnosi'] as String?,
+        soluzione: json['soluzione'] as String?,
         materialiNotRequired: json['materialiNotRequired'] as bool? ?? false,
         customerSignoffText: json['customerSignoffText'] as String?,
         ticketId: json['ticketId'] as String?,

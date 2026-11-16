@@ -568,6 +568,12 @@ class AiDraftFeed {
               details: (header.details ?? '').trim().isEmpty && (r.details ?? '').isNotEmpty
                   ? Value(r.details)
                   : const Value.absent(),
+              diagnosi: (header.diagnosi ?? '').trim().isEmpty && (r.diagnosi ?? '').isNotEmpty
+                  ? Value(r.diagnosi)
+                  : const Value.absent(),
+              soluzione: (header.soluzione ?? '').trim().isEmpty && (r.soluzione ?? '').isNotEmpty
+                  ? Value(r.soluzione)
+                  : const Value.absent(),
               materialiNotRequired: r.materialiNotRequired && !hasMaterials
                   ? const Value(true)
                   : const Value.absent(),

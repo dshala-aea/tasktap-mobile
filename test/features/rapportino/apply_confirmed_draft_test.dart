@@ -181,6 +181,8 @@ void main() {
       const AiConversationConfirmResponse(
         title: 'Pompa bloccata',
         details: 'Sostituita pompa',
+        diagnosi: 'Valvola bloccata',
+        soluzione: 'Valvola sostituita',
         ticketId: 'tkt-1',
         staff: [AiResolvedStaff(userId: 'u-1', hoursWorked: 6.5)],
       ),
@@ -199,6 +201,9 @@ void main() {
     expect(row.title, 'Pompa bloccata', reason: 'a notifier write before hydration blanks this');
     expect(row.ticketId, 'tkt-1');
     expect(row.details, 'Sostituita pompa');
+    // Structured cause/fix travel with the rest since 2026-11-16 (ruling D6 reversed).
+    expect(row.diagnosi, 'Valvola bloccata');
+    expect(row.soluzione, 'Valvola sostituita');
     expect(row.isAiAssisted, isTrue);
   });
 
