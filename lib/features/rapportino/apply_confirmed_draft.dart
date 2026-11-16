@@ -201,6 +201,9 @@ Future<String?> applyConfirmedDraft(
       materialiNotRequired: Value(response.materialiNotRequired),
       customerSignoffText: Value(response.customerSignoffText),
       details: Value(response.details),
+      // Structured cause/fix, AI-fillable since 2026-11-16 (ruling D6 reversed for these two).
+      diagnosi: Value(response.diagnosi),
+      soluzione: Value(response.soluzione),
       isAiAssisted: const Value(true),
       updatedAt: Value(now),
     ),
