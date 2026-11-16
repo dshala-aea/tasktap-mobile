@@ -477,6 +477,32 @@ class AiCopilotDraftDto {
     openItems: [],
   );
 
+  /// Copy with the fields the chat's completion model and its tests need. Nullable values cannot be
+  /// cleared through this (same limitation as `_draft` itself: the server draft is the truth).
+  AiCopilotDraftDto copyWith({
+    String? diagnosi,
+    String? soluzione,
+    String? customerSignoffText,
+    bool? materialiNotRequired,
+    List<AiDraftWorkerRef>? workers,
+    List<AiDraftMaterialUsage>? materials,
+    List<AiDraftControlAnswer>? controlli,
+    List<AiDraftStrumentoUsage>? strumenti,
+    List<AiDraftActivity>? activities,
+    List<AiCandidateFact>? openItems,
+  }) => AiCopilotDraftDto(
+    diagnosi: diagnosi ?? this.diagnosi,
+    soluzione: soluzione ?? this.soluzione,
+    customerSignoffText: customerSignoffText ?? this.customerSignoffText,
+    materialiNotRequired: materialiNotRequired ?? this.materialiNotRequired,
+    workers: workers ?? this.workers,
+    materials: materials ?? this.materials,
+    controlli: controlli ?? this.controlli,
+    strumenti: strumenti ?? this.strumenti,
+    activities: activities ?? this.activities,
+    openItems: openItems ?? this.openItems,
+  );
+
   bool get hasBlockingOpenItems => openItems.any(
     (f) =>
         f.state == AiResolutionState.ambiguous ||
