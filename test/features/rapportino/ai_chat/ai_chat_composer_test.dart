@@ -35,7 +35,7 @@ Future<void> _pump(
   ),
 );
 
-/// The fill of the 48 dp disc inside the microphone button.
+/// The fill of the 44 dp disc inside the microphone button.
 Color? _micFill(WidgetTester tester) {
   final disc = tester
       .widgetList<Container>(
@@ -44,7 +44,7 @@ Color? _micFill(WidgetTester tester) {
           matching: find.byType(Container),
         ),
       )
-      .where((c) => c.constraints?.maxWidth == 48)
+      .where((c) => c.constraints?.maxWidth == 44)
       .first;
   return (disc.decoration! as BoxDecoration).color;
 }

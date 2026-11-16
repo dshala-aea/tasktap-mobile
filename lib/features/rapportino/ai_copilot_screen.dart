@@ -1567,9 +1567,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                                 sendingMessageId: _sendingMessageId,
                               ),
                             ),
-                            AiCompletionStrip(
-                              completion: AiChatCompletion.fromDraft(_draft),
-                            ),
                             AiChatComposer(
                               controller: _inputCtrl,
                               recording: _recording,
@@ -1742,32 +1739,44 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextButton(
-            key: const ValueKey('ai-open-draft'),
-            onPressed: canLeaveChat ? () => _confirm(openEditor: true) : null,
-            style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
-            // The tapped control carries its own progress: confirming is a round trip, and a link
-            // that does nothing visible for a second reads as a missed tap.
-            child: _confirming
-                ? SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: context.colors.inkMuted,
-                    ),
-                  )
-                : Text(
-                    'Apri la bozza',
-                    style: TextStyle(
-                      fontFamily: 'Archivo',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: canLeaveChat ? context.colors.ink : context.colors.inkMuted,
-                    ),
-                  ),
+          // One line for two jobs: what the report still needs, and the way to finish it by hand.
+          // The status used to be its own full-width band above the composer, which spent a whole
+          // row of the bottom block on a sentence and left the shortcut alone on another.
+          Row(
+            children: [
+              Expanded(child: AiCompletionStrip(completion: AiChatCompletion.fromDraft(_draft))),
+              const SizedBox(width: 8),
+              TextButton(
+                key: const ValueKey('ai-open-draft'),
+                onPressed: canLeaveChat ? () => _confirm(openEditor: true) : null,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(44, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                // The tapped control carries its own progress: confirming is a round trip, and a
+                // link that does nothing visible for a second reads as a missed tap.
+                child: _confirming
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: context.colors.inkMuted,
+                        ),
+                      )
+                    : Text(
+                        'Apri la bozza',
+                        style: TextStyle(
+                          fontFamily: 'Archivo',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: canLeaveChat ? context.colors.ink : context.colors.inkMuted,
+                        ),
+                      ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           AppButton(
             key: const ValueKey('ai-controlla'),
             label: 'Controlla',
