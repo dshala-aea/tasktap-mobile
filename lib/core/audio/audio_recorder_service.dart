@@ -50,6 +50,11 @@ abstract class AudioRecorderService {
   /// Time recorded so far. The stream CLOSES if the recording ended without [stop] being called
   /// (another app or a phone call took the microphone), which callers treat as an interruption.
   Stream<Duration> get elapsed;
+
+  /// The input level right now, in dBFS, for a meter the technician can see moving — or null where
+  /// the platform cannot report one. Polled rather than streamed on purpose: it exists for the
+  /// composer's level bars, and a stream would keep a timer alive for every recorder ever built.
+  Future<double?> level() async => null;
 }
 
 /// The outcome of asking for the microphone — reported, never thrown.
@@ -110,6 +115,17 @@ class RecordAudioRecorderService implements AudioRecorderService {
 
   @override
   Stream<Duration> get elapsed => (_elapsed ??= StreamController<Duration>.broadcast()).stream;
+
+  @override
+  Future<double?> level() async {
+    try {
+      return (await _recorder.getAmplitude()).current;
+    } catch (_) {
+      // No amplitude on this platform (or the recorder is between states): the meter falls back to
+      // its static bars, which is exactly what the UI does with null.
+      return null;
+    }
+  }
 
   @override
   Future<void> start() async {

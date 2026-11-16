@@ -22,6 +22,7 @@ class AiChatThread extends StatefulWidget {
     this.onSpeakLastReply,
     this.failedMessageId,
     this.onRetryFailed,
+    this.sendingMessageId,
   });
 
   final List<ChatMessage> messages;
@@ -33,6 +34,10 @@ class AiChatThread extends StatefulWidget {
   /// The operator message the server did not accept; its retry lives on that bubble.
   final String? failedMessageId;
   final VoidCallback? onRetryFailed;
+
+  /// The operator message that is on its way to the model right now. Its own bubble carries the
+  /// spinner, so "sent" is visible on the message that was sent rather than only at the composer.
+  final String? sendingMessageId;
 
   @override
   State<AiChatThread> createState() => _AiChatThreadState();
@@ -91,6 +96,7 @@ class _AiChatThreadState extends State<AiChatThread> {
             key: ValueKey('ai-msg-${m.id}'),
             message: m,
             failed: m.id == widget.failedMessageId,
+            sending: m.id == widget.sendingMessageId,
             canSpeak: m.id == lastAssistantId && widget.onSpeakLastReply != null,
             speaking: widget.speakingLastReply,
             onSpeak: widget.onSpeakLastReply,
@@ -107,6 +113,7 @@ class _Bubble extends StatelessWidget {
     super.key,
     required this.message,
     required this.failed,
+    required this.sending,
     required this.canSpeak,
     required this.speaking,
     this.onSpeak,
@@ -115,6 +122,7 @@ class _Bubble extends StatelessWidget {
 
   final ChatMessage message;
   final bool failed;
+  final bool sending;
   final bool canSpeak;
   final bool speaking;
   final VoidCallback? onSpeak;
@@ -163,14 +171,37 @@ class _Bubble extends StatelessWidget {
                     ),
                 ],
               ),
-              Text(
-                message.text,
-                style: TextStyle(
-                  fontFamily: 'Archivo',
-                  fontSize: 14,
-                  height: 1.35,
-                  color: operator ? colors.inkInverse : colors.ink,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      message.text,
+                      style: TextStyle(
+                        fontFamily: 'Archivo',
+                        fontSize: 14,
+                        height: 1.35,
+                        color: operator ? colors.inkInverse : colors.ink,
+                      ),
+                    ),
+                  ),
+                  // The message the technician just sent, before the model has answered it: the
+                  // thread says "gone, waiting" on that bubble instead of leaving an ordinary one
+                  // behind and hoping the composer's spinner was noticed.
+                  if (sending) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      key: const ValueKey('ai-msg-sending'),
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.6,
+                        color: operator ? colors.inkInverse : colors.inkMuted,
+                      ),
+                    ),
+                  ],
+                ],
               ),
               if (failed && onRetry != null) ...[
                 const SizedBox(height: 6),

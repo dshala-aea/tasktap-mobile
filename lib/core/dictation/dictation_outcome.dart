@@ -23,7 +23,12 @@ enum DictationOutcome {
 
   /// The recogniser does not have the language it was asked for. Android reports this when the
   /// Italian offline model is missing.
-  languageUnavailable;
+  languageUnavailable,
+
+  /// The session never started because the device (as re-checked at the moment of the tap) cannot
+  /// dictate. The precise reason lives on the capability the caller already holds; the notice here
+  /// is the fallback for a caller that does not have one.
+  unavailable;
 
   /// What to put on screen, or null when there is nothing worth saying.
   ({String message, ToastTone tone})? get notice => switch (this) {
@@ -43,6 +48,10 @@ enum DictationOutcome {
     DictationOutcome.recognitionFailed => (
       message: 'Riconoscimento vocale non riuscito. Riprova.',
       tone: ToastTone.error,
+    ),
+    DictationOutcome.unavailable => (
+      message: 'Dettatura non disponibile su questo dispositivo.',
+      tone: ToastTone.warning,
     ),
   };
 }

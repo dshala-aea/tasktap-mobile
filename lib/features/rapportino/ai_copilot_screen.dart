@@ -32,6 +32,7 @@ import 'ai_report/ai_review_step.dart';
 import 'ai_chat/ai_chat_composer.dart';
 import 'ai_chat/ai_completion_strip.dart';
 import 'ai_chat/ai_chat_thread.dart';
+import 'ai_chat/chat_feedback.dart';
 import 'ai_chat/chat_message.dart';
 import 'ai_chat/completion.dart';
 import 'apply_confirmed_draft.dart';
@@ -236,6 +237,21 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
   /// The operator bubble whose turn was refused — its retry lives on that bubble.
   String? _failedMessageId;
+
+  /// The chat's own confirmations — a haptic and, for the operator's own taps, a click. Best
+  /// effort by contract: nothing on this screen depends on it.
+  ChatFeedback get _feedback => ref.read(chatFeedbackProvider);
+
+  /// The operator message on its way to the model, so its own bubble can show the spinner. While a
+  /// turn runs, that is the newest operator message: it is appended optimistically at the start of
+  /// [_run] and the reply only lands when the send is over.
+  String? get _sendingMessageId {
+    if (!_sending) return null;
+    for (final m in _messages.reversed) {
+      if (m.role == ChatRole.operator) return m.id;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -708,12 +724,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     // holding a second copy of something already sent. A failed turn keeps its own bubble with
     // "Riprova", which is where the text still lives.
     setState(_inputCtrl.clear);
+    unawaited(_feedback.sent());
     await _run(_Outgoing(key: const Uuid().v4(), text: text));
   }
 
   Future<void> _retryFailed() async {
     final o = _failed;
     if (o == null || _sending) return;
+    unawaited(_feedback.sent());
     await _run(o);
   }
 
@@ -805,6 +823,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       final result = await _postWithRetry(sessionId, o);
       if (!mounted) return;
       _cancelThinkingTimers();
+      final wasReady = AiChatCompletion.fromDraft(_draft).readyForReview;
       setState(() {
         if (o.recording != null) _pendingRecs.removeWhere((r) => r.id == o.recording!.id);
         _draft = result.draft;
@@ -814,10 +833,17 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         // A turn no longer jumps to Controlla: the reply lands in the thread and the technician
         // decides when the report is worth reviewing.
       });
+      // The draft crossed into "everything needed is there" on THIS turn: worth a tap through the
+      // case, because the completion strip is at the bottom of a conversation the technician is
+      // reading from the top.
+      if (!wasReady && AiChatCompletion.fromDraft(_draft).readyForReview) {
+        unawaited(_feedback.readyForReview());
+      }
       if (_assistantReply.isNotEmpty) {
         _appendMessage(
           ChatMessage(id: '${o.key}:reply', role: ChatRole.assistant, text: _assistantReply),
         );
+        unawaited(_feedback.replyArrived());
       }
       if (o.edits!.isNotEmpty) {
         unawaited(_quiet(ref.read(aiEditSyncerProvider).acknowledge(sessionId, o.edits!)));
@@ -877,6 +903,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   }
 
   void _fail(_Outgoing o, String message, {bool tooLong = false}) {
+    unawaited(_feedback.refused());
     setState(() {
       _failed = o;
       _failureMessage = message;
@@ -1088,6 +1115,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     }
     switch (result) {
       case RecordingStartResult.started:
+        // The confirmation arrives before the screen changes: the ring and the timer say it too,
+        // but the hand holding the phone at their side feels it first.
+        unawaited(_feedback.micStarted());
         setState(() {
           _recording = true;
           // The permission the OS asked for is now in hand: whatever the last refusal said about it
@@ -1121,6 +1151,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         );
       case RecordingStartResult.permissionDenied:
       case RecordingStartResult.permissionPermanentlyDenied:
+        unawaited(_feedback.refused());
         // Not a toast: the message has to outlive the moment of the tap, and it carries the one
         // action that fixes it. Writing stays available either way — the description card and
         // on-device dictation never needed this permission.
@@ -1159,6 +1190,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       _interruptSub = null;
       if (!mounted) return;
       setState(() => _recording = false);
+      unawaited(_feedback.micStopped());
       await _run(_Outgoing(key: '${rec.idempotencyKey}:turn', recording: rec, voice: voice));
     } on EmptyRecordingException {
       // Nothing was captured, so there is nothing to retry as-is: the microphone itself did not
@@ -1532,6 +1564,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                                 onSpeakLastReply: _speakReply,
                                 failedMessageId: _failedMessageId,
                                 onRetryFailed: _failed == null ? null : _retryFailed,
+                                sendingMessageId: _sendingMessageId,
                               ),
                             ),
                             AiCompletionStrip(
@@ -1546,6 +1579,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                               // accepting a tap the server will refuse again. A failed turn is NOT in
                               // this list on purpose — connectivity comes back.
                               micEnabled: _micBlockedMessage == null,
+                              // The recorder's own amplitude, for the level bars: null on a platform
+                              // that reports none, and the bars then hold their idle shape.
+                              levelOf: _recording && _voiceCtl != null
+                                  ? _voiceCtl!.recorder.level
+                                  : null,
                               onMic: _toggleMic,
                               onToggleWriting: () => setState(() => _writing = !_writing),
                               onSend: _send,

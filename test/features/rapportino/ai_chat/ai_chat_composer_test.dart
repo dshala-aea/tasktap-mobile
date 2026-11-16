@@ -9,6 +9,8 @@ Future<void> _pump(
   bool writing = true,
   bool busy = false,
   bool recording = false,
+  bool micEnabled = true,
+  Future<double?> Function()? levelOf,
   VoidCallback? onSend,
 }) => tester.pumpWidget(
   MaterialApp(
@@ -18,7 +20,8 @@ Future<void> _pump(
         recording: recording,
         busy: busy,
         writing: writing,
-        micEnabled: true,
+        micEnabled: micEnabled,
+        levelOf: levelOf,
         onMic: () {},
         onToggleWriting: () {},
         onSend: onSend ?? () {},
@@ -65,5 +68,63 @@ void main() {
 
     await _pump(tester, controller: ctrl, writing: true);
     expect(find.byKey(const ValueKey('ai-description-field')), findsOneWidget);
+  });
+
+  testWidgets('a running recording shows its own timer and level meter', (tester) async {
+    // Field report: the mic just became a square, so a recording running, a microphone hearing
+    // silence and a dead button all looked the same. The meter is the difference.
+    final ctrl = TextEditingController();
+    await _pump(tester, controller: ctrl, recording: true, levelOf: () async => -20);
+
+    expect(find.byKey(const ValueKey('ai-recording-indicator')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-recording-timer')), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey('ai-recording-indicator')), findsOneWidget);
+
+    // Ending the recording takes the meter with it.
+    await _pump(tester, controller: ctrl, recording: false);
+    expect(find.byKey(const ValueKey('ai-recording-indicator')), findsNothing);
+  });
+
+  testWidgets('a platform with no amplitude still draws the meter, just still', (tester) async {
+    final ctrl = TextEditingController();
+    await _pump(tester, controller: ctrl, recording: true, levelOf: () async => null);
+
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byKey(const ValueKey('ai-recording-timer')), findsOneWidget);
+  });
+
+  testWidgets('a message on its way shows the spinner where the paper plane was', (tester) async {
+    final ctrl = TextEditingController(text: 'Valvola sostituita');
+    await _pump(tester, controller: ctrl, busy: true);
+
+    expect(find.byKey(const ValueKey('ai-sending-indicator')), findsOneWidget);
+  });
+
+  testWidgets('a dimmed microphone takes no taps', (tester) async {
+    final ctrl = TextEditingController();
+    var micTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AiChatComposer(
+            controller: ctrl,
+            recording: false,
+            busy: false,
+            writing: true,
+            micEnabled: false,
+            onMic: () => micTaps++,
+            onToggleWriting: () {},
+            onSend: () {},
+            onTextChanged: () {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('ai-chat-mic')));
+    expect(micTaps, 0);
   });
 }

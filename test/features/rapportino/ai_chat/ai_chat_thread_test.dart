@@ -9,6 +9,7 @@ Future<void> _pump(
   required List<ChatMessage> messages,
   bool thinking = false,
   String? failedMessageId,
+  String? sendingMessageId,
   VoidCallback? onRetry,
 }) => tester.pumpWidget(
   MaterialApp(
@@ -18,6 +19,7 @@ Future<void> _pump(
         thinking: thinking,
         thinkingLabel: 'Sto compilando il rapporto…',
         failedMessageId: failedMessageId,
+        sendingMessageId: sendingMessageId,
         onRetryFailed: onRetry,
       ),
     ),
@@ -67,5 +69,26 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('ai-msg-retry')), findsNothing);
+  });
+
+  testWidgets('the message on its way carries the spinner, and only that one', (tester) async {
+    await _pump(
+      tester,
+      messages: const [
+        ChatMessage(id: 'm1', role: ChatRole.operator, text: 'Ho sostituito la valvola'),
+        ChatMessage(id: 'm2', role: ChatRole.operator, text: 'E ho pulito il filtro'),
+      ],
+      sendingMessageId: 'm2',
+    );
+
+    expect(find.byKey(const ValueKey('ai-msg-sending')), findsOneWidget);
+
+    await _pump(
+      tester,
+      messages: const [
+        ChatMessage(id: 'm1', role: ChatRole.operator, text: 'Ho sostituito la valvola'),
+      ],
+    );
+    expect(find.byKey(const ValueKey('ai-msg-sending')), findsNothing);
   });
 }

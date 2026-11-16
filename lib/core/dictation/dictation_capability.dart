@@ -26,6 +26,13 @@ enum DictationBlocker {
 
   /// The technician has not granted microphone access, or has refused it.
   microphoneDenied,
+
+  /// The platform would not answer. Not the same as [noRecognizer]: the device may well be able to
+  /// dictate — the check itself failed (no activity to attach to yet, a plugin that has not finished
+  /// registering, a permission prompt still open). Reported as its own blocker because it is the one
+  /// that can simply succeed on the next tap, and telling a technician their phone cannot do
+  /// something it can is worse than saying "riprova".
+  probeFailed,
 }
 
 /// What this specific handset can actually do, established before any dictation UI is drawn.
@@ -39,6 +46,7 @@ class DictationCapability {
     required this.italianLocaleId,
     required this.onDeviceRecognitionAvailable,
     required this.microphoneGranted,
+    this.probeFailed = false,
   });
 
   /// Nothing works. The state to assume when a check throws.
@@ -46,7 +54,17 @@ class DictationCapability {
     : recognizerAvailable = false,
       italianLocaleId = null,
       onDeviceRecognitionAvailable = false,
-      microphoneGranted = false;
+      microphoneGranted = false,
+      probeFailed = false;
+
+  /// The device did not answer the question. Everything reads as false, but the blocker is the one
+  /// that a retry can clear, not a verdict about the handset.
+  const DictationCapability.unknown()
+    : recognizerAvailable = false,
+      italianLocaleId = null,
+      onDeviceRecognitionAvailable = false,
+      microphoneGranted = false,
+      probeFailed = true;
 
   final bool recognizerAvailable;
 
@@ -67,10 +85,14 @@ class DictationCapability {
 
   final bool microphoneGranted;
 
+  /// Whether the platform failed to answer at all, rather than answering "no".
+  final bool probeFailed;
+
   bool get italianAvailable => italianLocaleId != null;
 
   /// The first thing standing in the way, in the order the technician would hit it.
   DictationBlocker get blocker {
+    if (probeFailed) return DictationBlocker.probeFailed;
     if (!recognizerAvailable) return DictationBlocker.noRecognizer;
     if (!italianAvailable) return DictationBlocker.noItalianLocale;
     if (!onDeviceRecognitionAvailable) return DictationBlocker.noOnDeviceRecognition;
@@ -94,6 +116,9 @@ class DictationCapability {
           'Installa il pacchetto vocale italiano nelle impostazioni di sistema.',
     DictationBlocker.microphoneDenied =>
       'Dettatura non disponibile: accesso al microfono non consentito.',
+    DictationBlocker.probeFailed =>
+      'Dettatura non disponibile: non riesco a verificare il riconoscimento vocale su questo '
+          'dispositivo. Tocca il microfono per riprovare.',
   };
 
   /// The actionable half of [unavailableMessage], for a control that already states the feature is
@@ -106,6 +131,7 @@ class DictationCapability {
     DictationBlocker.noOnDeviceRecognition =>
       'Installa il pacchetto vocale italiano nelle impostazioni di sistema.',
     DictationBlocker.microphoneDenied => 'Accesso al microfono non consentito.',
+    DictationBlocker.probeFailed => 'Verifica non riuscita: riprova.',
   };
 
   @override

@@ -17,14 +17,16 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 /// So the rule is that dictation availability may never affect rapportino availability. If the
 /// phone cannot do it, the technician has the same form and the same keyboard as before.
 class _FakeDictation implements IDictationService {
-  _FakeDictation(this._capability);
+  _FakeDictation(this.capabilityValue);
 
-  final DictationCapability _capability;
+  /// Mutable on purpose: the point of several tests here is that the answer can change between the
+  /// first probe and a later one (a permission granted in system settings, a pack installed).
+  DictationCapability capabilityValue;
   int starts = 0;
   bool stopped = false;
 
   @override
-  Future<DictationCapability> capability() async => _capability;
+  Future<DictationCapability> capability() async => capabilityValue;
 
   @override
   bool get isListening => false;
@@ -107,6 +109,18 @@ void main() {
       expect(capability.unavailableMessage, contains('microfono'));
     });
 
+    test('a check that could not be made is not a verdict about the handset', () {
+      // The failing case the field report came from: the plugin had not come up yet when the
+      // provider was first resolved, and "not available" was cached for the whole run (a grey
+      // crossed-out microphone in every field, saying the phone could not dictate). A check that
+      // failed is retryable, and says so.
+      const capability = DictationCapability.unknown();
+
+      expect(capability.blocker, DictationBlocker.probeFailed);
+      expect(capability.canDictate, isFalse);
+      expect(capability.unavailableMessage, contains('riprovare'));
+    });
+
     test('every blocker says something a technician can read', () {
       for (final blocker in DictationBlocker.values.where((b) => b != DictationBlocker.none)) {
         final capability = switch (blocker) {
@@ -129,6 +143,7 @@ void main() {
             onDeviceRecognitionAvailable: true,
             microphoneGranted: false,
           ),
+          DictationBlocker.probeFailed => const DictationCapability.unknown(),
           DictationBlocker.none => _ready,
         };
 
@@ -197,6 +212,39 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('offline'), findsOneWidget);
+    });
+
+    testWidgets('tapping the crossed-out microphone re-asks, and dictates once the answer changes',
+        (tester) async {
+      // Field report: "the dictation button doesn't work in the text fields". The capability is
+      // resolved once and cached for the run, so a technician who granted the microphone (or
+      // installed the Italian pack) after the first answer kept a dead microphone until the app was
+      // restarted. The tap is the retry, and a tap that now succeeds dictates instead of asking for
+      // a second one.
+      final fake = _FakeDictation(const DictationCapability.unknown());
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(retry: (_, _) => null,
+          overrides: [dictationServiceProvider.overrideWithValue(fake)],
+          child: MaterialApp(
+            home: Scaffold(body: DictateButton(controller: controller, onChanged: (_) {})),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(fake.starts, 0);
+
+      // What granting the permission / installing the pack does to the next probe.
+      fake.capabilityValue = _ready;
+
+      await tester.tap(find.byIcon(LucideIcons.micOff));
+      await tester.pumpAndSettle();
+
+      expect(fake.starts, 1);
+      expect(controller.text, 'sostituita la pompa di circolazione');
+      expect(find.byIcon(LucideIcons.mic), findsOneWidget);
     });
 
     testWidgets('dictation appends to the field rather than replacing it', (tester) async {

@@ -116,7 +116,10 @@ class DictationService implements IDictationService {
 
   @override
   Future<DictationCapability> capability() async {
-    if (!await _ensureInitialized()) return const DictationCapability.unavailable();
+    // The plugin could not be brought up (no activity to attach to yet, permission prompt still
+    // open, a recogniser that is not ready). That is not a verdict about the handset: reported as
+    // unknown so the microphone offers a retry instead of a permanent-sounding refusal.
+    if (!await _ensureInitialized()) return const DictationCapability.unknown();
 
     try {
       final locales = await _speech.locales();
@@ -132,7 +135,7 @@ class DictationService implements IDictationService {
         microphoneGranted: await _speech.hasPermission,
       );
     } catch (_) {
-      return const DictationCapability.unavailable();
+      return const DictationCapability.unknown();
     }
   }
 
@@ -146,7 +149,12 @@ class DictationService implements IDictationService {
       // Refusing is the point. Listening anyway with onDevice requested would, on Android,
       // construct a network recogniser and stream site audio to a server — silently, and against
       // a decision that was made deliberately.
-      onDone(DictationOutcome.stoppedByUser);
+      //
+      // Reported, not swallowed: the widget only offers a working microphone when its own cached
+      // capability says so, so a refusal here means the two answers disagreed (a permission
+      // revoked mid-session, a probe that came back differently). A tap that produces nothing at
+      // all is exactly what a broken button looks like.
+      onDone(DictationOutcome.unavailable);
       return;
     }
 
