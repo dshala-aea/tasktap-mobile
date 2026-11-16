@@ -6,8 +6,13 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 import 'completion.dart';
 
-/// Persistent "Stato rapportino" above the chat composer: what is complete, what is missing, and
-/// whether the draft is ready to be reviewed.
+/// Persistent "what the report still needs" above the chat composer.
+///
+/// One row of chips and nothing else. It used to carry a second line summarising them ("Pronto per
+/// la revisione" / "Manca: …") which restated the chips it sat under, and could contradict them —
+/// a draft one soft item short of complete read "Pronto" while an amber chip said otherwise. The
+/// chips are the summary: a check means captured, an alert means the send gate still wants it, a
+/// hollow circle means the ticket has nothing to satisfy.
 ///
 /// An indicator only — the authoritative send gate is the server's `CanInvia`. Keeping it visible
 /// (rather than a message in the thread) is the point: a technician scrolling back must not lose
@@ -27,10 +32,6 @@ class AiCompletionStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final ready = completion.readyForReview;
-    final summary = ready
-        ? 'Pronto per la revisione'
-        : 'Manca: ${completion.missingLabels.join(', ')}';
 
     return Container(
       key: const ValueKey('ai-completion-strip'),
@@ -45,67 +46,48 @@ class AiCompletionStrip extends StatelessWidget {
         color: colors.surface,
         border: Border(top: BorderSide(color: colors.borderLight)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: 6,
-            children: [for (final item in completion.items) _chip(context, item)],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Icon(
-                ready ? LucideIcons.checkCircle2 : LucideIcons.alertCircle,
-                size: 14,
-                color: ready ? colors.green : colors.amber,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  summary,
-                  key: const ValueKey('ai-completion-summary'),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: ready ? colors.ink : colors.inkMuted,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: 6,
+        children: [for (final item in completion.items) _chip(context, item)],
       ),
     );
   }
 
   Widget _chip(BuildContext context, CompletionItem item) {
     final colors = context.colors;
-    final (icon, color, suffix) = switch (item.state) {
-      CompletionState.complete => (LucideIcons.checkCircle2, colors.green, ''),
-      CompletionState.missing => (LucideIcons.alertCircle, colors.amber, ''),
-      CompletionState.notApplicable => (LucideIcons.circle, colors.inkMuted, ' · se previsti'),
+    final label = _labels[item.key] ?? item.key;
+    final (icon, color) = switch (item.state) {
+      CompletionState.complete => (LucideIcons.checkCircle2, colors.green),
+      // Amber as a glyph on Paper measures ~1.9:1; DESIGN.md routes every amber line and icon
+      // through `amberInk` for exactly this reason (5.8:1), keeping the fill hue for fills only.
+      CompletionState.missing => (LucideIcons.alertCircle, colors.amberInk),
+      CompletionState.notApplicable => (LucideIcons.circle, colors.inkMuted),
     };
 
-    return Container(
-      key: ValueKey('ai-completion-${item.key}'),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withAlpha(90)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            '${_labels[item.key] ?? item.key}$suffix',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.ink),
-          ),
-        ],
+    return Semantics(
+      // The "se previsti" caveat belongs in the reader, not in the chip: every extra word in the
+      // row is a word the technician reads before finding the one that matters.
+      label: item.state == CompletionState.notApplicable ? '$label, se previsti' : label,
+      child: Container(
+        key: ValueKey('ai-completion-${item.key}'),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withAlpha(20),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withAlpha(90)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colors.ink),
+            ),
+          ],
+        ),
       ),
     );
   }
