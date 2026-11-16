@@ -118,7 +118,9 @@ AiCopilotDraftDto _draft({
   List<AiDraftStrumentoUsage> strumenti = const [],
   List<AiCandidateFact> openItems = const [],
   String? signoff,
+  bool materialiNotRequired = false,
 }) => AiCopilotDraftDto(
+  materialiNotRequired: materialiNotRequired,
   customerSignoffText: signoff,
   workers: workers,
   materials: materials,
@@ -1064,6 +1066,112 @@ void main() {
         reason: 'Confirm never acknowledges; the Strumenti step must ask',
       );
     });
+  });
+
+  test('Confirm fills the place the linked draft never had', () async {
+    // A linked draft built while the ticket mirror had no location keeps locationId '' and fails
+    // `missingLocation` at submit, while the office's own answer names one.
+    await (h.db.update(h.db.draftReports)..where((r) => r.id.equals(_report))).write(
+      const DraftReportsCompanion(locationId: Value(''), ticketId: Value('tkt-1')),
+    );
+
+    final applied = await h.feed.applyConfirmResponse(
+      _session,
+      const AiConversationConfirmResponse(
+        title: 'Rapportino',
+        locationId: 'loc-9',
+        cantiereId: 'cant-1',
+      ),
+    );
+
+    expect(applied, isTrue);
+    final written = await h.header();
+    expect(written.locationId, 'loc-9');
+    expect(written.cantiereId, 'cant-1');
+    expect(written.ticketId, 'tkt-1', reason: 'a field already set is never overwritten');
+  });
+
+  test('Confirm takes the customer the confirm wire does not carry from the ticket mirror', () async {
+    await h.db
+        .into(h.db.tickets)
+        .insert(
+          TicketsCompanion.insert(
+            id: 'tkt-9',
+            tenantId: 'ten-1',
+            createdAt: DateTime.utc(2026, 10, 1),
+            title: 'Ticket',
+            customerId: 'cus-7',
+            locationId: 'loc-7',
+            statusId: 1,
+            typeId: 1,
+          ),
+        );
+    await (h.db.update(h.db.draftReports)..where((r) => r.id.equals(_report))).write(
+      const DraftReportsCompanion(ticketId: Value('tkt-9'), customerId: Value(null)),
+    );
+
+    await h.feed.applyConfirmResponse(
+      _session,
+      const AiConversationConfirmResponse(title: 'Rapportino'),
+    );
+
+    expect((await h.header()).customerId, 'cus-7');
+  });
+
+  test('Confirm writes the control note it resolved', () async {
+    await h.feed.applyConfirmResponse(
+      _session,
+      const AiConversationConfirmResponse(
+        title: 'Rapportino',
+        controlli: [
+          AiResolvedControl(
+            ticketControlId: 'tc-1',
+            boolValue: true,
+            note: 'Filtro sporco, da sostituire',
+          ),
+        ],
+      ),
+    );
+
+    final row = (await h.controls()).single;
+    expect(row.note, 'Filtro sporco, da sostituire');
+
+    // A later answer refreshes it, and a blank one never erases it.
+    await h.feed.applyConfirmResponse(
+      _session,
+      const AiConversationConfirmResponse(
+        title: 'Rapportino',
+        controlli: [
+          AiResolvedControl(ticketControlId: 'tc-1', boolValue: false, note: 'Sostituito'),
+        ],
+      ),
+    );
+    expect((await h.controls()).single.note, 'Sostituito');
+  });
+
+  test('a material row clears "nessun materiale" instead of living beside it', () async {
+    // An earlier turn said "no materials"; this one has a row. The flag is resolved, not merged.
+    await h.feed.apply(
+      _session,
+      _draft(materialiNotRequired: true, workers: [_worker(_me, hours: 1)]),
+    );
+    expect((await h.header()).materialiNotRequired, isTrue);
+
+    await h.feed.applyConfirmResponse(
+      _session,
+      const AiConversationConfirmResponse(
+        title: 'Rapportino',
+        materialiNotRequired: true,
+        materials: [AiResolvedMaterial(materialeId: '', freeTextName: 'Guarnizione', quantity: 2)],
+      ),
+    );
+
+    expect((await h.materials()), hasLength(1));
+    expect(
+      (await h.header()).materialiNotRequired,
+      isFalse,
+      reason: 'the flag and a material row are mutually exclusive',
+    );
   });
 
   test('Compila writes the header fields the draft owns, never over a hand edit', () async {

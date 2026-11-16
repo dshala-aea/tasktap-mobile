@@ -387,6 +387,9 @@ _DraftLines _linesOfDraft(AiCopilotDraftDto d) {
           'boolValue': c.boolValue,
           'dateValue': _iso(c.dateValue),
           'numberValue': c.numberValue,
+          // The per-answer remark. Part of the diffed values, not a side field: a note the
+          // technician typed wins over the server's exactly like a typed answer does.
+          'note': c.note,
         },
       ),
     );
@@ -424,6 +427,9 @@ List<_Line> _linesOfConfirm(AiConversationConfirmResponse r) => [
           'boolValue': c.boolValue,
           'dateValue': _iso(c.dateValue),
           'numberValue': c.numberValue,
+          // The per-answer remark. Part of the diffed values, not a side field: a note the
+          // technician typed wins over the server's exactly like a typed answer does.
+          'note': c.note,
         },
       ),
 ];
@@ -486,9 +492,19 @@ class AiDraftFeed {
   });
 
   /// Writes the header fields onto the linked report, hand edits always winning: a field the
-  /// technician already has a value in is never overwritten, and "nessun materiale" only applies
-  /// when no material row exists. Shared by [apply] (Compila/Modifica) and
-  /// [applyConfirmResponse] (Conferma), so the two can no longer disagree about what lands.
+  /// technician already has a value in is never overwritten. Shared by [apply] (Compila/Modifica)
+  /// and [applyConfirmResponse] (Conferma), so the two can no longer disagree about what lands.
+  ///
+  /// The confirm response also resolves the report's place — `locationId`, `ticketId`,
+  /// `cantiereId` — and this used to drop all three, so a linked draft built with an empty
+  /// location stayed empty (and failed `missingLocation` at submit) even though the office's
+  /// answer named one. The customer is the exception: it is not on the confirm wire at all, so a
+  /// ticket-linked report takes the ticket mirror's own customer, the same prefill the manual
+  /// "Crea rapportino" path applies.
+  ///
+  /// `materialiNotRequired` is written as the RESOLVED value, not "true or nothing": the flag and
+  /// a material row are mutually exclusive, so a stale `true` from an earlier turn is cleared the
+  /// moment a row exists, and a `false` is persisted instead of left to whatever was there.
   Future<void> _applyDraftHeader(
     String reportId, {
     String? title,
@@ -496,6 +512,9 @@ class AiDraftFeed {
     String? diagnosi,
     String? soluzione,
     String? customerSignoffText,
+    String? locationId,
+    String? ticketId,
+    String? cantiereId,
     required bool materialiNotRequired,
   }) async {
     final header = await (_db.select(
@@ -514,6 +533,14 @@ class AiDraftFeed {
     final diagnosiValue = fill(header.diagnosi, diagnosi);
     final soluzioneValue = fill(header.soluzione, soluzione);
     final signoffValue = fill(header.customerSignoffText, customerSignoffText);
+    final locationValue = fill(header.locationId, locationId);
+    final ticketValue = fill(header.ticketId, ticketId);
+    final cantiereValue = fill(header.cantiereId, cantiereId);
+
+    // The response's own ticket wins; otherwise the one the draft already had.
+    final linkedTicketId =
+        (ticketId ?? '').trim().isNotEmpty ? ticketId : header.ticketId;
+    final customerValue = fill(header.customerId, await _customerFromTicket(linkedTicketId));
 
     await (_db.update(_db.draftReports)..where((t) => t.id.equals(reportId))).write(
       DraftReportsCompanion(
@@ -522,13 +549,25 @@ class AiDraftFeed {
         diagnosi: diagnosiValue ?? const Value.absent(),
         soluzione: soluzioneValue ?? const Value.absent(),
         customerSignoffText: signoffValue ?? const Value.absent(),
-        materialiNotRequired: materialiNotRequired && !hasMaterials
-            ? const Value(true)
-            : const Value.absent(),
+        locationId: locationValue ?? const Value.absent(),
+        ticketId: ticketValue ?? const Value.absent(),
+        cantiereId: cantiereValue ?? const Value.absent(),
+        customerId: customerValue ?? const Value.absent(),
+        materialiNotRequired: Value(materialiNotRequired && !hasMaterials),
         isAiAssisted: const Value(true),
         updatedAt: Value(DateTime.now().toUtc()),
       ),
     );
+  }
+
+  /// The mirrored ticket's customer, or null when the ticket is unknown to this device.
+  Future<String?> _customerFromTicket(String? ticketId) async {
+    final id = (ticketId ?? '').trim();
+    if (id.isEmpty) return null;
+    final row = await (_db.select(
+      _db.tickets,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row?.customerId;
   }
 
   /// Runs [write] between the persisted "apply in progress" marker and the baseline save.
@@ -622,6 +661,12 @@ class AiDraftFeed {
           diagnosi: r.diagnosi,
           soluzione: r.soluzione,
           customerSignoffText: r.customerSignoffText,
+          // The confirm response resolves these against the ticket. A linked draft built while
+          // the ticket mirror was still empty keeps locationId '' forever otherwise, and the
+          // submit then fails `missingLocation` on a report the office can see is correct.
+          locationId: r.locationId,
+          ticketId: r.ticketId,
+          cantiereId: r.cantiereId,
           materialiNotRequired: r.materialiNotRequired,
         );
         await _store.save(state);
@@ -731,6 +776,7 @@ class AiDraftFeed {
             'boolValue': c.boolValue,
             'dateValue': _iso(c.dateValue),
             'numberValue': c.numberValue,
+            'note': c.note,
           },
         )..rowId = c.id,
       );
@@ -898,6 +944,7 @@ class AiDraftFeed {
                 boolValue: Value(v['boolValue'] as bool?),
                 dateValue: Value(_parseDate(v['dateValue'])),
                 numberValue: Value((v['numberValue'] as num?)?.toDouble()),
+                note: Value(v['note'] as String?),
               ),
             );
     }
@@ -962,6 +1009,7 @@ class AiDraftFeed {
             numberValue: u.containsKey('numberValue')
                 ? Value((u['numberValue'] as num?)?.toDouble())
                 : const Value.absent(),
+            note: u.containsKey('note') ? Value(u['note'] as String?) : const Value.absent(),
             updatedAt: Value(now),
           ),
         );
