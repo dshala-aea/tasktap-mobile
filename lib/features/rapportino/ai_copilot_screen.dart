@@ -30,6 +30,7 @@ import 'ai_transparency_notice.dart';
 import 'ai_report/ai_report_context.dart';
 import 'ai_report/ai_review_step.dart';
 import 'ai_chat/ai_chat_composer.dart';
+import 'ai_chat/ai_completion_strip.dart';
 import 'ai_chat/ai_chat_thread.dart';
 import 'ai_chat/chat_message.dart';
 import 'ai_chat/completion.dart';
