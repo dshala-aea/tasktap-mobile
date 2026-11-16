@@ -31,9 +31,8 @@ import 'package:tasktap_mobile/features/rapportino/ai_copilot_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart' show gpsPreferenceProvider;
 
-/// The two footers' labels, asserted and tapped below. "Genera" sends the same turn the chat's
-/// paper-plane used to; "Conferma" resolves the draft into a local Bozza and hands off to Firma.
-const _generateLabel = 'Genera il rapporto';
+/// The review footer's label, asserted and tapped below. Sending lives in the chat composer now,
+/// and moving to Controlla is the Descrivi footer's own action.
 const _confirmLabel = 'Conferma';
 
 /// A realistic confirm response: a resolved draft, no reportId, and a null location — the exact
@@ -317,7 +316,10 @@ Future<void> _describeAndGenerate(
   await tester.pumpAndSettle();
   await tester.enterText(find.byKey(const ValueKey('ai-description-field')), text);
   await tester.pump();
-  await tester.tap(find.widgetWithText(AppButton, _generateLabel));
+  await tester.tap(find.byKey(const ValueKey('ai-chat-send')));
+  await tester.pumpAndSettle();
+  // A compiled turn stays in the thread; the review is opened explicitly.
+  await tester.tap(find.byKey(const ValueKey('ai-controlla')));
   await tester.pumpAndSettle();
 }
 
@@ -326,11 +328,19 @@ void main() {
     await tester.pumpWidget(_wrap(_FakeAiApiClient(), ticketId: 'tkt-1'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Descrivi le attività svolte'), findsOneWidget);
+    expect(find.textContaining('Tocca il microfono per parlare'), findsOneWidget);
     expect(find.byKey(const ValueKey('ai-toggle-writing')), findsOneWidget);
-    // Nothing to generate from yet, so the one action of the screen is disabled.
-    final generate = tester.widget<AppButton>(find.widgetWithText(AppButton, _generateLabel));
-    expect(generate.onPressed, isNull);
+    // Missing items are an indicator, not a gate: Controlla is offered from the start.
+    final controlla = tester.widget<AppButton>(find.byKey(const ValueKey('ai-controlla')));
+    expect(controlla.onPressed, isNotNull);
+    // Nothing to send yet.
+    final send = tester.widget<InkResponse>(
+      find.descendant(
+        of: find.byKey(const ValueKey('ai-chat-send')),
+        matching: find.byType(InkResponse),
+      ),
+    );
+    expect(send.onTap, isNull);
   });
 
   testWidgets('a compiled turn moves to Controlla and shows what the assistant produced', (

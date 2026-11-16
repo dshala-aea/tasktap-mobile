@@ -27,9 +27,12 @@ import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider, reportEditorProvider;
 import 'ai_draft_feed.dart';
 import 'ai_transparency_notice.dart';
-import 'ai_report/ai_describe_step.dart';
 import 'ai_report/ai_report_context.dart';
 import 'ai_report/ai_review_step.dart';
+import 'ai_chat/ai_chat_composer.dart';
+import 'ai_chat/ai_chat_thread.dart';
+import 'ai_chat/chat_message.dart';
+import 'ai_chat/completion.dart';
 import 'apply_confirmed_draft.dart';
 import 'create_draft.dart';
 import 'draft_for_ticket.dart';
@@ -153,8 +156,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   DateTime? _expiresAt;
   bool _expiryDismissed = false;
 
-  /// The server said voice capture is off for this company (404 on the capture upload): no mic.
-  bool _voiceDisabled = false;
   bool _recording = false;
 
   /// "Abbandona e ricomincia" is running: a second tap would start a second session.
@@ -225,9 +226,15 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   bool _speechEnabled = false;
   bool _speakingReply = false;
 
-  /// The current turn's assistant reply as text. Empty until a turn in this visit returns one:
-  /// a resumed conversation's older replies are not replayed as this visit's message.
+  /// The current turn's assistant reply as text. Kept for the optional read-aloud action; the
+  /// visible conversation is [_messages].
   String _assistantReply = '';
+
+  /// The Descrivi conversation: the server's turns plus the optimistic message in flight.
+  final List<ChatMessage> _messages = [];
+
+  /// The operator bubble whose turn was refused — its retry lives on that bubble.
+  String? _failedMessageId;
 
   @override
   void initState() {
@@ -473,6 +480,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   void _adopt(AiConversationDetailDto d) {
     _draft = d.draft;
     _expiresAt = d.expiresAtUtc;
+    _messages
+      ..clear()
+      ..addAll(ChatMessage.fromTurns(d.turns));
   }
 
   // ── live feed into the editor (Task 12) ──────────────────────────────────────
@@ -679,25 +689,24 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
   bool get _aiBlocked => _aiBlockedMessage != null;
 
-  /// Does this draft have anything for the technician to check? A turn that only asked a question
-  /// resolves nothing, and moving to the review screen then would show an empty report.
-  static bool _draftHasContent(AiCopilotDraftDto d) =>
-      d.activities.isNotEmpty ||
-      d.workers.isNotEmpty ||
-      d.materials.isNotEmpty ||
-      d.controlli.isNotEmpty ||
-      d.strumenti.isNotEmpty ||
-      d.openItems.isNotEmpty ||
-      (d.customerSignoffText?.isNotEmpty ?? false);
+  /// Adds a message unless one with the same id is already there (a retry re-uses the turn key).
+  void _appendMessage(ChatMessage message) {
+    if (_messages.any((m) => m.id == message.id)) return;
+    setState(() => _messages.add(message));
+  }
+
+  void _removeMessage(String id) {
+    setState(() => _messages.removeWhere((m) => m.id == id));
+  }
 
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
     if (text.isEmpty || _sessionId == null || _sending || _aiBlocked || _recording) return;
     if (_failed != null) return; // the unsent update must be retried or discarded first
-    // The box is NOT cleared here. "Descrivi di nuovo" promises that a report the assistant got
-    // wrong costs a sentence rather than a re-recording, and that promise is only kept if the
-    // sentence is still in the box when the technician comes back. The turn carries its own copy
-    // of the text from this point on, so nothing downstream depends on the field being empty.
+    // The sentence is now a message in the thread, so the box follows the conversation instead of
+    // holding a second copy of something already sent. A failed turn keeps its own bubble with
+    // "Riprova", which is where the text still lives.
+    setState(_inputCtrl.clear);
     await _run(_Outgoing(key: const Uuid().v4(), text: text));
   }
 
@@ -724,6 +733,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       _speakingReply = false;
     });
     _startThinkingTimers();
+    // The technician's own message is in the thread before the network call: a turn that takes 45 s
+    // must not look like it was never sent. The id is the turn's own key, so a retry re-uses the
+    // same bubble instead of duplicating it.
+    _appendMessage(
+      o.recording != null
+          ? ChatMessage.operatorVoice(id: o.key)
+          : ChatMessage(id: o.key, role: ChatRole.operator, text: o.text ?? ''),
+    );
 
     try {
       if (o.text == null) {
@@ -792,14 +809,15 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         _draft = result.draft;
         _sending = false;
         _assistantReply = result.assistantReplyText.trim();
-        // A turn that compiled something takes the technician to the result. A turn that only asked
-        // a question leaves the draft empty and must not: there is nothing to check yet, and the
-        // description the technician just gave is still on screen to refine.
-        if (_draftHasContent(result.draft)) {
-          _step = _AiStep.review;
-          _writing = false;
-        }
+        _failedMessageId = null;
+        // A turn no longer jumps to Controlla: the reply lands in the thread and the technician
+        // decides when the report is worth reviewing.
       });
+      if (_assistantReply.isNotEmpty) {
+        _appendMessage(
+          ChatMessage(id: '${o.key}:reply', role: ChatRole.assistant, text: _assistantReply),
+        );
+      }
       if (o.edits!.isNotEmpty) {
         unawaited(_quiet(ref.read(aiEditSyncerProvider).acknowledge(sessionId, o.edits!)));
       }
@@ -813,10 +831,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
         // Retrying cannot help and the mic must not keep offering what the server refuses; the
         // file is deleted rather than offered again for a week.
         unawaited(_discardRecording(o));
-        setState(() {
-          _voiceDisabled = true;
-          _sending = false;
-        });
+        // The composer keeps offering the microphone: nothing on this screen can tell the
+        // technician otherwise, and the 404 banner text already explains the path forward.
+        setState(() => _sending = false);
         return;
       }
       setState(() => _sending = false);
@@ -863,6 +880,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       _failed = o;
       _failureMessage = message;
       _failedTooLong = tooLong;
+      _failedMessageId = o.key;
     });
   }
 
@@ -891,7 +909,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     setState(() {
       _failed = null;
       _failureMessage = null;
+      _failedMessageId = null;
     });
+    _removeMessage(o.key);
     unawaited(_discardRecording(o));
   }
 
@@ -1438,13 +1458,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
   @override
   Widget build(BuildContext context) {
-    final replyBubble = _assistantReply.isEmpty
-        ? null
-        : _AssistantReplyBubble(
-            text: _assistantReply,
-            speaking: _speakingReply,
-            onSpeak: _speakReply,
-          );
     return PopScope(
       canPop: !_needsLeaveConfirm,
       onPopInvokedWithResult: (didPop, _) {
@@ -1495,7 +1508,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                 ),
               if (!_starting && _startError == null) ...[
                 ..._buildBanners(context),
-                if (_step == _AiStep.describe && replyBubble != null) replyBubble,
                 Expanded(
                   child: _step == _AiStep.review
                       ? AiReviewStep(
@@ -1506,21 +1518,37 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                           onResolveHeld: (item, {required bool reAdd}) =>
                               _resolveHeld(item, reAdd: reAdd),
                         )
-                      : AiDescribeStep(
-                          recording: _recording,
-                          busy: _sending,
-                          thinkingLabel: _thinkingStageMessages[_thinkingStage],
-                          voiceDisabled: _voiceDisabled,
-                          // Credits are gone for the month: the orb goes dim rather than accepting a
-                          // tap whose upload the server will refuse again. A failed turn is NOT in
-                          // this list on purpose — connectivity comes back, and speaking again is a
-                          // legitimate retry.
-                          micEnabled: _micBlockedMessage == null,
-                          controller: _inputCtrl,
-                          writing: _writing,
-                          onToggleWriting: () => setState(() => _writing = !_writing),
-                          onMic: _toggleMic,
-                          onTextChanged: () => setState(() {}),
+                      : Column(
+                          children: [
+                            Expanded(
+                              child: AiChatThread(
+                                messages: _messages,
+                                thinking: _sending,
+                                thinkingLabel: _thinkingStageMessages[_thinkingStage],
+                                speakingLastReply: _speakingReply,
+                                onSpeakLastReply: _speakReply,
+                                failedMessageId: _failedMessageId,
+                                onRetryFailed: _failed == null ? null : _retryFailed,
+                              ),
+                            ),
+                            AiCompletionStrip(
+                              completion: AiChatCompletion.fromDraft(_draft),
+                            ),
+                            AiChatComposer(
+                              controller: _inputCtrl,
+                              recording: _recording,
+                              busy: _sending,
+                              writing: _writing,
+                              // Credits gone for the month: the microphone goes dim rather than
+                              // accepting a tap the server will refuse again. A failed turn is NOT in
+                              // this list on purpose — connectivity comes back.
+                              micEnabled: _micBlockedMessage == null,
+                              onMic: _toggleMic,
+                              onToggleWriting: () => setState(() => _writing = !_writing),
+                              onSend: _send,
+                              onTextChanged: () => setState(() {}),
+                            ),
+                          ],
                         ),
                 ),
                 _buildFooter(context),
@@ -1637,32 +1665,20 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     // footer's one action — instead of a second button inside the banner that says the same thing.
     if (_failed != null) return Padding(padding: pad, child: _retryAction());
 
-    final hasText = _inputCtrl.text.trim().isNotEmpty;
-    // A draft has already been compiled for this ticket: this is not a first attempt, and the label
-    // says so. The description itself is not re-shown — on a voice turn the server never receives it
-    // as text, so displaying it would need a second local store for something the technician is
-    // about to express again anyway; what matters is that the screen does not read as a fresh start
-    // on top of an existing draft.
-    final hasDraft = _draftHasContent(_draft);
+    // The chat owns sending (the composer's paper plane); this screen's one action is the move to
+    // the review. Deliberately enabled even with items missing: the technician may want to look at
+    // the compiled cards, or finish by hand in the editor, without satisfying the assistant first.
     return Padding(
       padding: pad,
       child: AppButton(
-        key: const ValueKey('ai-generate'),
-        label: _sending
-            ? 'Generazione in corso…'
-            : hasDraft
-            ? 'Genera di nuovo il rapporto'
-            : 'Genera il rapporto',
-        isLoading: _sending,
-        onPressed:
-            _sessionId == null ||
-                !hasText ||
-                _sending ||
-                _recording ||
-                _aiBlocked ||
-                _failed != null
+        key: const ValueKey('ai-controlla'),
+        label: 'Controlla',
+        onPressed: _sessionId == null || _aiBlocked
             ? null
-            : _send,
+            : () => setState(() {
+                _step = _AiStep.review;
+                _writing = false;
+              }),
       ),
     );
   }
@@ -1766,64 +1782,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
   }
 }
 
-/// The assistant's last reply, always visible as text, with the one action that may speak it.
-///
-/// Deliberately not a chat log: the wizard shows the current turn's reply above Descrivi, where a
-/// question needs an answer. Controlla shows the compiled draft instead. The speaker button is an
-/// explicit tap; nothing on this widget starts playback on its own.
-class _AssistantReplyBubble extends StatelessWidget {
-  const _AssistantReplyBubble({required this.text, required this.speaking, required this.onSpeak});
-
-  final String text;
-  final bool speaking;
-  final VoidCallback onSpeak;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      key: const ValueKey('ai-assistant-reply'),
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 2, AppSpacing.pagePadding, 2),
-      padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.colors.borderLight),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 96),
-              child: SingleChildScrollView(
-                child: Text(
-                  text,
-                  style: TextStyle(
-                    fontFamily: 'Archivo',
-                    fontSize: 14,
-                    height: 1.35,
-                    color: context.colors.ink,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            key: const ValueKey('ai-speak-reply'),
-            tooltip: speaking ? 'Interrompi la lettura' : 'Ascolta la risposta',
-            onPressed: onSpeak,
-            icon: Icon(
-              speaking ? LucideIcons.square : LucideIcons.volume2,
-              size: 20,
-              color: context.colors.red,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _CorrectionDialog extends StatefulWidget {
   const _CorrectionDialog({
