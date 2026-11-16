@@ -54,6 +54,10 @@ class _FakeRecorder implements AudioRecorderService {
   @override
   Stream<Duration> get elapsed => _elapsed.stream;
 
+  /// No amplitude in the fake: the meter's static fallback is what devices without one see.
+  @override
+  Future<double?> level() async => null;
+
   void tick(Duration d) => _elapsed.add(d);
   Future<void> endUnexpectedly() => _elapsed.close();
 }

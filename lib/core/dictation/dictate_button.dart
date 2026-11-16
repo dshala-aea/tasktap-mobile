@@ -7,6 +7,7 @@ import '../theme/app_palette.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/widgets.dart';
 import 'dictation_capability.dart';
+import 'dictation_outcome.dart';
 import 'dictation_service.dart';
 
 /// Dictate into a text field, on devices that can do it without a network.

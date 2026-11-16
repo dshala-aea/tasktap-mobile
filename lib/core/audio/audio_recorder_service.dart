@@ -54,7 +54,7 @@ abstract class AudioRecorderService {
   /// The input level right now, in dBFS, for a meter the technician can see moving — or null where
   /// the platform cannot report one. Polled rather than streamed on purpose: it exists for the
   /// composer's level bars, and a stream would keep a timer alive for every recorder ever built.
-  Future<double?> level() async => null;
+  Future<double?> level();
 }
 
 /// The outcome of asking for the microphone — reported, never thrown.
