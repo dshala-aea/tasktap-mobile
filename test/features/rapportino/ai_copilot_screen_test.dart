@@ -333,6 +333,11 @@ void main() {
     // Missing items are an indicator, not a gate: Controlla is offered from the start.
     final controlla = tester.widget<AppButton>(find.byKey(const ValueKey('ai-controlla')));
     expect(controlla.onPressed, isNotNull);
+    // Closing the conversation and landing in the draft is offered from the start; it is the way
+    // to finish signatures / submission without going through the review cards.
+    final openDraft = tester.widget<AppButton>(find.byKey(const ValueKey('ai-open-draft')));
+    expect(openDraft.onPressed, isNotNull);
+
     // Nothing to send yet.
     final send = tester.widget<InkResponse>(
       find.descendant(

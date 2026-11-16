@@ -468,8 +468,68 @@ class AiDraftFeed {
         lines: AiStrumentoLine.fromDraft(draft),
       );
     });
+    // The HEADER is part of "what the copilot understood": title, details, diagnosi, soluzione,
+    // materialiNotRequired. Leaving it to Confirm is what made "Modifica" open a draft whose rows
+    // were filled and whose text fields were blank.
+    // Title and details are NOT on the draft model: they are derived at Confirm from the ticket /
+    // cantiere and the operator's activities (server-side, including the operator-text fallback).
+    // "Apri la bozza" runs Confirm first, so the editor it opens is complete; this call still
+    // carries the fields the draft does own.
+    await _applyDraftHeader(
+      reportId,
+      diagnosi: draft.diagnosi,
+      soluzione: draft.soluzione,
+      customerSignoffText: draft.customerSignoffText,
+      materialiNotRequired: draft.materialiNotRequired,
+    );
     return true;
   });
+
+  /// Writes the header fields onto the linked report, hand edits always winning: a field the
+  /// technician already has a value in is never overwritten, and "nessun materiale" only applies
+  /// when no material row exists. Shared by [apply] (Compila/Modifica) and
+  /// [applyConfirmResponse] (Conferma), so the two can no longer disagree about what lands.
+  Future<void> _applyDraftHeader(
+    String reportId, {
+    String? title,
+    String? details,
+    String? diagnosi,
+    String? soluzione,
+    String? customerSignoffText,
+    required bool materialiNotRequired,
+  }) async {
+    final header = await (_db.select(
+      _db.draftReports,
+    )..where((t) => t.id.equals(reportId))).getSingleOrNull();
+    if (header == null) return;
+    final hasMaterials = (await _rows(reportId)).any((l) => l.kind == _Kind.material);
+
+    Value<String>? fill(String? local, String? incoming) =>
+        (local ?? '').trim().isEmpty && (incoming ?? '').trim().isNotEmpty
+            ? Value(incoming!)
+            : null;
+
+    final titleValue = fill(header.title, title);
+    final detailsValue = fill(header.details, details);
+    final diagnosiValue = fill(header.diagnosi, diagnosi);
+    final soluzioneValue = fill(header.soluzione, soluzione);
+    final signoffValue = fill(header.customerSignoffText, customerSignoffText);
+
+    await (_db.update(_db.draftReports)..where((t) => t.id.equals(reportId))).write(
+      DraftReportsCompanion(
+        title: titleValue ?? const Value.absent(),
+        details: detailsValue ?? const Value.absent(),
+        diagnosi: diagnosiValue ?? const Value.absent(),
+        soluzione: soluzioneValue ?? const Value.absent(),
+        customerSignoffText: signoffValue ?? const Value.absent(),
+        materialiNotRequired: materialiNotRequired && !hasMaterials
+            ? const Value(true)
+            : const Value.absent(),
+        isAiAssisted: const Value(true),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
+  }
 
   /// Runs [write] between the persisted "apply in progress" marker and the baseline save.
   /// [write] receives whether an earlier apply was interrupted (see [AiDraftFeedState.applying]).
@@ -555,33 +615,15 @@ class AiDraftFeed {
             lines: r.strumenti.map(AiStrumentoLine.fromResolved),
           );
         });
-        final header = await (_db.select(
-          _db.draftReports,
-        )..where((t) => t.id.equals(reportId))).getSingleOrNull();
-        if (header != null) {
-          final hasMaterials = (await _rows(reportId)).any((l) => l.kind == _Kind.material);
-          await (_db.update(_db.draftReports)..where((t) => t.id.equals(reportId))).write(
-            DraftReportsCompanion(
-              title: header.title.trim().isEmpty && r.title.trim().isNotEmpty
-                  ? Value(r.title)
-                  : const Value.absent(),
-              details: (header.details ?? '').trim().isEmpty && (r.details ?? '').isNotEmpty
-                  ? Value(r.details)
-                  : const Value.absent(),
-              diagnosi: (header.diagnosi ?? '').trim().isEmpty && (r.diagnosi ?? '').isNotEmpty
-                  ? Value(r.diagnosi)
-                  : const Value.absent(),
-              soluzione: (header.soluzione ?? '').trim().isEmpty && (r.soluzione ?? '').isNotEmpty
-                  ? Value(r.soluzione)
-                  : const Value.absent(),
-              materialiNotRequired: r.materialiNotRequired && !hasMaterials
-                  ? const Value(true)
-                  : const Value.absent(),
-              isAiAssisted: const Value(true),
-              updatedAt: Value(DateTime.now().toUtc()),
-            ),
-          );
-        }
+        await _applyDraftHeader(
+          reportId,
+          title: r.title,
+          details: r.details,
+          diagnosi: r.diagnosi,
+          soluzione: r.soluzione,
+          customerSignoffText: r.customerSignoffText,
+          materialiNotRequired: r.materialiNotRequired,
+        );
         await _store.save(state);
         return true;
       });

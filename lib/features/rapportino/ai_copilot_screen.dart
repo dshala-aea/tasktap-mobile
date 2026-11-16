@@ -1183,7 +1183,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
   // ── lifecycle: confirm, leave, abandon, manual path ──────────────────────────
 
-  Future<void> _confirm() async {
+  /// [openEditor] stops at the draft instead of the signing route: the technician closes the
+  /// conversation and finishes signatures / submission in the ordinary editor.
+  Future<void> _confirm({bool openEditor = false}) async {
     final sessionId = _sessionId;
     if (sessionId == null || _confirming) return;
 
@@ -1270,7 +1272,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       // The report exists locally now, so the flow's last screen is the signing one: the customer
       // signs, the technician sends, and only then does the office have a report. Anything still to
       // change goes through "Modifica" on the Controlla screen, which opens the full editor.
-      context.go(AppRoutes.aiSign(localId));
+      context.go(openEditor ? AppRoutes.rapportiniEditor(localId) : AppRoutes.aiSign(localId));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1666,20 +1668,33 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
     // footer's one action — instead of a second button inside the banner that says the same thing.
     if (_failed != null) return Padding(padding: pad, child: _retryAction());
 
-    // The chat owns sending (the composer's paper plane); this screen's one action is the move to
-    // the review. Deliberately enabled even with items missing: the technician may want to look at
-    // the compiled cards, or finish by hand in the editor, without satisfying the assistant first.
+    // The chat owns sending (the composer's paper plane). Two ways out: review the compiled cards,
+    // or close the conversation and land directly in the draft to sign and send. Both stay enabled
+    // with items missing — the technician decides; the server's send gate still has the final say.
+    final canLeaveChat = _sessionId != null && !_aiBlocked && !_confirming;
     return Padding(
       padding: pad,
-      child: AppButton(
-        key: const ValueKey('ai-controlla'),
-        label: 'Controlla',
-        onPressed: _sessionId == null || _aiBlocked
-            ? null
-            : () => setState(() {
-                _step = _AiStep.review;
-                _writing = false;
-              }),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppButton.secondary(
+            key: const ValueKey('ai-open-draft'),
+            label: 'Apri la bozza',
+            isLoading: _confirming,
+            onPressed: canLeaveChat ? () => _confirm(openEditor: true) : null,
+          ),
+          const SizedBox(height: 8),
+          AppButton(
+            key: const ValueKey('ai-controlla'),
+            label: 'Controlla',
+            onPressed: _sessionId == null || _aiBlocked
+                ? null
+                : () => setState(() {
+                    _step = _AiStep.review;
+                    _writing = false;
+                  }),
+          ),
+        ],
       ),
     );
   }

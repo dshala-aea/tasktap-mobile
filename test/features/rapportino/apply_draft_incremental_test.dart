@@ -1076,4 +1076,33 @@ class _AbandonAi extends AiApiClient {
     if (ok) abandoned.add(sessionId);
     return ok;
   }
+  test('Compila writes the header fields the draft owns, never over a hand edit', () async {
+    AiCopilotDraftDto draftWith(String? diagnosi) => AiCopilotDraftDto(
+      diagnosi: diagnosi,
+      soluzione: 'Valvola sostituita',
+      customerSignoffText: 'Cliente presente',
+      materialiNotRequired: true,
+      workers: [_worker(_me, hours: 3)],
+      materials: const [],
+      controlli: const [],
+      activities: const [],
+      openItems: const [],
+    );
+
+    await h.feed.apply(_session, draftWith('Valvola bloccata'));
+
+    final written = await h.header();
+    expect(written.diagnosi, 'Valvola bloccata');
+    expect(written.soluzione, 'Valvola sostituita');
+    expect(written.customerSignoffText, 'Cliente presente');
+    expect(written.materialiNotRequired, isTrue, reason: 'no material line exists');
+
+    // A field the technician already filled in is never overwritten by a later turn.
+    await (h.db.update(h.db.draftReports)..where((r) => r.id.equals(_report)))
+        .write(const DraftReportsCompanion(diagnosi: Value('Scritta a mano')));
+    await h.feed.apply(_session, draftWith('Valvola bloccata di nuovo'));
+
+    expect((await h.header()).diagnosi, 'Scritta a mano');
+  });
+
 }
