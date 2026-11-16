@@ -455,11 +455,6 @@ bool _sendEnabled(WidgetTester tester) => tester
     .onTap !=
     null;
 
-/// The Descrivi screen's one action: the explicit move to the review. Always enabled while a
-/// session exists — missing items are an indicator, not a gate.
-AppButton _controllaButton(WidgetTester tester) =>
-    tester.widget<AppButton>(find.byKey(const ValueKey('ai-controlla')));
-
 /// Taps the orb to start a recording. Nothing may `pumpAndSettle` again until the recording ends:
 /// the orb's halos animate for as long as `recording` is true, so the settle loop would spin until
 /// it timed out. Two plain frames are enough for the controller's `start()` and the rebuild.
