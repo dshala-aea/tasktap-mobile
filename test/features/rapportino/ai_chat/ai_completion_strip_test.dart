@@ -25,7 +25,7 @@ Color? _segment(WidgetTester tester, String key) {
 void main() {
   final colors = AppPalette.light;
 
-  testWidgets('a complete draft fills every segment and says it is ready', (tester) async {
+  testWidgets('a fully captured draft drops the rail and keeps the line', (tester) async {
     await _pump(
       tester,
       AiChatCompletion.fromDraft(
@@ -33,13 +33,19 @@ void main() {
           materialiNotRequired: true,
           workers: [_worker()],
           diagnosi: 'Valvola bloccata',
+          controlli: [
+            const AiDraftControlAnswer(
+              ticketControlId: 'tc-1',
+              boolValue: true,
+              state: AiResolutionState.resolvedBySystem,
+            ),
+          ],
         ),
       ),
     );
 
-    for (final key in ['tecnici', 'materiali', 'controlli', 'descrizione']) {
-      expect(_segment(tester, key), colors.green, reason: '$key is captured');
-    }
+    // Four green segments say nothing the caption has not said.
+    expect(find.byKey(const ValueKey('ai-completion-rail')), findsNothing);
     expect(find.text('Pronto per la revisione'), findsOneWidget);
   });
 

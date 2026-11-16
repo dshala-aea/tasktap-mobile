@@ -298,8 +298,8 @@ class _MicButtonState extends State<_MicButton> with SingleTickerProviderStateMi
         onTap: widget.enabled ? widget.onTap : null,
         radius: 28,
         child: SizedBox(
-          width: 56,
-          height: 56,
+          width: 48,
+          height: 48,
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -307,8 +307,8 @@ class _MicButtonState extends State<_MicButton> with SingleTickerProviderStateMi
                 AnimatedBuilder(
                   animation: _pulse,
                   builder: (context, _) => Container(
-                    width: 44 + 12 * _pulse.value,
-                    height: 44 + 12 * _pulse.value,
+                    width: 40 + 8 * _pulse.value,
+                    height: 40 + 8 * _pulse.value,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: colors.red.withValues(alpha: 0.35 * (1 - _pulse.value)),
@@ -316,8 +316,8 @@ class _MicButtonState extends State<_MicButton> with SingleTickerProviderStateMi
                   ),
                 ),
               Container(
-                width: 48,
-                height: 48,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: !widget.enabled
