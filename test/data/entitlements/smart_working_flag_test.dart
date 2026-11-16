@@ -38,6 +38,25 @@ import '../../support/auth_me_fixtures.dart';
 
 class MockDio extends Mock implements Dio {}
 
+/// A refresh that is still in flight when the test wants it to be, so a widget can be unmounted
+/// between the request and the cache invalidation that follows it.
+class _GatedEntitlementService extends EntitlementService {
+  _GatedEntitlementService({
+    required Dio super.dio,
+    required EntitlementRepository super.repository,
+    super.currentSessionId,
+    required this.gate,
+  });
+
+  final Completer<void> gate;
+
+  @override
+  Future<bool> refresh() async {
+    await gate.future;
+    return super.refresh();
+  }
+}
+
 /// "leave the key out of the body", distinct from an explicit null.
 const _absent = Object();
 
@@ -292,6 +311,52 @@ void main() {
 
       // Without the invalidation inside refreshEntitlements this stays null forever: nothing else
       // the refresh touches is a dependency of this provider.
+      expect(container.read(smartWorkingTodayProvider), isTrue);
+    });
+
+    testWidgets('refreshEntitlements_survivesTheWidgetBeingUnmountedMidFlight', (tester) async {
+      // Crash report, 2026-11-16: StateError "Using ref when a widget is about to or has been
+      // unmounted is unsafe" at entitlement_providers.dart:150. The refresh awaits /auth/me and
+      // THEN invalidates; the widget that asked (HomeShell on resume, a settings screen) can be
+      // gone by then — a sign-out, a popped route — and invalidating through its WidgetRef threw.
+      // The invalidations now run on a container-scoped Ref, so the answer still lands.
+      stub(ok(meBody(smartWorkingToday: true)));
+      final gate = Completer<void>();
+      final container = containerWith(
+        auth: Stream<AuthUser?>.value(_user('user-a')),
+        serviceOverride: entitlementServiceProvider.overrideWith(
+          (ref) => _GatedEntitlementService(
+            dio: dio,
+            repository: ref.watch(entitlementRepositoryProvider),
+            currentSessionId: () => 'user-a',
+            gate: gate,
+          ),
+        ),
+      );
+      container.listen(authStateProvider, (_, _) {});
+      await container.read(authStateProvider.future);
+
+      late WidgetRef widgetRef;
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: Consumer(
+            builder: (context, ref, _) {
+              widgetRef = ref;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      expect(container.read(smartWorkingTodayProvider), isNull);
+
+      // In flight, then the widget goes away, then the server answers.
+      final pending = refreshEntitlements(widgetRef);
+      await tester.pumpWidget(const SizedBox.shrink());
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      await expectLater(pending, completes);
       expect(container.read(smartWorkingTodayProvider), isTrue);
     });
   });

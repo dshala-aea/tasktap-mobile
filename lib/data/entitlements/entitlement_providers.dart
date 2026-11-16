@@ -10,6 +10,8 @@
 // asymmetry is deliberate.
 // ══════════════════════════════════════════════════════════════════════════════
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/time/business_time_providers.dart';
@@ -144,15 +146,35 @@ bool isButtonPunchWithheld({
 /// resume: a tenant that changed this user's timbratura mode, seat type or modules while the app sat
 /// backgrounded is exactly the change nothing used to pick up — reconnect never fires on a device
 /// that never lost its network interface, so the answer stayed at whatever it was at launch.
-Future<void> refreshEntitlements(WidgetRef ref) async {
-  final updated = await ref.read(entitlementServiceProvider).refresh();
-  if (updated) {
-    ref.invalidate(cachedEntitlementProvider);
-    ref.invalidate(hasFeatureProvider);
+Future<void> refreshEntitlements(WidgetRef ref) =>
+    ref.read(_entitlementRefresherProvider).refresh();
+
+/// The refresh itself, on a `Ref` owned by the provider container.
+///
+/// The invalidations happen AFTER the `/auth/me` round trip, and a widget that asked for the
+/// refresh can be gone by then — HomeShell unmounted by a sign-out, a settings screen popped while
+/// the request was in flight. Invalidating through the widget's `WidgetRef` at that point throws
+/// `StateError: Using "ref" when a widget is about to or has been unmounted is unsafe` (crash
+/// report, 2026-11-16, `entitlement_providers.dart:150`). A container-scoped `Ref` has the same
+/// lifetime as the cache it is invalidating, so the answer still lands where it was going.
+class _EntitlementRefresher {
+  const _EntitlementRefresher(this._ref);
+
+  final Ref _ref;
+
+  Future<void> refresh() async {
+    final updated = await _ref.read(entitlementServiceProvider).refresh();
+    if (!updated) return;
+    _ref.invalidate(cachedEntitlementProvider);
+    _ref.invalidate(hasFeatureProvider);
     // Not backed by a FutureProvider, so nothing else would rebuild a reader after the refresh.
-    ref.invalidate(smartWorkingTodayProvider);
+    _ref.invalidate(smartWorkingTodayProvider);
   }
 }
+
+final _entitlementRefresherProvider = Provider<_EntitlementRefresher>(
+  (ref) => _EntitlementRefresher(ref),
+);
 
 /// Call once on app start, alongside initAuthReconnectWatcher.
 ///
@@ -166,6 +188,10 @@ Future<void> refreshEntitlements(WidgetRef ref) async {
 /// remount (e.g. forced sign-out → re-login) leaves the old closure's `ref` in the listener list
 /// forever, and the next reconnect throws on that stale entry.
 VoidCallback initEntitlementRefreshWatcher(WidgetRef ref) {
-  refreshEntitlements(ref);
-  return ref.read(connectivityProvider.notifier).onReconnect(() => refreshEntitlements(ref));
+  // The refresher, not the widget: the reconnect closure outlives this build, and a `WidgetRef`
+  // captured in it is exactly the stale entry the cancel function below exists to prevent. Even a
+  // missed cancel now costs nothing — the container-scoped refresher has no widget to outlive.
+  final refresher = ref.read(_entitlementRefresherProvider);
+  unawaited(refresher.refresh());
+  return ref.read(connectivityProvider.notifier).onReconnect(refresher.refresh);
 }
