@@ -191,13 +191,9 @@ class _SmartWorkingRowState extends ConsumerState<_SmartWorkingRow> {
     // still mounted — which is the normal one, since the list keeps cancelled rows and this row's
     // element survives the refetch.
     //
-    // The exception is this row's own disposal during the `/auth/me` round trip (the technician
-    // popped the screen): the helper invalidates through this row's `ref`, so its `invalidate`
-    // would throw, and the swallow below would hide that the answer was never refreshed. The chip
-    // is then stale until the next resume — the same tolerated residual as a warm app resumed
-    // across midnight (a stale `true` costs one refused punch with a visible message; a stale
-    // `false` would cost the day's hours, and this path can only produce the former). Fixing it
-    // properly means refreshing off the container rather than a widget ref.
+    // The invalidations inside the helper run on a container-scoped Ref, so popping this screen
+    // during the `/auth/me` round trip no longer loses the refresh (it used to throw on a dead
+    // WidgetRef and leave the chip stale until the next resume).
     try {
       await refreshEntitlements(ref);
     } catch (_) {
