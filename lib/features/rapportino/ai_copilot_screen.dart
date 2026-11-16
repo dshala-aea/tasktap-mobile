@@ -1579,6 +1579,13 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                               // accepting a tap the server will refuse again. A failed turn is NOT in
                               // this list on purpose — connectivity comes back.
                               micEnabled: _micBlockedMessage == null,
+                              // Before the first word the microphone is the only thing to do. After
+                              // it, the next step is reviewing what the assistant compiled, and the
+                              // footer's bar is the one solid Stamp Red in the bottom of the screen.
+                              micProminent: !_messages.any((m) => m.role == ChatRole.operator),
+                              // An unsent turn owns the way forward: its retry or discard sits in
+                              // the footer, and the plane stays quiet until one of them happens.
+                              canSend: _failed == null,
                               // The recorder's own amplitude, for the level bars: null on a platform
                               // that reports none, and the bars then hold their idle shape.
                               levelOf: _recording && _voiceCtl != null
@@ -1615,6 +1622,18 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       AppSpacing.base,
     );
 
+    // The docked action deck (DESIGN.md, Timbra): a full-bleed Sheet strip with one hairline along
+    // its top, so the screen's action is a band of its own rather than a third row of the composer.
+    Widget deck(Widget child) => Container(
+      width: double.infinity,
+      padding: pad,
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border(top: BorderSide(color: context.colors.borderLight)),
+      ),
+      child: child,
+    );
+
     if (_step == _AiStep.review) {
       final busy = _sending || _confirming || _editing || _applying || _recording;
       // Controlla can start a turn too — the pending-recordings banner's "Invia" — so a failure
@@ -1622,9 +1641,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
       // than joined by a third button: Conferma is disabled while a turn sits unsent (its own guard
       // says so), and a disabled primary beside a live retry reads as the retry being secondary.
       final retry = _failed != null;
-      return Padding(
-        padding: pad,
-        child: Column(
+      return deck(
+        Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextButton(
@@ -1635,19 +1653,26 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
                   ? null
                   : () => setState(() {
                       _step = _AiStep.describe;
-                      // A compiled turn switches to the keyboard off (step 1 shows the mic orb), so
-                      // coming back here would land the technician on an orb while the sentence they
-                      // wrote sits hidden behind "Preferisci scrivere?". Bring the field back with the
-                      // text still in it: that is what "the description is kept" has to mean on screen.
+                      // A compiled turn switches the keyboard off (step 1 shows the microphone), so
+                      // coming back here would land the technician on the microphone while the
+                      // sentence they wrote sits behind "Tocca per scrivere". Bring the field back
+                      // with the text still in it: that is what "the description is kept" has to
+                      // mean on screen.
                       _writing = _inputCtrl.text.trim().isNotEmpty;
                     }),
               style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
               child: Text(
                 'Descrivi di nuovo',
                 style: TextStyle(
+                  fontFamily: 'Archivo',
                   fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: context.colors.red,
+                  fontWeight: FontWeight.w600,
+                  // Ink, not Stamp Red: the solid bar under this line is the screen's one action,
+                  // and a second red control beside it splits the accent — the same reason the
+                  // Descrivi footer's shortcut is ink.
+                  color: busy || _usedDraftMessage != null
+                      ? context.colors.inkDisabled
+                      : context.colors.ink,
                 ),
               ),
             ),
@@ -1704,28 +1729,49 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> with WidgetsB
 
     // The unsent turn is the error state, and its retry belongs where the attempt was made — the
     // footer's one action — instead of a second button inside the banner that says the same thing.
-    if (_failed != null) return Padding(padding: pad, child: _retryAction());
+    if (_failed != null) return deck(_retryAction());
 
     // The chat owns sending (the composer's paper plane). Two ways out: review the compiled cards,
-    // or close the conversation and land directly in the draft to sign and send. Both stay enabled
-    // with items missing — the technician decides; the server's send gate still has the final say.
+    // or close the conversation and land directly in the draft to sign and send. One is the screen's
+    // action and gets the bar; the other is a shortcut and gets a quiet line above it — two filled
+    // bars stacked here made "Apri la bozza" read as a peer of "Controlla" when it is the smaller
+    // of two ways to the same end. Both stay enabled with items missing — the technician decides;
+    // the server's send gate still has the final say.
     final canLeaveChat = _sessionId != null && !_aiBlocked && !_confirming;
-    return Padding(
-      padding: pad,
-      child: Column(
+    return deck(
+      Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AppButton.secondary(
+          TextButton(
             key: const ValueKey('ai-open-draft'),
-            label: 'Apri la bozza',
-            isLoading: _confirming,
             onPressed: canLeaveChat ? () => _confirm(openEditor: true) : null,
+            style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+            // The tapped control carries its own progress: confirming is a round trip, and a link
+            // that does nothing visible for a second reads as a missed tap.
+            child: _confirming
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: context.colors.inkMuted,
+                    ),
+                  )
+                : Text(
+                    'Apri la bozza',
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: canLeaveChat ? context.colors.ink : context.colors.inkMuted,
+                    ),
+                  ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           AppButton(
             key: const ValueKey('ai-controlla'),
             label: 'Controlla',
-            onPressed: _sessionId == null || _aiBlocked
+            onPressed: _sessionId == null || _aiBlocked || _confirming
                 ? null
                 : () => setState(() {
                     _step = _AiStep.review;

@@ -114,16 +114,13 @@ Future<void> _describeAndGenerate(WidgetTester tester, [String text = 'Ho fatto 
     await tester.tap(find.byKey(const ValueKey('ai-describe-again')));
     await tester.pumpAndSettle();
   }
-  final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
-  if (toggle.evaluate().isEmpty) {
-    await tester.dragUntilVisible(toggle, find.byType(Scrollable).first, const Offset(0, -120));
+  // The hint is present only while the keyboard is closed: tapping it is what opens writing, and
+  // write mode survives a question-only turn, so it must not be tapped a second time.
+  final hint = find.byKey(const ValueKey('ai-chat-hint'));
+  if (hint.evaluate().isNotEmpty) {
+    await tester.ensureVisible(hint);
     await tester.pumpAndSettle();
-  }
-  await tester.ensureVisible(toggle);
-  await tester.pumpAndSettle();
-  // Write mode survives a question-only turn, so only tap the toggle when the field is hidden.
-  if (find.text('Preferisci scrivere?').evaluate().isNotEmpty) {
-    await tester.tap(toggle);
+    await tester.tap(hint);
     await tester.pumpAndSettle();
   }
   final field = find.byKey(const ValueKey('ai-description-field'));
@@ -131,7 +128,13 @@ Future<void> _describeAndGenerate(WidgetTester tester, [String text = 'Ho fatto 
   await tester.pumpAndSettle();
   await tester.enterText(field, text);
   await tester.pump();
-  await tester.tap(find.byKey(const ValueKey('ai-generate')));
+  // The chat owns sending (the composer's paper plane) and the review is opened explicitly, exactly
+  // like the live tests' own typed path. The old footer's single "Genera il rapporto" key no longer
+  // exists — this helper used to tap it and had been failing on a stale finder.
+  await tester.tap(find.byKey(const ValueKey('ai-chat-send')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('ai-controlla')));
+  await tester.pumpAndSettle();
   await tester.pumpAndSettle();
 }
 

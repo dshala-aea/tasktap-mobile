@@ -515,11 +515,12 @@ Future<void> _reveal(WidgetTester tester, Finder finder, {bool settle = true}) a
   }
 }
 
-/// Taps "Preferisci scrivere?" and reveals the description field.
-Future<void> _tapToggleWriting(WidgetTester tester) async {
-  final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
-  await _reveal(tester, toggle);
-  await tester.tap(toggle);
+/// Opens the keyboard from the hint beside the microphone, revealing the description field.
+Future<void> _tapWriting(WidgetTester tester) async {
+  final hint = find.byKey(const ValueKey('ai-chat-hint'));
+  if (hint.evaluate().isEmpty) return; // already writing
+  await _reveal(tester, hint);
+  await tester.tap(hint);
   await tester.pumpAndSettle();
 }
 
@@ -531,17 +532,15 @@ Future<void> _typeAndGenerate(WidgetTester tester, String text) async {
     await tester.tap(find.byKey(const ValueKey('ai-describe-again')));
     await tester.pumpAndSettle();
   }
-  // Whether the keyboard mode is on is read from the toggle's own label, not from the field being
-  // absent: the list builds lazily, so an absent field means "not built yet" just as often as
-  // "mode off", and tapping the toggle in the second case would switch it off again. Reveal the
-  // toggle first — a banner above the list can leave it unbuilt — and only then read its label.
-  final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
-  await _reveal(tester, toggle);
-  if (find.text('Preferisci scrivere?').evaluate().isNotEmpty) {
-    await tester.tap(toggle);
+  // The composer is pinned under the thread, so the field's presence answers "is writing on?"
+  // without scrolling: the hint only exists while the keyboard is closed.
+  final field = find.byKey(const ValueKey('ai-description-field'));
+  if (field.evaluate().isEmpty) {
+    final hint = find.byKey(const ValueKey('ai-chat-hint'));
+    await _reveal(tester, hint);
+    await tester.tap(hint);
     await tester.pumpAndSettle();
   }
-  final field = find.byKey(const ValueKey('ai-description-field'));
   await _reveal(tester, field);
   await tester.enterText(field, text);
   // The send action only enables once the parent has heard about the text.
@@ -689,7 +688,7 @@ void main() {
       // GONE: the two turn texts and the worker's name. The turns were chat bubbles, and Controlla
       // renders neither them nor the worker lines. What resuming still has to prove is that the
       // draft was adopted and the flow opened on a usable Descrivi screen.
-      expect(find.byKey(const ValueKey('ai-toggle-writing')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-chat-hint')), findsOneWidget);
       await _unmount(tester);
     });
 
@@ -924,12 +923,12 @@ void main() {
       expect(find.byKey(const ValueKey('mic-open-settings')), findsOneWidget);
       // Writing is untouched — the banner says so and the toggle is still there.
       //
-      // The banner is inserted above the list, which pushes the toggle past the fold; the list does
-      // not mount what it cannot show, so it is revealed the way a thumb would reach it rather than
-      // asserted on an element that was never built.
-      final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
-      await _reveal(tester, toggle);
-      expect(toggle, findsOneWidget);
+      // The banner is inserted above the list, which pushes the composer past the fold; the list
+      // does not mount what it cannot show, so it is revealed the way a thumb would reach it rather
+      // than asserted on an element that was never built.
+      final hint = find.byKey(const ValueKey('ai-chat-hint'));
+      await _reveal(tester, hint);
+      expect(hint, findsOneWidget);
       await _unmount(tester);
     });
 
@@ -1297,7 +1296,7 @@ void main() {
     testWidgetsNoSemantics('typed send is blocked while recording', (tester) async {
       await tester.pumpWidget(_wrap(_FakeAi(), _FakeVoice()));
       await tester.pumpAndSettle();
-      await _tapToggleWriting(tester);
+      await _tapWriting(tester);
       await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Ho iniziato');
       await tester.pump();
       // Sending is available up to the moment the microphone opens, so the assertion below is about
@@ -1306,16 +1305,11 @@ void main() {
 
       await _startRecording(tester);
 
-      expect(_sendEnabled(tester), isFalse);
-      // Revealing the orb scrolled the list back up, so the toggle may no longer be built; bring it
-      // back with fixed pumps, since the running recording never settles.
-      final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
-      await _reveal(tester, toggle, settle: false);
-      expect(
-        tester.widget<TextButton>(toggle).onPressed,
-        isNull,
-        reason: 'the description cannot be swapped mid-recording either',
-      );
+      // The composer collapses to the meter while a recording is open: the paper plane is not drawn
+      // at all (there is nothing it could send), and neither is the writing hint — the row says one
+      // thing at a time. Fixed pumps, since a running recording animates and never settles.
+      expect(find.byKey(const ValueKey('ai-chat-send')), findsNothing);
+      expect(find.byKey(const ValueKey('ai-chat-hint')), findsNothing);
       await _unmount(tester);
     });
   });

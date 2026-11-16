@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/features/rapportino/ai_chat/ai_chat_composer.dart';
 
 Future<void> _pump(
@@ -10,8 +11,10 @@ Future<void> _pump(
   bool busy = false,
   bool recording = false,
   bool micEnabled = true,
+  bool micProminent = true,
   Future<double?> Function()? levelOf,
   VoidCallback? onSend,
+  VoidCallback? onToggleWriting,
 }) => tester.pumpWidget(
   MaterialApp(
     home: Scaffold(
@@ -21,9 +24,10 @@ Future<void> _pump(
         busy: busy,
         writing: writing,
         micEnabled: micEnabled,
+        micProminent: micProminent,
         levelOf: levelOf,
         onMic: () {},
-        onToggleWriting: () {},
+        onToggleWriting: onToggleWriting ?? () {},
         onSend: onSend ?? () {},
         onTextChanged: () {},
       ),
@@ -31,60 +35,86 @@ Future<void> _pump(
   ),
 );
 
+/// The fill of the 48 dp disc inside the microphone button.
+Color? _micFill(WidgetTester tester) {
+  final disc = tester
+      .widgetList<Container>(
+        find.descendant(
+          of: find.byKey(const ValueKey('ai-chat-mic')),
+          matching: find.byType(Container),
+        ),
+      )
+      .where((c) => c.constraints?.maxWidth == 48)
+      .first;
+  return (disc.decoration! as BoxDecoration).color;
+}
+
 void main() {
-  testWidgets('send fires only with text', (tester) async {
+  testWidgets('the paper plane appears only when there is something to send', (tester) async {
     final ctrl = TextEditingController();
     var sent = 0;
     await _pump(tester, controller: ctrl, onSend: () => sent++);
 
-    await tester.tap(find.byKey(const ValueKey('ai-chat-send')));
-    expect(sent, 0, reason: 'nothing to send yet');
+    // Nothing typed: no plane to tap, and the row is just microphone + "Tocca per scrivere".
+    expect(find.byKey(const ValueKey('ai-chat-send')), findsNothing);
 
     await tester.enterText(find.byKey(const ValueKey('ai-description-field')), 'Valvola sostituita');
     await tester.pump();
+
     await tester.tap(find.byKey(const ValueKey('ai-chat-send')));
     expect(sent, 1);
   });
 
-  testWidgets('send is inert while a turn is running or a recording is open', (tester) async {
+  testWidgets('a turn in flight keeps the plane slot, as a spinner and inert', (tester) async {
     final ctrl = TextEditingController(text: 'Valvola sostituita');
     var sent = 0;
     await _pump(tester, controller: ctrl, busy: true, onSend: () => sent++);
 
-    await tester.tap(find.byKey(const ValueKey('ai-chat-send')));
-    expect(sent, 0);
-
-    await _pump(tester, controller: ctrl, recording: true, onSend: () => sent++);
+    expect(find.byKey(const ValueKey('ai-sending-indicator')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('ai-chat-send')));
     expect(sent, 0);
   });
 
-  testWidgets('the hint invites the microphone until the keyboard is chosen', (tester) async {
+  testWidgets('the hint opens the keyboard, and is the only writing affordance', (tester) async {
     final ctrl = TextEditingController();
-    await _pump(tester, controller: ctrl, writing: false);
+    var toggled = 0;
+    await _pump(tester, controller: ctrl, writing: false, onToggleWriting: () => toggled++);
 
     expect(find.byKey(const ValueKey('ai-chat-hint')), findsOneWidget);
+    expect(find.text('Tocca per scrivere'), findsOneWidget);
     expect(find.byKey(const ValueKey('ai-description-field')), findsNothing);
+    // The red "Preferisci scrivere?" band is gone: the hint beside the microphone does its job.
+    expect(find.byKey(const ValueKey('ai-toggle-writing')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('ai-chat-hint')));
+    expect(toggled, 1);
 
     await _pump(tester, controller: ctrl, writing: true);
     expect(find.byKey(const ValueKey('ai-description-field')), findsOneWidget);
   });
 
-  testWidgets('a running recording shows its own timer and level meter', (tester) async {
+  testWidgets('a running recording replaces the row with the meter, and offers no send', (
+    tester,
+  ) async {
     // Field report: the mic just became a square, so a recording running, a microphone hearing
-    // silence and a dead button all looked the same. The meter is the difference.
-    final ctrl = TextEditingController();
+    // silence and a dead button all looked the same. The meter is the difference — and the paper
+    // plane, which cannot be used while a recording is open, is not drawn at all.
+    final ctrl = TextEditingController(text: 'Valvola sostituita');
     await _pump(tester, controller: ctrl, recording: true, levelOf: () async => -20);
 
     expect(find.byKey(const ValueKey('ai-recording-indicator')), findsOneWidget);
     expect(find.byKey(const ValueKey('ai-recording-timer')), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-chat-send')), findsNothing);
+    // The old two-line instruction ("In ascolto… tocca il quadrato per fermare.") is gone: the
+    // square is the platform's own stop symbol and the meter says it is running.
+    expect(find.textContaining('tocca il quadrato'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byKey(const ValueKey('ai-recording-indicator')), findsOneWidget);
 
-    // Ending the recording takes the meter with it.
     await _pump(tester, controller: ctrl, recording: false);
     expect(find.byKey(const ValueKey('ai-recording-indicator')), findsNothing);
+    expect(find.byKey(const ValueKey('ai-description-field')), findsOneWidget);
   });
 
   testWidgets('a platform with no amplitude still draws the meter, just still', (tester) async {
@@ -96,11 +126,15 @@ void main() {
     expect(find.byKey(const ValueKey('ai-recording-timer')), findsOneWidget);
   });
 
-  testWidgets('a message on its way shows the spinner where the paper plane was', (tester) async {
-    final ctrl = TextEditingController(text: 'Valvola sostituita');
-    await _pump(tester, controller: ctrl, busy: true);
+  testWidgets('the microphone is the loud control only until something has been said', (
+    tester,
+  ) async {
+    final ctrl = TextEditingController();
+    await _pump(tester, controller: ctrl);
+    expect(_micFill(tester), AppPalette.light.red);
 
-    expect(find.byKey(const ValueKey('ai-sending-indicator')), findsOneWidget);
+    await _pump(tester, controller: ctrl, micProminent: false);
+    expect(_micFill(tester), AppPalette.light.surface);
   });
 
   testWidgets('a dimmed microphone takes no taps', (tester) async {
@@ -125,6 +159,6 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey('ai-chat-mic')));
-    expect(micTaps, 0);
+    expect(micTaps, 0, reason: 'dimmed means inert');
   });
 }

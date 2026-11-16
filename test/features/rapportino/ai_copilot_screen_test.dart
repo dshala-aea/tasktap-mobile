@@ -296,23 +296,23 @@ Future<void> _describeAndGenerate(
   WidgetTester tester, [
   String text = 'Ho fatto il lavoro',
 ]) async {
-  // The toggle is the last thing on step 1, below the mic orb, in a lazily-built list: on the
-  // 800x600 surface the tests run on its centre is past the bottom of the viewport, so a bare `tap`
-  // lands on the pinned footer's "Genera il rapporto" instead — and if a banner has pushed it
-  // further down it is not in the tree at all, so `ensureVisible` throws. Drag it into reach the way
-  // a thumb would, then ensure it is fully visible.
-  final toggle = find.byKey(const ValueKey('ai-toggle-writing'));
-  if (toggle.evaluate().isEmpty) {
+  // The writing entry is the hint beside the microphone, in a lazily-built list: on the 800x600
+  // surface the tests run on its centre is past the bottom of the viewport, so a bare `tap` lands on
+  // the pinned footer's "Controlla" instead — and if a banner has pushed it further down it is not
+  // in the tree at all, so `ensureVisible` throws. Drag it into reach the way a thumb would, then
+  // ensure it is fully visible.
+  final hint = find.byKey(const ValueKey('ai-chat-hint'));
+  if (hint.evaluate().isEmpty) {
     await tester.dragUntilVisible(
-      toggle,
+      hint,
       _contentScrollable(),
       const Offset(0, -120),
     );
     await tester.pumpAndSettle();
   }
-  await tester.ensureVisible(toggle);
+  await tester.ensureVisible(hint);
   await tester.pumpAndSettle();
-  await tester.tap(toggle);
+  await tester.tap(hint);
   await tester.pumpAndSettle();
   await tester.enterText(find.byKey(const ValueKey('ai-description-field')), text);
   await tester.pump();
@@ -328,24 +328,18 @@ void main() {
     await tester.pumpWidget(_wrap(_FakeAiApiClient(), ticketId: 'tkt-1'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Tocca il microfono per parlare'), findsOneWidget);
-    expect(find.byKey(const ValueKey('ai-toggle-writing')), findsOneWidget);
+    expect(find.text('Tocca per scrivere'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-chat-hint')), findsOneWidget);
     // Missing items are an indicator, not a gate: Controlla is offered from the start.
     final controlla = tester.widget<AppButton>(find.byKey(const ValueKey('ai-controlla')));
     expect(controlla.onPressed, isNotNull);
     // Closing the conversation and landing in the draft is offered from the start; it is the way
     // to finish signatures / submission without going through the review cards.
-    final openDraft = tester.widget<AppButton>(find.byKey(const ValueKey('ai-open-draft')));
+    final openDraft = tester.widget<TextButton>(find.byKey(const ValueKey('ai-open-draft')));
     expect(openDraft.onPressed, isNotNull);
 
-    // Nothing to send yet.
-    final send = tester.widget<InkResponse>(
-      find.descendant(
-        of: find.byKey(const ValueKey('ai-chat-send')),
-        matching: find.byType(InkResponse),
-      ),
-    );
-    expect(send.onTap, isNull);
+    // Nothing to send yet — the plane is not even drawn.
+    expect(find.byKey(const ValueKey('ai-chat-send')), findsNothing);
   });
 
   testWidgets('a compiled turn moves to Controlla and shows what the assistant produced', (
