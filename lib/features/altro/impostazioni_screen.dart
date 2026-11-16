@@ -835,6 +835,15 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
                   color: context.colors.inkMuted,
                 ),
               ),
+              // The answer is cached for the run of the app: after granting the microphone or
+              // installing the Italian pack in Settings and coming back, this is how it is asked
+              // again without restarting TaskTap.
+              TextButton(
+                key: const ValueKey('dictation-recheck'),
+                onPressed: () => ref.invalidate(dictationCapabilityProvider),
+                style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                child: const Text('Ricontrolla'),
+              ),
             ],
           ],
         ),

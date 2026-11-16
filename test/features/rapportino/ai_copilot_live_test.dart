@@ -179,6 +179,8 @@ class _NoRecorder implements AudioRecorderService {
   Future<File> stop() async => File('x.m4a');
   @override
   Stream<Duration> get elapsed => const Stream.empty();
+  @override
+  Future<double?> level() async => null;
 }
 
 class _GrantedMic implements MicPermissionService {
