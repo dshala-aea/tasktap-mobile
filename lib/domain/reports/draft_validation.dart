@@ -36,12 +36,29 @@ enum DraftValidationIssue {
   noMateriali, // only when materialiNotRequired == false
   missingCustomerSignature,
   missingTechnicianSignature,
+  missingExtensionFields,
 }
 
 class DraftValidationResult {
-  const DraftValidationResult({required this.issues});
+  const DraftValidationResult({required this.issues, this.missingExtensionLabels = const []});
 
   final List<DraftValidationIssue> issues;
+
+  /// Labels of the tenant's required "Altri campi" left blank (see
+  /// [withMissingExtensionFields]); non-empty exactly when [issues] holds
+  /// [DraftValidationIssue.missingExtensionFields].
+  final List<String> missingExtensionLabels;
+
+  /// This result plus the required custom fields still blank. The pure draft rules above cannot
+  /// know the tenant's definitions (they live in the sync mirror), so the screen that does folds
+  /// them in here and every consumer keeps reading one result.
+  DraftValidationResult withMissingExtensionFields(List<String> labels) {
+    if (labels.isEmpty) return this;
+    return DraftValidationResult(
+      issues: [...issues, DraftValidationIssue.missingExtensionFields],
+      missingExtensionLabels: labels,
+    );
+  }
 
   bool get isValid => issues.isEmpty;
 
@@ -65,6 +82,8 @@ class DraftValidationResult {
           return 'Firma cliente mancante (o motivo dell\'assenza da indicare)';
         case DraftValidationIssue.missingTechnicianSignature:
           return 'Firma tecnico mancante';
+        case DraftValidationIssue.missingExtensionFields:
+          return 'Campi aggiuntivi obbligatori: ${missingExtensionLabels.join(', ')}';
       }
     }).toList();
   }

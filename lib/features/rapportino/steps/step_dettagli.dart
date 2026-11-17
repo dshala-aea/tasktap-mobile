@@ -11,6 +11,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../core/theme/app_colors.dart';
 // Uses StepLabel (the padding-free sibling of SectionTitle) — these headings sit inside cards
 // that already carry their own padding.
+import '../../../data/reports/draft_report_repository.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 
@@ -262,11 +263,18 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           const SizedBox(height: 16),
           _GpsCapture(reportId: widget.reportId),
 
-          // Tenant-configured custom fields (web-only admin config) — the draft already has a
-          // real reportId by the time this step can open (create_draft.dart creates it before
-          // RapportinoFormScreen ever mounts), so unlike the ticket create wizard this needs no
-          // "does the entity exist yet" gate.
-          ExtensionFieldsSection(entityType: 'report', entityId: widget.reportId),
+          // Tenant-configured custom fields (web-only admin config). The draft exists only on this
+          // phone until it is submitted, so its values live on the draft itself (local-first:
+          // identical online and offline) and travel with the submit — the server has no row to
+          // GET or PUT them against yet.
+          ExtensionFieldsSection(
+            entityType: 'report',
+            entityId: widget.reportId,
+            localStore: _DraftExtensionValuesStore(
+              ref.read(draftReportRepositoryProvider),
+              widget.reportId,
+            ),
+          ),
         ],
       ),
     );
@@ -423,3 +431,17 @@ class _LinkedChip extends StatelessWidget {
 }
 
 // ── Inline section label (no built-in padding — avoids double-pad) ─────────────
+
+/// The draft's own `extension_values` column as the section's [ExtensionValuesStore].
+class _DraftExtensionValuesStore implements ExtensionValuesStore {
+  _DraftExtensionValuesStore(this._repo, this._reportId);
+
+  final DraftReportRepository _repo;
+  final String _reportId;
+
+  @override
+  Future<Map<String, String>> load() => _repo.getExtensionValues(_reportId);
+
+  @override
+  Future<void> save(Map<String, String> values) => _repo.setExtensionValues(_reportId, values);
+}

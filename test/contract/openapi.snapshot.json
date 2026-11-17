@@ -39142,6 +39142,16 @@
             ],
             "description": "The report row\u0027s version the client last saw \u2014 the \u0060version\u0060 field of\n\u0060GET /api/reports/{id}\u0060, i.e. ReportVersion of the row\u0027s \u0060xmin\u0060.\nWhen it does not match the report\u0027s current version, the submit is rejected with a\n\u0060409 concurrency_conflict\u0060 instead of overwriting an edit made after that read (an\noffice edit landing while the phone was offline).\n\nNull means \u0022do not check\u0022 \u2014 the pre-existing unconditional-overwrite\nbehaviour \u2014 so every client build that predates this field (v1.0.2/v1.0.3) is unaffected,\nand a submit for a report that does not exist yet (a brand-new offline draft) is never\nversion-checked: there is nothing to have raced."
           },
+          "extensionValues": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Tenant-defined \u0022Altri campi\u0022 values (key \u2192 text) typed in the wizard. A rapportino drafted on\nthe phone has no server row until this submit, so there is nowhere to \u0060PUT\u0060 them\nbeforehand \u2014 they ride with the submit instead.\nnull = \u0022this client does not own the field\u0022: stored values are left untouched\nand required fields are not enforced (an older build cannot know they exist). When present\nthe values are merged per key into the stored ones; keys that are not an active\nreport definition are dropped, exactly as PUT /extension-fields/report/{id}/values\ndoes."
+          },
           "scheduleId": {
             "type": [
               "null",

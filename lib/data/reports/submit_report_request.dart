@@ -15,6 +15,7 @@ class SubmitReportRequest {
   const SubmitReportRequest({
     required this.id,
     this.expectedVersion,
+    this.extensionValues,
     this.scheduleId,
     this.ticketId,
     this.cantiereId,
@@ -58,6 +59,11 @@ class SubmitReportRequest {
   /// Never populate this from a fetch taken while building the request: a version read immediately
   /// before submitting always matches the row it is compared against, so the guard would be inert.
   final String? expectedVersion;
+
+  /// The wizard's "Altri campi" values (key → text). Null = this build does not own the field and
+  /// the server leaves the stored values alone; present, they are merged per key and a required
+  /// field left blank refuses the submit. Mirrors backend `SubmitReportRequest.ExtensionValues`.
+  final Map<String, String>? extensionValues;
 
   /// Optional schedule the report belongs to.
   final String? scheduleId;
@@ -162,6 +168,7 @@ class SubmitReportRequest {
     // rather than always emitting means a never-on-the-server draft sends no `expectedVersion` at
     // all, exactly the pre-guard wire shape.
     if (expectedVersion != null) 'expectedVersion': expectedVersion,
+    if (extensionValues != null) 'extensionValues': extensionValues,
     if (scheduleId != null) 'scheduleId': scheduleId,
     if (ticketId != null) 'ticketId': ticketId,
     if (cantiereId != null) 'cantiereId': cantiereId,
