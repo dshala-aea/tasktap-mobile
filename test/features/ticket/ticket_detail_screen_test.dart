@@ -15,6 +15,7 @@ import 'package:intl/intl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/auth/access.dart';
 import 'package:tasktap_mobile/core/files/capture_store.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';

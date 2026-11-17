@@ -387,9 +387,9 @@ _DraftLines _linesOfDraft(AiCopilotDraftDto d) {
           'boolValue': c.boolValue,
           'dateValue': _iso(c.dateValue),
           'numberValue': c.numberValue,
-          // The per-answer remark. Part of the diffed values, not a side field: a note the
-          // technician typed wins over the server's exactly like a typed answer does.
-          'note': c.note,
+          // No 'note' here on purpose: a draft answer carries no remark (backend DraftControlAnswer
+          // has none), and the line diff walks `values.keys`, so leaving the key out means a draft
+          // never touches a note the technician typed or the confirm payload wrote.
         },
       ),
     );
