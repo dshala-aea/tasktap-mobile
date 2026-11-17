@@ -86,12 +86,14 @@ class SubmissionQueue {
     bool Function()? isOnline,
     Future<bool> Function()? recheckOnline,
     Future<List<String>> Function(String cantiereId)? claimedCantiereWorkLogClientIds,
+    Future<String?> Function(String reportId)? customerCopyRecipient,
     this.maxAutoRetries = 5,
   }) : _repo = repo,
        _apiClient = apiClient,
        _isOnline = isOnline ?? (() => true),
        _recheckOnline = recheckOnline,
-       _claimedCantiereWorkLogClientIds = claimedCantiereWorkLogClientIds;
+       _claimedCantiereWorkLogClientIds = claimedCantiereWorkLogClientIds,
+       _customerCopyRecipient = customerCopyRecipient;
 
   final DraftReportRepository _repo;
   final ReportSubmitApiClient _apiClient;
@@ -106,6 +108,10 @@ class SubmissionQueue {
   /// source wired (tests, and any build without local punch storage): the submit then carries no
   /// claims, exactly the pre-P2-6 wire shape.
   final Future<List<String>> Function(String cantiereId)? _claimedCantiereWorkLogClientIds;
+
+  /// The address confirmed for the customer's copy of this draft (ClickUp 12493t4wxvm). Null = no
+  /// source wired (tests): the submit carries none, exactly the wire shape of older builds.
+  final Future<String?> Function(String reportId)? _customerCopyRecipient;
 
   /// Consecutive transient failures after which a `failed` row stops being retried unattended.
   final int maxAutoRetries;
@@ -405,6 +411,17 @@ class SubmissionQueue {
   static bool _isStaleSubmitConflict(Object e) =>
       e is DioException && e.response?.statusCode == HttpStatus.conflict;
 
+  Future<String?> _readCustomerCopyRecipient(String reportId) async {
+    final source = _customerCopyRecipient;
+    if (source == null) return null;
+    try {
+      return await source(reportId);
+    } catch (_) {
+      // Best effort: no copy is better than a submit that never leaves the phone.
+      return null;
+    }
+  }
+
   Future<SubmitReportRequest> _buildRequest(DraftReport draft) async {
     final staff = await _repo.getStaff(draft.id);
     // The intervals the timer recorded on this phone, already ordered `start_utc, id`. The server
@@ -478,6 +495,11 @@ class SubmissionQueue {
       // so they ride with the submit; null (no definitions known) tells the server this build does
       // not own the field.
       extensionValues: await _repo.buildSubmitExtensionValues(draft.id),
+      // The customer's copy: only meaningful when the customer signed, and best-effort — a failed
+      // preference read must never block the submit itself.
+      customerCopyRecipient: draft.customerSignatureAllegatoId == null
+          ? null
+          : await _readCustomerCopyRecipient(draft.id),
       scheduleId: draft.scheduleId,
       ticketId: draft.ticketId,
       locationId: draft.locationId,

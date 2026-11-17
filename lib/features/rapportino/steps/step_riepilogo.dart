@@ -21,6 +21,7 @@ import '../../../core/time/business_time_providers.dart' show businessTimeProvid
 import '../../../core/utils/error_message.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
+import '../../../data/reports/customer_copy_recipient_store.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/draft_submission_state.dart';
 import '../../../data/sync/submission_queue.dart' show isStaleSubmitConflictMessage;
@@ -307,6 +308,19 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     return (typed?.isNotEmpty ?? false) ? typed! : '—';
   }
 
+  /// The customer's email from the local cache, to pre-fill the copy address. Null when unknown.
+  static String? _customerEmail(WidgetRef ref, ReportEditorState state) {
+    final id = state.customerId;
+    if (id == null || id.isEmpty) return null;
+    for (final c in ref.watch(allCustomersProvider).value ?? const <Customer>[]) {
+      if (c.id == id) {
+        final e = c.email?.trim();
+        return (e == null || e.isEmpty) ? null : e;
+      }
+    }
+    return null;
+  }
+
   /// Ticket or cantiere as one line. They are alternatives, so four rows for them was three too
   /// many, and "(lib.)" was internal vocabulary for a distinction the reader does not have.
   static String? _riferimento(WidgetRef ref, ReportEditorState state) {
@@ -505,6 +519,12 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
               isCustomer: true,
               reportId: widget.reportId,
             ),
+            // The copy of what they just signed, to an address the technician confirms.
+            if (state.customerSignatureAllegatoId != null)
+              _CustomerCopyCard(
+                reportId: widget.reportId,
+                suggestedEmail: _customerEmail(ref, state),
+              ),
             // Hidden once a customer signature exists — a signed report has nothing to explain.
             if (state.customerSignatureAllegatoId == null)
               Align(
@@ -1372,6 +1392,116 @@ class _SigDialogState extends State<_SigDialog> {
           Expanded(
             child: Signature(controller: _ctrl, backgroundColor: context.colors.bg1),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+
+// ── Customer copy ─────────────────────────────────────────────────────────────
+
+final RegExp _kEmailShape = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
+/// "Invia copia al cliente": the signed rapportino as a PDF to an address the technician confirms
+/// (ClickUp 12493t4wxvm). Shown only once the customer has signed — it is the copy of what they
+/// signed. On by default when the customer's email is known; the address is editable. The choice is
+/// kept per draft and rides with the submit, so it works offline and goes out at the sync.
+class _CustomerCopyCard extends ConsumerStatefulWidget {
+  const _CustomerCopyCard({required this.reportId, required this.suggestedEmail});
+
+  final String reportId;
+  final String? suggestedEmail;
+
+  @override
+  ConsumerState<_CustomerCopyCard> createState() => _CustomerCopyCardState();
+}
+
+class _CustomerCopyCardState extends ConsumerState<_CustomerCopyCard> {
+  final TextEditingController _ctrl = TextEditingController();
+  bool _send = false;
+  bool _loaded = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final stored = await ref.read(customerCopyRecipientStoreProvider).read(widget.reportId);
+    if (!mounted) return;
+    setState(() {
+      if (stored == null) {
+        // No decision yet: offer the customer's own address, on.
+        _ctrl.text = widget.suggestedEmail ?? '';
+        _send = _ctrl.text.isNotEmpty;
+      } else {
+        _ctrl.text = stored;
+        _send = stored.isNotEmpty;
+      }
+      _loaded = true;
+    });
+    // Persist the default so the submit carries it even if the technician never touches the card.
+    if (stored == null && _send) await _persist();
+  }
+
+  Future<void> _persist() async {
+    final store = ref.read(customerCopyRecipientStoreProvider);
+    if (!_send) {
+      await store.write(widget.reportId, '');
+      return;
+    }
+    final v = _ctrl.text.trim();
+    if (_kEmailShape.hasMatch(v)) {
+      await store.write(widget.reportId, v);
+    }
+  }
+
+  void _onChanged() {
+    final v = _ctrl.text.trim();
+    setState(() => _error = (_send && v.isNotEmpty && !_kEmailShape.hasMatch(v))
+        ? 'Inserisci un indirizzo email valido'
+        : null);
+    unawaited(_persist());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Invia copia al cliente'),
+            subtitle: const Text('Riceve il rapporto firmato in PDF'),
+            value: _send,
+            onChanged: (v) {
+              setState(() => _send = v);
+              _onChanged();
+            },
+          ),
+          if (_send)
+            TextField(
+              controller: _ctrl,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              decoration: InputDecoration(
+                labelText: 'Email del cliente',
+                errorText: _error,
+              ),
+              onChanged: (_) => _onChanged(),
+            ),
         ],
       ),
     );

@@ -3,6 +3,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
+import '../reports/customer_copy_recipient_store.dart';
 import '../reports/report_submit_api_client.dart';
 import '../timbratura/cantiere_timbra_sync_service.dart' show cantiereSessionRepositoryProvider;
 import 'connectivity_provider.dart';
@@ -42,6 +43,9 @@ final realSubmissionQueueProvider = Provider<SubmissionQueue>((ref) {
     // queued or already uploaded.
     claimedCantiereWorkLogClientIds: (cantiereId) =>
         ref.read(cantiereSessionRepositoryProvider).getClosedIntervalClientIds(cantiereId),
+    // The customer's copy (ClickUp 12493t4wxvm): the address the technician confirmed at Riepilogo.
+    customerCopyRecipient: (reportId) =>
+        ref.read(customerCopyRecipientStoreProvider).recipientForSubmit(reportId),
   );
 });
 
