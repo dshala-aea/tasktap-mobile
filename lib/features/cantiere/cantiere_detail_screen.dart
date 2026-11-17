@@ -15,16 +15,26 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_text_styles.dart';
+import '../../core/time/business_time.dart' show formatWorkDate;
 import '../../core/utils/error_message.dart';
+import '../../core/utils/maps_launcher.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
-import '../../data/sync/sync_service.dart';
+import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
+import '../../data/sync/sync_freshness_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../rapportino/create_draft.dart';
-import '../ticket/ticket_providers.dart' show commessaByIdProvider;
-import '../timbra/cantiere_timbra_screen.dart' show cantiereCrewAssignmentsProvider;
-import 'cantiere_map_card.dart';
+import '../ticket/ticket_providers.dart' show commessaByIdProvider, ticketStatusMapProvider;
+import '../timbra/cantiere_timbra_screen.dart'
+    show
+        cantiereActiveSessionProvider,
+        cantiereCrewAssignmentsProvider,
+        cantiereTodayHoursProvider,
+        formatHoursMinutes,
+        isLeadForCantiereProvider;
+import 'cantiere_close_sheet.dart';
+import 'cantiere_day.dart';
+import 'cantiere_design.dart';
 import 'cantiere_providers.dart';
 
 class CantiereDetailScreen extends ConsumerStatefulWidget {
@@ -41,13 +51,16 @@ class CantiereDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
-  // Guards "Crea rapportino" against a double-tap: the button awaits a real network round-trip
+  // Guards "Crea rapporto" against a double-tap: the button awaits a real network round-trip
   // (POST /api/reports/from-cantiere-worklogs), and on a slow connection — which this app is
   // explicitly built for — a second tap during that window would fire the create call again. The
   // first call already consumed this cantiere's unconsumed worklogs, so the second would create a
   // second, empty backend Report (burning a document number), a second local draft, and a double
   // navigation push. Same pattern as CantiereTimbraScreen's own `_isLoading` guard.
   bool _isCreatingRapportino = false;
+
+  /// Anchor for the hero's "Dettagli" action: scrolls the page to the Dossier.
+  final GlobalKey _dossierKey = GlobalKey();
 
   static String _statusLabel(int status) {
     switch (status) {
@@ -62,10 +75,19 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
     }
   }
 
+  void _scrollToDossier() {
+    final ctx = _dossierKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cantiereAsync = ref.watch(cantiereByIdProvider(widget.cantiereId));
-    final ticketsAsync = ref.watch(ticketsForCantiereProvider(widget.cantiereId));
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -73,14 +95,13 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ScreenHeader(title: 'Cantiere', showBack: true),
+            const _DetailTopBar(),
             Expanded(
               // Same RefreshIndicator+performSync() pattern as cantieri_list_screen.dart one level
-              // up — this detail screen had none of its own. Every branch below gets a real
-              // Scrollable (a RefreshIndicator only fires over one), same reasoning as that
-              // screen's own doc comment.
+              // up. Every branch below gets a real Scrollable (a RefreshIndicator only fires over
+              // one).
               child: RefreshIndicator(
-                onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                onRefresh: () => refreshWithFeedback(context, ref),
                 child: cantiereAsync.when(
                   loading: () => ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -123,146 +144,39 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                       );
                     }
 
+                    final address = [
+                      cantiere.address,
+                      cantiere.city,
+                      cantiere.postalCode,
+                    ].where((s) => s != null && s.isNotEmpty).join(', ');
+
                     return SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.pagePadding,
-                        AppSpacing.sm,
-                        AppSpacing.pagePadding,
-                        AppSpacing.xxl,
-                      ),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          AppCard(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  cantiere.name,
-                                  style: AppTextStyles.headlineMedium.copyWith(
-                                    color: context.colors.ink,
-                                  ),
-                                ),
-                                if (cantiere.address != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    cantiere.address!,
-                                    style: AppTextStyles.bodySmall.copyWith(
-                                      color: context.colors.inkMuted,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 8),
-                                // StatusPill (renders as Il Documento's stamp), not a bare
-                                // AppBadge — this is a genuine status, same vocabulary
-                                // statusFamilyOf already maps.
-                                StatusPill(stato: _statusLabel(cantiere.status)),
-                              ],
-                            ),
+                          _TitleBlock(cantiere: cantiere, address: address),
+                          _SiteStateCard(
+                            cantiere: cantiere,
+                            ticketId: widget.ticketId,
+                            isCreatingRapportino: _isCreatingRapportino,
+                            onCreateRapportino: () => _handleCreateRapportino(cantiere),
+                            onDetails: _hasDossier(cantiere) ? _scrollToDossier : null,
                           ),
-
-                          // ── Dettagli ───────────────────────────────────────────────
-                          _DettagliSection(cantiere: cantiere),
-
-                          // ── Squadra assegnata ─────────────────────────────────────
+                          CantiereDayLedger(cantiereId: cantiere.id),
                           _SquadraSection(cantiereId: cantiere.id),
-
-                          // ── Map ────────────────────────────────────────────────────
-                          //
-                          // Only when there's an address worth plotting — same gate
-                          // admin_cantiere_detail_screen.dart's own map section uses. Sits after
-                          // Dettagli/Squadra and before the CTAs — the technician reads what/who this
-                          // cantiere is before where it is, and the map is the last thing before
-                          // acting on it (Timbra / Crea rapportino), not the first thing after the
-                          // name card.
-                          if (cantiere.address != null && cantiere.address!.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            CantiereMapCard(
-                              cantiereId: cantiere.id,
-                              address: [
-                                cantiere.address,
-                                cantiere.city,
-                                cantiere.postalCode,
-                              ].where((s) => s != null && s.isNotEmpty).join(', '),
-                            ),
-                          ],
-
-                          const SizedBox(height: 8),
-                          AppButton(
-                            label: 'Timbra cantiere',
-                            icon: const Icon(LucideIcons.mapPin),
-                            onPressed: () => context.push(
-                              AppRoutes.cantiereTimbraPath(
-                                cantiereId: cantiere.id,
-                                ticketId: widget.ticketId,
-                              ),
-                            ),
+                          _TicketsSection(cantiereId: cantiere.id),
+                          KeyedSubtree(
+                            key: _dossierKey,
+                            child: _DettagliSection(cantiere: cantiere),
                           ),
-                          const SizedBox(height: 12),
-                          // ── Crea rapportino ──────────────────────────────────────────
-                          //
-                          // The office/admin equivalent of this button (admin_cantiere_detail_
-                          // screen.dart) creates a purely local draft with blank hours via
-                          // createLocalDraft. A technician standing on-site has already logged
-                          // hours against this cantiere (Timbra cantiere, above) — this button
-                          // calls the cantiere-only report endpoint instead, so the editor opens
-                          // with those hours (and, if this technician started the batch as squadra
-                          // lead, their whole team's hours) already filled in.
-                          AppButton(
-                            label: 'Crea rapportino',
-                            icon: const Icon(LucideIcons.fileText),
-                            isLoading: _isCreatingRapportino,
-                            onPressed: _isCreatingRapportino
-                                ? null
-                                : () => _handleCreateRapportino(cantiere),
-                          ),
-                          const SizedBox(height: 24),
-                          const SectionTitle(title: 'Ticket collegati'),
-                          const SizedBox(height: 8),
-                          ticketsAsync.when(
-                            loading: () => const Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(AppSpacing.xxxl),
-                                child: CircularProgressIndicator(),
-                              ),
-                            ),
-                            error: (e, _) => UnavailableState(
-                              icon: LucideIcons.ticket,
-                              titolo: 'Impossibile caricare i ticket collegati',
-                              motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
-                              action: AppButton(
-                                label: 'Riprova',
-                                size: AppButtonSize.sm,
-                                fullWidth: false,
-                                onPressed: () =>
-                                    ref.invalidate(ticketsForCantiereProvider(widget.cantiereId)),
-                              ),
-                            ),
-                            data: (tickets) {
-                              if (tickets.isEmpty) {
-                                return const EmptyState(
-                                  icon: LucideIcons.ticket,
-                                  title: 'Nessun ticket collegato',
-                                  body: 'I ticket collegati a questo cantiere appariranno qui.',
-                                );
-                              }
-                              return AppCard(
-                                padding: EdgeInsets.zero,
-                                child: Column(
-                                  children: tickets.asMap().entries.map((entry) {
-                                    final i = entry.key;
-                                    final t = entry.value;
-                                    return ListRow(
-                                      title: t.title,
-                                      showDivider: i != tickets.length - 1,
-                                      onTap: () => context.push(AppRoutes.ticketDetailPath(t.id)),
-                                    );
-                                  }).toList(),
-                                ),
-                              );
-                            },
-                          ),
+                          // After the dossier: "what I have worked here", readable with no
+                          // signal. Not in the mockup; kept because it is the only place a past
+                          // shift is visible offline.
+                          _TimbratureSection(cantiereId: cantiere.id),
+                          // Only when there's an address worth plotting.
+                          if (address.isNotEmpty) _MapSection(cantiere: cantiere, address: address),
                         ],
                       ),
                     );
@@ -276,7 +190,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
     );
   }
 
-  /// "Crea rapportino" — calls `POST /api/reports/from-cantiere-worklogs` and opens the ordinary
+  /// "Crea rapporto" — calls `POST /api/reports/from-cantiere-worklogs` and opens the ordinary
   /// rapportino editor on the resulting draft. See [createCantiereReportDraft] for the full
   /// create-then-hydrate flow and why the local draft reuses the backend-issued report id.
   Future<void> _handleCreateRapportino(CantieriData cantiere) async {
@@ -304,7 +218,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
         setState(() => _isCreatingRapportino = false);
         showAppToast(
           context,
-          message: humanErrorMessage(e, azione: 'creare il rapportino'),
+          message: humanErrorMessage(e, azione: 'creare il rapporto di intervento'),
           tone: ToastTone.error,
         );
       }
@@ -315,20 +229,482 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
     setState(() => _isCreatingRapportino = false);
 
     if (id == null) {
-      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+      showAppToast(
+        context,
+        message: 'Accedi per creare un rapporto di intervento.',
+        tone: ToastTone.warning,
+      );
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
   }
 }
 
+bool _hasDossier(CantieriData c) =>
+    c.customerId != null ||
+    c.commessaId != null ||
+    c.startDate != null ||
+    c.endDate != null ||
+    (c.notes != null && c.notes!.isNotEmpty);
+
 // ══════════════════════════════════════════════════════════════════════════════
-// Dettagli — Cliente/Commessa/Periodo/Note. All five fields
-// (customerId/commessaId/startDate/endDate/notes) are already synced to the local Cantieri
-// mirror (see this file's own header/task context) but were shown nowhere on this screen before
-// now. Each row is skipped independently when its field is absent (same contract
-// admin_cantiere_detail_screen.dart's own detail card uses for Commessa); the whole section
-// collapses to nothing when every field is, rather than showing an empty card.
+// App bar — back, "Cantiere" in display 18/600, the overflow dots. 50px, no rule.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _DetailTopBar extends StatelessWidget {
+  const _DetailTopBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 50,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                tooltip: 'Indietro',
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: Icon(LucideIcons.chevronLeft, size: 22, color: context.colors.ink),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Cantiere', style: cantiereDisplay(context, 18))),
+            Text('···', style: TextStyle(color: context.colors.inkMuted, letterSpacing: 2)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Kicker, title and sub line.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _TitleBlock extends ConsumerWidget {
+  const _TitleBlock({required this.cantiere, required this.address});
+
+  final CantieriData cantiere;
+  final String address;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final customerId = cantiere.customerId;
+    final customer = customerId == null
+        ? null
+        : ref.watch(customerByIdProvider(customerId)).value?.companyName;
+    final sub = [
+      if (customer != null && customer.isNotEmpty) 'Cliente $customer',
+      if (address.isNotEmpty) address,
+    ].join(' · ');
+    final kicker = cantiereMono(context, 9, letterSpacing: 0.9);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 7),
+          child: Row(
+            children: [
+              // The mockup's reference code (C-2026-018) has no source on the Cantieri mirror, so
+              // the red ref is the word alone rather than an invented number.
+              Text('CANTIERE', style: kicker.copyWith(color: context.colors.accentInk)),
+              const SizedBox(width: 8),
+              Text('·', style: kicker),
+              const SizedBox(width: 8),
+              Text('OGGI', style: kicker),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 5),
+          child: Text(
+            cantiere.name,
+            style: cantiereDisplay(
+              context,
+              29,
+              weight: FontWeight.w700,
+              letterSpacing: -0.725,
+              height: 1,
+            ),
+          ),
+        ),
+        if (sub.isNotEmpty)
+          Text(
+            sub,
+            style: cantiereBody(context, 11.5, color: context.colors.inkMuted, height: 1.4),
+          ),
+        if (cantiere.status != 0) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: CantiereStamp(
+              label: _CantiereDetailScreenState._statusLabel(cantiere.status),
+              color: context.colors.inkMuted,
+            ),
+          ),
+        ],
+        const SizedBox(height: 13),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Hero — one card answers "am I on site", "how long today", and offers the single next action.
+// A live timer is mounted only for an open session.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _SiteStateCard extends ConsumerWidget {
+  const _SiteStateCard({
+    required this.cantiere,
+    this.ticketId,
+    required this.isCreatingRapportino,
+    required this.onCreateRapportino,
+    this.onDetails,
+  });
+
+  final CantieriData cantiere;
+  final String? ticketId;
+  final bool isCreatingRapportino;
+  final VoidCallback onCreateRapportino;
+  final VoidCallback? onDetails;
+
+  static String _hm(DateTime t) {
+    final local = t.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final active = ref.watch(cantiereActiveSessionProvider);
+    final activeHere = active?.cantiereId == cantiere.id;
+    final activeElsewhere = active != null && !activeHere;
+    final today = ref.watch(cantiereTodayHoursProvider(cantiere.id));
+    final closed = cantiere.status != 0;
+    final crewCount = ref.watch(cantiereCrewAssignmentsProvider(cantiere.id)).value?.length;
+    final crewTail = crewCount != null && crewCount > 0 ? ' · squadra di $crewCount' : '';
+
+    return CantiereCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(activeHere ? 'IN CANTIERE' : 'OGGI', style: cantiereMini(context)),
+                if (activeHere)
+                  CantiereLiveElapsed(
+                    start: active!.startTime,
+                    clock: true,
+                    style: cantiereTimer(context),
+                  )
+                else
+                  Text(
+                    formatHoursMinutes(today),
+                    style: cantiereTimer(context).copyWith(color: context.colors.ink),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: activeHere
+                ? CantiereHeroCopy(
+                    before: 'Ingresso alle ',
+                    bold: _hm(active!.startTime),
+                    after: crewTail,
+                  )
+                : CantiereHeroCopy(
+                    before: today > Duration.zero
+                        ? 'Ore lavorate oggi su questo cantiere'
+                        : 'Nessuna timbratura oggi',
+                  ),
+          ),
+          if (activeElsewhere)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: CantiereHeroCopy(
+                before: 'Sei già in cantiere su un altro sito. Chiudi quella sessione prima di timbrare qui.',
+              ),
+            ),
+          if (closed)
+            const CantiereHeroCopy(before: 'Cantiere chiuso: non è possibile timbrare.')
+          else if (activeHere)
+            CantiereButton(
+              label: 'Timbra uscita',
+              onPressed: () => showCantiereCloseSheet(
+                context,
+                cantiereId: cantiere.id,
+                cantiereName: cantiere.name,
+                startTime: active!.startTime,
+              ),
+            )
+          else
+            CantiereButton(
+              label: 'Timbra cantiere',
+              onPressed: activeElsewhere
+                  ? null
+                  : () => context.push(
+                      AppRoutes.cantiereTimbraPath(cantiereId: cantiere.id, ticketId: ticketId),
+                    ),
+            ),
+          Padding(
+            padding: EdgeInsets.only(top: closed ? 12 : 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: CantiereButton(
+                    label: 'Crea rapporto',
+                    kind: CantiereButtonKind.secondary,
+                    compact: true,
+                    loading: isCreatingRapportino,
+                    onPressed: onCreateRapportino,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: CantiereButton(
+                    label: 'Dettagli',
+                    kind: CantiereButtonKind.ghost,
+                    compact: true,
+                    onPressed: onDetails,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Squadra — read-only crew from `cantiereCrewAssignmentsProvider` (online API, Drift mirror
+// offline). Loading/error collapse to nothing (an error is "unavailable", never "no crew"); an
+// empty answer says "not downloaded yet" on a never-synced offline phone and "none" otherwise.
+// The red "Scansiona" link is lead-only, as the badge scanner's own entry is.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _SquadraSection extends ConsumerWidget {
+  const _SquadraSection({required this.cantiereId});
+
+  final String cantiereId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final assignmentsAsync = ref.watch(cantiereCrewAssignmentsProvider(cantiereId));
+    // Offline plus a mirror that has never been filled is "we don't know", not "nobody".
+    final crewUnknown =
+        !ref.watch(isOnlineProvider) && ref.watch(hasSyncedAtLeastOnceProvider).value == false;
+    final isLead = ref.watch(isLeadForCantiereProvider(cantiereId));
+
+    return assignmentsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (e, _) => const SizedBox.shrink(),
+      data: (assignments) {
+        return CantiereSection(
+          title: 'Squadra',
+          note: isLead ? 'Scansiona' : null,
+          onNoteTap: isLead
+              ? () => context.push(AppRoutes.cantiereBadgeScanPath(cantiereId))
+              : null,
+          child: assignments.isEmpty
+              ? CantiereCard(
+                  child: Text(
+                    crewUnknown ? 'Squadra non ancora scaricata' : 'Nessuna squadra assegnata',
+                    style: cantiereBody(context, 11, color: context.colors.inkMuted),
+                  ),
+                )
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final a in assignments)
+                      _CrewChip(
+                        // Same fallback as everywhere colleagueNameProvider is read: the raw id
+                        // rather than nothing when the mirror doesn't (yet) know them.
+                        name: ref.watch(colleagueNameProvider(a.userId)).value ?? a.userId,
+                        isLead: a.isLead,
+                      ),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _CrewChip extends StatelessWidget {
+  const _CrewChip({required this.name, required this.isLead});
+
+  final String name;
+  final bool isLead;
+
+  static String _initials(String name) {
+    final parts = name.split(RegExp(r'[\s@.]+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: c.borderLight),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(color: c.bg3, shape: BoxShape.circle),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: Center(
+                  child: Text(
+                    _initials(name),
+                    style: cantiereDisplay(context, 10, weight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 7),
+            Flexible(child: Text(name, style: cantiereBody(context, 10.5))),
+            if (isLead) ...[const SizedBox(width: 7), const CantiereMiniStamp(label: 'LEAD')],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Ticket collegati — `ticketsForCantiereProvider`, rows of 11px text with the status in mono 8
+// and 1px rules above and below.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _TicketsSection extends ConsumerWidget {
+  const _TicketsSection({required this.cantiereId});
+
+  final String cantiereId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ticketsAsync = ref.watch(ticketsForCantiereProvider(cantiereId));
+    final statusMap = ref.watch(ticketStatusMapProvider).value ?? const <int, String>{};
+
+    return CantiereSection(
+      title: 'Ticket collegati',
+      child: ticketsAsync.when(
+        loading: () => const Center(
+          child: Padding(
+            padding: EdgeInsets.all(AppSpacing.xl),
+            child: CircularProgressIndicator(),
+          ),
+        ),
+        error: (e, _) => UnavailableState(
+          icon: LucideIcons.ticket,
+          titolo: 'Impossibile caricare i ticket collegati',
+          motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+          action: AppButton(
+            label: 'Riprova',
+            size: AppButtonSize.sm,
+            fullWidth: false,
+            onPressed: () => ref.invalidate(ticketsForCantiereProvider(cantiereId)),
+          ),
+        ),
+        data: (tickets) {
+          if (tickets.isEmpty) {
+            return CantiereCard(
+              child: Text(
+                'Nessun ticket collegato',
+                style: cantiereBody(context, 11, color: context.colors.inkMuted),
+              ),
+            );
+          }
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: context.colors.divider)),
+            ),
+            child: Column(
+              children: [
+                for (final t in tickets)
+                  _TicketRow(
+                    title: t.title,
+                    status: statusMap[t.statusId],
+                    onTap: () => context.push(AppRoutes.ticketDetailPath(t.id)),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TicketRow extends StatelessWidget {
+  const _TicketRow({required this.title, required this.status, required this.onTap});
+
+  final String title;
+  final String? status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: context.colors.divider)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: cantiereBody(context, 11),
+                ),
+              ),
+              if (status != null && status!.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(status!.toUpperCase(), style: cantiereMono(context, 8)),
+              ],
+              const SizedBox(width: 8),
+              Text('›', style: cantiereBody(context, 11)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Dossier — Cliente / Commessa / Periodo (+ Note) as a bordered two-column facts grid. Every
+// field is already in the local Cantieri mirror; each cell is skipped independently, and the whole
+// section collapses when none is present.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _DettagliSection extends ConsumerWidget {
@@ -338,20 +714,12 @@ class _DettagliSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!_hasDossier(cantiere)) return const SizedBox.shrink();
     final hasNotes = cantiere.notes != null && cantiere.notes!.isNotEmpty;
-    final hasAnything =
-        cantiere.customerId != null ||
-        cantiere.commessaId != null ||
-        cantiere.startDate != null ||
-        cantiere.endDate != null ||
-        hasNotes;
-    if (!hasAnything) return const SizedBox.shrink();
 
-    // Live-fetched, no local mirror for either — same shape as
-    // admin_cantiere_detail_screen.dart's own Cliente/Commessa rows. `error`/`null` both fall
-    // back to '—': a commessa lookup throws TicketDetailOfflineException while offline (see
-    // commessaByIdProvider's own doc comment), which must read the same as "not resolved yet",
-    // not surface as a broken row on an otherwise-fine offline screen.
+    // Both resolve from what the phone already has. `error`/`null` fall back to '—': the commessa
+    // lookup throws TicketDetailOfflineException when neither the server nor the mirror can
+    // answer, which must read the same as "not resolved yet", not as a broken cell.
     final customerId = cantiere.customerId;
     final customerAsync = customerId == null ? null : ref.watch(customerByIdProvider(customerId));
     final customerLabel = customerAsync?.when(
@@ -371,102 +739,255 @@ class _DettagliSection extends ConsumerWidget {
     String? periodoLabel;
     final start = cantiere.startDate;
     final end = cantiere.endDate;
+    final dm = DateFormat('dd/MM');
     if (start != null && end != null) {
-      periodoLabel =
-          '${DateFormat('dd/MM/yyyy').format(start.toLocal())} – '
-          '${DateFormat('dd/MM/yyyy').format(end.toLocal())}';
+      periodoLabel = '${dm.format(start.toLocal())} – ${dm.format(end.toLocal())}';
     } else if (start != null) {
-      periodoLabel = 'Dal ${DateFormat('dd/MM/yyyy').format(start.toLocal())}';
+      periodoLabel = 'Dal ${dm.format(start.toLocal())}';
     } else if (end != null) {
-      periodoLabel = 'Fino al ${DateFormat('dd/MM/yyyy').format(end.toLocal())}';
+      periodoLabel = 'Fino al ${dm.format(end.toLocal())}';
     }
 
-    final entries = <({String label, String value, bool vertical})>[
-      if (customerId != null) (label: 'Cliente', value: customerLabel ?? '—', vertical: false),
-      if (commessaId != null) (label: 'Commessa', value: commessaLabel ?? '—', vertical: false),
-      if (periodoLabel != null) (label: 'Periodo', value: periodoLabel, vertical: false),
-      if (hasNotes) (label: 'Note', value: cantiere.notes!, vertical: true),
+    final cells = <({String label, String value})>[
+      if (customerId != null) (label: 'Cliente', value: customerLabel ?? '—'),
+      if (commessaId != null) (label: 'Commessa', value: commessaLabel ?? '—'),
+      if (periodoLabel != null) (label: 'Periodo', value: periodoLabel),
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionTitle(title: 'Dettagli'),
-        AppCard(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-          child: Column(
-            children: entries.asMap().entries.map((e) {
-              final entry = e.value;
-              return KeyVal(
-                label: entry.label,
-                value: entry.value,
-                vertical: entry.vertical,
-                showDivider: e.key != entries.length - 1,
-              );
-            }).toList(),
+    final c = context.colors;
+    final rows = <Widget>[];
+    for (var i = 0; i < cells.length; i += 2) {
+      final left = cells[i];
+      final right = i + 1 < cells.length ? cells[i + 1] : null;
+      rows.add(
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _Fact(label: left.label, value: left.value),
+              ),
+              SizedBox(width: 1, child: ColoredBox(color: c.divider)),
+              Expanded(
+                child: right == null
+                    ? const SizedBox.shrink()
+                    : _Fact(label: right.label, value: right.value),
+              ),
+            ],
           ),
         ),
-      ],
+      );
+    }
+    if (hasNotes) rows.add(_Fact(label: 'Note', value: cantiere.notes!, wrap: true));
+
+    return CantiereSection(
+      title: 'Dossier',
+      note: '${cells.length + (hasNotes ? 1 : 0)} campi',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: BorderRadius.circular(2),
+          border: Border.all(color: c.borderLight),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(2),
+          child: Column(
+            children: [
+              for (var i = 0; i < rows.length; i++) ...[if (i > 0) const CantiereRule(), rows[i]],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Fact extends StatelessWidget {
+  const _Fact({required this.label, required this.value, this.wrap = false});
+
+  final String label;
+  final String value;
+  final bool wrap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: Text(label.toUpperCase(), style: cantiereMono(context, 8, letterSpacing: 0.64)),
+          ),
+          Text(
+            value,
+            maxLines: wrap ? null : 1,
+            overflow: wrap ? TextOverflow.visible : TextOverflow.ellipsis,
+            style: cantiereBody(context, 11.5, weight: FontWeight.w500),
+          ),
+        ],
+      ),
     );
   }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Squadra assegnata — read-only crew list from the same `cantiereCrewAssignmentsProvider`
-// (GET /api/cantieri/{id}/assegnazioni) the batch-timbra "Seleziona squadra" picker already uses
-// (cantiere_timbra_screen.dart / teammate_picker_sheet.dart) — same data, no new fetch. Collapses
-// to nothing while loading, on error (including offline — see that provider's own doc comment on
-// why AsyncError there is an expected, not exceptional, state), or when nobody is assigned: this
-// is a convenience read, not something this screen's primary Timbra/Crea-rapportino flows depend
-// on, so it must never block or clutter the rest of the page while it resolves.
+// Le tue timbrature — the signed-in technician's own shifts on this site, from the
+// `cantiere_work_logs` mirror (so a shift worked yesterday is visible today, offline or not).
+// Loading/error collapse to nothing; empty says "not downloaded yet" only when that can't be
+// trusted.
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _SquadraSection extends ConsumerWidget {
-  const _SquadraSection({required this.cantiereId});
+class _TimbratureSection extends ConsumerWidget {
+  const _TimbratureSection({required this.cantiereId});
 
   final String cantiereId;
 
+  /// `WorkLogApprovalStatusEnum`, as the server stores it.
+  static String _approvalLabel(int status) => switch (status) {
+    1 => 'Inviato',
+    2 => 'Approvato',
+    3 => 'Respinto',
+    _ => 'Bozza',
+  };
+
+  /// `HH:mm` for a seconds-into-the-day value — the form a legacy row carries.
+  static String _hm(int seconds) {
+    final h = (seconds ~/ 3600).toString().padLeft(2, '0');
+    final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  /// The shift length. True instants when the row has them — the only safe way across midnight —
+  /// otherwise the time-of-day pair, which on an overnight shift reads negative and is shown as
+  /// the domain's own overnight correction rather than a nonsense duration.
+  static String _duration(CantiereWorkLog w) {
+    Duration d;
+    if (w.startUtc != null && w.endUtc != null) {
+      d = w.endUtc!.difference(w.startUtc!);
+    } else if (w.endSeconds != null) {
+      d = Duration(seconds: w.endSeconds! - w.startSeconds);
+      if (d.isNegative) d += const Duration(hours: 24);
+    } else {
+      return 'in corso';
+    }
+    return '${d.inHours}h ${d.inMinutes.remainder(60).toString().padLeft(2, '0')}m';
+  }
+
+  /// The shift's wall clock. Always the business-zone time of day the server stored, never the
+  /// phone's own zone: a technician whose handset is set to another timezone (or travelling) must
+  /// read the same hours the office prices the job from.
+  static String _window(CantiereWorkLog w) {
+    final start = _hm(w.startSeconds);
+    final end = w.endSeconds == null ? null : _hm(w.endSeconds!);
+    return end == null ? '$start – in corso' : '$start – $end';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final assignmentsAsync = ref.watch(cantiereCrewAssignmentsProvider(cantiereId));
+    final logsAsync = ref.watch(cantiereWorkLogMirrorProvider(cantiereId));
+    // Offline with a mirror that has never been filled is "we don't know", not "you never punched".
+    final unknown =
+        !ref.watch(isOnlineProvider) && ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
-    return assignmentsAsync.when(
+    return logsAsync.when(
       loading: () => const SizedBox.shrink(),
       error: (e, _) => const SizedBox.shrink(),
-      data: (assignments) {
-        if (assignments.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SectionTitle(title: 'Squadra assegnata'),
-            AppCard(
-              padding: EdgeInsets.zero,
-              child: Column(
-                children: assignments.asMap().entries.map((entry) {
-                  final i = entry.key;
-                  final a = entry.value;
-                  // Same fallback contract as everywhere else colleagueNameProvider is read: the
-                  // raw id rather than nothing, when the local mirror doesn't (yet) know them.
-                  final name = ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId;
-                  return ListRow(
-                    leading: AppAvatar(name: name, size: 36),
-                    title: name,
-                    meta: a.isLead
-                        ? AppBadge(
-                            label: 'LEAD',
-                            small: true,
-                            bgColor: context.colors.inkMuted.withAlpha(31),
-                            fgColor: context.colors.inkMuted,
-                          )
-                        : null,
-                    showDivider: i != assignments.length - 1,
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
+      data: (logs) {
+        return CantiereSection(
+          title: 'Le tue timbrature',
+          child: CantiereCard(
+            padding: logs.isEmpty
+                ? const EdgeInsets.all(14)
+                : const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+            child: logs.isEmpty
+                ? Text(
+                    unknown ? 'Timbrature non ancora scaricate' : 'Nessuna timbratura registrata',
+                    style: cantiereBody(context, 11, color: context.colors.inkMuted),
+                  )
+                : Column(
+                    children: [
+                      for (var i = 0; i < logs.length; i++) ...[
+                        if (i > 0) const CantiereRule(),
+                        CantiereLedgerRow(
+                          done: true,
+                          // A calendar label, not an instant: formatting its y/m/d fields with no
+                          // zone conversion is what keeps the day right west of UTC.
+                          title: formatWorkDate(logs[i].workDate, 'dd/MM/yyyy'),
+                          meta: '${_window(logs[i])}  ·  ${_duration(logs[i])}',
+                          time: _approvalLabel(logs[i].approvalStatus),
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
         );
       },
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Mappa — the drawn map card: a 78px map drawing with the red site pin, and a footer row with the
+// address and "Apri in Mappe". The drawing opens the in-app map view; the footer hands the
+// address to the device's maps app.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _MapSection extends StatelessWidget {
+  const _MapSection({required this.cantiere, required this.address});
+
+  final CantieriData cantiere;
+  final String address;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    void openMap() => context.push(AppRoutes.cantiereMapPath(cantiere.id));
+
+    return CantiereSection(
+      title: 'Mappa',
+      note: 'Apri',
+      onNoteTap: openMap,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: openMap,
+            borderRadius: BorderRadius.circular(2),
+            child: const CantiereMapArt(),
+          ),
+          InkWell(
+            onTap: () => openMapsForAddress(address),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: c.surface,
+                border: Border(
+                  left: BorderSide(color: c.borderLight),
+                  right: BorderSide(color: c.borderLight),
+                  bottom: BorderSide(color: c.borderLight),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: cantiereBody(context, 10.5),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text('APRI IN MAPPE', style: cantiereMono(context, 8)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

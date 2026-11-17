@@ -52,6 +52,39 @@ abstract interface class IWorkSessionRepository {
   /// Snapshot of today's events in chronological order (one-shot).
   Future<List<WorkSession>> getTodaySessions();
 
+  /// Stream of every visible event on ANY business day, in chronological order.
+  ///
+  /// The day-independent counterpart of [watchTodaySessions]. A shift opened at 22:00 and not yet
+  /// closed belongs to yesterday's business day: a today-scoped read cannot see it, and the one
+  /// question that must never follow the day boundary is "is there a shift left to finish". Same
+  /// exclusions as today's view (permanently refused rows, [syncFailedMarker]); reconciler
+  /// corrections are INCLUDED, because they are the device's best knowledge of what the server
+  /// holds — a backfilled `ingresso` is an open shift like any other.
+  ///
+  /// The whole local log is read rather than a day: it is one person's punches on one device since
+  /// the last wipe, so it stays small — the same read `localCantiereTimersProvider` already makes
+  /// for site sessions.
+  Stream<List<WorkSession>> watchAllSessions();
+
+  /// Snapshot of [watchAllSessions] (one-shot).
+  Future<List<WorkSession>> getAllSessions();
+
+  /// Every event still waiting to reach the server, on ANY business day, in chronological order.
+  ///
+  /// The upload queue is deliberately not day-scoped: a punch recorded offline before midnight
+  /// must still be sent the next day (and the day after). "Today" is a display concern only — see
+  /// [getTodaySessions]. Reconciler corrections are included (they are pending by construction but
+  /// never pushed); the sync itself filters them out via [reconciledOrphanMarker].
+  Future<List<WorkSession>> getPendingSessions();
+
+  /// How many events still have to reach the server, on any day.
+  ///
+  /// Counts `isPendingSync` rows but NOT this device's own reconciler corrections, which are
+  /// pending by construction and never pushed — counting them would report unsent work that no
+  /// sync will ever clear. Permanently refused rows ([syncFailedMarker]) are not pending and are
+  /// not counted. This is the personal-timbra half of the app's unsent-work counter.
+  Future<int> getPendingCount();
+
   /// Mark the given event ids as synced (isPendingSync = false).
   Future<void> markSynced(List<String> ids);
 
@@ -65,6 +98,17 @@ abstract interface class IWorkSessionRepository {
   /// Retires event [id] after a permanent 409 `active_session_exists`: keeps it for support under
   /// [syncFailedMarker], stops it being pending, and hides it from today's view.
   Future<void> markSyncFailed(String id);
+
+  /// Punches the server permanently refused, newest first, limited to the last [within].
+  ///
+  /// Hiding a rejected punch from "today" is what keeps it from doubling the shift on screen; it is
+  /// not a reason for the technician never to hear about it again. Without this the only trace was
+  /// a toast that scrolled away, and nothing in the app ever mentioned the punch again — the data
+  /// survived for support, but the person whose hours they were did not.
+  ///
+  /// Bounded by a window rather than shown forever: a rejection months old is no longer something
+  /// anyone can act on, and a permanent badge that can never be cleared trains people to ignore it.
+  Stream<List<WorkSession>> watchSyncFailedSessions({Duration within});
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -72,11 +116,16 @@ abstract interface class IWorkSessionRepository {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class WorkSessionRepository implements IWorkSessionRepository {
-  WorkSessionRepository(this._db, {BusinessTime? businessTime})
-    : _businessTime = businessTime ?? BusinessTime.fallback();
+  WorkSessionRepository(this._db, {BusinessTime? businessTime, DateTime Function()? clock})
+    : _businessTime = businessTime ?? BusinessTime.fallback(),
+      _clock = clock ?? DateTime.now;
 
   final AppDatabase _db;
   final BusinessTime _businessTime;
+
+  /// Now, for the rejection window in [watchSyncFailedSessions]. Injected so the window can be
+  /// tested without waiting a week; every other read is windowed by [BusinessTime].
+  final DateTime Function() _clock;
 
   /// The one definition of "today": the tenant business day as a half-open UTC window.
   (DateTime, DateTime) _todayRange() => _businessTime.todayRangeUtc();
@@ -93,6 +142,30 @@ class WorkSessionRepository implements IWorkSessionRepository {
       )
       ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
   }
+
+  /// Every visible row, with no day window at all — the day-independent shift view.
+  ///
+  /// Ordered exactly like [_todayQuery]: by `eventTime` and nothing else. Two punches written in
+  /// the same microsecond (a tap seconds apart on a phone whose clock is coarse — the widget tests
+  /// produce this routinely) then keep their insertion order, which is the only order that makes
+  /// "the last event" mean "the punch that happened last". Adding `id` as a tiebreak looks safer
+  /// and is not: ids are random UUIDs, so it reorders same-instant pairs and can put a pausa before
+  /// the ingresso it followed.
+  SimpleSelectStatement<$WorkSessionsTable, WorkSession> _allQuery() => _db.select(_db.workSessions)
+    ..where((s) => s.notes.isNull() | s.notes.equals(syncFailedMarker).not())
+    ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
+
+  /// Every unsynced row, with no day window at all — the upload queue.
+  SimpleSelectStatement<$WorkSessionsTable, WorkSession> _pendingQuery() =>
+      _db.select(_db.workSessions)
+        ..where((s) => s.isPendingSync.equals(true))
+        ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
+
+  /// Pending rows that still need the server, i.e. excluding our own reconciler corrections.
+  Expression<bool> get _countablePending =>
+      _db.workSessions.isPendingSync.equals(true) &
+      (_db.workSessions.notes.isNull() |
+          _db.workSessions.notes.equals(reconciledOrphanMarker).not());
 
   @override
   Future<void> addEvent({
@@ -122,6 +195,24 @@ class WorkSessionRepository implements IWorkSessionRepository {
 
   @override
   Future<List<WorkSession>> getTodaySessions() => _todayQuery().get();
+
+  @override
+  Stream<List<WorkSession>> watchAllSessions() => _allQuery().watch();
+
+  @override
+  Future<List<WorkSession>> getAllSessions() => _allQuery().get();
+
+  @override
+  Future<List<WorkSession>> getPendingSessions() => _pendingQuery().get();
+
+  @override
+  Future<int> getPendingCount() async {
+    final count = _db.workSessions.id.count();
+    final query = _db.selectOnly(_db.workSessions)
+      ..addColumns([count])
+      ..where(_countablePending);
+    return (await query.getSingle()).read(count) ?? 0;
+  }
 
   @override
   Future<void> markSynced(List<String> ids) async {
@@ -155,5 +246,14 @@ class WorkSessionRepository implements IWorkSessionRepository {
     await (_db.update(_db.workSessions)..where((s) => s.id.equals(id))).write(
       const WorkSessionsCompanion(notes: Value(syncFailedMarker), isPendingSync: Value(false)),
     );
+  }
+
+  @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({Duration within = const Duration(days: 7)}) {
+    final since = _clock().toUtc().subtract(within);
+    return (_db.select(_db.workSessions)
+          ..where((s) => s.notes.equals(syncFailedMarker) & s.eventTime.isBiggerOrEqualValue(since))
+          ..orderBy([(s) => OrderingTerm.desc(s.eventTime)]))
+        .watch();
   }
 }

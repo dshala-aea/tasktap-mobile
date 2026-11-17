@@ -113,8 +113,17 @@ void main() {
 
   group('describeAnswer', () {
     test('booleans, zero and fractions', () {
-      expect(describeAnswer(control(ControlType.checkbox), const ChecklistAnswer(boolValue: true)), 'Sì');
+      // A checkbox reads back as a tick, a TrueFalse as a choice — the same split the editors use.
+      expect(
+        describeAnswer(control(ControlType.checkbox), const ChecklistAnswer(boolValue: true)),
+        'Spuntato',
+      );
+      expect(
+        describeAnswer(control(ControlType.checkbox), const ChecklistAnswer(boolValue: false)),
+        'Non spuntato',
+      );
       expect(describeAnswer(control(ControlType.trueFalse), const ChecklistAnswer(boolValue: false)), 'No');
+      expect(describeAnswer(control(ControlType.trueFalse), const ChecklistAnswer(boolValue: true)), 'Sì');
       expect(describeAnswer(control(ControlType.number), const ChecklistAnswer(numberValue: 0)), '0');
       expect(describeAnswer(control(ControlType.number), const ChecklistAnswer(numberValue: 12.5)), '12.5');
       expect(describeAnswer(control(ControlType.text), const ChecklistAnswer()), isNull);

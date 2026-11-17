@@ -11,6 +11,22 @@ class KioskQrToken {
   final int expiresInSeconds;
 }
 
+/// Per-device offline QR provisioning: the device id and signing key are stored in the platform
+/// keystore; [serverTimeUtc] lets the tablet offset its own clock.
+class KioskProvisioning {
+  const KioskProvisioning({
+    required this.deviceId,
+    required this.signingKey,
+    required this.expiresInSeconds,
+    required this.serverTimeUtc,
+  });
+
+  final String deviceId;
+  final String signingKey;
+  final int expiresInSeconds;
+  final DateTime serverTimeUtc;
+}
+
 /// Why a kiosk request failed.
 ///
 /// [invalidOrRevoked] is the one outcome that must end kiosk mode on this device — a 401 here
@@ -72,6 +88,26 @@ class KioskApiClient {
   /// Also doubles as the activation-time credential check — a bad or revoked key surfaces the
   /// same [KioskApiFailureReason.invalidOrRevoked] either way, so the activation screen and the
   /// display screen's background poll share one error path.
+  /// Provisions the per-device v3 signing key. Called at activation and by an upgraded,
+  /// already-activated device on its first online QR refresh.
+  Future<KioskProvisioning> provision(String rawKey) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/WorkLog/kiosk/provision',
+        options: Options(headers: {'X-Api-Key': rawKey}),
+      );
+      final data = response.data ?? const <String, dynamic>{};
+      return KioskProvisioning(
+        deviceId: data['deviceId'] as String? ?? '',
+        signingKey: data['signingKey'] as String? ?? '',
+        expiresInSeconds: (data['expiresInSeconds'] as num?)?.toInt() ?? 300,
+        serverTimeUtc: DateTime.parse(data['serverTimeUtc'] as String).toUtc(),
+      );
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
   Future<KioskQrToken> fetchQr(String rawKey) async {
     try {
       final response = await _dio.get<Map<String, dynamic>>(

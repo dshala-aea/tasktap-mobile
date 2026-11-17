@@ -15,6 +15,7 @@ import 'package:drift/drift.dart' hide isNull, isNotNull, Column;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
@@ -25,12 +26,15 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_form_screen.dart';
 import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_list_screen.dart'
-    show adminProdottiAssistenzaProvider;
+    show adminProdottiAssistenzaProvider, ProdottoListRows;
 
 class MockDio extends Mock implements Dio {}
 
-Response<T> _ok<T>(T data, String path) =>
-    Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
+Response<T> _ok<T>(T data, String path) => Response<T>(
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 void main() {
   setUpAll(() {
@@ -81,10 +85,7 @@ void main() {
     );
 
     when(
-      () => mockDio.post<Map<String, dynamic>>(
-        '/api/prodottoassistenza',
-        data: any(named: 'data'),
-      ),
+      () => mockDio.post<Map<String, dynamic>>('/api/prodottoassistenza', data: any(named: 'data')),
     ).thenAnswer((_) async => _ok({'id': 'new-prod'}, '/api/prodottoassistenza'));
 
     when(
@@ -123,7 +124,7 @@ void main() {
       ],
     );
 
-    return ProviderScope(
+    return ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),
@@ -136,8 +137,12 @@ void main() {
         // in for a real list screen that stays mounted underneath a pushed detail/form route.
         builder: persistentWatcher == null
             ? null
-            : (context, child) =>
-                  Column(children: [persistentWatcher(context), Expanded(child: child!)]),
+            : (context, child) => Column(
+                children: [
+                  persistentWatcher(context),
+                  Expanded(child: child!),
+                ],
+              ),
       ),
     );
   }
@@ -179,15 +184,17 @@ void main() {
       // Codice — the second TextFormField on the form (after Nome).
       await tester.enterText(find.byType(TextFormField).at(1), 'PROD-001');
 
-      await tester.tap(find.text('Crea prodotto'));
+      await tester.tap(find.text('Crea asset'));
       await tester.pumpAndSettle();
 
-      final captured = verify(
-        () => mockDio.post<Map<String, dynamic>>(
-          '/api/prodottoassistenza',
-          data: captureAny(named: 'data'),
-        ),
-      ).captured.single as Map;
+      final captured =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/prodottoassistenza',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
       expect(captured['name'], 'Caldaia');
       expect(captured['customerId'], 'cust-1');
       expect(captured['locationId'], 'loc-1');
@@ -209,7 +216,7 @@ void main() {
           extraOverrides: [
             adminProdottiAssistenzaProvider.overrideWith((ref) async {
               fetchCalls++;
-              return const <Map<String, dynamic>>[];
+              return const ProdottoListRows([], fromMirror: false);
             }),
           ],
           persistentWatcher: (context) => Consumer(
@@ -236,7 +243,7 @@ void main() {
       await tester.tap(find.text('Sede Milano').last);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Crea prodotto'));
+      await tester.tap(find.text('Crea asset'));
       await tester.pumpAndSettle();
 
       expect(fetchCalls, greaterThan(fetchesBeforeSave));
@@ -256,15 +263,17 @@ void main() {
       await tester.tap(find.text('Sede Milano').last);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Crea prodotto'));
+      await tester.tap(find.text('Crea asset'));
       await tester.pumpAndSettle();
 
-      final captured = verify(
-        () => mockDio.post<Map<String, dynamic>>(
-          '/api/prodottoassistenza',
-          data: captureAny(named: 'data'),
-        ),
-      ).captured.single as Map;
+      final captured =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/prodottoassistenza',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
       for (final key in ['codice', 'marchio', 'categoria']) {
         expect(captured.containsKey(key), isFalse, reason: '"$key" should be omitted');
       }
@@ -295,12 +304,14 @@ void main() {
       await tester.tap(find.text('Salva modifiche'));
       await tester.pumpAndSettle();
 
-      final captured = verify(
-        () => mockDio.put<dynamic>(
-          '/api/prodottoassistenza/prod-1',
-          data: captureAny(named: 'data'),
-        ),
-      ).captured.single as Map;
+      final captured =
+          verify(
+                () => mockDio.put<dynamic>(
+                  '/api/prodottoassistenza/prod-1',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
       expect(captured['marchio'], 'Baxi');
       expect(captured['codice'], 'PROD-001');
       await teardown(tester);

@@ -9,6 +9,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/realtime/realtime_connection.dart';
@@ -42,10 +43,34 @@ class _RefreshTrackingNotifier extends NotificheNotifier {
 }
 
 void main() {
+  setUp(() {
+    // NotificheNotifier reads its cache scoped to `internalUserIdPrefsKey` (G2a); with no mock
+    // store the plugin channel throws inside the constructor's async cache load.
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  /// A container backed by an in-memory Drift database.
+  ///
+  /// `ticketWorklogsProvider` reads the ticket-timer mirror first (O-9), so a bare
+  /// `ProviderContainer(retry: (_, _) => null, )` opens the real on-device database through `path_provider` — a channel
+  /// with no implementation under `flutter test`. The read then dies before the provider has a
+  /// state to invalidate, and the listener below never fires.
+  ProviderContainer memoryContainer() {
+    final db = AppDatabase(NativeDatabase.memory());
+    final container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+    return container;
+  }
+
   test('a TicketWorkLogStarted event invalidates ticketWorklogsProvider for that ticket', () async {
     var invalidated = false;
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+    final container = memoryContainer();
     container.listen(
       ticketWorklogsProvider('t1'),
       (prev, next) => invalidated = true,
@@ -71,8 +96,7 @@ void main() {
 
   test('a TicketWorkLogStopped event invalidates ticketWorklogsProvider for that ticket', () async {
     var invalidated = false;
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+    final container = memoryContainer();
     container.listen(
       ticketWorklogsProvider('t2'),
       (prev, next) => invalidated = true,
@@ -100,6 +124,7 @@ void main() {
       when(() => mockSyncService.sync()).thenAnswer((_) async => DateTime.utc(2026, 1, 1));
 
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           syncServiceProvider.overrideWithValue(mockSyncService),
@@ -136,15 +161,57 @@ void main() {
     },
   );
 
+  test('a CantiereStatusChanged event invalidates cantiereByIdProvider for that cantiere and '
+      'triggers a sync (without trusting the raw status ordinal in the payload)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final mockSyncService = MockSyncService();
+    when(() => mockSyncService.sync()).thenAnswer((_) async => DateTime.utc(2026, 1, 1));
+
+    final container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        syncServiceProvider.overrideWithValue(mockSyncService),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    var invalidated = false;
+    container.listen(
+      cantiereByIdProvider('c1'),
+      (prev, next) => invalidated = true,
+      fireImmediately: false,
+    );
+    container.read(cantiereByIdProvider('c1'));
+
+    routeRealtimeEvent(
+      container,
+      // status is a raw enum ordinal on the wire — deliberately not read by the router at all,
+      // matching this plan's central rule that a push payload is a re-fetch signal, not a
+      // trusted value.
+      RealtimeEvent.fromHubPayload({
+        'type': 'CantiereStatusChanged',
+        'data': {'cantiereId': 'c1', 'status': 1},
+      }),
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    expect(invalidated, isTrue);
+    verify(() => mockSyncService.sync()).called(1);
+  });
+
   test(
-    'a CantiereStatusChanged event invalidates cantiereByIdProvider for that cantiere and '
-    'triggers a sync (without trusting the raw status ordinal in the payload)',
+    'a RapportinoSubmitted event invalidates rapportiniListProvider and triggers a sync',
     () async {
       final db = AppDatabase(NativeDatabase.memory());
       final mockSyncService = MockSyncService();
       when(() => mockSyncService.sync()).thenAnswer((_) async => DateTime.utc(2026, 1, 1));
 
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           syncServiceProvider.overrideWithValue(mockSyncService),
@@ -157,49 +224,10 @@ void main() {
 
       var invalidated = false;
       container.listen(
-        cantiereByIdProvider('c1'),
+        rapportiniListProvider,
         (prev, next) => invalidated = true,
         fireImmediately: false,
       );
-      container.read(cantiereByIdProvider('c1'));
-
-      routeRealtimeEvent(
-        container,
-        // status is a raw enum ordinal on the wire — deliberately not read by the router at all,
-        // matching this plan's central rule that a push payload is a re-fetch signal, not a
-        // trusted value.
-        RealtimeEvent.fromHubPayload({
-          'type': 'CantiereStatusChanged',
-          'data': {'cantiereId': 'c1', 'status': 1},
-        }),
-      );
-
-      await Future<void>.delayed(Duration.zero);
-      expect(invalidated, isTrue);
-      verify(() => mockSyncService.sync()).called(1);
-    },
-  );
-
-  test(
-    'a RapportinoSubmitted event invalidates rapportiniListProvider and triggers a sync',
-    () async {
-      final db = AppDatabase(NativeDatabase.memory());
-      final mockSyncService = MockSyncService();
-      when(() => mockSyncService.sync()).thenAnswer((_) async => DateTime.utc(2026, 1, 1));
-
-      final container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          syncServiceProvider.overrideWithValue(mockSyncService),
-        ],
-      );
-      addTearDown(() async {
-        container.dispose();
-        await db.close();
-      });
-
-      var invalidated = false;
-      container.listen(rapportiniListProvider, (prev, next) => invalidated = true, fireImmediately: false);
       container.read(rapportiniListProvider);
 
       routeRealtimeEvent(
@@ -223,6 +251,7 @@ void main() {
       late _RefreshTrackingNotifier notifier;
 
       final container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           notificheProvider.overrideWith((ref) {
             notifier = _RefreshTrackingNotifier(db, Dio(), ref);

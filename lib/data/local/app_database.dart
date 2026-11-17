@@ -3,6 +3,10 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+
+import 'local_database_encryption.dart';
+import 'local_database_key_store.dart';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -42,6 +46,41 @@ class Customers extends Table {
   TextColumn get contactPerson => text().nullable()();
   TextColumn get notes => text().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  /// The customer's one agent (Riferimento) — `Customer.AgentId` on the server. A new ticket for this
+  /// customer pre-fills its own Riferimento from it; the ticket's value stays authoritative after
+  /// that. Nullable: most customers have none. No foreign key — the agent may not be mirrored (it
+  /// travels in the sync's `agents`, and the picker reads `agents` by id, tolerating a miss).
+  TextColumn get agentId => text().nullable()();
+
+  /// Mobile phone number — `cellulare` on the wire, distinct from the landline [phone]. A
+  /// technician on site calls the number on the customer card, so it has to be readable with no
+  /// signal; before this column only the landline ever arrived.
+  TextColumn get cellulare => text().nullable()();
+
+  // ── fiscal identity (schema 48) ──────────────────────────────────────────────
+  // The fields an Italian customer is identified by, all already on the wire inside the customer
+  // entity — the mirror simply never stored them, so the "Dati fiscali" card could show only
+  // P.IVA and the rest was network-only. Same field-parity gap as `numero`/`priority`/`dueDate` on
+  // tickets (schema 12/20) and `agentId` above (schema 42). See `syncCursorGeneration`'s own doc
+  // comment for why the delta cursor is bumped too.
+  //
+  // Wire names are NOT the C# property names: `fiscalCode` (CodiceFiscale), `sdiCode` (SDICode),
+  // `pec` (PECEmail), `province` (Provincia). A wrong name here fails silently — the value just
+  // never arrives and the card shows nothing.
+
+  /// Codice Fiscale. Independent of [taxId]: a private individual may have this and no P.IVA.
+  TextColumn get fiscalCode => text().nullable()();
+
+  /// Codice Destinatario SDI. `0000000` means PEC-routed and `XXXXXXX` a foreign recipient — both
+  /// are real values, so this is stored verbatim and never interpreted.
+  TextColumn get sdiCode => text().nullable()();
+
+  /// PEC (certified email) address.
+  TextColumn get pec => text().nullable()();
+
+  /// Province code (sigla), e.g. "RM".
+  TextColumn get province => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -140,6 +179,40 @@ class Agents extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── maintenance template catalogue (schema 40) ─────────────────────────────────
+/// The maintenance checklist templates a technician may attach to a NEW ticket as its checklist —
+/// the "Modello checklist" the web form already offers — mirrored so the wizard's picker is filled
+/// offline.
+///
+/// Mirrors [SyncMaintenanceTemplateDto] on the wire rather than the full template entity: the picker
+/// needs the [name] to show and two answers about the template — whether new work may resolve it
+/// ([isActive]) and which version it would resolve to ([latestPublishedVersion], null while every
+/// version is still a draft). [origin] rides along because it is on the wire and describes the row,
+/// the same reasoning [Contracts.isActive] records: dropping a wire field would make the mirror a
+/// different set of facts than the payload.
+///
+/// No tenant/created/updated bookkeeping: the whole visible set is replaced wholesale on every sync
+/// (see SyncService), so the row only has to answer the picker.
+class MaintenanceTemplates extends Table {
+  TextColumn get id => text()();
+
+  /// MaintenanceTemplateOrigin: "System" (curated) | "Tenant" (this tenant's own), stored as the
+  /// wire enum name like [Tickets.priority] rather than an int — nothing filters on it.
+  TextColumn get origin => text()();
+
+  TextColumn get name => text()();
+  TextColumn get description => text().nullable()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  /// The version a new ticket would resolve to today, or null while every version is still a draft
+  /// or already retired. Null is a real, visible state ("cannot be attached now"), not missing data
+  /// — the picker hides it.
+  IntColumn get latestPublishedVersion => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── locations ─────────────────────────────────────────────────────────────────
 class Locations extends Table {
   TextColumn get id => text()();
@@ -189,7 +262,28 @@ class Tickets extends Table {
   TextColumn get technicianNotes => text().nullable()();
   TextColumn get internalNotes => text().nullable()();
   TextColumn get contractId => text().nullable()();
+
+  /// Legacy, and deliberately kept rather than dropped: the singular asset a ticket covered.
+  ///
+  /// The server's ticket carries `ProdottoAssistenzaIds` — a LIST, filled from the
+  /// `TicketProdottoAssistenza` join table — so this column never had a writer and reads null on
+  /// every row. [prodottoAssistenzaIdsJson] is what the mirror actually fills. Dropping a column
+  /// would mean rewriting the whole table on upgrade for no gain; nothing reads this one.
   TextColumn get prodottoAssistenzaId => text().nullable()();
+
+  /// The products this ticket covers, JSON-encoded — same storage as [tagsJson] (see its doc
+  /// comment for why not a comma-join).
+  ///
+  /// The server fills this on every synced ticket (`MobileUserSyncService`: one set-based read of
+  /// the join table for the whole payload), and it was invisible here for the same reason as
+  /// `numero` and `priorita`: the entity is on the wire, the client never read the key. What the
+  /// mirror did have was `TicketAssets` — coverage rows derived from the *checklist* scope, capped
+  /// per sync and only for tickets that have checklist rows at all — so a job whose units carried
+  /// no controls had no visible coverage offline. The ticket's own list is the complete statement.
+  ///
+  /// Tickets are delta-filtered, so a ticket that has not changed since the mirror was written
+  /// would keep a null forever without `syncCursorGeneration` bumping to v16 — see its doc comment.
+  TextColumn get prodottoAssistenzaIdsJson => text().nullable()();
   TextColumn get commessaId => text().nullable()();
 
   /// The cantiere (worksite) this ticket is linked to, when it has one — a ticket may or may not
@@ -224,6 +318,58 @@ class Tickets extends Table {
   /// literal comma would silently split wrong).
   TextColumn get tagsJson => text().nullable()();
 
+  /// The tenant's custom-field values for this ticket ("campi aggiuntivi"), as the server's raw
+  /// JSON-object text — the same double-encoded shape the backend sends (`extensionValues` is a
+  /// `string?` over a Postgres `jsonb` column, so the API serializes it as a JSON *string* holding
+  /// JSON). Stored verbatim rather than unpacked: the keys are tenant-defined and change over time,
+  /// and the section renders whatever [ExtensionFieldDefinitions] says this tenant configured.
+  ///
+  /// Without this column the value of every custom field was invisible offline even though the
+  /// payload has always carried it inside the ticket entity — the same field-parity gap as `numero`
+  /// (schema 12) and `priority`/`dueDate` (schema 20). See `syncCursorGeneration`'s own doc
+  /// comment for why this needs a bump too.
+  TextColumn get extensionValues => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The tenant's custom-field definitions ("campi aggiuntivi"), mirrored from the sync payload so
+/// the section renders offline — and so a rapportino written on site can still be completed field
+/// by field when there is no signal.
+///
+/// Before this table the phone's only source was the live
+/// `GET /api/extension-fields/{entityType}/definitions`; offline that call has nothing to answer
+/// with, so the whole section silently disappeared on exactly the screens where the tenant's own
+/// fields are filled in (rapportino Dettagli, cantiere form).
+///
+/// Replaced WHOLESALE on every sync, and only when the payload carries a non-empty list: the server
+/// sends the complete active set each time (a soft-deactivated field has no change marker a delta
+/// could see), and an empty carried list means "this caller may not read any type's definitions" —
+/// not "the tenant has none". See `SyncService._replaceExtensionFieldDefinitions`.
+class ExtensionFieldDefinitions extends Table {
+  TextColumn get id => text()();
+
+  /// What the entity's `extensionValues` JSON object is keyed by.
+  TextColumn get key => text()();
+
+  TextColumn get label => text()();
+
+  /// Lowercase canonical type (`ticket`, `cantiere`, `report`, …) — the backend's own key, the same
+  /// one `ExtensionFieldsApiClient` sends.
+  TextColumn get entityType => text()();
+
+  /// Free string mapped by `ExtensionFieldRenderType.of`, never an enum on the wire.
+  TextColumn get fieldType => text()();
+
+  BoolColumn get isRequired => boolean().withDefault(const Constant(false))();
+  BoolColumn get showInCard => boolean().withDefault(const Constant(false))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  TextColumn get options => text().nullable()();
+  TextColumn get unit => text().nullable()();
+  TextColumn get defaultValue => text().nullable()();
+  TextColumn get placeholder => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -249,6 +395,31 @@ class Schedules extends Table {
   BoolColumn get allDay => boolean().withDefault(const Constant(false))();
   TextColumn get title => text()();
   TextColumn get description => text()();
+
+  /// True when this row exists because an absence request (Ferie/Permesso/Malattia) was approved.
+  ///
+  /// The server creates an ordinary `Schedule` for an approved absence so the agenda blocks the
+  /// day, so status and assignment say nothing about it: the row reaches the device looking like
+  /// work, counted in "oggi" and queued as "da fare". The flag is what lets every reader tell the
+  /// two apart. Defaults to false — the honest reading of a row written before the column existed,
+  /// and the behaviour of every build before this one.
+  BoolColumn get isAssenza => boolean().withDefault(const Constant(false))();
+
+  /// True when this day belongs to a multi-day plan rather than to a job scheduled on its own.
+  ///
+  /// A block reserves every day it covers, so the day is not free to edit, drag or delete; the
+  /// admin screens read this the same way they already read [isAssenza]. Defaults to false — the
+  /// honest reading of a row written before the column existed, and the behaviour of every build
+  /// before this one.
+  BoolColumn get isBlockOccupied => boolean().withDefault(const Constant(false))();
+
+  /// The absence request this row was materialised from, when it is one.
+  ///
+  /// The server sends the row's owning request id unconditionally, so this is whichever request
+  /// materialised the row, or null. It is a GROUPING key, not a lock: the admin screens read
+  /// [isAssenza] and [isBlockOccupied] for "may I edit this", and wiring a write block to this
+  /// column instead would lock the wrong thing.
+  TextColumn get absenceRequestId => text().nullable()();
 
   // Who is on this schedule lives in [ScheduleAssignees]. teamLeadId, staffIds and squadraId
   // were dropped server-side (backend ADR-0009) and stopped arriving; keeping them here would
@@ -306,6 +477,41 @@ class Cantieri extends Table {
   RealColumn get latitude => real().nullable()();
   RealColumn get longitude => real().nullable()();
 
+  /// The tenant's custom-field values for this cantiere, verbatim JSON-object text — see
+  /// [Tickets.extensionValues] for the wire shape and why it is stored unpacked.
+  TextColumn get extensionValues => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── cantiere crew assignments (schema 43) ────────────────────────────────────
+/// The crew of each cantiere this device has synced — one row per assignment, the lead flag
+/// included.
+///
+/// Client-only mirror of `GET /api/cantieri/{id}/assegnazioni`. Before it existed that endpoint was
+/// the cantiere flow's last live-only read: offline, the lead-only clock-in affordances silently
+/// disappeared (`isLeadForCantiereProvider` read "not lead") and the teammate picker opened empty,
+/// even though the cantiere punches themselves already queue offline. The row carries exactly what
+/// its two readers need — who is on the crew and which of them is lead — and is replaced per
+/// cantiere on every sync (see `SyncService._replaceCantiereCrewAssignments`), never merged field
+/// by field.
+///
+/// No tenant/created/updated bookkeeping: nothing reads them, and the whole set for a cantiere is
+/// rewritten each time the payload carries it.
+class CantiereCrewAssignments extends Table {
+  TextColumn get id => text()();
+  TextColumn get cantiereId => text()();
+
+  /// The internal database Guid of the assigned technician — the same id
+  /// `internalUserIdProvider` holds, not the Zitadel OIDC sub.
+  TextColumn get userId => text()();
+
+  /// Whether this person is the lead for the cantiere. A lead change must reach the device even
+  /// when the cantiere row itself did not change, which is why the sync sends the crew in full
+  /// rather than delta-filtered.
+  BoolColumn get isLead => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -317,6 +523,19 @@ class TicketStatuses extends Table {
   TextColumn get name => text()();
   BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
   BoolColumn get isClosed => boolean().withDefault(const Constant(false))();
+
+  /// The tenant's own "work has started" flag — seeded as "In corso".
+  ///
+  /// Mirrored so the dashboard can tell that a ticket is being worked on even when no timer is
+  /// running and its schedule row still says "da fare". Read through the flag, never the name:
+  /// a tenant may rename the status, and `TicketStatus` itself says the flag is the contract.
+  BoolColumn get isInProgress => boolean().withDefault(const Constant(false))();
+
+  /// "Solo ufficio": only a caller holding `interventi.ticket.configure` may move a ticket into this
+  /// status or out of it. The server enforces it on `PUT /api/tickets/{id}/status` (and on its
+  /// implicit writers); the device mirrors the flag so the status sheet does not offer a move that
+  /// would come back 403 after the tap.
+  BoolColumn get officeOnly => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -344,6 +563,30 @@ class TicketTypes extends Table {
 class Colleagues extends Table {
   TextColumn get id => text()();
   TextColumn get displayName => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The people to phone at a customer site, mirrored so the customer screen's *Contatti* section
+/// renders from the local cache.
+///
+/// It used to call `GET /api/customers/{id}/contacts` on every open and show an error card when the
+/// network was gone — standing in front of the machine is exactly where a technician needs the
+/// number. Read-only mirror: the office owns these rows, and the sync REPLACES each customer's list
+/// (a removed contact has no tombstone to carry its removal, so merging would keep it forever).
+///
+/// `CustomerContactRow`, not the default `CustomerContact`: `CustomerContactApiClient` already owns
+/// that name for the wire model, and a screen holding both would hit an ambiguous import.
+@DataClassName('CustomerContactRow')
+class CustomerContacts extends Table {
+  TextColumn get id => text()();
+  TextColumn get customerId => text()();
+  TextColumn get name => text()();
+  TextColumn get role => text().nullable()();
+  TextColumn get phone => text().nullable()();
+  TextColumn get email => text().nullable()();
+  TextColumn get notes => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -409,6 +652,41 @@ class Materiali extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── magazzini ───────────────────────────────────────────────────────────────
+/// The tenant's active warehouses, mirrored so a rapportino material line can name its source
+/// with no signal.
+///
+/// Both reads behind that were live REST calls: `furgoneDiUserProvider` (the technician's own van,
+/// the default source for a line) and `magazziniProvider` (the "cambia magazzino" override). Offline
+/// they both failed, the dialog opened with no default, and the line was saved with a null
+/// `magazzinoId` — the report recorded the material but the warehouse provenance, which the stock
+/// movement is keyed on, was gone server-side and unrecoverable.
+///
+/// Read-only mirror: replaced wholesale on every sync (`MobileUserSyncResult.Magazzini` carries
+/// every active warehouse, no delta filter), never written by the device. Active only, so an admin
+/// deactivating a warehouse removes it from the phone with no separate delete.
+class Magazzini extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get nome => text()();
+
+  /// `"Sede"` or `"Furgone"` — `MagazzinoTipoEnum` serialises as its label, the same string the
+  /// REST endpoints and [MagazzinoDto] already carry.
+  TextColumn get tipo => text()();
+
+  /// For a Furgone: the technician it is assigned to. Null for a Sede, and the field that lets
+  /// "my van" resolve offline without a per-user lookup.
+  TextColumn get assegnatoUserId => text().nullable()();
+
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── ticket_materiali ─────────────────────────────────────────────────────────
 // Fabbisogno: a ticket's planned/required materials. Mirrors the backend `TicketMateriale`
 // entity 1:1 (raw field names, not the Italian-translated shape the per-ticket detail REST
@@ -428,6 +706,10 @@ class TicketMateriali extends Table {
   TextColumn get unitOfMeasure => text().nullable()();
   TextColumn get notes => text().nullable()();
   BoolColumn get isAvailable => boolean().withDefault(const Constant(false))();
+
+  /// Optional source warehouse for this planned line. Planning only — no stock movement is ever
+  /// booked from fabbisogno. Resolved to a name through the locally mirrored [Magazzini].
+  TextColumn get magazzinoId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -462,6 +744,19 @@ class DraftReports extends Table {
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
   TextColumn get title => text()();
+
+  /// The rapportino's human number, exactly as a ticket's `numero` — what the office calls this
+  /// report ("il 41 del cliente").
+  ///
+  /// Server-side only and read-only on the device: a locally created draft has no number until it
+  /// is submitted, and the server assigns one. The sync payload has always carried it (the payload
+  /// ships the `Report` entity itself), but `ReportDto.fromJson` never read the key, so every
+  /// rapportini row could only ever show a title. Null means *no number yet*, and the list shows
+  /// nothing rather than inventing one from the row id.
+  ///
+  /// Drafts are delta-filtered by `UpdatedAt`, so `syncCursorGeneration` was bumped to v16 alongside
+  /// this column — otherwise a report the office had not touched since would keep its null forever.
+  TextColumn get numero => text().nullable()();
   TextColumn get scheduleId => text().nullable()();
   TextColumn get ticketId => text().nullable()();
   TextColumn get customerId => text().nullable()();
@@ -488,6 +783,21 @@ class DraftReports extends Table {
   DateTimeColumn get endedAt => dateTime().nullable()();
   TextColumn get documentTemplateId => text().nullable()();
   TextColumn get customerSignatureAllegatoId => text().nullable()();
+
+  /// Why the customer did not sign — "Il cliente non può firmare".
+  ///
+  /// Mirrors the backend `CustomerSignatureAbsenceReason`, which is serialized as an INTEGER (no
+  /// string converter): `Assente = 0`, `Rifiuta = 1`, `Altro = 2`. Nullable, and mutually exclusive
+  /// with [customerSignatureAllegatoId]: a signed report carries no absence reason. Stored as the
+  /// raw int, not the Dart enum, so the column is the wire value and a renumbering server-side is
+  /// visible instead of silently remapped by a local ordinal.
+  IntColumn get customerSignatureAbsenceReason => integer().nullable()();
+
+  /// Free text explaining [customerSignatureAbsenceReason], required by the UI when the reason is
+  /// "Altro" and optional otherwise. Capped at 500 characters at the input; nullable because most
+  /// reasons need no explanation.
+  TextColumn get customerSignatureAbsenceNote => text().nullable()();
+
   TextColumn get technicianSignatureAllegatoId => text().nullable()();
   TextColumn get technicianNotes => text().nullable()();
   DateTimeColumn get closedAt => dateTime().nullable()();
@@ -518,6 +828,14 @@ class DraftReports extends Table {
   /// other text replaces it. Do not collapse empty into null anywhere on the write path.
   TextColumn get diagnosi => text().nullable()();
   TextColumn get soluzione => text().nullable()();
+
+  /// The tenant's custom-field values for this rapportino, verbatim JSON-object text — see
+  /// [Tickets.extensionValues] for the wire shape and why it is stored unpacked.
+  ///
+  /// Server-authored only: the values are written through
+  /// `PUT /api/extension-fields/report/{id}/values` by the Dettagli step, and read back here so a
+  /// rapportino opened offline still shows what was recorded for it.
+  TextColumn get extensionValues => text().nullable()();
 
   /// True for drafts that only exist locally (not yet submitted).
   BoolColumn get isLocalOnly => boolean().withDefault(const Constant(false))();
@@ -622,6 +940,37 @@ class ReportStaffTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── report_staff_segments ─────────────────────────────────────────────────────
+/// One work interval of one technician on one report — what the timer actually recorded.
+///
+/// Mirrors the server's `ReportStaffSegment`: it hangs off `(reportId, userId)` exactly like the
+/// `report_staff` row it describes, and carries the phone's own id for the tap in [clientId] so a
+/// replayed submit collapses onto the rows it already wrote instead of counting the hours twice.
+class ReportStaffSegments extends Table {
+  @override
+  String get tableName => 'report_staff_segments';
+
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get reportId => text()();
+  TextColumn get userId => text()();
+
+  /// The run's real instants, UTC.
+  DateTimeColumn get startUtc => dateTime()();
+  DateTimeColumn get endUtc => dateTime()();
+
+  /// The phone's id for this tap — a UUID, like everything else the server accepts as a Guid —
+  /// stable across a retried submit so a replay collapses onto the rows it already wrote. Null for
+  /// an interval that only ever came down from the server for a row written by an older client.
+  TextColumn get clientId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── report_materiali ──────────────────────────────────────────────────────────
 class ReportMateriali extends Table {
   TextColumn get id => text()();
@@ -661,6 +1010,23 @@ class ReportControlli extends Table {
   /// Per-answer remark (backend `ReportControlObservation.Note`, max 2000). A note never counts as
   /// an answer; a blank/omitted note never erases a stored one server-side.
   TextColumn get note => text().nullable()();
+
+  /// What this row was called when it was answered, and which asset it answered against.
+  ///
+  /// A sent report is a document: it has to render itself on any device, offline, forever. The wire
+  /// carries only `ticketControlId`, so before these columns the view resolved the label from the
+  /// *ticket's* checklist — and printed raw GUIDs ("Controllo 3046f4c0-…") whenever that checklist
+  /// was not on the device: a report drafted on another phone, a ticket whose checklist the sync
+  /// payload omitted, a template the office has since replaced. Those GUIDs reached the view of the
+  /// job the customer is billed for.
+  ///
+  /// Null on rows that never went through the checklist UI (server mirror, AI draft) — the view
+  /// still falls back to the ticket checklist for those, then to the id.
+  TextColumn get controlLabel => text().nullable()();
+
+  /// `TicketControl.ProdottoAssistenzaId` at answer time — the asset this answer belongs to, which
+  /// is what a maintenance report is read by. Null means a ticket-level row.
+  TextColumn get assetId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -762,9 +1128,29 @@ class CantierePunches extends Table {
   RealColumn get longitude => real().nullable()();
 
   /// Free-text work description, carried through to `CantiereMobileSessionDto.description` on
-  /// sync — the one rich field the offline batch endpoint accepts (see
-  /// `CantiereWorkLogController.MobileSessions`). Set on 'ingresso'; null on 'uscita'.
+  /// sync — see `CantiereWorkLogController.MobileSessions`. Set on 'ingresso'; on 'uscita' it is
+  /// the note typed on the clock-out screen, which the assembler lets win (the online `end` route
+  /// overwrites the row's Description the same way).
   TextColumn get description => text().nullable()();
+
+  /// Safety note typed on the clock-out screen. 'uscita' only — that screen is the only place the
+  /// app ever asks for it.
+  TextColumn get safetyNotes => text().nullable()();
+
+  /// The clock-in screen's rich fields. 'ingresso' only: they describe what was true on arrival,
+  /// and the server writes them when the punch is created, never on a later close. Before schema
+  /// 51 they travelled only through the online `start` call, so a technician who clocked in with no
+  /// signal lost the work order, the equipment, the crew size and the weather the office prices
+  /// the job from.
+  TextColumn get workOrderNumber => text().nullable()();
+  TextColumn get equipmentUsed => text().nullable()();
+  IntColumn get teamSize => integer().nullable()();
+  TextColumn get weatherConditions => text().nullable()();
+
+  /// GPS the phone recorded at clock-out. 'uscita' only; [latitude]/[longitude] stay the arrival
+  /// fix on 'ingresso'.
+  RealColumn get departureLatitude => real().nullable()();
+  RealColumn get departureLongitude => real().nullable()();
 
   /// True while not yet synced to the backend.
   BoolColumn get isPendingSync => boolean().withDefault(const Constant(true))();
@@ -776,6 +1162,189 @@ class CantierePunches extends Table {
   /// `CantiereWorkLogReconciler` on an 'ingresso' the server has already closed elsewhere, so
   /// `CantiereTimbraSyncService` never resends it. See cantiere_work_log_reconciler.dart.
   TextColumn get notes => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── ticket_timers (Ore tab and ticket timer bar) ──────────────────────────────
+/// The caller's own ticket timer sessions: the server's rows, plus any row this device started
+/// offline and has not managed to send yet.
+///
+/// Unlike [WorkSessions] (raw punch events for simple attendance) and [CantierePunches] (raw site
+/// events), a ticket timer is already a session — the backend stores it as one row and its mobile
+/// upsert takes start/end instants directly. So this table mirrors that row rather than folding
+/// events, and `clientId` is the idempotency key the batch endpoint upserts on.
+///
+/// `workDate`/`startSeconds`/`endSeconds` are the Rome-local frame every ticket worklog reader
+/// uses; `startUtc`/`endUtc` are the true instants. A row born offline has the instants first and
+/// the local frame is derived for display; a server row carries both (the instants are null on
+/// legacy rows written before the instant columns existed).
+class TicketTimers extends Table {
+  @override
+  String get tableName => 'ticket_timers';
+
+  /// Server id once known; the local uuid before the first successful upload.
+  TextColumn get id => text()();
+
+  /// The idempotency key. Device rows are born with the local uuid as their client id; a row
+  /// created in the office or online carries no client id on the wire, and stays null here.
+  TextColumn get clientId => text().nullable()();
+
+  TextColumn get ticketId => text()();
+
+  /// The owning user's internal id, so the offline list renders the same shape as the server's.
+  TextColumn get userId => text().withDefault(const Constant(''))();
+
+  /// Rome-local date and time of day; null only for a device row not yet sent.
+  DateTimeColumn get workDate => dateTime().nullable()();
+  IntColumn get startSeconds => integer().nullable()();
+  IntColumn get endSeconds => integer().nullable()();
+
+  DateTimeColumn get startUtc => dateTime().nullable()();
+  DateTimeColumn get endUtc => dateTime().nullable()();
+
+  IntColumn get approvalStatus => integer().nullable()();
+  TextColumn get description => text().nullable()();
+  BoolColumn get isManualEntry => boolean().withDefault(const Constant(false))();
+
+  /// True while this row is a session the server has not confirmed.
+  BoolColumn get isPendingSync => boolean().withDefault(const Constant(false))();
+
+  /// Human-readable reason the last upload attempt was refused (null when nothing is wrong).
+  TextColumn get syncError => text().nullable()();
+
+  /// The server row's `updatedAt`, when it sent one.
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── ticket history (Storico) ─────────────────────────────────────────────────
+/// A ticket's recorded field changes, mirrored from the sync payload.
+///
+/// The Storico tab used to be online-only: the server held the timeline and the device held
+/// nothing, so the one screen that says *who moved this ticket* went blank exactly where the
+/// technician was standing — on site, with no signal.
+///
+/// Append-only on the server (a row is written once and never edited), so the applier upserts and
+/// never rewrites one. [oldValue]/[newValue] hold the server's raw, invariant text — ids as `D`
+/// GUIDs, instants as round-trip `O` — and the screen resolves them through its own mirrors. A
+/// label frozen here would lie after the office renames a status.
+class TicketHistory extends Table {
+  @override
+  String get tableName => 'ticket_history';
+
+  TextColumn get id => text()();
+  TextColumn get ticketId => text()();
+  TextColumn get fieldName => text()();
+  TextColumn get oldValue => text().nullable()();
+  TextColumn get newValue => text().nullable()();
+
+  /// Who made the change. Empty string means no person — a background job or the customer portal —
+  /// and the screen says so rather than inventing a name.
+  TextColumn get changedByUserId => text()();
+  DateTimeColumn get changedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── cantiere work logs (the read mirror) ─────────────────────────────────────
+/// The caller's own cantiere punches as the server holds them — the *read* side of site time.
+///
+/// Deliberately a different table from [CantierePunches], which is an outbox: a punch enters there
+/// when it is queued, is pushed, and is marked sent — so once it drained, the record of the shift
+/// was gone and with no signal a technician could not look back at yesterday's hours at all.
+///
+/// This table only ever mirrors the server: rows are upserted from the sync payload and pruned from
+/// its manifest. Nothing local is written into it — putting unsent state here would make a mirror
+/// of the server disagree with the server, which is the bug the two concepts are kept apart to
+/// avoid.
+///
+/// `workDate` + the time-of-day pair are the Rome-local values the WorkLogs domain stores;
+/// [startUtc]/[endUtc] are the true instants and are null on legacy rows — prefer them for a
+/// duration, since subtracting time-of-day across midnight is negative.
+class CantiereWorkLogs extends Table {
+  @override
+  String get tableName => 'cantiere_work_logs';
+
+  TextColumn get id => text()();
+  TextColumn get cantiereId => text()();
+  TextColumn get userId => text()();
+  TextColumn get ticketId => text().nullable()();
+  DateTimeColumn get workDate => dateTime()();
+  IntColumn get startSeconds => integer()();
+  IntColumn get endSeconds => integer().nullable()();
+  DateTimeColumn get startUtc => dateTime().nullable()();
+  DateTimeColumn get endUtc => dateTime().nullable()();
+
+  /// `CantiereWorkLogTypeEnum`: 0 Site, 1 Travel, 2 Setup.
+  IntColumn get workLogType => integer().withDefault(const Constant(0))();
+
+  /// `WorkLogApprovalStatusEnum`: 0 Draft, 1 Submitted, 2 Approved, 3 Rejected.
+  IntColumn get approvalStatus => integer().withDefault(const Constant(0))();
+
+  TextColumn get description => text().nullable()();
+
+  /// The device's own key for the punch, when it queued one — lets the screen recognise the
+  /// server's row of a shift it is still holding in the outbox [CantierePunches] before the push
+  /// lands. Null for a row written online or in the office.
+  TextColumn get clientId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── ferie / permessi (the read mirror) ───────────────────────────────────────
+/// The caller's own absence requests as the server holds them, so "Ferie e Permessi" answers "was
+/// my request approved" with no signal — the one question that screen exists to answer.
+///
+/// A mirror only: the sync payload replaces this table wholesale whenever it carries the member.
+/// Filing and cancelling stay online, because both need the server's validation and its decision to
+/// mean anything, so nothing local is ever written here.
+///
+/// The two dates are CIVIL days stored as `yyyy-MM-dd` TEXT — the same rule as
+/// [Strumenti.calibrationExpiry], and for a sharper reason: a Drift [DateTimeColumn] comes back
+/// local and renders the previous day west of UTC, and a ferie request shown starting a day early is
+/// exactly the mistake this screen cannot afford. [startTime]/[endTime] stay the wire's own
+/// `HH:mm:ss` strings; they mean Rome office time, not an instant.
+@DataClassName('AbsenceRequestRow')
+class AbsenceRequests extends Table {
+  @override
+  String get tableName => 'absence_requests';
+
+  TextColumn get id => text()();
+  TextColumn get requestedByUserId => text()();
+  TextColumn get createdByUserId => text()();
+
+  /// `AbsenceTypeEnum`: 0 Ferie, 1 Permesso (legacy), 2 Malattia, 3 ROL, 4 Ex festività,
+  /// 5 Permesso retribuito, 6 Permesso non retribuito, 7 Legge 104, 8 Congedo parentale,
+  /// 9 Altri congedi/permessi. Raw ordinal — never renumbered server-side.
+  IntColumn get type => integer()();
+
+  /// `yyyy-MM-dd`, inclusive on both ends.
+  TextColumn get startDate => text()();
+  TextColumn get endDate => text()();
+
+  /// Set only for a same-day partial permesso; null means whole days.
+  TextColumn get startTime => text().nullable()();
+  TextColumn get endTime => text().nullable()();
+
+  TextColumn get reason => text().nullable()();
+
+  /// `AbsenceRequestStatusEnum`: 0 Pending, 1 Approved, 2 Rejected, 3 Cancelled.
+  IntColumn get status => integer()();
+
+  TextColumn get decidedByUserId => text().nullable()();
+  DateTimeColumn get decidedAt => dateTime().nullable()();
+  TextColumn get decisionReason => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -837,6 +1406,19 @@ class ReportAllegati extends Table {
 
   /// True when this file has not yet been uploaded to the server.
   BoolColumn get isPendingUpload => boolean().withDefault(const Constant(false))();
+
+  /// AllegatoKindEnum: UserUpload=0, SystemArtifact=1 (captured signatures). Only the server sends
+  /// this today; a row this device wrote before schema 43 keeps the default, which is what every
+  /// locally-captured file is.
+  IntColumn get kind => integer().withDefault(const Constant(0))();
+
+  /// SHA-256 of the file's bytes, lowercase hex — the value the sync delivers for a server row and
+  /// the value `AttachmentService` computes for one uploaded from here. Null on rows written
+  /// before the column existed, and on a local capture that has never reached the server.
+  ///
+  /// Its reason for existing is the attachment cache (O-8c): a file identifies itself by content,
+  /// so a re-uploaded or re-sent attachment is the same cache entry, and a changed one is not.
+  TextColumn get contentHash => text().nullable()();
 
   /// GPS position captured at the moment this allegato was recorded (signatures only — see
   /// `ReportEditorNotifier.saveCustomerSignature`/`saveTechnicianSignature`). Null when the
@@ -910,6 +1492,11 @@ class PendingTickets extends Table {
   TextColumn get contractId => text().nullable()();
   TextColumn get commessaId => text().nullable()();
   TextColumn get cantiereId => text().nullable()();
+
+  /// The maintenance checklist template the wizard chose to attach, sent as `maintenanceTemplateId`.
+  /// Null means "let the server resolve it from type/contract" — the wizard's default option — which
+  /// is why the request body omits the key rather than sending null (see TicketApiClient.createTicket).
+  TextColumn get maintenanceTemplateId => text().nullable()();
 
   /// Covered products, JSON-encoded — same storage as [Tickets.tagsJson] (its doc comment has the
   /// reasoning). A JSON list rather than a join table because nothing reads it relationally: it is
@@ -1072,6 +1659,12 @@ class Strumenti extends Table {
   TextColumn get certificateReference => text().nullable()();
   BoolColumn get isMine => boolean().withDefault(const Constant(false))();
 
+  /// Who has the instrument in charge: the id the office knows it by, and the display name the
+  /// rapportino shows. Both null when it sits on the shelf — never an empty string, so the picker
+  /// can tell "unassigned" from "someone we could not name".
+  TextColumn get holderUserId => text().nullable()();
+  TextColumn get holderName => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1093,6 +1686,12 @@ class ReportStrumenti extends Table {
   BoolColumn get expiredAtUse => boolean().withDefault(const Constant(false))();
   BoolColumn get expiredAcknowledged => boolean().withDefault(const Constant(false))();
   BoolColumn get isLocal => boolean().withDefault(const Constant(false))();
+
+  /// Free text, how the instrument was used on this rapportino. Optional, max 2000 chars server-side.
+  TextColumn get usageDescription => text().nullable()();
+
+  /// Free text, the outcome (esito) of using the instrument. Optional, max 2000 chars server-side.
+  TextColumn get outcome => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1131,14 +1730,17 @@ class ChecklistOmittedTickets extends Table {
     MaterialeBarcodes,
     DraftReports,
     ReportStaffTable,
+    ReportStaffSegments,
     ReportMateriali,
     ReportControlli,
     ReportAllegati,
     WorkSessions,
     AppNotifications,
     CantierePunches,
+    TicketTimers,
     PendingTickets,
     Colleagues,
+    CustomerContacts,
     Entitlements,
     PendingTicketAttachments,
     CachedTicketControls,
@@ -1153,13 +1755,20 @@ class ChecklistOmittedTickets extends Table {
     Commesse,
     ProdottiAssistenza,
     Agents,
+    MaintenanceTemplates,
+    CantiereCrewAssignments,
+    ExtensionFieldDefinitions,
+    Magazzini,
+    TicketHistory,
+    CantiereWorkLogs,
+    AbsenceRequests,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 39;
+  int get schemaVersion => 63;
 
   @override
   MigrationStrategy get migration {
@@ -1168,6 +1777,12 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
         await _createChecklistIndexes();
         await _createReferenceIndexes();
+        await _createCantiereCrewIndexes();
+        await _createCustomerContactIndexes();
+        await _createTicketHistoryIndexes();
+        await _createCantiereWorkLogIndexes();
+        await _createAbsenceRequestIndexes();
+        await _createReportStaffSegmentIndexes();
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -1463,6 +2078,14 @@ class AppDatabase extends _$AppDatabase {
             // ignore: experimental_member_use
             TableMigration(
               tickets,
+              // `extensionValues` (schema 46) is declared above but absent from a 37-or-older
+              // `tickets`, and this re-creation copies with a statement built from the CURRENT
+              // definition — see the `pendingTickets` migration below for the mechanism and why an
+              // unnamed absent column comes out holding its own name. Here that would leave every
+              // such ticket with the literal string "extension_values", which `decodeExtensionValues`
+              // reads as "no values recorded", so nothing would ever surface it. It is the first
+              // `tickets` column to need this.
+              newColumns: [tickets.extensionValues],
               columnTransformer: {
                 tickets.dueDate: CustomExpression<String>(_civilDayOfDueDate('tickets')),
               },
@@ -1472,6 +2095,23 @@ class AppDatabase extends _$AppDatabase {
             // ignore: experimental_member_use
             TableMigration(
               pendingTickets,
+              // The columns this 37-or-older table does NOT have, even though the class above
+              // declares them. Not bookkeeping: `TableMigration` copies the rows with a statement
+              // built from the CURRENT definition — `INSERT INTO tmp_for_copy_pending_tickets
+              // (<every column>) SELECT <every column> FROM pending_tickets` — skipping only the
+              // columns named here (or given a `columnTransformer`). A column it copies but the old
+              // table lacks is read back as a bare quoted identifier, and SQLite resolves an unknown
+              // double-quoted identifier as a string LITERAL rather than failing the way an unquoted
+              // one would, so every row would silently come out holding the column's own name:
+              // a value the server refuses with a 400, which carries no `field` and so can never be
+              // classified repairable — that row would retry forever. Naming it here leaves the new
+              // table's own default (NULL, "let the server resolve it from type/contract").
+              //
+              // Standing rule for this step: every column `tickets` or `pendingTickets` gains after
+              // schema 37 belongs in `newColumns` — here for `pendingTickets`, and in the `tickets`
+              // migration above for `tickets.extensionValues` (schema 46). Those two are the whole
+              // list so far.
+              newColumns: [pendingTickets.maintenanceTemplateId],
               columnTransformer: {
                 pendingTickets.dueDate: CustomExpression<String>(
                   _civilDayOfDueDate('pending_tickets'),
@@ -1487,6 +2127,455 @@ class AppDatabase extends _$AppDatabase {
           // server skip the check, exactly the old behaviour, so no backfill is possible or wanted
           // (the device genuinely does not know those versions and must not invent one).
           await m.addColumn(draftReports, draftReports.expectedVersion);
+        }
+        if (from < 40) {
+          // The maintenance-template catalogue the ticket wizard's "Modello checklist" picker reads
+          // offline, and the pending-ticket column the wizard's choice is queued into.
+          //
+          // A new table plus a new nullable column, and NO `syncCursorGeneration` bump: unlike a
+          // since-filtered ticket list (which is why schema 36's checklist tables needed v9), the
+          // template catalogue travels in full on every sync with no delta filter, so there is no
+          // row a delta cursor could leave unbackfilled — `_replaceMaintenanceTemplates` fills it the
+          // next time the device syncs at all.
+          await m.createTable(maintenanceTemplates);
+          // The column is added only when the table really lacks it. A device upgrading from 37 or
+          // older ALREADY has it: the `from < 38` step above re-creates `pending_tickets` from the
+          // CURRENT table definition — which now declares `maintenanceTemplateId` — so by the time
+          // this step runs the column exists and an unconditional `addColumn` dies on `duplicate
+          // column name` before the app ever opens. Devices coming from 38 or 39 have the old table
+          // shape and do need the add. Ask SQLite which of the two this upgrade is instead of
+          // inferring it from `from`.
+          //
+          // This guard only prevents the crash, not the wrong data: skipping the add is correct only
+          // because step 38 declares the column as a new one, so the re-created table holds NULL
+          // rather than the literal column name its copy would otherwise read out of the old table.
+          // The two changes belong together — one without the other leaves a ≤37 device either
+          // crashing on open or holding a template id that can never be sent.
+          if (!await _columnExists(m.database, 'pending_tickets', 'maintenance_template_id')) {
+            await m.addColumn(pendingTickets, pendingTickets.maintenanceTemplateId);
+          }
+        }
+        if (from < 41) {
+          // Per-instrument free text on a rapportino ("how it was used", "esito"). Two nullable
+          // columns, no backfill: every existing row simply has no note.
+          //
+          // Guarded by `PRAGMA table_info`, not by `from`: a device coming from 35 or older gets
+          // `report_strumenti` created by the `from < 36` step from the CURRENT definition, which
+          // already declares both columns, and an unconditional `addColumn` would die on
+          // `duplicate column name` before the app opens.
+          if (!await _columnExists(m.database, 'report_strumenti', 'usage_description')) {
+            await m.addColumn(reportStrumenti, reportStrumenti.usageDescription);
+          }
+          if (!await _columnExists(m.database, 'report_strumenti', 'outcome')) {
+            await m.addColumn(reportStrumenti, reportStrumenti.outcome);
+          }
+        }
+        if (from < 42) {
+          // The customer's agent, which pre-fills a new ticket's Riferimento. Nullable, no backfill
+          // here: the value is already on the wire (`customers[].agentId`), so the cursor bump below
+          // (v10) is what makes every existing device re-download its customers and fill the column.
+          //
+          // Guarded by `PRAGMA table_info`, not by `from`, like the steps above: `customers` is never
+          // re-created from the current definition by an earlier step today, but the guard costs
+          // nothing and an `alterTable` added later would turn an unconditional add into a crash on
+          // `duplicate column name` before the app opens.
+          if (!await _columnExists(m.database, 'customers', 'agent_id')) {
+            await m.addColumn(customers, customers.agentId);
+          }
+        }
+        if (from < 43) {
+          // The cantiere crew mirror — who is assigned to a cantiere and which of them is lead — so
+          // the lead-only clock-in affordances and the teammate picker survive offline (the
+          // cantiere punches themselves already queue offline; the crew was the last live-only read
+          // in that flow).
+          //
+          // A new client-only table, and NO `syncCursorGeneration` bump, for the same reason schema
+          // 40 needed none: the sync member carries the *complete* crew of every cantiere the
+          // payload already carries, with no delta filter on the crew rows (a lead change must reach
+          // the device even when the cantiere row itself is unchanged). So there is no row a delta
+          // cursor could leave unbackfilled — the next ordinary sync fills this table. Nothing is
+          // backfilled here: the device genuinely holds no crew until that sync, and inventing one
+          // would make `isLeadForCantiereProvider` lie.
+          await m.createTable(cantiereCrewAssignments);
+          await _createCantiereCrewIndexes();
+        }
+        if (from < 44) {
+          // The two attachment columns the sync now delivers: what kind of file it is, and the
+          // SHA-256 of its bytes. Both nullable/defaulted, so no backfill here — every device
+          // fills them by downloading the attachment list once, which it does on the next sync
+          // whatever its cursor (the list travels whole, like the maintenance catalogue).
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `report_allegati` from the current definition today, but the guard is
+          // what keeps an `alterTable` added later from turning this into a crash on `duplicate
+          // column name` before the app opens.
+          //
+          // 44, not 43: 43 is already the cantiere-crew step on `main`, and a device that ran that
+          // build must still get these two columns.
+          if (!await _columnExists(m.database, 'report_allegati', 'kind')) {
+            await m.addColumn(reportAllegati, reportAllegati.kind);
+          }
+          if (!await _columnExists(m.database, 'report_allegati', 'content_hash')) {
+            await m.addColumn(reportAllegati, reportAllegati.contentHash);
+          }
+        }
+        if (from < 45) {
+          // Ticket timers: a technician on site could read a ticket but not book a minute of work
+          // against it without a network. The mirror also holds rows the device starts offline
+          // until the batch upsert accepts them.
+          //
+          // 45, not 44: 44 is already the report-allegati step once this stacks on O-8b/O-8c, and
+          // a device that ran a build of that step must still get this table.
+          await m.createTable(ticketTimers);
+        }
+        if (from < 46) {
+          // Tenant extension fields ("campi aggiuntivi"), the last live-only read on the
+          // rapportino and cantiere forms: the *definitions* section vanished offline, and the
+          // *values* were already on the wire inside the entity JSON but had nowhere to land.
+          //
+          // The definitions table is filled by the very next sync whatever its cursor (that member
+          // travels whole, like the maintenance catalogue), so it needs no backfill here. The three
+          // `extension_values` columns are the opposite case — a delta sync only re-sends rows that
+          // changed, so an unedited ticket would keep a null forever — which is why
+          // `syncCursorGeneration` is bumped to v12 alongside this step.
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `tickets`/`cantieri`/`draft_reports` from the current definition today,
+          // but the guard is what keeps an `alterTable` added later from turning this into a crash
+          // on `duplicate column name` before the app opens.
+          await m.createTable(extensionFieldDefinitions);
+          if (!await _columnExists(m.database, 'tickets', 'extension_values')) {
+            await m.addColumn(tickets, tickets.extensionValues);
+          }
+          if (!await _columnExists(m.database, 'cantieri', 'extension_values')) {
+            await m.addColumn(cantieri, cantieri.extensionValues);
+          }
+          if (!await _columnExists(m.database, 'draft_reports', 'extension_values')) {
+            await m.addColumn(draftReports, draftReports.extensionValues);
+          }
+        }
+        if (from < 47) {
+          // The warehouses a rapportino material line can be sourced from. A brand-new table, so
+          // it needs no backfill: the member travels whole on every sync (never delta-filtered),
+          // which fills the mirror on the very next one whatever its cursor. No cursor-generation
+          // bump is needed for the same reason — unlike a new column on a delta-synced table.
+          await m.createTable(magazzini);
+        }
+        if (from < 48) {
+          // The customer's fiscal identity and mobile number, already on the wire inside the
+          // customer entity: the "Dati fiscali" card could show only P.IVA, and its own comment
+          // called SDI/PEC/Codice Fiscale out as a real gap. A technician opening a customer on
+          // site had no way to read the customer's CF or the mobile number.
+          //
+          // Needs the cursor bump to v13: the `fullScope` (office) branch delta-filters customers,
+          // so an unedited customer would keep these null forever. The technician branch sends its
+          // customers whole every sync and would have filled them anyway.
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `customers` from the current definition today, but the guard is what
+          // keeps an `alterTable` added later from turning this into a crash on `duplicate column
+          // name` before the app opens.
+          if (!await _columnExists(m.database, 'customers', 'cellulare')) {
+            await m.addColumn(customers, customers.cellulare);
+          }
+          if (!await _columnExists(m.database, 'customers', 'fiscal_code')) {
+            await m.addColumn(customers, customers.fiscalCode);
+          }
+          if (!await _columnExists(m.database, 'customers', 'sdi_code')) {
+            await m.addColumn(customers, customers.sdiCode);
+          }
+          if (!await _columnExists(m.database, 'customers', 'pec')) {
+            await m.addColumn(customers, customers.pec);
+          }
+          if (!await _columnExists(m.database, 'customers', 'province')) {
+            await m.addColumn(customers, customers.province);
+          }
+        }
+        if (from < 49) {
+          // Customer contacts, the last live-only read on the customer screen: its Contatti
+          // section called `GET /api/customers/{id}/contacts` on every open and rendered an error
+          // card offline, which is exactly where a technician needs a phone number.
+          //
+          // A brand-new table, so nothing to backfill. The cursor moves to v14 alongside it: on the
+          // office branch customers are delta-filtered, so a device whose cursor is already past a
+          // customer would never receive its contacts until something else edited that customer.
+          await m.createTable(customerContacts);
+          await _createCustomerContactIndexes();
+        }
+        if (from < 50) {
+          // Whose instrument it is, so the rapportino picker can say "di Anna Neri" instead of
+          // offering a bare name the technician has to guess the owner of. The name travels from
+          // the server rather than being resolved from the colleague mirror, which carries active
+          // users only — an instrument stays with someone who has since been deactivated until the
+          // office reassigns it.
+          //
+          // Nothing to backfill and no cursor bump: `strumenti` is one of the members that travel
+          // WHOLE on every sync (`replaceStrumenti` deletes and re-inserts), so the next sync fills
+          // these columns whatever its cursor.
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `strumenti` from the current definition today, but the guard is what
+          // keeps an `alterTable` added later from turning this into a crash on `duplicate column
+          // name` before the app opens.
+          if (!await _columnExists(m.database, 'strumenti', 'holder_user_id')) {
+            await m.addColumn(strumenti, strumenti.holderUserId);
+          }
+          if (!await _columnExists(m.database, 'strumenti', 'holder_name')) {
+            await m.addColumn(strumenti, strumenti.holderName);
+          }
+
+          // The cantiere clock-out screen's own fields: the description typed on leaving, the
+          // safety note, and the departure fix. They went to the server only through the online
+          // `end` call — a technician who clocked out with no signal lost all three, and the batch
+          // upsert the queue drains through had nowhere to put them.
+          //
+          // Guarded by `PRAGMA table_info` rather than by `from`, like the steps above: no earlier
+          // step re-creates `cantiere_punches` from the current definition today, but the guard is
+          // what keeps an `alterTable` added later from turning this into a crash on `duplicate
+          // column name` before the app opens.
+          if (!await _columnExists(m.database, 'cantiere_punches', 'safety_notes')) {
+            await m.addColumn(cantierePunches, cantierePunches.safetyNotes);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'departure_latitude')) {
+            await m.addColumn(cantierePunches, cantierePunches.departureLatitude);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'departure_longitude')) {
+            await m.addColumn(cantierePunches, cantierePunches.departureLongitude);
+          }
+        }
+        if (from < 51) {
+          // The cantiere clock-in screen's rich fields, the counterpart of schema 50's clock-out
+          // set: the work order, the equipment used, the crew size and the weather. They reached
+          // the server only through the online `start` call, so an offline clock-in arrived with
+          // none of them — silently, since nothing on the device asked again.
+          //
+          // Same `PRAGMA table_info` guard as 50, for the same reason: a device that already
+          // carries one of these columns must not die on `duplicate column name` before the app
+          // opens.
+          if (!await _columnExists(m.database, 'cantiere_punches', 'work_order_number')) {
+            await m.addColumn(cantierePunches, cantierePunches.workOrderNumber);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'equipment_used')) {
+            await m.addColumn(cantierePunches, cantierePunches.equipmentUsed);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'team_size')) {
+            await m.addColumn(cantierePunches, cantierePunches.teamSize);
+          }
+          if (!await _columnExists(m.database, 'cantiere_punches', 'weather_conditions')) {
+            await m.addColumn(cantierePunches, cantierePunches.weatherConditions);
+          }
+        }
+        if (from < 52) {
+          // The Storico timeline, mirrored so the tab renders with no network. A NEW table, so
+          // `createTable` is additive on its own — no `PRAGMA table_info` guard, and drift emits
+          // `CREATE TABLE IF NOT EXISTS`, which also keeps the older-version test fixtures working
+          // when they rewind a current-schema database.
+          //
+          // Nothing to backfill: the member is re-sent from the window (full sync) or the cutoff
+          // (delta) on the next sync, and the applier only ever upserts — a device that has never
+          // held a row simply fills in.
+          await m.createTable(ticketHistory);
+          await _createTicketHistoryIndexes();
+        }
+        if (from < 53) {
+          // Cantiere site hours, mirrored so a past shift is readable with no network. A NEW table,
+          // same shape of reasoning as the `from < 52` branch above: `createTable` is additive and
+          // `IF NOT EXISTS` keeps a rewound fixture safe.
+          //
+          // Nothing to backfill — the member is re-sent in full on every sync (window plus any
+          // still-open shift), so the first sync after the upgrade fills it.
+          await m.createTable(cantiereWorkLogs);
+          await _createCantiereWorkLogIndexes();
+        }
+        if (from < 54) {
+          // Ferie e permessi, mirrored so the list answers offline. A NEW table, same shape of
+          // reasoning as the `from < 53` branch above; nothing to backfill — the member is re-sent
+          // in full on every sync, so the first sync after the upgrade fills it.
+          await m.createTable(absenceRequests);
+          await _createAbsenceRequestIndexes();
+        }
+        if (from < 55) {
+          // An answered control remembers its own label and asset, so a sent report renders itself
+          // instead of printing raw control GUIDs whenever the ticket's checklist is not on this
+          // device (see `ReportControlli.controlLabel`).
+          //
+          // Nothing to backfill and no cursor bump: the columns are filled by the next answer typed
+          // on this phone. Rows already stored — mirrored server reports, older device drafts —
+          // stay null and keep resolving through the checklist fallback the view already had.
+          //
+          // Same `PRAGMA table_info` guard as 50 and 51, for the same reason: a re-created table or
+          // a half-applied step must not kill the app on `duplicate column name` before it opens.
+          //
+          // Numbered 55, not 52: main shipped 52 (ticketHistory), 53 (cantiereWorkLogs) and 54
+          // (absenceRequests) while this branch was open, and the ladder is linear.
+          if (!await _columnExists(m.database, 'report_controlli', 'control_label')) {
+            await m.addColumn(reportControlli, reportControlli.controlLabel);
+          }
+          if (!await _columnExists(m.database, 'report_controlli', 'asset_id')) {
+            await m.addColumn(reportControlli, reportControlli.assetId);
+          }
+        }
+        if (from < 56) {
+          // The tenant's own "work has started" flag on a ticket status (`isInProgress`, seeded as
+          // "In corso"). The server has always sent it — the sync serializes the `TicketStatus`
+          // entity — but the device dropped it, so the dashboard could only tell that work had
+          // started by finding a running timer. A ticket moved to "In corso" by the office, or by a
+          // timer that has since been stopped, fell back to "da fare" on the home queue.
+          //
+          // Nothing to backfill: `ticketStatuses` is replaced wholesale from the payload on every
+          // sync, so the first sync after the upgrade fills the flag.
+          //
+          // Same `PRAGMA table_info` guard as 50, 51 and 55: a re-created table or a half-applied
+          // step must not kill the app on `duplicate column name` before it opens.
+          if (!await _columnExists(m.database, 'ticket_statuses', 'is_in_progress')) {
+            await m.addColumn(ticketStatuses, ticketStatuses.isInProgress);
+          }
+        }
+        if (from < 57) {
+          // "Il cliente non può firmare": a ticket-linked report that the customer could not sign
+          // records why (assente / rifiuta / altro + an optional note) instead of being blocked
+          // forever, or submitted with no explanation at all. See
+          // `DraftReports.customerSignatureAbsenceReason`'s own doc comment for the wire shape.
+          //
+          // Two plain nullable columns, nothing to backfill: every existing row reads "no reason
+          // recorded", which is the true statement about a report written before this column
+          // existed. Client-authored only (the editor sets it, the submit sends it), never
+          // delta-synced from the server — no `syncCursorGeneration` bump needed.
+          //
+          // Same `PRAGMA table_info` guard as 50, 51, 55 and 56, and here it is not defensive but
+          // required: the older-schema fixtures in test/ rewind `user_version` on the CURRENT
+          // schema, which already declares both columns, so an unconditional add would die on
+          // `duplicate column name` before the app opens. migration_v57_test.dart covers the real
+          // add path on a database that genuinely lacks them.
+          if (!await _columnExists(
+            m.database,
+            'draft_reports',
+            'customer_signature_absence_reason',
+          )) {
+            await m.addColumn(draftReports, draftReports.customerSignatureAbsenceReason);
+          }
+          if (!await _columnExists(
+            m.database,
+            'draft_reports',
+            'customer_signature_absence_note',
+          )) {
+            await m.addColumn(draftReports, draftReports.customerSignatureAbsenceNote);
+          }
+        }
+        if (from < 58) {
+          // An approved absence is materialised server-side as an ordinary schedule so the agenda
+          // blocks the day — which also means the phone could not tell it from a job: it counted in
+          // "oggi" and sat in the work queue as "da fare", and the admin screens offered edits the
+          // backend refuses (`absence_schedule_read_only`). `isAssenza` is the server's own answer
+          // to "is this really work".
+          //
+          // No `syncCursorGeneration` bump: a technician's schedules are re-sent in full on every
+          // sync (the delta filter deliberately does not cover them — see
+          // `MobileUserSyncService`'s type-level delta contract), so the first sync after the
+          // upgrade fills the flag on rows already on the device. Same `PRAGMA table_info` guard as
+          // 50-57, and here it is required: the older-schema fixtures rewind `user_version` on the
+          // CURRENT schema, which already declares the column.
+          if (!await _columnExists(m.database, 'schedules', 'is_assenza')) {
+            await m.addColumn(schedules, schedules.isAssenza);
+          }
+        }
+        if (from < 59) {
+          // Two fields that were on the wire and never mirrored — the same class of defect as
+          // `numero` (schema 12), `priority`/`dueDate` (schema 20) and `tagsJson` (schema 32).
+          //
+          // `tickets.prodottoAssistenzaIdsJson` — the units a job covers. Read off the ticket
+          // entity the payload already ships, which `MobileUserSyncService` fills for every synced
+          // ticket from the `TicketProdottoAssistenza` join table.
+          //
+          // `draft_reports.numero` — the rapportino's human number. Server-assigned, so null on a
+          // locally created draft that has not been submitted yet.
+          //
+          // BOTH need `syncCursorGeneration` bumped to v16, and the task's own note that a
+          // rapportino "is carried in full on every sync" is not true of a delta: the drafts query
+          // is filtered on `(UpdatedAt ?? CreatedAt) > cutoff` exactly like tickets
+          // (`MobileUserSyncService`), so neither field would ever arrive for a row the office had
+          // not touched since this build was installed.
+          //
+          // Same `PRAGMA table_info` guard as 50-57, and here it is required: the
+          // older-schema fixtures in test/ rewind `user_version` on the CURRENT schema, which
+          // already declares both columns, so an unconditional add would die on
+          // `duplicate column name` before the app opens. migration_v59_test.dart covers the real
+          // add path on a database that genuinely lacks them.
+          if (!await _columnExists(m.database, 'tickets', 'prodotto_assistenza_ids_json')) {
+            await m.addColumn(tickets, tickets.prodottoAssistenzaIdsJson);
+          }
+          if (!await _columnExists(m.database, 'draft_reports', 'numero')) {
+            await m.addColumn(draftReports, draftReports.numero);
+          }
+        }
+        if (from < 60) {
+          // The technician's real work intervals — one row per start/stop, the thing the
+          // rapportino's hours are supposed to be. `report_staff` gets no new column: exactly as
+          // server-side, segments are a child collection of the staff row.
+          //
+          // A NEW table, so `createTable` is additive on its own and drift emits
+          // `CREATE TABLE IF NOT EXISTS`, which keeps the older-schema fixtures working when they
+          // rewind `user_version` on a current-schema database (the `from < 52`/`53`/`54`
+          // branches' reasoning).
+          //
+          // The cursor bump to v17 is NOT optional here: report children travel inside the report
+          // aggregate, and `MobileUserSyncService` delta-filters reports on
+          // `(UpdatedAt ?? CreatedAt) > cutoff` exactly like everything else. A device whose
+          // cursor already sits past a report would never receive that report's intervals until
+          // somebody touched it, so every rapportino already on the phone would open with no
+          // segments at all and the Ore field would stay editable on a timer row.
+          await m.createTable(reportStaffSegments);
+          await _createReportStaffSegmentIndexes();
+        }
+        if (from < 61) {
+          // "Solo ufficio" on a ticket status: the flag the server uses to reserve a status for a
+          // caller holding `interventi.ticket.configure`. Mirrored so the status sheet stops
+          // offering moves the server refuses.
+          //
+          // No cursor bump: `ticketStatuses` travels in full on every sync (the entity has no
+          // UpdatedAt, so there is nothing to delta on), so a device picks the new flag up on its
+          // next sync without being told to resend anything.
+          //
+          // Guarded like 59: the older-schema fixtures rewind `user_version` on the CURRENT schema,
+          // which already declares the column, and an unconditional add would die on
+          // `duplicate column name` before the app opened.
+          if (!await _columnExists(m.database, 'ticket_statuses', 'office_only')) {
+            await m.addColumn(ticketStatuses, ticketStatuses.officeOnly);
+          }
+        }
+        if (from < 62) {
+          // A multi-day plan marks every day it covers as occupied, and an absence-owned row now
+          // carries the request it came from. `is_block_occupied` joins `isAssenza` (schema 58) as
+          // a write-blocking signal, so the admin screens stop offering writes the server refuses;
+          // `absence_request_id` is only a grouping key.
+          //
+          // `syncCursorGeneration` bumped to v18 alongside this. A technician's schedules already
+          // avoid the cutoff, but office/admin callers sync `fullScope`, where
+          // `MobileUserSyncService` DOES filter schedules on `(UpdatedAt ?? CreatedAt) > cutoff` —
+          // so an unedited block day would keep the column default forever on exactly the role
+          // that edits plans. Same blind spot as v3/v4/v6/v8/v10/v12/v13/v15/v16/v17.
+          //
+          // Guarded like 58-61: the older-schema fixtures rewind `user_version` on the CURRENT
+          // schema, which already declares both columns, and an unconditional add would die on
+          // `duplicate column name` before the app opened.
+          if (!await _columnExists(m.database, 'schedules', 'is_block_occupied')) {
+            await m.addColumn(schedules, schedules.isBlockOccupied);
+          }
+          if (!await _columnExists(m.database, 'schedules', 'absence_request_id')) {
+            await m.addColumn(schedules, schedules.absenceRequestId);
+          }
+        }
+        if (from < 63) {
+          // Fabbisogno now records the source warehouse it is planned to be taken from. No
+          // `syncCursorGeneration` bump: unlike schedules, ticket materials are re-sent whole on
+          // every sync (no delta cutoff), so the next sync backfills this column for every device.
+          //
+          // Guarded like 59-62: the older-schema fixtures rewind `user_version` on the CURRENT
+          // schema, which already declares the column, and an unconditional add would die on
+          // `duplicate column name` before the app opened.
+          if (!await _columnExists(m.database, 'ticket_materiali', 'magazzino_id')) {
+            await m.addColumn(ticketMateriali, ticketMateriali.magazzinoId);
+          }
         }
       },
     );
@@ -1526,6 +2615,18 @@ class AppDatabase extends _$AppDatabase {
       "THEN strftime('%Y-%m-%d', $table.due_date, 'unixepoch') "
       "ELSE strftime('%Y-%m-%d', $table.due_date, 'unixepoch', 'localtime') END";
 
+  /// Whether [table] currently carries [column], asked of SQLite rather than assumed.
+  ///
+  /// A migration step that adds a column cannot always trust `from`: an earlier `alterTable` step
+  /// re-creates its table from the CURRENT definition, so a column declared after that step exists
+  /// already on any device the re-creation ran for. `Migrator.addColumn` does not emit
+  /// `IF NOT EXISTS` — it dies on `duplicate column name` — so the only correct answer is to look.
+  /// Used by the schema-40 step for `pending_tickets.maintenance_template_id`.
+  static Future<bool> _columnExists(DatabaseConnectionUser db, String table, String column) async {
+    final rows = await db.customSelect('PRAGMA table_info($table)').get();
+    return rows.any((r) => r.read<String>('name') == column);
+  }
+
   // ── sync_meta helpers ────────────────────────────────────────────────────
 
   /// Which generation of the sync cursor this build understands.
@@ -1560,7 +2661,64 @@ class AppDatabase extends _$AppDatabase {
   ///      resent on every sync, but a fullScope caller's ticket list is since-filtered, so a device
   ///      whose cursor is already past a ticket would never receive its asset rows. Same reasoning
   ///      as v3-v8.
-  static const String syncCursorGeneration = 'v9';
+  /// v10 — 2026-10-16, schema 42 added `customers.agentId`. Already on the wire, and a delta sync only
+  ///      re-sends customers that changed, so an unedited customer would keep a null agent — and the
+  ///      new-ticket pre-fill silently never fire for it — until somebody happened to edit it.
+  /// v11 — 2026-10-21, the sync-v2 authoritative scope. Two independent reasons, both about a
+  ///      cursor this device already holds:
+  ///      * the server now hands back a cursor with a short overlap, so a row written while the
+  ///        request was running is re-read next time instead of falling behind the cursor
+  ///        forever. A cursor written by v10 or earlier predates that overlap and would never
+  ///        re-request those rows.
+  ///      * the mirror now PRUNES to the payload's authoritative `scope`, and a prune is only
+  ///        safe against a complete payload. Resuming from a stale delta cursor would treat rows
+  ///        a delta merely did not mention as out of scope and delete them.
+  /// v12 — 2026-10-21, schema 46 added `tickets`/`cantieri`/`draft_reports.extensionValues`. Same
+  ///      reasoning as v3/v4/v6/v8: the values were already on the wire inside the entity JSON, and a
+  ///      delta sync only re-sends rows that changed, so an unedited entity would keep a null
+  ///      forever. The definitions table added by the same step needs no bump — its member travels
+  ///      whole on every sync.
+  /// v13 — 2026-10-22, schema 48 added the customer's fiscal identity (`fiscalCode`, `sdiCode`,
+  ///      `pec`, `province`) and `cellulare`. Same reasoning as v10's `customers.agentId`: the
+  ///      values were already on the wire, and a delta sync only re-sends customers that changed,
+  ///      so an unedited customer would keep them null forever — on the office branch that reads
+  ///      the tenant's whole book delta-filtered.
+  /// v14 — 2026-10-22, schema 49 added `customer_contacts`. A new table, but the same blind spot
+  ///      as v10: on the office branch customers are delta-filtered, so a device whose cursor is
+  ///      already past a customer would never receive its contacts until something else touched
+  ///      that customer — and the Contatti section would stay empty on a device that had just been
+  ///      upgraded to show it.
+  /// v15 — 2026-10-25, the `priorita` wire key. No schema change: `tickets.priority` has been there
+  ///      since v4, but it was filled from `priority`, a key the server never sends (`Ticket` carries
+  ///      `priorita`), so every mirrored ticket holds a null. A delta sync only re-sends tickets that
+  ///      changed, so without this bump an untouched ticket would keep its null forever and the
+  ///      priority stripe would stay blank until somebody happened to edit the job. Same reasoning as
+  ///      v3/v4/v6/v8. The `draft_reports.is_ai_assisted` fix in the same release needs no bump of its
+  ///      own: the mobile payload carries every Bozza the user authored, in full, on each sync.
+  ///      (Correction, v16: that last sentence is not true — `MobileUserSyncService` filters the
+  ///      draft query on `(UpdatedAt ?? CreatedAt) > cutoff` exactly like tickets, so a "full" list
+  ///      is only full on a sync without a cursor. The v16 bump below re-sends everything once and
+  ///      therefore backfills `is_ai_assisted` on every draft written before v15 too.)
+  /// v16 — 2026-10-26, schema 59 added `tickets.prodottoAssistenzaIdsJson` and
+  ///      `draft_reports.numero`. Both were already on the wire inside the entity JSON the payload
+  ///      ships (the server even fills the covered-asset list for every synced ticket), and both
+  ///      tables are delta-filtered, so an untouched ticket or rapportino would keep its null
+  ///      forever — the same blind spot as v3/v4/v6/v8/v10/v12/v13/v15.
+  /// v17 — 2026-10-29, schema 60 added `report_staff_segments`. The intervals travel inside the
+  ///      report aggregate, which is delta-filtered by report, so a device whose cursor already
+  ///      sits past a report would never receive that report's segments — every rapportino already
+  ///      on the phone would open with an empty interval list. Same blind spot as
+  ///      v3/v4/v6/v8/v10/v12/v13/v15. Bumping the generation only invalidates the cursor; the
+  ///      reports themselves are re-requested and arrive whole with their children.
+  /// v18 — 2026-11-03, schema 62 added `schedules.isBlockOccupied` and `schedules.absenceRequestId`.
+  ///      A technician's schedules are re-sent in full on every sync, but office/admin callers take
+  ///      the `fullScope` branch, where `MobileUserSyncService` keeps the `(UpdatedAt ?? CreatedAt)
+  ///      > cutoff` filter on schedules too — so an unedited day of a multi-day block would keep
+  ///      both leaves at their defaults until something else touched the row, and the admin screen
+  ///      would offer edits the server refuses. Same blind spot as v3/v4/v6/v8/v10/v12/v13/v15/
+  ///      v16/v17. (Schema 58's `isAssenza` shipped without a bump on the technician-only reading;
+  ///      that was the same mistake, left alone because it is already on devices.)
+  static const String syncCursorGeneration = 'v18';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 
@@ -1600,9 +2758,78 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// The crew mirror is only ever read as "the rows for this cantiere", by the teammate picker and
+  /// by the lead derivation in cantiere_timbra_screen.dart.
+  ///
+  /// Kept separate from the other index helpers for the same reason [_createReferenceIndexes] is
+  /// kept from [_createChecklistIndexes]: the table it indexes does not exist on devices older than
+  /// schema 43, and a `CREATE INDEX ... ON cantiere_crew_assignments` emitted from an earlier
+  /// branch would fail their upgrade. `IF NOT EXISTS` keeps this idempotent (a fresh install runs
+  /// it from `onCreate`, an upgrade from the `from < 43` branch).
+  Future<void> _createCantiereCrewIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS cantiere_crew_assignments_cantiere '
+      'ON cantiere_crew_assignments (cantiere_id)',
+    );
+  }
+
+  /// The contact mirror is only ever read as "the contacts of this customer".
+  ///
+  /// Separate from the other index helpers for the same reason they are separate from each other:
+  /// the table does not exist on devices older than schema 49, and a `CREATE INDEX ... ON
+  /// customer_contacts` emitted from an earlier branch would fail their upgrade.
+  Future<void> _createTicketHistoryIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS ticket_history_ticket '
+      'ON ticket_history (ticket_id, changed_at)',
+    );
+  }
+
+  /// The cantiere detail reads one site's shifts, newest first — without this index that is a full
+  /// scan of the mirror on every open.
+  Future<void> _createCantiereWorkLogIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS cantiere_work_logs_site '
+      'ON cantiere_work_logs (cantiere_id, work_date)',
+    );
+  }
+
+  /// The list reads one user's requests, newest first — without this index that is a full scan on
+  /// every open, and the order would come from a sort instead of the index.
+  Future<void> _createAbsenceRequestIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS absence_requests_owner '
+      'ON absence_requests (requested_by_user_id, created_at)',
+    );
+  }
+
+  /// Intervals are read per report (the editor) and per report+technician (the submit payload and
+  /// any later correction), never by id alone.
+  Future<void> _createReportStaffSegmentIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS report_staff_segments_report '
+      'ON report_staff_segments (report_id, user_id)',
+    );
+  }
+
+  Future<void> _createCustomerContactIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS customer_contacts_customer '
+      'ON customer_contacts (customer_id)',
+    );
+  }
+
   Future<DateTime?> getLastSync() async {
     final row = await (select(syncMeta)..where((t) => t.id.equals(_cursorId))).getSingleOrNull();
     return row?.lastSync;
+  }
+
+  /// [getLastSync], but live: emits again whenever [setLastSync] writes a new cursor, so a screen
+  /// can show "ultima sincronizzazione" without polling. Emits null until the first successful sync
+  /// (there is then no `sync_meta` row at all — the same "never synced" the getter reports).
+  Stream<DateTime?> watchLastSync() {
+    final query = select(syncMeta)..where((t) => t.id.equals(_cursorId));
+    return query.watchSingleOrNull().map((row) => row?.lastSync);
   }
 
   Future<void> setLastSync(DateTime dt) async {
@@ -1643,6 +2870,14 @@ LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'tasktap.db'));
-    return NativeDatabase.createInBackground(file);
+    final plan = await LocalDatabaseEncryption(keyStore: SecureLocalDatabaseKeyStore())
+        .prepare(file);
+
+    return NativeDatabase.createInBackground(
+      file,
+      // Null only in the plaintext fallback (key store unavailable or migration failed); the
+      // encryption plan reports those to Sentry and retries on the next launch.
+      setup: plan.keyHex == null ? null : (db) => db.execute("PRAGMA key = \"x'${plan.keyHex}'\";"),
+    );
   });
 }

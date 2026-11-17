@@ -11,14 +11,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/auth/access.dart';
+import 'package:tasktap_mobile/core/files/capture_store.dart';
 import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_activity_timeline.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_facts_grid.dart';
+import 'package:tasktap_mobile/core/widgets/detail/detail_hero.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/attachments/attachment_content_cache.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/tickets/pending_ticket_attachment_repository.dart';
@@ -28,6 +37,9 @@ import 'package:tasktap_mobile/data/sync/checklist_sync_dto.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/domain/checklist/control_type.dart';
+import 'package:tasktap_mobile/features/calendario/widgets/schedule_info_sheet.dart';
+import 'package:tasktap_mobile/features/checklist/checklist_providers.dart'
+    show ticketMirrorKnownProvider;
 import 'package:tasktap_mobile/features/ticket/ticket_detail_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
@@ -53,6 +65,16 @@ class _FakeImagePickerPlatform extends ImagePickerPlatform {
 class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
+
+/// The default seat for this file's existing tests: a technician who may write the ticket and
+/// start a rapportino. Individual tests override it to exercise the read-only and office-only
+/// paths; a test that passes an [Entitlement] replaces it wholesale.
+final _ticketWriteEntitlement = Entitlement(
+  features: const {'interventi', 'rapportini'},
+  capabilities: const {'interventi.ticket.write', 'rapportini.report.write'},
+  seatType: 'field',
+  fetchedAt: DateTime.utc(2026, 11, 9),
+);
 
 /// Never geocodes for real — every test in this file overrides `geocodingServiceProvider` with
 /// this, so a ticket location with an address exercises `GeoMapCard`'s fallback path
@@ -81,14 +103,42 @@ Widget _buildDetail({
   // fetch-on-demand tab endpoints) get the deterministic "offline" tab
   // content rather than depending on how an unstubbed MockDio call fails.
   bool isOnline = false,
+  // The app-wide store resolves `<documents>/captures` through path_provider, which has no
+  // platform implementation in a widget test. Only the three upload tests need it (they tap
+  // Galleria/Fotocamera); every other test leaves it unresolved and never reads it.
+  CaptureStore? captureStore,
+  // The attachment cache resolves its root through `getApplicationDocumentsDirectory()` — another
+  // channel with no platform implementation in a widget test. Only the two tap-to-open tests need
+  // it; every other test never opens an attachment.
+  AttachmentContentCache? attachmentCache,
+  // Null leaves the real provider in place, which answers from the `tickets` row `seedBase`
+  // writes (`true`). Only the unknown-mirror test needs to say otherwise, because a ticket that
+  // reaches the screen has by definition already reached the mirror.
+  bool? ticketMirrorKnown,
+  // The cached `/auth/me` answer. Null leaves the real provider in place, which reads the empty
+  // `entitlements` table — i.e. "no capabilities", the same fail-closed answer a device with no
+  // cache gets. Only the "office may move into a Solo ufficio status" test grants anything.
+  Entitlement? entitlement,
 }) {
   return ProviderScope(
+    retry: (_, _) => null,
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(dio ?? MockDio()),
       isOnlineProvider.overrideWithValue(isOnline),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+      if (captureStore != null)
+        captureStoreProvider.overrideWith((ref) async => captureStore),
+      if (attachmentCache != null)
+        attachmentContentCacheProvider.overrideWithValue(attachmentCache),
+      if (ticketMirrorKnown != null)
+        ticketMirrorKnownProvider.overrideWith(
+          (ref, _) async => ticketMirrorKnown,
+        ),
+      cachedEntitlementProvider.overrideWith(
+        (ref) async => entitlement ?? _ticketWriteEntitlement,
+      ),
     ],
     child: MaterialApp(home: TicketDetailScreen(ticketId: ticketId)),
   );
@@ -105,7 +155,16 @@ GoRouter _makeChipRouter({required String ticketId}) => GoRouter(
   routes: [
     GoRoute(
       path: AppRoutes.ticketDetail,
-      builder: (_, state) => TicketDetailScreen(ticketId: state.pathParameters['id']!),
+      builder: (_, state) =>
+          TicketDetailScreen(ticketId: state.pathParameters['id']!),
+    ),
+    GoRoute(
+      path: '/altro/rapportini/view/:id',
+      builder: (_, state) => Scaffold(
+        body: Center(
+          child: Text('REPORT-VIEW-MARKER:${state.pathParameters['id']}'),
+        ),
+      ),
     ),
     GoRoute(
       path: AppRoutes.cantieriDetail,
@@ -113,6 +172,18 @@ GoRouter _makeChipRouter({required String ticketId}) => GoRouter(
         body: Center(
           child: Text(
             'CANTIERE-DETAIL-MARKER:ticketId=${state.uri.queryParameters['ticketId']}',
+          ),
+        ),
+      ),
+    ),
+    GoRoute(
+      path: AppRoutes.cantiereTimbra,
+      builder: (_, state) => Scaffold(
+        body: Center(
+          child: Text(
+            'CANTIERE-TIMBRA-MARKER:'
+            'cantiereId=${state.uri.queryParameters['cantiereId']}:'
+            'ticketId=${state.uri.queryParameters['ticketId']}',
           ),
         ),
       ),
@@ -125,12 +196,14 @@ Widget _buildDetailWithRouter({
   required MockAuthRepository repo,
   required GoRouter router,
   bool isOnline = false,
+  Dio? dio,
 }) {
   return ProviderScope(
+    retry: (_, _) => null,
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
-      dioProvider.overrideWithValue(MockDio()),
+      dioProvider.overrideWithValue(dio ?? MockDio()),
       isOnlineProvider.overrideWithValue(isOnline),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
     ],
@@ -148,8 +221,10 @@ void main() {
   late AppDatabase db;
   late MockAuthRepository repo;
   late StreamController<AuthUser?> authStream;
-  final ImagePickerPlatform originalImagePickerPlatform = ImagePickerPlatform.instance;
+  final ImagePickerPlatform originalImagePickerPlatform =
+      ImagePickerPlatform.instance;
   final List<File> tempFiles = [];
+  final List<Directory> captureRoots = [];
 
   final fakeUser = AuthUser(
     id: 'u1',
@@ -175,6 +250,10 @@ void main() {
       if (f.existsSync()) f.deleteSync();
     }
     tempFiles.clear();
+    for (final d in captureRoots) {
+      if (d.existsSync()) d.deleteSync(recursive: true);
+    }
+    captureRoots.clear();
   });
 
   /// A real file on disk — `_pickImage`'s size check reads it with `File.readAsBytes`, so the
@@ -192,20 +271,49 @@ void main() {
     return file;
   }
 
+  /// A real captures directory under the system temp dir — the same shape `CaptureStore.forApp()`
+  /// builds under Documents, minus path_provider's platform channel (which a widget test cannot
+  /// drive). The screen resolves it through `captureStoreProvider`, so production and this test
+  /// run the same code, just pointed somewhere the test can inspect.
+  CaptureStore makeCaptureStore() {
+    final root = Directory.systemTemp.createTempSync('tt_captures_');
+    captureRoots.add(root);
+    return CaptureStore(Directory('${root.path}/${CaptureStore.folderName}'));
+  }
+
+  /// Files in a test capture store (empty when the store was never written to).
+  List<File> capturedFiles(CaptureStore store) => store.directory.existsSync()
+      ? store.directory.listSync().whereType<File>().toList()
+      : const <File>[];
+
   Future<void> pump(
     WidgetTester tester, {
     String ticketId = 'ticket-1',
     Dio? dio,
     bool isOnline = false,
+    CaptureStore? captureStore,
     // False for a fixture with an open (still-running) worklog entry: that renders a LiveDot,
     // whose pulse repeats forever and never lets pumpAndSettle's frame-quiescence check succeed —
     // it would otherwise hang until the 10-minute timeout. A handful of bounded pumps gives every
     // async provider chain the same room to resolve without waiting for an animation that, by
     // design, never stops.
     bool settle = true,
+    AttachmentContentCache? attachmentCache,
+    bool? ticketMirrorKnown,
+    Entitlement? entitlement,
   }) async {
     await tester.pumpWidget(
-      _buildDetail(db: db, repo: repo, ticketId: ticketId, dio: dio, isOnline: isOnline),
+      _buildDetail(
+        db: db,
+        repo: repo,
+        ticketId: ticketId,
+        dio: dio,
+        isOnline: isOnline,
+        captureStore: captureStore,
+        attachmentCache: attachmentCache,
+        ticketMirrorKnown: ticketMirrorKnown,
+        entitlement: entitlement,
+      ),
     );
     await tester.pump();
     authStream.add(fakeUser);
@@ -222,12 +330,20 @@ void main() {
     await db
         .into(db.ticketStatuses)
         .insert(
-          TicketStatusesCompanion.insert(id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'),
+          TicketStatusesCompanion.insert(
+            id: const Value(1),
+            tenantId: 'tenant-1',
+            name: 'Aperto',
+          ),
         );
     await db
         .into(db.ticketTypes)
         .insert(
-          TicketTypesCompanion.insert(id: const Value(1), tenantId: 'tenant-1', name: 'Assistenza'),
+          TicketTypesCompanion.insert(
+            id: const Value(1),
+            tenantId: 'tenant-1',
+            name: 'Assistenza',
+          ),
         );
     await db
         .into(db.customers)
@@ -269,17 +385,164 @@ void main() {
   }
 
   group('TicketDetailScreen', () {
-    testWidgets('shows empty-state when ticket not found', (tester) async {
+    testWidgets('shows unavailable state when ticket not found', (
+      tester,
+    ) async {
       await pump(tester, ticketId: 'nonexistent');
-      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.byType(UnavailableState), findsOneWidget);
+      expect(find.text('Ticket non trovato'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders KeyVal rows for Cliente and Sede', (tester) async {
+    testWidgets(
+      'uses the generic Ticket header and the entity title in the hero',
+      (tester) async {
+        await seedBase(db);
+        await pump(tester);
+        expect(find.text('Ticket'), findsOneWidget);
+        expect(find.text('Perdita idrica bagno'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'offline hero keeps Avvia intervento enabled and says the timer works',
+      (tester) async {
+        // Defaults offline with an empty worklog mirror. The action is enabled because a start is
+        // written to the mirror and queued; the live value must not contradict that by saying the
+        // timer is unavailable offline.
+        await seedBase(db);
+        await pump(tester);
+
+        final hero = find.byType(DetailHero);
+        expect(
+          find.descendant(of: hero, matching: find.text('Avvia intervento')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: hero,
+            matching: find.text('Timer non disponibile offline'),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: hero,
+            matching: find.text(
+              'Ore di questo ticket non ancora sincronizzate. Il timer funziona: '
+              'verrà inviato appena torni online.',
+            ),
+          ),
+          findsOneWidget,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('the assistant leads the report actions, the form follows', (
+      tester,
+    ) async {
+      await seedBase(db);
+      await pump(tester);
+      final hero = find.byType(DetailHero);
+      expect(
+        find.descendant(of: hero, matching: find.text('Assistente AI')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: hero, matching: find.byIcon(LucideIcons.sparkles)),
+        findsOneWidget,
+        reason: 'the assistant is recognisable at a glance, not just by its name',
+      );
+      expect(
+        find.descendant(of: hero, matching: find.text('Crea report')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an unassigned ticket keeps Prendi in carico reachable', (
+      tester,
+    ) async {
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 'ticket-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1, 9),
+              title: 'Ticket libero',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
+      await pump(tester, ticketId: 'ticket-2');
+      expect(find.text('Prendi in carico'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'a read-only seat keeps the ticket readable but loses every write action',
+      (tester) async {
+        await seedBase(db);
+        await pump(
+          tester,
+          entitlement: Entitlement(
+            features: const {'interventi', 'rapportini'},
+            capabilities: const {},
+            seatType: 'field',
+            fetchedAt: DateTime.utc(2026, 11, 9),
+          ),
+        );
+
+        // Ticket write actions are withheld entirely: they are secondary surface and a read-only
+        // seat has no use for them.
+        expect(find.bySemanticsLabel('Modifica'), findsNothing);
+        expect(find.bySemanticsLabel('Assegna'), findsNothing);
+        expect(find.text('Crea report'), findsNothing);
+        expect(find.text('AI Copilot'), findsNothing);
+
+        // The status stays on screen — it is also how the ticket is read — but is no longer a
+        // control, and the reason is stated rather than left to an opaque refusal.
+        expect(find.byType(StatusPill), findsOneWidget);
+        expect(find.text(noPermissionReason), findsOneWidget);
+        await tester.tap(find.byType(StatusPill));
+        await tester.pumpAndSettle();
+        expect(find.text('Cambia stato'), findsNothing);
+
+        // Timbra/worklog is a different permission surface and stays exactly as it was.
+        expect(find.text('Avvia intervento'), findsWidgets);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('delete is hidden without the tenant-admin capability', (
+      tester,
+    ) async {
+      await seedBase(db);
+      await pump(tester);
+      expect(find.bySemanticsLabel('Elimina'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('renders the hero KeyVal rows for Cliente and Sede', (
+      tester,
+    ) async {
       await seedBase(db);
       await pump(tester);
 
+      // Cliente and Sede are hero facts, and Sintesi deliberately does not repeat them.
       expect(find.text('ACME Srl'), findsOneWidget);
       expect(find.text('Sede Milano'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -292,12 +555,20 @@ void main() {
         await db
             .into(db.ticketStatuses)
             .insert(
-              TicketStatusesCompanion.insert(id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'),
+              TicketStatusesCompanion.insert(
+                id: const Value(1),
+                tenantId: 'tenant-1',
+                name: 'Aperto',
+              ),
             );
         await db
             .into(db.ticketTypes)
             .insert(
-              TicketTypesCompanion.insert(id: const Value(1), tenantId: 'tenant-1', name: 'Assistenza'),
+              TicketTypesCompanion.insert(
+                id: const Value(1),
+                tenantId: 'tenant-1',
+                name: 'Assistenza',
+              ),
             );
         await db
             .into(db.customers)
@@ -337,15 +608,18 @@ void main() {
               ),
             );
 
+        await tester.binding.setSurfaceSize(const Size(800, 1600));
         await pump(tester);
 
         // The fake geocoder never resolves a point, so this exercises GeoMapCard's own fallback
         // to AppMapCard — same widget the screen always rendered before this refactor, just no
-        // longer instantiated directly by the screen itself.
+        // longer instantiated directly by the screen itself. The map now sits in Documenti &
+        // mappa, below the fold at the default test surface.
         expect(find.byType(GeoMapCard), findsOneWidget);
         expect(find.byType(AppMapCard), findsOneWidget);
         expect(find.text('Via Roma 1, Milano'), findsOneWidget);
 
+        await tester.binding.setSurfaceSize(null);
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();
       },
@@ -357,49 +631,103 @@ void main() {
 
       expect(find.byType(StatusPill), findsOneWidget);
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
-      // status_pill_test.dart's own note on this rendering change.
-      expect(find.text('APERTO'), findsOneWidget);
+      // status_pill_test.dart's own note on this rendering change. One stamp is the hero status,
+      // one is the status row's pill, and the collapsed bar always builds its hidden copy.
+      expect(find.text('APERTO'), findsNWidgets(3));
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders a compartment grid with all eight section labels', (tester) async {
-      await seedBase(db);
-      // A taller surface, for the same reason the Pianificazioni test below already uses one: the
-      // grid lives well down a CustomScrollView, slivers build lazily, and on the default 600dp
-      // test window it sits below the fold. The assertion is that the screen renders eight
-      // section labels, not that they fit in 600dp.
-      await tester.binding.setSurfaceSize(const Size(800, 1200));
-      await pump(tester);
+    testWidgets(
+      'renders one compartment grid per section with all nine section labels',
+      (tester) async {
+        await seedBase(db);
+        // A taller surface, for the same reason the Pianificazioni test below already uses one: the
+        // grids live well down a CustomScrollView, slivers build lazily, and on the default 600dp
+        // test window the later sections sit below the fold. The assertion is that the screen
+        // renders nine section labels, not that they fit in 600dp.
+        await tester.binding.setSurfaceSize(const Size(800, 1600));
+        await pump(tester);
 
-      expect(find.byType(GridView), findsOneWidget);
-      expect(find.text('Dettagli'), findsOneWidget);
-      expect(find.text('Report'), findsOneWidget);
-      expect(find.text('Controllo'), findsOneWidget);
-      expect(find.text('Allegati'), findsOneWidget);
-      expect(find.text('Pianificazioni'), findsOneWidget);
-      expect(find.text('Ore'), findsOneWidget);
-      expect(find.text('Fabbisogno'), findsOneWidget);
-      expect(find.text('Storico'), findsOneWidget);
+        expect(find.byType(GridView), findsNWidgets(4));
+        expect(find.text('Dettagli'), findsOneWidget);
+        expect(find.text('Report'), findsOneWidget);
+        expect(find.text('Controllo'), findsOneWidget);
+        expect(find.text('Allegati'), findsOneWidget);
+        expect(find.text('Pianificazioni'), findsOneWidget);
+        expect(find.text('Ore'), findsOneWidget);
+        expect(find.text('Fabbisogno'), findsOneWidget);
+        expect(find.text('Asset'), findsOneWidget);
+        expect(find.text('Storico'), findsOneWidget);
+        await tester.binding.setSurfaceSize(null);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('renders the four ticket sections in order', (tester) async {
+      await seedBase(db);
+      // All four sections have to be laid out at once for their vertical order to be comparable;
+      // the later ones sit below the default 600dp test window.
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester);
+      final attivita = tester.getTopLeft(find.text('Attività')).dy;
+      final sintesi = tester.getTopLeft(find.text('Sintesi')).dy;
+      final relazioni = tester.getTopLeft(find.text('Relazioni')).dy;
+      final documenti = tester.getTopLeft(find.text('Documenti & mappa')).dy;
+      expect(attivita, lessThan(sintesi));
+      expect(sintesi, lessThan(relazioni));
+      expect(relazioni, lessThan(documenti));
       await tester.binding.setSurfaceSize(null);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('names the assigned technician instead of showing their id', (tester) async {
+    testWidgets('groups the nine compartments into the four sections', (
+      tester,
+    ) async {
+      await seedBase(db);
+      // Same reason as the order test: every section's grid must be laid out, not just the first.
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester);
+      expect(find.text('Ore'), findsOneWidget);
+      expect(find.text('Storico'), findsOneWidget);
+      expect(find.text('Dettagli'), findsOneWidget);
+      expect(find.text('Pianificazioni'), findsOneWidget);
+      expect(find.text('Fabbisogno'), findsOneWidget);
+      expect(find.text('Asset'), findsOneWidget);
+      expect(find.text('Report'), findsOneWidget);
+      expect(find.text('Controllo'), findsOneWidget);
+      expect(find.text('Allegati'), findsOneWidget);
+      await tester.binding.setSurfaceSize(null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('names the assigned technician instead of showing their id', (
+      tester,
+    ) async {
       await seedBase(db);
       await db
           .into(db.colleagues)
-          .insert(ColleaguesCompanion.insert(id: 'user-1', displayName: 'Mario Rossi'));
+          .insert(
+            ColleaguesCompanion.insert(
+              id: 'user-1',
+              displayName: 'Mario Rossi',
+            ),
+          );
       await pump(tester);
 
+      // The technician is a hero fact; Sintesi deliberately does not repeat it.
       expect(find.text('Mario Rossi'), findsOneWidget);
       expect(find.text('user-1'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('falls back to the id when the mirror does not know them', (tester) async {
+    testWidgets('falls back to the id when the mirror does not know them', (
+      tester,
+    ) async {
       // A colleague who left, or a sync that has not landed. An unfamiliar id is still something
       // to read out over the phone; a blank is not.
       await seedBase(db);
@@ -410,7 +738,9 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('a ticket that already has an owner offers no self-assign', (tester) async {
+    testWidgets('a ticket that already has an owner offers no self-assign', (
+      tester,
+    ) async {
       // seedBase assigns user-1. Offering "take this" for a ticket somebody already holds invites
       // a technician to quietly reassign work away from a colleague.
       await seedBase(db);
@@ -423,9 +753,8 @@ void main() {
 
     testWidgets('an unowned ticket offers self-assign', (tester) async {
       await seedBase(db);
-      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
-        const TicketsCompanion(assignedUserId: Value(null)),
-      );
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1')))
+          .write(const TicketsCompanion(assignedUserId: Value(null)));
       await pump(tester);
 
       expect(find.text('Prendi in carico'), findsOneWidget);
@@ -444,6 +773,135 @@ void main() {
       expect(find.text('Cambia stato'), findsOneWidget);
       // The ticket's current status is marked rather than merely listed, so a technician can see
       // what they are changing from.
+      expect(find.text('Aperto'), findsWidgets);
+
+      await tester.tapAt(const Offset(10, 10)); // dismiss
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    // ── "Solo ufficio" ────────────────────────────────────────────────────────
+    //
+    // Only a caller holding `interventi.ticket.configure` may move a ticket into such a status or
+    // out of it; the server 403s either way. The device mirrors the flag so the sheet never offers
+    // a move whose only possible answer is a refusal after the tap.
+
+    /// Adds a status the office administers. `statusId` moves the ticket onto it.
+    Future<void> seedOfficeOnlyStatus({int statusId = 1}) async {
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(6),
+              tenantId: 'tenant-1',
+              name: 'Da ufficio',
+              officeOnly: const Value(true),
+            ),
+          );
+      if (statusId != 1) {
+        await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1')))
+            .write(TicketsCompanion(statusId: Value(statusId)));
+      }
+    }
+
+    Entitlement withCapabilities(Set<String> capabilities) => Entitlement(
+      features: const {},
+      capabilities: capabilities,
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 2),
+    );
+
+    testWidgets(
+      'the status sheet does not offer a "Solo ufficio" status to a technician',
+      (tester) async {
+        await seedBase(db);
+        await seedOfficeOnlyStatus();
+        await pump(tester);
+
+        await tester.tap(find.byType(StatusPill));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Cambia stato'), findsOneWidget);
+        expect(find.text('Aperto'), findsWidgets);
+        // Offering it would mean offering a tap that comes back 403 with nothing the technician can
+        // do about it.
+        expect(find.text('Da ufficio'), findsNothing);
+
+        await tester.tapAt(const Offset(10, 10)); // dismiss
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('the office may move a ticket into a "Solo ufficio" status', (
+      tester,
+    ) async {
+      await seedBase(db);
+      await seedOfficeOnlyStatus();
+      await pump(
+        tester,
+        entitlement: withCapabilities(const {
+          'interventi.ticket.configure',
+          'interventi.ticket.write',
+        }),
+      );
+
+      await tester.tap(find.byType(StatusPill));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cambia stato'), findsOneWidget);
+      expect(find.text('Da ufficio'), findsOneWidget);
+
+      await tester.tapAt(const Offset(10, 10)); // dismiss
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'a ticket the office parked on a "Solo ufficio" status is not movable',
+      (tester) async {
+        // Not just "hides that row": the ticket sits ON one, and leaving it is refused too, so there
+        // is no move this caller may make. Saying so beats opening a sheet of refusals.
+        await seedBase(db);
+        await seedOfficeOnlyStatus(statusId: 6);
+        await pump(tester);
+
+        await tester.tap(find.byType(StatusPill));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Cambia stato'), findsNothing);
+        expect(
+          find.text(
+            'Questo stato è gestito solo dall\'ufficio: chiedi all\'ufficio di spostare l\'intervento.',
+          ),
+          findsOneWidget,
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('the office may move a ticket off a "Solo ufficio" status', (
+      tester,
+    ) async {
+      await seedBase(db);
+      await seedOfficeOnlyStatus(statusId: 6);
+      await pump(
+        tester,
+        entitlement: withCapabilities(const {
+          'interventi.ticket.configure',
+          'interventi.ticket.write',
+        }),
+      );
+
+      await tester.tap(find.byType(StatusPill));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cambia stato'), findsOneWidget);
       expect(find.text('Aperto'), findsWidgets);
 
       await tester.tapAt(const Offset(10, 10)); // dismiss
@@ -484,48 +942,203 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Sopralluogo'), findsOneWidget);
+      // The clock is the hours the office planned (480→1020 = 08:00–17:00), not the stored
+      // activity date's midnight stamp read through the device zone — which printed 02:00 in
+      // Italy whatever the schedule said.
+      final day = DateFormat(
+        'EEE d MMM',
+        'it',
+      ).format(DateTime.utc(2026, 7, 10).toLocal());
+      expect(find.text('$day · 08:00 – 17:00'), findsOneWidget);
       await tester.binding.setSurfaceSize(null); // reset
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('the bottom bar holds a single leading doing-action', (tester) async {
-      // Was four equal buttons in two rows: Assegna / Cliente / Crea rapportino / Timbra cantiere,
-      // about 130dp of permanent chrome with no rank between them. What a technician does on a
-      // ticket is start the work and write it up — "Timbra cantiere" moved to CantiereDetailScreen
-      // (reached from this ticket's own cantiere chip; see the chip tests below), so it no longer
-      // shares the bottom bar with "Crea rapportino" at all.
+    testWidgets('an all-day schedule shows the day, not a placeholder clock', (
+      tester,
+    ) async {
+      // All-day rows carry 0/0 bounds; formatting them unconditionally reads "00:00 – 00:00",
+      // which says "starts at midnight" instead of "no time today".
+      await seedBase(db);
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-allday',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: const Value('ticket-1'),
+              activityDate: DateTime.utc(2026, 7, 10),
+              timeStartMinutes: 0,
+              timeEndMinutes: 0,
+              userId: 'user-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Giornata intera',
+              description: '',
+              allDay: const Value(true),
+            ),
+          );
+      await pump(tester);
+
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pump();
+      await tester.ensureVisible(find.text('Pianificazioni'));
+      await tester.tap(find.text('Pianificazioni'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Giornata intera'), findsOneWidget);
+      final day = DateFormat(
+        'EEE d MMM',
+        'it',
+      ).format(DateTime.utc(2026, 7, 10).toLocal());
+      expect(find.text(day), findsOneWidget);
+      await tester.binding.setSurfaceSize(null); // reset
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a Pianificazioni row opens the schedule detail card', (
+      tester,
+    ) async {
+      // The box listed a ticket's schedules and offered no way to read one — the detail existed
+      // only from the calendar. Same read-only card, so a technician does not need the
+      // `pianificazione.schedule.*` capabilities (the admin screen's gate) to read their own day,
+      // and the card comes from the mirror, so it opens offline too.
+      await seedBase(db);
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: const Value('ticket-1'),
+              activityDate: DateTime.utc(2026, 7, 10),
+              timeStartMinutes: 480,
+              timeEndMinutes: 1020,
+              userId: 'user-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Sopralluogo',
+              description: '',
+            ),
+          );
+
+      await pump(tester);
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pump();
+      await tester.ensureVisible(find.text('Pianificazioni'));
+      await tester.tap(find.text('Pianificazioni'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sopralluogo'));
+      await tester.pumpAndSettle();
+
+      // The card repeats the title and adds what the row never carried: the hours, the customer
+      // (through the schedule's ticket) and the site.
+      //
+      // Scoped to the sheet: the ticket detail underneath spells its own "CLIENTE" / "SEDE"
+      // KeyVal labels, so an unscoped `find.text` matched two widgets and failed the test on a
+      // collision that says nothing about the sheet.
+      final sheet = find.byType(ScheduleInfoSheet);
+      expect(sheet, findsOneWidget);
+      Finder inSheet(String text) =>
+          find.descendant(of: sheet, matching: find.text(text));
+
+      expect(find.text('Sopralluogo'), findsNWidgets(2));
+      expect(inSheet('08:00 – 17:00'), findsOneWidget);
+      expect(inSheet('CLIENTE'), findsOneWidget);
+      expect(inSheet('ACME Srl'), findsWidgets);
+      expect(inSheet('SEDE'), findsOneWidget);
+      expect(inSheet('Sede Milano'), findsOneWidget);
+
+      await tester.binding.setSurfaceSize(null); // reset
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the hero holds the report action', (tester) async {
+      // What a technician does on a ticket is start the work and write it up. "Timbra cantiere"
+      // moved to CantiereDetailScreen (reached from this ticket's own cantiere chip; see the chip
+      // tests below), so it is not in the hero at all.
       await seedBase(db);
       await pump(tester);
 
-      expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('Crea report'), findsOneWidget);
+      expect(find.text('AI Copilot'), findsOneWidget);
       expect(find.text('Timbra cantiere'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('assegna stays in the header; customer nav lives on the Cliente row', (
+    testWidgets(
+      'offers no report entry once the ticket sits in a closing status',
+      (tester) async {
+        // Filed bug: the bar offered "Crea rapporto di lavoro" on a ticket the office had already
+        // closed, and the submit was accepted — the server never reopens a closed ticket on its
+        // own, so a rapportino landed on finished work. The tenant's status flag is what decides,
+        // and it is set here with `closedAt` deliberately left null: that is exactly the state a
+        // ticket closed from this very screen has until the next sync.
+        await seedBase(db);
+        await db
+            .into(db.ticketStatuses)
+            .insert(
+              TicketStatusesCompanion.insert(
+                id: const Value(2),
+                tenantId: 'tenant-1',
+                name: 'Completato',
+                isClosed: const Value(true),
+              ),
+            );
+        await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1')))
+            .write(const TicketsCompanion(statusId: Value(2)));
+
+        await pump(tester);
+
+        expect(find.text('Crea report'), findsNothing);
+        expect(find.text('AI Copilot'), findsNothing);
+        // The hero explains why the timer cannot start, not just hiding the action.
+        expect(
+          find.text('Intervento chiuso: riaprilo dallo stato qui sopra.'),
+          findsOneWidget,
+        );
+        // Not silence: the screen says the ticket is closed and where the way back is.
+        expect(find.textContaining('Intervento chiuso'), findsNWidgets(2));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'assegna stays in the header; customer nav lives on the Cliente row',
+      (tester) async {
+        // Reachable, not prominent: a dispatcher action and a navigation link do not belong in the
+        // same weight as the two things the person on site came here to do. "Scheda cliente" used
+        // to be a second header icon whose only job was "go look at this customer" — the customer's
+        // name is already sitting right there in the fact card, so that row is the tap target now
+        // instead of a disconnected briefcase glyph, and the header carries one action, not two.
+        await seedBase(db);
+        await pump(tester);
+
+        expect(find.bySemanticsLabel('Assegna'), findsOneWidget);
+        expect(find.bySemanticsLabel('Scheda cliente'), findsNothing);
+        expect(
+          find.ancestor(
+            of: find.text('ACME Srl'),
+            matching: find.byType(AppTappable),
+          ),
+          findsWidgets,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('shows description card when description is present', (
       tester,
     ) async {
-      // Reachable, not prominent: a dispatcher action and a navigation link do not belong in the
-      // same weight as the two things the person on site came here to do. "Scheda cliente" used
-      // to be a second header icon whose only job was "go look at this customer" — the customer's
-      // name is already sitting right there in the fact card, so that row is the tap target now
-      // instead of a disconnected briefcase glyph, and the header carries one action, not two.
-      await seedBase(db);
-      await pump(tester);
-
-      expect(find.bySemanticsLabel('Assegna'), findsOneWidget);
-      expect(find.bySemanticsLabel('Scheda cliente'), findsNothing);
-      expect(
-        find.ancestor(of: find.text('ACME Srl'), matching: find.byType(AppTappable)),
-        findsOneWidget,
-      );
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('shows description card when description is present', (tester) async {
       await seedBase(db);
       await pump(tester);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
@@ -558,22 +1171,28 @@ void main() {
               name: 'Cantiere Nord',
             ),
           );
-      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
-        const TicketsCompanion(cantiereId: Value('cant-1')),
-      );
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1')))
+          .write(const TicketsCompanion(cantiereId: Value('cant-1')));
     }
 
-    testWidgets('shows a cantiere chip when the ticket has one linked', (tester) async {
+    testWidgets('shows a cantiere chip when the ticket has one linked', (
+      tester,
+    ) async {
       await seedWithCantiere(db);
+      // The chip lives in Relazioni now, below the fold at the default test surface.
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
       await pump(tester);
 
       expect(find.textContaining('Cantiere:'), findsOneWidget);
       expect(find.text('Cantiere: Cantiere Nord'), findsOneWidget);
+      await tester.binding.setSurfaceSize(null);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows no cantiere chip when the ticket has none linked', (tester) async {
+    testWidgets('shows no cantiere chip when the ticket has none linked', (
+      tester,
+    ) async {
       await seedBase(db);
       await pump(tester);
 
@@ -582,47 +1201,95 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets(
-      'falls back to a neutral label, never the raw GUID, when the linked cantiere is not synced '
-      'locally',
-      (tester) async {
-        // ticket.cantiereId points at a cantiere id that was never synced to this device — a
-        // real, ordinary case per this app's sync-scoping rules, not a hypothetical. The chip's
-        // label must never fall back to the raw id.
-        await seedBase(db);
-        await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
-          const TicketsCompanion(cantiereId: Value('cant-unsynced')),
-        );
-        await pump(tester);
+    testWidgets('falls back to a neutral label, never the raw GUID, when the linked cantiere is not synced '
+        'locally', (tester) async {
+      // ticket.cantiereId points at a cantiere id that was never synced to this device — a
+      // real, ordinary case per this app's sync-scoping rules, not a hypothetical. The chip's
+      // label must never fall back to the raw id.
+      await seedBase(db);
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1')))
+          .write(const TicketsCompanion(cantiereId: Value('cant-unsynced')));
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester);
 
-        expect(find.text('Cantiere: Cantiere collegato'), findsOneWidget);
-        expect(find.textContaining('cant-unsynced'), findsNothing);
+      expect(find.text('Cantiere: Cantiere collegato'), findsOneWidget);
+      expect(find.textContaining('cant-unsynced'), findsNothing);
+      await tester.binding.setSurfaceSize(null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'tapping the chip pushes CantiereDetailScreen with ticket.id as ticketId',
+      (tester) async {
+        await seedWithCantiere(db);
+        final router = _makeChipRouter(ticketId: 'ticket-1');
+        await tester.binding.setSurfaceSize(const Size(800, 1600));
+        await tester.pumpWidget(
+          _buildDetailWithRouter(db: db, repo: repo, router: router),
+        );
+        await tester.pump();
+        authStream.add(fakeUser);
+        await tester.pumpAndSettle(const Duration(seconds: 2));
+
+        final chip = find.text('Cantiere: Cantiere Nord');
+        expect(chip, findsOneWidget);
+
+        await tester.tap(chip);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('CANTIERE-DETAIL-MARKER:ticketId=ticket-1'),
+          findsOneWidget,
+        );
+
+        await tester.binding.setSurfaceSize(null);
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pumpAndSettle();
       },
     );
 
-    testWidgets('tapping the chip pushes CantiereDetailScreen with ticket.id as ticketId', (
-      tester,
-    ) async {
-      await seedWithCantiere(db);
-      final router = _makeChipRouter(ticketId: 'ticket-1');
-      await tester.pumpWidget(_buildDetailWithRouter(db: db, repo: repo, router: router));
-      await tester.pump();
-      authStream.add(fakeUser);
-      await tester.pumpAndSettle(const Duration(seconds: 2));
+    testWidgets(
+      'the hero offers Timbra cantiere only when a cantiere is linked',
+      (tester) async {
+        await seedWithCantiere(db);
+        final router = _makeChipRouter(ticketId: 'ticket-1');
+        await tester.pumpWidget(
+          _buildDetailWithRouter(db: db, repo: repo, router: router),
+        );
+        await tester.pump();
+        authStream.add(fakeUser);
+        await tester.pumpAndSettle(const Duration(seconds: 2));
 
-      final chip = find.text('Cantiere: Cantiere Nord');
-      expect(chip, findsOneWidget);
+        final timbra = find.text('Timbra cantiere');
+        expect(timbra, findsOneWidget);
 
-      await tester.tap(chip);
-      await tester.pumpAndSettle();
+        await tester.tap(timbra);
+        await tester.pumpAndSettle();
 
-      expect(find.text('CANTIERE-DETAIL-MARKER:ticketId=ticket-1'), findsOneWidget);
+        expect(
+          find.text(
+            'CANTIERE-TIMBRA-MARKER:cantiereId=cant-1:ticketId=ticket-1',
+          ),
+          findsOneWidget,
+        );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'the hero hides Timbra cantiere when the ticket has no cantiere',
+      (tester) async {
+        await seedBase(db);
+        await pump(tester);
+
+        expect(find.text('Timbra cantiere'), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
   });
 
   // Feature audit module #11, Gap D: a technician working a ticket tied to a contract had no way
@@ -631,9 +1298,8 @@ void main() {
   group('TicketDetailScreen — contract summary (Gap D)', () {
     Future<void> seedWithContract(AppDatabase db) async {
       await seedBase(db);
-      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
-        const TicketsCompanion(contractId: Value('contr-1')),
-      );
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1')))
+          .write(const TicketsCompanion(contractId: Value('contr-1')));
     }
 
     // KeyVal renders its label uppercase (see key_val.dart's `_labelStyle`/`_horizontal`), so
@@ -641,7 +1307,9 @@ void main() {
     // "CONDIZIONI" — matching how every other KeyVal label in this file is asserted against its
     // *value*, never its own label text, except here where the label's mere presence/absence is
     // exactly what's under test.
-    testWidgets('shows no Contratto row when the ticket has no contract', (tester) async {
+    testWidgets('shows no Contratto row when the ticket has no contract', (
+      tester,
+    ) async {
       await seedBase(db);
       await pump(tester);
 
@@ -650,15 +1318,18 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows the linked contract\'s name, resolved live', (tester) async {
+    testWidgets('shows the linked contract\'s name, resolved live', (
+      tester,
+    ) async {
       await seedWithContract(db);
       final dio = MockDio();
-      when(() => dio.get<Map<String, dynamic>>('/api/contracts/contr-1')).thenAnswer(
-        (_) async => _okResponse({
-          'id': 'contr-1',
-          'name': 'Manutenzione annuale',
-        }, '/api/contracts/contr-1'),
-      );
+      when(() => dio.get<Map<String, dynamic>>('/api/contracts/contr-1'))
+          .thenAnswer(
+            (_) async => _okResponse({
+              'id': 'contr-1',
+              'name': 'Manutenzione annuale',
+            }, '/api/contracts/contr-1'),
+          );
 
       await pump(tester, dio: dio, isOnline: true);
 
@@ -668,39 +1339,54 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('tapping the row opens a read-only sheet with scadenza and condizioni', (
+    testWidgets(
+      'tapping the row opens a read-only sheet with scadenza and condizioni',
+      (tester) async {
+        await seedWithContract(db);
+        final dio = MockDio();
+        when(() => dio.get<Map<String, dynamic>>('/api/contracts/contr-1'))
+            .thenAnswer(
+              (_) async => _okResponse({
+                'id': 'contr-1',
+                'name': 'Manutenzione annuale',
+                'endDate': '2026-12-31T00:00:00Z',
+                'condizioni': 'Pagamento a 30gg',
+              }, '/api/contracts/contr-1'),
+            );
+
+        // The contract rows now sit in Sintesi, below the hero and the status row; a taller
+        // surface keeps them on screen so the tap lands on the row itself rather than the sticky
+        // bar.
+        await tester.binding.setSurfaceSize(const Size(800, 1600));
+        await pump(tester, dio: dio, isOnline: true);
+        await tester.tap(find.text('Manutenzione annuale'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('SCADENZA'), findsOneWidget);
+        expect(find.text('31/12/2026'), findsOneWidget);
+        expect(find.text('CONDIZIONI'), findsOneWidget);
+        expect(find.text('Pagamento a 30gg'), findsOneWidget);
+        await tester.binding.setSurfaceSize(null);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('says plainly it is offline instead of showing a broken row', (
       tester,
     ) async {
       await seedWithContract(db);
-      final dio = MockDio();
-      when(() => dio.get<Map<String, dynamic>>('/api/contracts/contr-1')).thenAnswer(
-        (_) async => _okResponse({
-          'id': 'contr-1',
-          'name': 'Manutenzione annuale',
-          'endDate': '2026-12-31T00:00:00Z',
-          'condizioni': 'Pagamento a 30gg',
-        }, '/api/contracts/contr-1'),
-      );
 
-      await pump(tester, dio: dio, isOnline: true);
-      await tester.tap(find.text('Manutenzione annuale'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('SCADENZA'), findsOneWidget);
-      expect(find.text('31/12/2026'), findsOneWidget);
-      expect(find.text('CONDIZIONI'), findsOneWidget);
-      expect(find.text('Pagamento a 30gg'), findsOneWidget);
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('says plainly it is offline instead of showing a broken row', (tester) async {
-      await seedWithContract(db);
-
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
       await pump(tester, isOnline: false);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
 
       expect(find.text('Caricamento…'), findsNothing);
       expect(find.text('CONTRATTO'), findsOneWidget);
+      await tester.binding.setSurfaceSize(null);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -711,12 +1397,13 @@ void main() {
   group('TicketDetailScreen — commessa (Gap 6)', () {
     Future<void> seedWithCommessa(AppDatabase db) async {
       await seedBase(db);
-      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
-        const TicketsCompanion(commessaId: Value('commessa-1')),
-      );
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1')))
+          .write(const TicketsCompanion(commessaId: Value('commessa-1')));
     }
 
-    testWidgets('shows no Commessa row when the ticket has no commessa', (tester) async {
+    testWidgets('shows no Commessa row when the ticket has no commessa', (
+      tester,
+    ) async {
       await seedBase(db);
       await pump(tester);
 
@@ -725,15 +1412,18 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets("shows the linked commessa's codice, resolved live", (tester) async {
+    testWidgets("shows the linked commessa's codice, resolved live", (
+      tester,
+    ) async {
       await seedWithCommessa(db);
       final dio = MockDio();
-      when(() => dio.get<Map<String, dynamic>>('/api/commesse/commessa-1')).thenAnswer(
-        (_) async => _okResponse({
-          'id': 'commessa-1',
-          'codice': 'COM-001',
-        }, '/api/commesse/commessa-1'),
-      );
+      when(() => dio.get<Map<String, dynamic>>('/api/commesse/commessa-1'))
+          .thenAnswer(
+            (_) async => _okResponse({
+              'id': 'commessa-1',
+              'codice': 'COM-001',
+            }, '/api/commesse/commessa-1'),
+          );
 
       await pump(tester, dio: dio, isOnline: true);
 
@@ -743,13 +1433,97 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('says plainly it is offline instead of showing a broken row', (tester) async {
+    testWidgets('says plainly it is offline instead of showing a broken row', (
+      tester,
+    ) async {
       await seedWithCommessa(db);
 
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
       await pump(tester, isOnline: false);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
 
       expect(find.text('Caricamento…'), findsNothing);
       expect(find.text('COMMESSA'), findsOneWidget);
+      await tester.binding.setSurfaceSize(null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'without commesse.commessa.read the Commessa fact keeps its value but is not tappable',
+      (tester) async {
+        await seedWithCommessa(db);
+        final dio = MockDio();
+        when(() => dio.get<Map<String, dynamic>>('/api/commesse/commessa-1'))
+            .thenAnswer(
+              (_) async => _okResponse({
+                'id': 'commessa-1',
+                'codice': 'COM-001',
+              }, '/api/commesse/commessa-1'),
+            );
+
+        await pump(
+          tester,
+          dio: dio,
+          isOnline: true,
+          entitlement: Entitlement(
+            features: const {'interventi', 'rapportini'},
+            capabilities: const {},
+            seatType: 'field',
+            fetchedAt: DateTime.utc(2026, 11, 9),
+          ),
+        );
+
+        // `/altro/commesse/:id` would redirect to /forbidden without the read capability.
+        expect(find.text('COM-001'), findsOneWidget);
+        expect(
+          find.ancestor(
+            of: find.text('COM-001'),
+            matching: find.byType(AppTappable),
+          ),
+          findsNothing,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('with commesse.commessa.read the Commessa fact is tappable', (
+      tester,
+    ) async {
+      await seedWithCommessa(db);
+      final dio = MockDio();
+      when(() => dio.get<Map<String, dynamic>>('/api/commesse/commessa-1'))
+          .thenAnswer(
+            (_) async => _okResponse({
+              'id': 'commessa-1',
+              'codice': 'COM-001',
+            }, '/api/commesse/commessa-1'),
+          );
+
+      await pump(
+        tester,
+        dio: dio,
+        isOnline: true,
+        entitlement: Entitlement(
+          features: const {'interventi', 'rapportini'},
+          capabilities: const {'commesse.commessa.read'},
+          seatType: 'field',
+          fetchedAt: DateTime.utc(2026, 11, 9),
+        ),
+      );
+
+      expect(find.text('COM-001'), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: find.text('COM-001'),
+          matching: find.byType(AppTappable),
+        ),
+        findsOneWidget,
+      );
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -812,11 +1586,142 @@ void main() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Report / Controllo / Allegati / Fabbisogno — none of these have a local
-  // Drift mirror (unlike Pianificazioni), so each is fetched on demand and
-  // must distinguish three outcomes: real data, a genuine empty list, and
-  // "we couldn't check" (offline). See ticket_providers.dart.
+  // Report / Controllo / Allegati / Fabbisogno / Prodotti — each must
+  // distinguish three outcomes: real data, a genuine empty list, and "we
+  // couldn't check" (offline, nothing mirrored). Controllo and Prodotti answer
+  // from the sync mirror offline; their empty-mirror case is the third
+  // outcome, never an empty-list claim. See ticket_providers.dart.
   // ══════════════════════════════════════════════════════════════════════════
+  group('TicketDetailScreen — Prodotti compartment', () {
+    void stubTicketAndProdotti(
+      MockDio dio,
+      Map<String, dynamic> ticket,
+      Map<String, Map<String, dynamic>> prodotti,
+    ) {
+      when(
+        () => dio.get<Map<String, dynamic>>('/api/tickets/ticket-1'),
+      ).thenAnswer((_) async => _okResponse(ticket, '/api/tickets/ticket-1'));
+      prodotti.forEach((id, body) {
+        when(() => dio.get<Map<String, dynamic>>('/api/prodottoassistenza/$id'))
+            .thenAnswer(
+              (_) async => _okResponse(body, '/api/prodottoassistenza/$id'),
+            );
+      });
+    }
+
+    testWidgets(
+      'lists the prodotti the ticket covers, by name with code and serial',
+      (tester) async {
+        await seedBase(db);
+        final dio = MockDio();
+        stubTicketAndProdotti(
+          dio,
+          {
+            'id': 'ticket-1',
+            'prodottoAssistenzaIds': ['p2', 'p1'],
+            'prodottoAssistenzaId': 'p1',
+          },
+          {
+            'p1': {
+              'id': 'p1',
+              'name': 'Caldaia Murale',
+              'codice': 'CAL-1',
+              'serialNumber': 'SN-9',
+              'marchio': 'Vaillant',
+              'modello': 'X1',
+            },
+            'p2': {'id': 'p2', 'name': 'Bruciatore', 'codice': null},
+          },
+        );
+
+        // The Asset tile now lives in Relazioni, below the fold at the default test surface.
+        await tester.binding.setSurfaceSize(const Size(800, 1600));
+        await pump(tester, dio: dio, isOnline: true);
+        await tester.tap(find.text('Asset'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Caldaia Murale'), findsOneWidget);
+        expect(find.text('CAL-1 · S/N: SN-9 · Vaillant X1'), findsOneWidget);
+        expect(find.text('Bruciatore'), findsOneWidget);
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets('says plainly when the ticket covers no prodotto', (
+      tester,
+    ) async {
+      await seedBase(db);
+      final dio = MockDio();
+      stubTicketAndProdotti(dio, {
+        'id': 'ticket-1',
+        'prodottoAssistenzaIds': <String>[],
+      }, {});
+
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester, dio: dio, isOnline: true);
+      await tester.tap(find.text('Asset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun asset'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('says it is offline instead of showing an empty list', (
+      tester,
+    ) async {
+      await seedBase(db);
+
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester, isOnline: false);
+      await tester.tap(find.text('Asset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Asset non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun asset'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('offline, lists the covered assets from the local mirror', (
+      tester,
+    ) async {
+      await seedBase(db);
+      // The sync mirrors the ticket's coverage (`ticket_assets`) and the asset identities
+      // (`assets`). The Prodotti compartment must read them rather than going blank on site — the
+      // same rows already drive the checklist card on the Controllo tab.
+      await applyChecklistBatch(
+        db,
+        ChecklistBatch(
+          authoritativeTicketIds: {'ticket-1'},
+          controlGroups: const [],
+          ticketControls: const [],
+          ticketAssets: const [
+            SyncTicketAssetDto(
+              ticketId: 'ticket-1',
+              prodottoAssistenzaId: 'a0',
+            ),
+          ],
+          assets: const [
+            SyncAssetDto(
+              id: 'a0',
+              name: 'Caldaia Murale',
+              serialNumber: 'SN-9',
+            ),
+          ],
+        ),
+      );
+
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      await pump(tester, isOnline: false);
+      await tester.tap(find.text('Asset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Caldaia Murale'), findsOneWidget);
+      expect(find.text('S/N: SN-9'), findsOneWidget);
+      expect(find.text('Asset non disponibili offline'), findsNothing);
+      await resetAndDispose(tester);
+    });
+  });
+
   group('TicketDetailScreen — Report tab (index 0)', () {
     testWidgets('shows rapportini returned by the backend', (tester) async {
       await seedBase(db);
@@ -846,6 +1751,8 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Report'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
@@ -856,7 +1763,61 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('shows an honest empty state when there are no rapportini', (tester) async {
+    testWidgets('tapping a listed rapportino opens its read-only view', (
+      tester,
+    ) async {
+      await seedBase(db);
+      final dio = MockDio();
+      when(
+        () => dio.get<Map<String, dynamic>>(
+          '/api/Reports',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
+            {
+              'id': 'rep-1',
+              'title': 'Sostituzione valvola',
+              'stato': 1,
+              'createdAt': '2026-07-01T10:00:00Z',
+            },
+          ],
+          'page': 1,
+          'pageSize': 100,
+          'totalItems': 1,
+          'totalPages': 1,
+        }, '/api/Reports'),
+      );
+      final router = _makeChipRouter(ticketId: 'ticket-1');
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpWidget(
+        _buildDetailWithRouter(
+          db: db,
+          repo: repo,
+          router: router,
+          isOnline: true,
+          dio: dio,
+        ),
+      );
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+      await tester.ensureVisible(find.text('Report'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Report'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sostituzione valvola'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('REPORT-VIEW-MARKER:rep-1'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('shows an honest empty state when there are no rapportini', (
+      tester,
+    ) async {
       await seedBase(db);
       final dio = MockDio();
       when(
@@ -877,29 +1838,87 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Report'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nessun rapportino'), findsOneWidget);
-      expect(find.text('Non ci sono rapportini registrati per questo ticket.'), findsOneWidget);
+      expect(find.text('Nessun rapporto di intervento'), findsOneWidget);
+      expect(
+        find.text(
+          'Non ci sono rapporti di intervento registrati per questo ticket.',
+        ),
+        findsOneWidget,
+      );
       await resetAndDispose(tester);
     });
 
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+    testWidgets('says plainly it is offline instead of showing an empty list', (
+      tester,
+    ) async {
       await seedBase(db);
 
       await pump(tester, isOnline: false);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Report'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rapportini non disponibili offline'), findsOneWidget);
+      expect(
+        find.text('Rapporti di intervento non ancora sul telefono'),
+        findsOneWidget,
+      );
       // Never claims "nessun rapportino" — that would say "there is
       // nothing" when the truth is "we could not check".
-      expect(find.text('Nessun rapportino'), findsNothing);
+      expect(find.text('Nessun rapporto di intervento'), findsNothing);
       await resetAndDispose(tester);
     });
+
+    testWidgets(
+      'offline it lists the rapportini already mirrored on the phone',
+      (tester) async {
+        await seedBase(db);
+        await db
+            .into(db.draftReports)
+            .insert(
+              DraftReportsCompanion.insert(
+                id: 'rep-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 2, 10),
+                title: 'Sostituzione valvola',
+                insertedUserId: 'user-1',
+                locationId: 'loc-1',
+                ticketId: const Value('ticket-1'),
+                stato: const Value('Inviato'),
+              ),
+            );
+
+        await pump(tester, isOnline: false);
+        await tester.binding.setSurfaceSize(const Size(800, 1200));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Report'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Report'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Sostituzione valvola'), findsOneWidget);
+        // The row renders `StatusPill`, which is a `StatusStamp` — the stamp device upper-cases its
+        // label (same as the Rapportini list's 'BOZZA'/'INVIATA' assertions).
+        expect(
+          find.text('INVIATO'),
+          findsOneWidget,
+          reason: 'the mirror stato, by name',
+        );
+        expect(
+          find.text('Rapporti di intervento non ancora sul telefono'),
+          findsNothing,
+        );
+        expect(find.text('Nessun rapporto di intervento'), findsNothing);
+        await resetAndDispose(tester);
+      },
+    );
   });
 
   group('TicketDetailScreen — Controllo tab (index 1)', () {
@@ -933,7 +1952,9 @@ void main() {
       },
     ];
 
-    testWidgets('shows the real checklist resolved from the template', (tester) async {
+    testWidgets('shows the real checklist resolved from the template', (
+      tester,
+    ) async {
       await seedBase(db);
       final dio = MockDio();
       when(
@@ -949,41 +1970,103 @@ void main() {
       await tapTab(tester, 'Controllo');
 
       expect(find.text('Pressione OK'), findsOneWidget);
-      expect(find.text('Sì'), findsOneWidget);
+      // A Checkbox control reads back as a tick, not as the Sì/No pair a TrueFalse control gets.
+      expect(find.text('Spuntato'), findsOneWidget);
+      expect(find.text('Sì'), findsNothing);
       await resetAndDispose(tester);
     });
 
-    testWidgets('says honestly that no controls are planned, not "coming soon"', (tester) async {
-      await seedBase(db);
-      final dio = MockDio();
-      when(
-        () => dio.get<Map<String, dynamic>>('/api/tickets/ticket-1/controls'),
-      ).thenAnswer(
-        (_) async => _okResponse({
-          'groups': <dynamic>[],
-          'assetProgress': <dynamic>[],
-        }, '/api/tickets/ticket-1/controls'),
-      );
+    testWidgets(
+      'says honestly that no controls are planned, not "coming soon"',
+      (tester) async {
+        await seedBase(db);
+        final dio = MockDio();
+        when(
+          () => dio.get<Map<String, dynamic>>('/api/tickets/ticket-1/controls'),
+        ).thenAnswer(
+          (_) async => _okResponse({
+            'groups': <dynamic>[],
+            'assetProgress': <dynamic>[],
+          }, '/api/tickets/ticket-1/controls'),
+        );
 
-      await pump(tester, dio: dio, isOnline: true);
-      await tapTab(tester, 'Controllo');
+        await pump(tester, dio: dio, isOnline: true);
+        await tapTab(tester, 'Controllo');
 
-      expect(find.text('Nessun controllo previsto'), findsOneWidget);
-      await resetAndDispose(tester);
-    });
+        expect(find.text('Nessun controllo previsto'), findsOneWidget);
+        await resetAndDispose(tester);
+      },
+    );
 
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
-      await seedBase(db);
+    testWidgets(
+      'offline, shows the ticket-level controls from the local mirror',
+      (tester) async {
+        await seedBase(db);
+        // The checklist sync mirrors ticket-level rows (`prodottoAssistenzaId` null), so the
+        // Controllo tab answers with them instead of the "non disponibili offline" state.
+        await applyChecklistBatch(
+          db,
+          ChecklistBatch(
+            authoritativeTicketIds: {'ticket-1'},
+            controlGroups: const [
+              SyncControlGroupDto(
+                id: 'g1',
+                maintenanceTemplateVersionId: 'v1',
+                name: 'Sicurezza',
+                sortOrder: 0,
+              ),
+            ],
+            ticketControls: const [
+              SyncTicketControlDto(
+                id: 'tl-1',
+                ticketId: 'ticket-1',
+                templateControlId: 'tpl-1',
+                controlLineageId: 'lin-1',
+                groupId: 'g1',
+                label: 'Pressione OK',
+                type: ControlType.checkbox,
+                isRequired: true,
+                status: 'Completed',
+                boolValue: true,
+              ),
+            ],
+            ticketAssets: const [],
+            assets: const [],
+          ),
+        );
 
-      await pump(tester, isOnline: false);
-      await tapTab(tester, 'Controllo');
+        await pump(tester, isOnline: false);
+        await tapTab(tester, 'Controllo');
 
-      expect(find.text('Controlli non disponibili offline'), findsOneWidget);
-      expect(find.text('Nessun controllo previsto'), findsNothing);
-      await resetAndDispose(tester);
-    });
+        expect(find.text('Pressione OK'), findsOneWidget);
+        // Twice by design: the accordion's group header and the group path above the control row
+        // both read "Sicurezza" for a top-level group — the same string at two sizes.
+        expect(find.text('Sicurezza'), findsNWidgets(2));
+        expect(find.text('Controlli non disponibili offline'), findsNothing);
+        await resetAndDispose(tester);
+      },
+    );
 
-    testWidgets('shows the per-asset checklist card from the local mirror', (tester) async {
+    testWidgets(
+      'offline with an empty mirror reports offline, not "no controls planned"',
+      (tester) async {
+        await seedBase(db);
+
+        await pump(tester, isOnline: false);
+        await tapTab(tester, 'Controllo');
+
+        // An empty mirror cannot tell "this ticket has no template" from "its rows have not synced
+        // yet". Stating the former is how a technician signs a rapportino believing the safety
+        // checklist was complete, so the tab must say it does not know.
+        expect(find.text('Controlli non disponibili offline'), findsOneWidget);
+        expect(find.text('Nessun controllo previsto'), findsNothing);
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets('shows the per-asset checklist card from the local mirror', (
+      tester,
+    ) async {
       await seedBase(db);
       // The asset checklist is read from the synced mirror, not the online REST read — seed one
       // covered, templated asset so the card's entry point renders.
@@ -1042,6 +2125,14 @@ void main() {
   });
 
   group('TicketDetailScreen — Allegati tab (index 3)', () {
+    // Somewhere real for `AttachmentContentCache` to write, so a tap-to-open test exercises the
+    // download path instead of dying on the path_provider channel.
+    late Directory scratchDir;
+    setUp(
+      () => scratchDir = Directory.systemTemp.createTempSync('tt-attachments-'),
+    );
+    tearDown(() => scratchDir.deleteSync(recursive: true));
+
     final attachmentsJson = [
       {
         'id': 'att-1',
@@ -1059,23 +2150,37 @@ void main() {
       final dio = MockDio();
       when(
         () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
-      ).thenAnswer((_) async => _okResponse(attachmentsJson, '/api/Tickets/ticket-1/attachments'));
+      ).thenAnswer(
+        (_) async =>
+            _okResponse(attachmentsJson, '/api/Tickets/ticket-1/attachments'),
+      );
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Allegati');
 
-      expect(find.text('foto1.jpg'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('foto1.jpg'),
+        ),
+        findsOneWidget,
+      );
       await resetAndDispose(tester);
     });
 
     // ── Tap to view (2026-08-30 attachment viewer) ────────────────────────
 
-    testWidgets('tapping an image attachment pushes the fullscreen viewer', (tester) async {
+    testWidgets('tapping an image attachment pushes the fullscreen viewer', (
+      tester,
+    ) async {
       await seedBase(db);
       final dio = MockDio();
       when(
         () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
-      ).thenAnswer((_) async => _okResponse(attachmentsJson, '/api/Tickets/ticket-1/attachments'));
+      ).thenAnswer(
+        (_) async =>
+            _okResponse(attachmentsJson, '/api/Tickets/ticket-1/attachments'),
+      );
       // The image viewer fetches bytes through the same authenticated dio — contentUrl is a
       // path on our own API, not an external storage URL (see openAttachment's own doc comment).
       when(
@@ -1084,15 +2189,41 @@ void main() {
           options: any(named: 'options'),
         ),
       ).thenAnswer(
-        (_) async => _okResponse<List<int>>(
-          [1, 2, 3],
-          '/api/tickets/ticket-1/attachments/att-1/content',
-        ),
+        (_) async => _okResponse<List<int>>([
+          1,
+          2,
+          3,
+        ], '/api/tickets/ticket-1/attachments/att-1/content'),
       );
 
-      await pump(tester, dio: dio, isOnline: true);
+      // A cache rooted in a temp directory: the app's own root loader is
+      // `getApplicationDocumentsDirectory()`, which has no platform implementation here, so the
+      // viewer's FutureBuilder would never complete and the spinner would animate forever.
+      final cache = AttachmentContentCache(
+        dio: dio,
+        rootLoader: () async => scratchDir,
+      );
+
+      await pump(tester, dio: dio, isOnline: true, attachmentCache: cache);
       await tapTab(tester, 'Allegati');
-      await tester.tap(find.text('foto1.jpg'));
+      // The cache's hit/miss path touches dart:io (`Directory.exists`, the write-then-rename),
+      // and real I/O never resolves inside `testWidgets`' fake-async zone — the viewer's
+      // FutureBuilder would sit on `CircularProgressIndicator` until `pumpAndSettle` timed out.
+      // So the tap, the frame that BUILDS the pushed viewer (that frame is what starts the
+      // future), and the wait all happen inside `runAsync` — the shape already used in
+      // step_riepilogo_signature_test.dart. A bare `Future.delayed` outside runAsync cannot
+      // help: at that point the future does not exist yet.
+      await tester.runAsync(() async {
+        await tester.tap(
+          find.descendant(
+            of: find.byType(BottomSheet),
+            matching: find.text('foto1.jpg'),
+          ),
+        );
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+      });
       await tester.pumpAndSettle();
 
       // The pushed screen's AppBar repeats the filename as its title. Its own copy is the only
@@ -1100,56 +2231,85 @@ void main() {
       // (still in the tree, per Navigator semantics, just not what find.text sees by default).
       expect(find.byType(InteractiveViewer), findsOneWidget);
       expect(find.text('foto1.jpg'), findsOneWidget);
+      // Viewer title + the (offstage) sheet row. The inline Allegati row reads the mirror only
+      // (empty here), so opening the page did not fetch it.
       expect(find.text('foto1.jpg', skipOffstage: false), findsNWidgets(2));
       await resetAndDispose(tester);
     });
 
-    testWidgets('tapping a non-image attachment attempts a download, not the image viewer', (
+    testWidgets(
+      'tapping a non-image attachment attempts a download, not the image viewer',
+      (tester) async {
+        final pdfAttachment = [
+          {
+            'id': 'att-2',
+            'fileName': 'certificato.pdf',
+            'contentType': 'application/pdf',
+            'sizeBytes': 51200,
+            'contentUrl': '/api/tickets/ticket-1/attachments/att-2/content',
+            'uploadedByUserId': 'u1',
+            'createdAt': '2026-07-01T09:00:00Z',
+          },
+        ];
+        await seedBase(db);
+        final dio = MockDio();
+        when(
+          () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
+        ).thenAnswer(
+          (_) async =>
+              _okResponse(pdfAttachment, '/api/Tickets/ticket-1/attachments'),
+        );
+        // No stub for the content GET — a MockDio throws MissingStubError on an unstubbed call,
+        // which openAttachment's catch-all turns into the download-failure SnackBar. That's still
+        // the right assertion: it proves the non-image branch tried to fetch rather than opening
+        // the image viewer, without needing a real OpenFilex/platform-channel round trip.
+        when(
+          () => dio.get<List<int>>(
+            '/api/tickets/ticket-1/attachments/att-2/content',
+            options: any(named: 'options'),
+          ),
+        ).thenThrow(Exception('boom'));
+
+        final cache = AttachmentContentCache(
+          dio: dio,
+          rootLoader: () async => scratchDir,
+        );
+
+        await pump(tester, dio: dio, isOnline: true, attachmentCache: cache);
+        await tapTab(tester, 'Allegati');
+        // Same fake-async/real-I/O rule as the image test above: `cache.lookup` calls
+        // `Directory.exists` before the (stubbed) request, so that await never resolves under the
+        // fake clock and the toast never appears. Tap, pump and wait inside `runAsync`, then let
+        // the frame that mounts the toast be pumped there as well.
+        await tester.runAsync(() async {
+          await tester.tap(
+            find.descendant(
+              of: find.byType(BottomSheet),
+              matching: find.text('certificato.pdf'),
+            ),
+          );
+          await tester.pump();
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+          await tester.pump();
+        });
+        await tester.pumpAndSettle();
+
+        expect(find.byType(InteractiveViewer), findsNothing);
+        expect(find.text('Impossibile scaricare il file.'), findsOneWidget);
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets('shows an honest empty state when there are no attachments', (
       tester,
     ) async {
-      final pdfAttachment = [
-        {
-          'id': 'att-2',
-          'fileName': 'certificato.pdf',
-          'contentType': 'application/pdf',
-          'sizeBytes': 51200,
-          'contentUrl': '/api/tickets/ticket-1/attachments/att-2/content',
-          'uploadedByUserId': 'u1',
-          'createdAt': '2026-07-01T09:00:00Z',
-        },
-      ];
       await seedBase(db);
       final dio = MockDio();
-      when(
-        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
-      ).thenAnswer((_) async => _okResponse(pdfAttachment, '/api/Tickets/ticket-1/attachments'));
-      // No stub for the content GET — a MockDio throws MissingStubError on an unstubbed call,
-      // which openAttachment's catch-all turns into the download-failure SnackBar. That's still
-      // the right assertion: it proves the non-image branch tried to fetch rather than opening
-      // the image viewer, without needing a real OpenFilex/platform-channel round trip.
-      when(
-        () => dio.get<List<int>>(
-          '/api/tickets/ticket-1/attachments/att-2/content',
-          options: any(named: 'options'),
-        ),
-      ).thenThrow(Exception('boom'));
-
-      await pump(tester, dio: dio, isOnline: true);
-      await tapTab(tester, 'Allegati');
-      await tester.tap(find.text('certificato.pdf'));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(InteractiveViewer), findsNothing);
-      expect(find.text('Impossibile scaricare il file.'), findsOneWidget);
-      await resetAndDispose(tester);
-    });
-
-    testWidgets('shows an honest empty state when there are no attachments', (tester) async {
-      await seedBase(db);
-      final dio = MockDio();
-      when(
-        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
-      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/Tickets/ticket-1/attachments'));
+      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'))
+          .thenAnswer(
+            (_) async =>
+                _okResponse(<dynamic>[], '/api/Tickets/ticket-1/attachments'),
+          );
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Allegati');
@@ -1158,27 +2318,70 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+    testWidgets('says plainly it is offline instead of showing an empty list', (
+      tester,
+    ) async {
       await seedBase(db);
 
       await pump(tester, isOnline: false);
       await tapTab(tester, 'Allegati');
 
-      expect(find.text('Allegati non disponibili offline'), findsOneWidget);
+      expect(find.text('Allegati non ancora sul telefono'), findsOneWidget);
       expect(find.text('Nessun allegato'), findsNothing);
       await resetAndDispose(tester);
     });
 
-    testWidgets('a successful upload while online adds the file to the list', (tester) async {
+    testWidgets(
+      'offline it lists the attachments already mirrored on the phone',
+      (tester) async {
+        await seedBase(db);
+        await db
+            .into(db.reportAllegati)
+            .insert(
+              ReportAllegatiCompanion.insert(
+                id: 'att-9',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 1, 9),
+                fileName: 'preventivo.pdf',
+                contentType: 'application/pdf',
+                sizeBytes: 4096,
+                storagePath: '',
+                url: '/api/tickets/ticket-1/attachments/att-9/content',
+                entityType: 0,
+                entityId: 'ticket-1',
+                uploadedByUserId: 'user-1',
+              ),
+            );
+
+        await pump(tester, isOnline: false);
+        await tapTab(tester, 'Allegati');
+
+        expect(
+          find.descendant(
+            of: find.byType(BottomSheet),
+            matching: find.text('preventivo.pdf'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Allegati non ancora sul telefono'), findsNothing);
+        expect(find.text('Nessun allegato'), findsNothing);
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets('a successful upload while online adds the file to the list', (
+      tester,
+    ) async {
       await seedBase(db);
       var serverAttachments = <Map<String, dynamic>>[];
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments')).thenAnswer(
-        (_) async => _okResponse<List<dynamic>>(
-          serverAttachments,
-          '/api/Tickets/ticket-1/attachments',
-        ),
-      );
+      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'))
+          .thenAnswer(
+            (_) async => _okResponse<List<dynamic>>(
+              serverAttachments,
+              '/api/Tickets/ticket-1/attachments',
+            ),
+          );
       when(
         () => dio.post<Map<String, dynamic>>(
           '/api/tickets/ticket-1/attachments',
@@ -1208,16 +2411,34 @@ void main() {
       ImagePickerPlatform.instance = _FakeImagePickerPlatform(
         makeTempFile('foto.jpg', 2048).path,
       );
+      final captureStore = makeCaptureStore();
 
-      await pump(tester, dio: dio, isOnline: true);
+      await pump(tester, dio: dio, isOnline: true, captureStore: captureStore);
       await tapTab(tester, 'Allegati');
 
       expect(find.text('Nessun allegato'), findsOneWidget);
 
       await tapAndSettle(tester, find.text('Fotocamera'));
 
-      expect(find.text('foto.jpg'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('foto.jpg'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Nessun allegato'), findsNothing);
+
+      // The pick was copied into the app's own store — the upload never saw the picker's
+      // purgeable temp path (audit F6).
+      final stored = capturedFiles(captureStore);
+      expect(stored, hasLength(1));
+      expect(
+        stored.single.path.startsWith(captureStore.directory.path),
+        isTrue,
+      );
+      expect(stored.single.lengthSync(), 2048);
+      expect(stored.single.path.endsWith('.jpg'), isTrue);
       await resetAndDisposeAfterUpload(tester);
     });
 
@@ -1230,12 +2451,17 @@ void main() {
         // assertion self-checking: any accidental network call throws instead of silently
         // succeeding.
         await seedBase(db);
-        ImagePickerPlatform.instance = _FakeImagePickerPlatform(
-          makeTempFile('offline.jpg', 4096).path,
-        );
+        final picked = makeTempFile('offline.jpg', 4096);
+        ImagePickerPlatform.instance = _FakeImagePickerPlatform(picked.path);
+        final captureStore = makeCaptureStore();
 
         final dio = MockDio();
-        await pump(tester, dio: dio, isOnline: false);
+        await pump(
+          tester,
+          dio: dio,
+          isOnline: false,
+          captureStore: captureStore,
+        );
         await tapTab(tester, 'Allegati');
 
         await tapAndSettle(tester, find.text('Galleria'));
@@ -1243,11 +2469,24 @@ void main() {
         // A direct Drift read here (rather than through a watched provider a widget rebuild
         // would pick up) still needs `runAsync` — same reasoning as `tapAndSettle` itself.
         final rows = await tester.runAsync(
-          () => PendingTicketAttachmentRepository(db).watchForTicket('ticket-1').first,
+          () =>
+              PendingTicketAttachmentRepository(db)
+                  .watchForTicket('ticket-1')
+                  .first,
         );
         expect(rows, hasLength(1));
         expect(rows!.single.fileName, 'offline.jpg');
         expect(rows.single.state, 'pendingSync');
+        // The queued row points at the durable copy, not the picker's purgeable temp path — a
+        // cache purge between now and the reconnect must not lose the photo.
+        expect(rows.single.localPath, isNot(picked.path));
+        expect(
+          rows.single.localPath.startsWith(captureStore.directory.path),
+          isTrue,
+        );
+        expect(rows.single.contentType, 'image/jpeg');
+        expect(rows.single.sizeBytes, 4096);
+        expect(File(rows.single.localPath).existsSync(), isTrue);
         verifyNever(
           () => dio.post<Map<String, dynamic>>(
             any(),
@@ -1287,59 +2526,76 @@ void main() {
       },
     );
 
-    testWidgets('a failed pending attachment offers Riprova, matching the retry pattern', (
-      tester,
-    ) async {
-      await seedBase(db);
-      final repo = PendingTicketAttachmentRepository(db);
-      await repo.insert(
-        id: 'pa-1',
-        ticketId: 'ticket-1',
-        localPath: '/tmp/whatever.jpg',
-        fileName: 'whatever.jpg',
-        contentType: 'image/jpeg',
-        sizeBytes: 1024,
-        state: PendingTicketAttachmentState.failed,
-      );
-      await repo.updateState(
-        id: 'pa-1',
-        state: PendingTicketAttachmentState.failed,
-        error: 'Nessuna connessione. Riprova quando torni online.',
-      );
+    testWidgets(
+      'a failed pending attachment offers Riprova, matching the retry pattern',
+      (tester) async {
+        await seedBase(db);
+        final repo = PendingTicketAttachmentRepository(db);
+        await repo.insert(
+          id: 'pa-1',
+          ticketId: 'ticket-1',
+          localPath: '/tmp/whatever.jpg',
+          fileName: 'whatever.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 1024,
+          state: PendingTicketAttachmentState.failed,
+        );
+        await repo.updateState(
+          id: 'pa-1',
+          state: PendingTicketAttachmentState.failed,
+          error: 'Nessuna connessione. Riprova quando torni online.',
+        );
 
-      await pump(tester, isOnline: false);
-      await tapTab(tester, 'Allegati');
+        await pump(tester, isOnline: false);
+        await tapTab(tester, 'Allegati');
 
-      expect(find.textContaining('Caricamento non riuscito'), findsOneWidget);
-      expect(find.text('Riprova'), findsOneWidget);
-      await resetAndDispose(tester);
-    });
+        expect(find.textContaining('Caricamento non riuscito'), findsOneWidget);
+        expect(find.text('Riprova'), findsOneWidget);
+        await resetAndDispose(tester);
+      },
+    );
 
-    testWidgets('a file over the 10 MB cap is rejected client-side, never queued', (tester) async {
-      await seedBase(db);
-      final bigFile = makeTempFile('big.jpg', 10 * 1024 * 1024 + 1);
-      ImagePickerPlatform.instance = _FakeImagePickerPlatform(bigFile.path);
+    testWidgets(
+      'a file over the 10 MB cap is rejected client-side, never queued',
+      (tester) async {
+        await seedBase(db);
+        final bigFile = makeTempFile('big.jpg', 10 * 1024 * 1024 + 1);
+        ImagePickerPlatform.instance = _FakeImagePickerPlatform(bigFile.path);
+        final captureStore = makeCaptureStore();
 
-      final dio = MockDio();
-      when(
-        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
-      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/Tickets/ticket-1/attachments'));
+        final dio = MockDio();
+        when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'))
+            .thenAnswer(
+              (_) async =>
+                  _okResponse(<dynamic>[], '/api/Tickets/ticket-1/attachments'),
+            );
 
-      await pump(tester, dio: dio, isOnline: true);
-      await tapTab(tester, 'Allegati');
+        await pump(
+          tester,
+          dio: dio,
+          isOnline: true,
+          captureStore: captureStore,
+        );
+        await tapTab(tester, 'Allegati');
 
-      await tapAndSettle(tester, find.text('Fotocamera'));
+        await tapAndSettle(tester, find.text('Fotocamera'));
 
-      expect(find.textContaining('10 MB'), findsOneWidget);
-      expect(find.text('In sospeso (1)'), findsNothing);
-      expect(find.text('big.jpg'), findsNothing);
+        expect(find.textContaining('10 MB'), findsOneWidget);
+        expect(find.text('In sospeso (1)'), findsNothing);
+        expect(find.text('big.jpg'), findsNothing);
 
-      final rows = await tester.runAsync(
-        () => PendingTicketAttachmentRepository(db).watchForTicket('ticket-1').first,
-      );
-      expect(rows, isEmpty);
-      await resetAndDisposeAfterUpload(tester);
-    });
+        final rows = await tester.runAsync(
+          () =>
+              PendingTicketAttachmentRepository(db)
+                  .watchForTicket('ticket-1')
+                  .first,
+        );
+        expect(rows, isEmpty);
+        // The refused copy is discarded rather than left as a 10 MB orphan in app documents.
+        expect(capturedFiles(captureStore), isEmpty);
+        await resetAndDisposeAfterUpload(tester);
+      },
+    );
   });
 
   group('TicketDetailScreen — Fabbisogno tab (index 4)', () {
@@ -1385,7 +2641,9 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('shows an honest empty state when nothing is planned', (tester) async {
+    testWidgets('shows an honest empty state when nothing is planned', (
+      tester,
+    ) async {
       await seedBase(db);
 
       await pump(tester, isOnline: true);
@@ -1395,19 +2653,37 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('still shows planned materials offline — the whole point of the local mirror', (
-      tester,
-    ) async {
-      await seedBase(db);
-      await seedFabbisogno(db);
+    testWidgets(
+      'an unknown mirror is "not downloaded yet", never "nothing planned"',
+      (tester) async {
+        await seedBase(db);
 
-      await pump(tester, isOnline: false);
-      await tapTab(tester, 'Fabbisogno');
+        // The payload replaces a ticket's fabbisogno wholesale, so an empty mirror speaks for the
+        // tenant only once the ticket is on the phone. Until then the tab would otherwise report
+        // the phone's missing download as a fact about the customer's site.
+        await pump(tester, isOnline: true, ticketMirrorKnown: false);
+        await tapTab(tester, 'Fabbisogno');
 
-      expect(find.text('Valvola idraulica'), findsOneWidget);
-      expect(find.text('Fabbisogno non disponibile offline'), findsNothing);
-      await resetAndDispose(tester);
-    });
+        expect(find.text('Nessun fabbisogno'), findsNothing);
+        expect(find.text('Fabbisogno non ancora scaricato'), findsOneWidget);
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets(
+      'still shows planned materials offline — the whole point of the local mirror',
+      (tester) async {
+        await seedBase(db);
+        await seedFabbisogno(db);
+
+        await pump(tester, isOnline: false);
+        await tapTab(tester, 'Fabbisogno');
+
+        expect(find.text('Valvola idraulica'), findsOneWidget);
+        expect(find.text('Fabbisogno non disponibile offline'), findsNothing);
+        await resetAndDispose(tester);
+      },
+    );
 
     testWidgets(
       'Modifica → add a row → Salva PUTs the full list and updates the local mirror',
@@ -1425,11 +2701,16 @@ void main() {
           (_) async => Response<dynamic>(
             data: null,
             statusCode: 200,
-            requestOptions: RequestOptions(path: '/api/Tickets/ticket-1/materiali'),
+            requestOptions: RequestOptions(
+              path: '/api/Tickets/ticket-1/materiali',
+            ),
           ),
         );
         when(
-          () => dio.get<dynamic>('/Materiali', queryParameters: any(named: 'queryParameters')),
+          () => dio.get<dynamic>(
+            '/Materiali',
+            queryParameters: any(named: 'queryParameters'),
+          ),
         ).thenAnswer(
           (_) async => Response<dynamic>(
             data: {'items': []},
@@ -1450,16 +2731,23 @@ void main() {
         await tester.tap(find.text('Aggiungi materiale'));
         await tester.pumpAndSettle();
 
-        // New row's own fields are the last 4 TextFormFields on screen (Articolo/Quantità/
-        // Unità/Note) — the article field is 4 before the last, quantity 3 before.
-        final fieldCount = tester.widgetList(find.byType(TextFormField)).length;
-        final articleFieldForNewRow = find.byType(TextFormField).at(fieldCount - 4);
-        await tester.enterText(articleFieldForNewRow, 'Guarnizione custom');
+        // Add is the shared modal now: lookup + numeric qty inside the dialog.
+        final modalFields = find.descendant(
+          of: find.byType(Dialog),
+          matching: find.byType(TextFormField),
+        );
+        await tester.enterText(modalFields.first, 'Guarnizione custom');
         await tester.pump();
-        final qtyFieldForNewRow = find.byType(TextFormField).at(fieldCount - 3);
-        await tester.enterText(qtyFieldForNewRow, '5');
+        await tester.enterText(
+          find.byKey(const Key('materiale-qty-field')),
+          '5',
+        );
         await tester.pump();
+        await tester.tap(find.text('Aggiungi').last);
+        await tester.pumpAndSettle();
 
+        await tester.ensureVisible(find.text('Salva'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Salva'));
         await tester.pumpAndSettle();
 
@@ -1477,6 +2765,7 @@ void main() {
           'quantity': 5.0,
           'unitOfMeasure': null,
           'notes': null,
+          'magazzinoId': null,
         });
 
         // Back to the read view, showing both rows — proof the local Drift mirror was updated
@@ -1503,7 +2792,11 @@ void main() {
   /// Ore and Storico are the sixth and seventh tabs. At the 800dp width `tapTab` uses, the strip
   /// scrolls horizontally and a tap on the right-most labels lands on whatever is under them, so
   /// these two groups widen the surface enough for all seven to be laid out at once.
-  Future<void> tapWideTab(WidgetTester tester, String label, {bool settle = true}) async {
+  Future<void> tapWideTab(
+    WidgetTester tester,
+    String label, {
+    bool settle = true,
+  }) async {
     await tester.binding.setSurfaceSize(const Size(1400, 1200));
     await tester.pump();
     await tester.ensureVisible(find.text(label));
@@ -1527,9 +2820,13 @@ void main() {
   group('TicketDetailScreen — Ore tab (index 5)', () {
     MockDio dioWithWorklogs(List<Map<String, dynamic>> entries) {
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/ticket-1/worklogs')).thenAnswer(
-        (_) async => _okResponse<List<dynamic>>(entries, '/api/tickets/ticket-1/worklogs'),
-      );
+      when(() => dio.get<List<dynamic>>('/api/tickets/ticket-1/worklogs'))
+          .thenAnswer(
+            (_) async => _okResponse<List<dynamic>>(
+              entries,
+              '/api/tickets/ticket-1/worklogs',
+            ),
+          );
       return dio;
     }
 
@@ -1588,7 +2885,49 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('a worklog with an unparseable workDate shows the error state, not a thrown error', (
+    testWidgets(
+      'offline names the total as this technician\'s own hours, not the ticket\'s',
+      (tester) async {
+        await seedBase(db);
+        // The mirror only ever holds the caller's sessions (sync filters `UserId == userId`), so a
+        // colleague's hours on this same ticket are absent and cannot be fetched while offline.
+        // Two closed sessions, so the total (3:00) is a sum no single row also shows.
+        for (final (id, startHour, endHour) in [
+          ('t1', 8, 10),
+          ('t2', 11, 12),
+        ]) {
+          await db
+              .into(db.ticketTimers)
+              .insert(
+                TicketTimersCompanion.insert(
+                  id: id,
+                  ticketId: 'ticket-1',
+                  userId: const Value('u1'),
+                  workDate: Value(DateTime.utc(2026, 7, 1)),
+                  startSeconds: Value(startHour * 3600),
+                  endSeconds: Value(endHour * 3600),
+                  startUtc: Value(DateTime.utc(2026, 7, 1, startHour)),
+                  endUtc: Value(DateTime.utc(2026, 7, 1, endHour)),
+                ),
+              );
+        }
+
+        await pump(tester, isOnline: false);
+        await tapWideTab(tester, 'Ore');
+
+        expect(find.text('Totale delle tue ore'), findsOneWidget);
+        expect(
+          find.text('Totale registrato'),
+          findsNothing,
+          reason: 'unqualified, the mirror total reads as the whole ticket',
+        );
+        expect(find.textContaining('Solo le tue ore'), findsOneWidget);
+        expect(find.text('3:00'), findsOneWidget);
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets('online the total is the ticket\'s, with no own-hours caveat', (
       tester,
     ) async {
       await seedBase(db);
@@ -1596,10 +2935,10 @@ void main() {
         {
           'id': 'w1',
           'ticketId': 'ticket-1',
-          'userId': 'u1',
-          'workDate': 'not-a-date',
+          'userId': 'u2',
+          'workDate': '2026-07-01T00:00:00Z',
           'startTime': '08:00:00',
-          'endTime': '10:30:00',
+          'endTime': '10:00:00',
           'isManualEntry': false,
         },
       ]);
@@ -1607,13 +2946,40 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tapWideTab(tester, 'Ore');
 
-      expect(find.text('Impossibile caricare le ore'), findsOneWidget);
-      expect(find.text('Nessuna ora registrata'), findsNothing);
-      expect(tester.takeException(), null);
+      expect(find.text('Totale registrato'), findsOneWidget);
+      expect(find.textContaining('Solo le tue ore'), findsNothing);
       await resetAndDispose(tester);
     });
 
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+    testWidgets(
+      'a worklog with an unparseable workDate shows the error state, not a thrown error',
+      (tester) async {
+        await seedBase(db);
+        final dio = dioWithWorklogs([
+          {
+            'id': 'w1',
+            'ticketId': 'ticket-1',
+            'userId': 'u1',
+            'workDate': 'not-a-date',
+            'startTime': '08:00:00',
+            'endTime': '10:30:00',
+            'isManualEntry': false,
+          },
+        ]);
+
+        await pump(tester, dio: dio, isOnline: true);
+        await tapWideTab(tester, 'Ore');
+
+        expect(find.text('Impossibile caricare le ore'), findsOneWidget);
+        expect(find.text('Nessuna ora registrata'), findsNothing);
+        expect(tester.takeException(), null);
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets('says plainly it is offline instead of showing an empty list', (
+      tester,
+    ) async {
       await seedBase(db);
       await pump(tester, isOnline: false);
       await tapWideTab(tester, 'Ore');
@@ -1624,67 +2990,249 @@ void main() {
   });
 
   group('TicketDetailScreen — Storico tab (index 6)', () {
-    testWidgets('renders a status change by name, not by raw id', (tester) async {
+    testWidgets(
+      'the Attività timeline shows history from the mirror and issues no history request',
+      (tester) async {
+        await seedBase(db);
+        await db
+            .into(db.ticketHistory)
+            .insert(
+              TicketHistoryCompanion.insert(
+                id: 'h1',
+                ticketId: 'ticket-1',
+                fieldName: 'StatusId',
+                oldValue: const Value(null),
+                newValue: const Value('1'),
+                changedByUserId: 'user-1',
+                changedAt: DateTime.now().toUtc(),
+              ),
+            );
+        final dio = MockDio();
+
+        await pump(tester, dio: dio, isOnline: true);
+
+        final timeline = find.byType(DetailActivityTimeline);
+        expect(timeline, findsOneWidget);
+        expect(
+          find.descendant(of: timeline, matching: find.text('Stato')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: timeline, matching: find.text('— → Aperto')),
+          findsOneWidget,
+        );
+        // Full detail stays one tap away.
+        expect(find.text('APRI'), findsWidgets);
+        verifyNever(
+          () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history'),
+        );
+        verifyNever(
+          () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
+        );
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets(
+      'with an empty mirror the page shows no timeline and a collapsed Allegati',
+      (tester) async {
+        await seedBase(db);
+        final dio = MockDio();
+
+        await pump(tester, dio: dio, isOnline: true);
+
+        expect(find.byType(DetailActivityTimeline), findsNothing);
+        await tester.scrollUntilVisible(
+          find.text('Apri per vedere o aggiungere allegati.'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(
+          find.text('Apri per vedere o aggiungere allegati.'),
+          findsOneWidget,
+        );
+        expect(find.textContaining(' FILE'), findsNothing);
+        verifyNever(
+          () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history'),
+        );
+        verifyNever(
+          () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
+        );
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets(
+      'Sintesi renders Cliente, Sede and Tecnico as a facts grid, not in the hero',
+      (tester) async {
+        await seedBase(db);
+        await pump(tester);
+
+        final grid = find.byType(DetailFactsGrid);
+        expect(grid, findsOneWidget);
+        for (final label in ['CLIENTE', 'SEDE', 'TECNICO']) {
+          expect(
+            find.descendant(of: grid, matching: find.text(label)),
+            findsOneWidget,
+          );
+        }
+        expect(
+          find.descendant(of: grid, matching: find.text('ACME Srl')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(DetailHero),
+            matching: find.byType(DetailFactsGrid),
+          ),
+          findsNothing,
+        );
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets('renders a status change by name, not by raw id', (
+      tester,
+    ) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history')).thenAnswer(
-        (_) async => _okResponse<List<dynamic>>([
-          {
-            'id': 'h1',
-            'ticketId': 'ticket-1',
-            'fieldName': 'StatusId',
-            'oldValue': null,
-            'newValue': '1',
-            'changedByUserId': 'u1',
-            'changedAt': '2026-07-01T10:00:00Z',
-          },
-        ], '/api/Tickets/ticket-1/history'),
-      );
+      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history'))
+          .thenAnswer(
+            (_) async => _okResponse<List<dynamic>>([
+              {
+                'id': 'h1',
+                'ticketId': 'ticket-1',
+                'fieldName': 'StatusId',
+                'oldValue': null,
+                'newValue': '1',
+                'changedByUserId': 'u1',
+                'changedAt': '2026-07-01T10:00:00Z',
+              },
+            ], '/api/Tickets/ticket-1/history'),
+          );
 
       await pump(tester, dio: dio, isOnline: true);
       await tapWideTab(tester, 'Storico');
 
       // The audit table stores column names and raw values. Showing "StatusId: → 1" would put
       // database identifiers in front of a technician.
-      expect(find.text('Stato'), findsOneWidget);
-      expect(find.text('— → Aperto'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('Stato'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('— → Aperto'),
+        ),
+        findsOneWidget,
+      );
       await resetAndDispose(tester);
     });
 
-    testWidgets('keeps an untranslated field rather than dropping the change', (tester) async {
+    testWidgets('keeps an untranslated field rather than dropping the change', (
+      tester,
+    ) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history')).thenAnswer(
-        (_) async => _okResponse<List<dynamic>>([
-          {
-            'id': 'h1',
-            'ticketId': 'ticket-1',
-            'fieldName': 'SomeFutureColumn',
-            'oldValue': 'a',
-            'newValue': 'b',
-            'changedByUserId': 'u1',
-            'changedAt': '2026-07-01T10:00:00Z',
-          },
-        ], '/api/Tickets/ticket-1/history'),
-      );
+      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history'))
+          .thenAnswer(
+            (_) async => _okResponse<List<dynamic>>([
+              {
+                'id': 'h1',
+                'ticketId': 'ticket-1',
+                'fieldName': 'SomeFutureColumn',
+                'oldValue': 'a',
+                'newValue': 'b',
+                'changedByUserId': 'u1',
+                'changedAt': '2026-07-01T10:00:00Z',
+              },
+            ], '/api/Tickets/ticket-1/history'),
+          );
 
       await pump(tester, dio: dio, isOnline: true);
       await tapWideTab(tester, 'Storico');
 
       // A change nobody has a label for still happened; hiding it would make the trail lie.
-      expect(find.text('SomeFutureColumn'), findsOneWidget);
-      expect(find.text('a → b'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('SomeFutureColumn'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('a → b'),
+        ),
+        findsOneWidget,
+      );
       await resetAndDispose(tester);
     });
 
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+    testWidgets('answers offline from the synced mirror', (tester) async {
       await seedBase(db);
+      await db
+          .into(db.ticketHistory)
+          .insert(
+            TicketHistoryCompanion.insert(
+              id: 'h1',
+              ticketId: 'ticket-1',
+              fieldName: 'StatusId',
+              oldValue: const Value(null),
+              newValue: const Value('1'),
+              changedByUserId: 'u1',
+              changedAt: DateTime.utc(2026, 7, 1, 10),
+            ),
+          );
+
       await pump(tester, isOnline: false);
       await tapWideTab(tester, 'Storico');
 
-      expect(find.text('Storico non disponibile offline'), findsOneWidget);
+      // The mirror is the point of this slice: on site, with no signal, the trail of who moved
+      // this ticket is still readable — through the same translation as the online path.
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('Stato'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('— → Aperto'),
+        ),
+        findsOneWidget,
+      );
       await resetAndDispose(tester);
     });
+
+    testWidgets(
+      'says the timeline was never received, not that nothing happened',
+      (tester) async {
+        await seedBase(db);
+        await pump(tester, isOnline: false);
+        await tapWideTab(tester, 'Storico');
+
+        // G3: reaching the offline branch now means this device has never received the timeline —
+        // which must never be mistaken for a ticket with no activity.
+        expect(find.text('Storico non ancora disponibile'), findsOneWidget);
+        expect(
+          find.text(
+            'Nessuna copia dello storico su questo dispositivo. '
+            'Verrà scaricato alla prossima sincronizzazione.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Nessuna modifica registrata'), findsNothing);
+        await resetAndDispose(tester);
+      },
+    );
   });
 
   // Regression: the "Assegna" sheet seeded its dropdown's value from ticket.assignedUserId
@@ -1724,7 +3272,9 @@ void main() {
       },
     );
 
-    testWidgets('does not crash when the technician fetch fails outright', (tester) async {
+    testWidgets('does not crash when the technician fetch fails outright', (
+      tester,
+    ) async {
       await seedBase(db); // assigns 'user-1'
       final dio = MockDio(); // no stub for /api/users — throws MissingStubError
 
@@ -1737,34 +3287,35 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('keeps the assigned user selected when they are in the fetched list', (
-      tester,
-    ) async {
-      await seedBase(db); // assigns 'user-1'
-      final dio = MockDio();
-      when(
-        () => dio.get<Map<String, dynamic>>(
-          '/api/users',
-          queryParameters: any(named: 'queryParameters'),
-        ),
-      ).thenAnswer(
-        (_) async => _okResponse({
-          'items': [
-            {'id': 'user-1', 'displayName': 'Mario Rossi'},
-          ],
-        }, '/api/users'),
-      );
+    testWidgets(
+      'keeps the assigned user selected when they are in the fetched list',
+      (tester) async {
+        await seedBase(db); // assigns 'user-1'
+        final dio = MockDio();
+        when(
+          () => dio.get<Map<String, dynamic>>(
+            '/api/users',
+            queryParameters: any(named: 'queryParameters'),
+          ),
+        ).thenAnswer(
+          (_) async => _okResponse({
+            'items': [
+              {'id': 'user-1', 'displayName': 'Mario Rossi'},
+            ],
+          }, '/api/users'),
+        );
 
-      await pump(tester, dio: dio, isOnline: true);
-      await tester.tap(find.bySemanticsLabel('Assegna'));
-      await tester.pumpAndSettle();
+        await pump(tester, dio: dio, isOnline: true);
+        await tester.tap(find.bySemanticsLabel('Assegna'));
+        await tester.pumpAndSettle();
 
-      expect(tester.takeException(), null);
-      final dropdown = tester.widget<DropdownButtonFormField<String>>(
-        find.byType(DropdownButtonFormField<String>),
-      );
-      expect(dropdown.initialValue, 'user-1');
-      await resetAndDispose(tester);
-    });
+        expect(tester.takeException(), null);
+        final dropdown = tester.widget<DropdownButtonFormField<String>>(
+          find.byType(DropdownButtonFormField<String>),
+        );
+        expect(dropdown.initialValue, 'user-1');
+        await resetAndDispose(tester);
+      },
+    );
   });
 }

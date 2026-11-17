@@ -53,9 +53,13 @@ VoidCallback initTicketAttachmentUploadQueueWatcher(WidgetRef ref) {
   });
 
   // Also attempt a flush immediately (covers attachments picked offline before this watcher was
-  // registered, and startup when already online).
-  Future.microtask(() {
-    ref.read(ticketAttachmentUploadQueueProvider).processAll();
+  // registered, and startup when already online). Rows the previous process left in `submitting`
+  // are surfaced first: `processAll` does not look at them, so without this they would stay
+  // "Caricamento…" forever.
+  Future.microtask(() async {
+    final queue = ref.read(ticketAttachmentUploadQueueProvider);
+    await queue.recoverInterrupted();
+    await queue.processAll();
   });
 
   return cancel;

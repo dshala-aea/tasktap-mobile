@@ -4,17 +4,23 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/crash_reporting/crash_reporter.dart';
 import 'package:tasktap_mobile/core/notifications/notification_service.dart';
+import 'package:tasktap_mobile/core/notifications/push_reporting.dart';
 import 'package:tasktap_mobile/main.dart';
+
+import 'support/recording_crash_reporter.dart';
 
 void main() {
   setUp(() {
     NotificationService.isAvailable = false;
     NotificationService.lastError = null;
+    resetPushReporting();
   });
   tearDown(() {
     NotificationService.isAvailable = false;
     NotificationService.lastError = null;
+    resetPushReporting();
   });
 
   testWidgets('both steps succeed -> push available', (tester) async {
@@ -115,5 +121,54 @@ void main() {
 
     expect(NotificationService.isAvailable, isTrue);
     expect(NotificationService.lastError, isNull);
+  });
+
+  // ── What a store build actually sends ──────────────────────────────────────
+  //
+  // `lastError` is shown to the technician on one screen; on a TestFlight or App Store handset it
+  // is otherwise unreachable. These pin that the same two failures also leave the device as
+  // events, tagged with the step that broke, because "push is off on this build" and "push is on
+  // and failing later" are indistinguishable from the outside without them.
+  testWidgets('both bootstrap failures are reported, each naming its own step', (tester) async {
+    final reporter = RecordingCrashReporter();
+    final previous = CrashReporter.instance;
+    CrashReporter.setInstance(reporter);
+    try {
+      await initializePush(
+        initFirebase: () async => throw StateError('no plist'),
+        initNotifications: () async {},
+      );
+      await initializePush(
+        initFirebase: () async {},
+        initNotifications: () async => throw StateError('apns-token-not-set'),
+      );
+    } finally {
+      CrashReporter.setInstance(previous);
+    }
+
+    expect(reporter.exceptions, hasLength(2));
+
+    final firebase = reporter.exceptions.first;
+    expect(firebase.tags?['push.stage'], 'firebase-init');
+    expect(firebase.error.toString(), contains('no plist'));
+
+    final notifications = reporter.exceptions.last;
+    expect(notifications.tags?['push.stage'], 'messaging-init');
+    expect(notifications.error.toString(), contains('apns-token-not-set'));
+  });
+
+  testWidgets('a successful bootstrap reports a breadcrumb, never an exception', (tester) async {
+    final reporter = RecordingCrashReporter();
+    final previous = CrashReporter.instance;
+    CrashReporter.setInstance(reporter);
+    try {
+      await initializePush(initFirebase: () async {}, initNotifications: () async {});
+    } finally {
+      CrashReporter.setInstance(previous);
+    }
+
+    expect(reporter.exceptions, isEmpty);
+    expect(reporter.messages, isEmpty);
+    expect(reporter.breadcrumbs.single, contains('push available'));
   });
 }

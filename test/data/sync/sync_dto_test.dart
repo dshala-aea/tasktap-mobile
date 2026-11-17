@@ -76,6 +76,37 @@ void main() {
     });
   });
 
+  group('TicketDto.prodottoAssistenzaIds', () {
+    Map<String, dynamic> json({Object? ids = #absent}) => {
+      'id': 't1',
+      'tenantId': 'tenant1',
+      'createdAt': '2026-08-31T00:00:00Z',
+      'title': 'Test',
+      'customerId': 'c1',
+      'locationId': 'l1',
+      'statusId': 1,
+      'typeId': 1,
+      if (ids != #absent) 'prodottoAssistenzaIds': ids,
+    };
+
+    test('parses the units the ticket covers', () {
+      expect(
+        TicketDto.fromJson(json(ids: ['pa-1', 'pa-2'])).prodottoAssistenzaIds,
+        ['pa-1', 'pa-2'],
+      );
+    });
+
+    test('defaults to an empty list, not null, when the key is absent', () {
+      // The server has always sent it (the entity fills it from the join table), so an absent key
+      // means an older backend. Empty keeps one shape for the writer, which encodes it as `[]`.
+      expect(TicketDto.fromJson(json()).prodottoAssistenzaIds, isEmpty);
+    });
+
+    test('keeps an empty list as an empty list', () {
+      expect(TicketDto.fromJson(json(ids: <String>[])).prodottoAssistenzaIds, isEmpty);
+    });
+  });
+
   group('SyncTicketMaterialeDto.fromJson', () {
     test('parses a catalog-referenced item', () {
       final json = {
@@ -87,6 +118,7 @@ void main() {
         'quantity': 2.5,
         'unitOfMeasure': 'pz',
         'isAvailable': true,
+        'magazzinoId': 'mag1',
       };
 
       final dto = SyncTicketMaterialeDto.fromJson(json);
@@ -95,6 +127,7 @@ void main() {
       expect(dto.materialeId, 'mat1');
       expect(dto.quantity, 2.5);
       expect(dto.isAvailable, isTrue);
+      expect(dto.magazzinoId, 'mag1');
     });
 
     test('parses a free-text item and tolerates missing optional fields', () {
@@ -112,6 +145,113 @@ void main() {
       expect(dto.materialeId, isNull);
       expect(dto.freeTextName, 'Guarnizione generica');
       expect(dto.isAvailable, isFalse);
+      expect(dto.magazzinoId, isNull);
+    });
+  });
+
+  group('ScheduleDto.isAssenza', () {
+    Map<String, dynamic> json({Object? isAssenza = #absent}) => {
+      'id': 's1',
+      'tenantId': 'tenant1',
+      'createdAt': '2026-10-24T00:00:00Z',
+      'activityDate': '2026-10-24T00:00:00Z',
+      'timeStart': '00:00:00',
+      'timeEnd': '00:00:00',
+      'userId': 'u1',
+      'statusId': 1,
+      'locationId': 'loc-1',
+      'allDay': true,
+      'title': 'ferie',
+      'description': '',
+      if (isAssenza != #absent) 'isAssenza': isAssenza,
+    };
+
+    test('parses an absence-owned row', () {
+      expect(ScheduleDto.fromJson(json(isAssenza: true)).isAssenza, isTrue);
+    });
+
+    test('a job reads as a job', () {
+      expect(ScheduleDto.fromJson(json(isAssenza: false)).isAssenza, isFalse);
+    });
+
+    // An older backend does not send the key at all. Reading every row as a job is the behaviour
+    // the app had before the flag existed — a guess in the other direction would empty the day.
+    test('is false when the key is absent (older backend)', () {
+      expect(ScheduleDto.fromJson(json()).isAssenza, isFalse);
+    });
+  });
+
+  group('CustomerDto.agentId', () {
+    Map<String, dynamic> json({Object? agentId = #absent}) => {
+      'id': 'c1',
+      'tenantId': 'tenant1',
+      'createdAt': '2026-10-16T00:00:00Z',
+      'companyName': 'ACME Srl',
+      if (agentId != #absent) 'agentId': agentId,
+    };
+
+    test('parses the agent when present', () {
+      expect(CustomerDto.fromJson(json(agentId: 'ag-1')).agentId, 'ag-1');
+    });
+
+    test('is null when the key is absent (older backend)', () {
+      expect(CustomerDto.fromJson(json()).agentId, isNull);
+    });
+
+    test('is null when the server sends an explicit null', () {
+      expect(CustomerDto.fromJson(json(agentId: null)).agentId, isNull);
+    });
+  });
+
+  group('ReportDto.numero', () {
+    Map<String, dynamic> json({Object? numero = #absent}) => {
+      'id': 'r1',
+      'tenantId': 'tenant1',
+      'createdAt': '2026-10-24T00:00:00Z',
+      'title': 'Rapportino caldaia',
+      'insertedUserId': 'u1',
+      'locationId': 'l1',
+      'stato': 'Bozza',
+      if (numero != #absent) 'numero': numero,
+    };
+
+    test('parses the human number when the server has assigned one', () {
+      expect(ReportDto.fromJson(json(numero: 'RAP-2026-0042')).numero, 'RAP-2026-0042');
+    });
+
+    test('is null for a draft the server has not numbered yet', () {
+      expect(ReportDto.fromJson(json()).numero, isNull);
+      expect(ReportDto.fromJson(json(numero: null)).numero, isNull);
+    });
+  });
+
+  group('TicketStatusDto.officeOnly', () {
+    Map<String, dynamic> json({Object? officeOnly = #absent}) => {
+      'id': 7,
+      'tenantId': 'tenant1',
+      'name': 'Da ufficio',
+      'isDefault': false,
+      'isClosed': false,
+      'isInProgress': false,
+      if (officeOnly != #absent) 'officeOnly': officeOnly,
+    };
+
+    test('parses a status the office administers', () {
+      expect(TicketStatusDto.fromJson(json(officeOnly: true)).officeOnly, isTrue);
+    });
+
+    test('a normal status reads as unrestricted', () {
+      expect(TicketStatusDto.fromJson(json(officeOnly: false)).officeOnly, isFalse);
+    });
+
+    // An older backend does not send the key. "No restriction" is what every status meant before
+    // the flag existed, so reading it true would lock the sheet for everybody.
+    test('is false when the key is absent (older backend)', () {
+      expect(TicketStatusDto.fromJson(json()).officeOnly, isFalse);
+    });
+
+    test('is false when the server sends an explicit null', () {
+      expect(TicketStatusDto.fromJson(json(officeOnly: null)).officeOnly, isFalse);
     });
   });
 }

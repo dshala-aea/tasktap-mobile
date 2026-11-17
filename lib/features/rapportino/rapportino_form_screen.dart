@@ -2,12 +2,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../core/widgets/widgets.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/dictation/dictation_bar.dart';
-import '../../core/dictation/dictation_target.dart';
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
@@ -18,10 +18,14 @@ import '../../presentation/providers/report_editor_providers.dart';
 import '../checklist/checklist_providers.dart';
 import '../ticket/ticket_detail_api_client.dart' show flattenTicketControls;
 import 'ai_draft_action.dart';
+import 'ai_draft_feed_card.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
 import 'steps/step_ore.dart';
 import 'steps/step_riepilogo.dart';
+import 'steps/step_strumenti.dart';
+import '../../presentation/providers/strumenti_selection_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -96,16 +100,11 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     );
   }
 
-  /// Opens Dettagli with the step's single microphone pinned below the form — outside the fields
-  /// it writes into, so the technician never has to aim before speaking. The registry is created
-  /// per open, so the "last field touched" memory never outlives the sheet it belongs to.
   void _openDettagli(BuildContext context) {
-    final dictation = DictationTargetRegistry();
     openCompartmentSheet(
       context,
       label: 'Dettagli',
-      content: StepDettagli(reportId: widget.reportId, dictation: dictation),
-      footer: DictationBar(registry: dictation),
+      content: StepDettagli(reportId: widget.reportId),
     );
   }
 
@@ -134,9 +133,9 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
               .watch(cachedTicketControlsProvider(ticketId))
               .maybeWhen(
                 data: (groups) => controlliCompletionFor(
-                  requiredControlIds: flattenTicketControls(
-                    groups,
-                  ).map((f) => f.control.id).toList(),
+                  requiredControlIds: flattenTicketControls(groups)
+                      .map((f) => f.control.id)
+                      .toList(),
                   recordedRows: editorState.controlloRows,
                 ),
                 orElse: () => false,
@@ -173,7 +172,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       appBar: ScreenHeaderBar(
-        title: 'Rapportino',
+        title: 'Rapporto',
         subtitle: subtitle,
         actions: [
           // Autosave indicator — spinner ↔ cloud used to hard-cut, on the single most-repeated
@@ -183,7 +182,9 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Semantics(
-              label: editorState.isSaving ? 'Salvataggio in corso' : 'Rapportino salvato',
+              label: editorState.isSaving
+                  ? 'Salvataggio in corso'
+                  : 'Rapporto di intervento salvato',
               liveRegion: true,
               child: AnimatedSwitcher(
                 duration: MediaQuery.of(context).disableAnimations
@@ -233,6 +234,8 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                     // reading order for a technician who just opened the report. Always visible (no
                     // tile tap required), unlike the old buried-in-Dettagli button it replaces.
                     AiDraftAction(reportId: reportId),
+                    // Only for a rapportino fed by a live AI draft (Task 12): sync hand edits back.
+                    AiDraftFeedCard(reportId: reportId),
                     GridView.count(
                       // 2 columns on a phone, 4 on a tablet/wide window — same width-driven
                       // breakpoint (AppBottomNav.wideBreakpoint) altro_hub_screen.dart's Gestione
@@ -284,6 +287,17 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    // Optional step, so a full-width row under the grid rather than a fifth tile
+                    // (an orphan in the 2-column layout) and not part of the completion count.
+                    _StrumentiRow(
+                      count: ref.watch(strumentiSelectionProvider(reportId)).items.length,
+                      onTap: () => openCompartmentSheet(
+                        context,
+                        label: 'Strumenti',
+                        content: StepStrumenti(reportId: reportId),
+                      ),
                     ),
                     const SizedBox(height: 20),
                     _CompletionCard(
@@ -436,6 +450,44 @@ class _CompletionCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Strumenti" entry: a full-width row with the selected count. Not a completion tile: the step is
+/// optional, so there is no done/not-done dot.
+class _StrumentiRow extends StatelessWidget {
+  const _StrumentiRow({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AppCard.pressable(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 40),
+        child: Row(
+          children: [
+            Icon(LucideIcons.wrench, size: 20, color: c.ink),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(
+                'Strumenti',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: c.ink),
+              ),
+            ),
+            Text(
+              count == 0 ? 'Nessuno' : '$count selezionat${count == 1 ? 'o' : 'i'}',
+              style: TextStyle(fontSize: 12, color: c.inkMuted),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Icon(LucideIcons.chevronRight, size: 16, color: c.inkMuted),
+          ],
         ),
       ),
     );

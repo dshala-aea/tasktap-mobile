@@ -19,25 +19,29 @@ class _Api extends WorklogApiClient {
   final calls = <String>[];
   Object? error;
   @override
-  Future<void> endWork() async {
+  Future<int?> endWork({DateTime? deviceUtc}) async {
     calls.add('end');
     if (error != null) throw error!;
+    return null;
   }
 
   @override
-  Future<void> startBreak() async {
+  Future<void> startBreak({DateTime? occurredAtUtc}) async {
     calls.add('break/start');
     if (error != null) throw error!;
   }
 
   @override
-  Future<void> endBreak() async {
+  Future<void> endBreak({DateTime? occurredAtUtc}) async {
     calls.add('break/end');
     if (error != null) throw error!;
   }
 
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> s) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> s, {
+    List<MobileSessionDto> breaks = const [],
+  }) async {
     calls.add('batch');
     return [];
   }

@@ -4,17 +4,20 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
 import '../local/app_database.dart';
+import '../local/checklist_read_repository.dart';
 import 'server_report_api_client.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // importServerReport — make a report that was created SERVER-side (the AI copilot's Confirm, or a
 // Bozza authored on another device) editable on this phone.
 //
-// Why it exists: the editor hydrates only from Drift, sync delivers only report HEADERS (no
-// staff / materiali / controlli), and `POST /api/reports/submit` replaces the server's children
-// with whatever the phone holds. Opening such a report without importing it either shows a blank
-// editor or, worse, lets the technician submit a partial one that deletes the server's data. So
-// the phone must hold the FULL report before the editor opens.
+// Why it exists: the editor hydrates only from Drift, and `POST /api/reports/submit` replaces the
+// server's children with whatever the phone holds. Opening a report the phone does not fully hold
+// either shows a blank editor or, worse, lets the technician submit a partial one that deletes the
+// server's data. So the phone must hold the FULL report before the editor opens. Sync used to
+// deliver report HEADERS only, which is why this fetch existed; O-8a now mirrors the whole
+// aggregate for every in-scope report, so the offline case is served by
+// [importServerReportFromMirror] below and the fetch is the online refresh.
 //
 // isLocalOnly = true, deliberately:
 //   * SyncService._upsertDraftReports skips rows with isLocalOnly, so a later 60 s sync tick can
@@ -33,14 +36,126 @@ const _uuid = Uuid();
 class ServerReportNotEditableException implements Exception {
   const ServerReportNotEditableException();
   @override
-  String toString() => 'Questo rapportino non è più modificabile.';
+  String toString() => 'Questo rapporto di intervento non è più modificabile.';
+}
+
+/// The full report is not on this device: sync never delivered its children (an older backend, or a
+/// report outside the synced scope), so it cannot be opened here without a fetch.
+class ServerReportNotMirroredException implements Exception {
+  const ServerReportNotMirroredException();
+  @override
+  String toString() => 'I dati completi di questo rapporto di intervento non sono sul telefono.';
 }
 
 /// Row id the Controlli step uses for the answer to one checklist item
 /// (step_materiali_fold.dart `_rowId`). Any other scheme makes the first edit insert a second
 /// row for the same TicketControl.
-String controlRowId(String reportId, String ticketControlId) =>
-    'ctrl-$reportId-$ticketControlId';
+String controlRowId(String reportId, String ticketControlId) => 'ctrl-$reportId-$ticketControlId';
+
+/// The label and asset of each of [ticketId]'s checklist items, as this device's sync mirror knows
+/// them, keyed by TicketControl id. Empty when there is nothing to read — no ticket, no mirror yet.
+///
+/// Read straight off `ticket_controls` rather than through the group tree: that tree deliberately
+/// leaves the per-asset rows out (they reach the screen as `assetChecklists`), and those are exactly
+/// the answers whose asset the grouped view needs.
+///
+/// Best-effort by design: an import must not fail because the checklist has not synced, and an
+/// answer without a snapshot simply falls back to resolving its label against the checklist at
+/// read time, the way every answer did before the snapshot columns existed.
+Future<Map<String, ({String? controlLabel, String? assetId})>> controlSnapshotsForTicket(
+  AppDatabase db,
+  String? ticketId,
+) async {
+  if (ticketId == null || ticketId.isEmpty) return const {};
+  try {
+    final rows = await ChecklistReadRepository(db).getTicketControlRows(ticketId);
+    return {
+      for (final row in rows) row.id: (controlLabel: row.label, assetId: row.prodottoAssistenzaId),
+    };
+  } catch (e) {
+    debugPrint('importServerReport: checklist read failed ($e); answers keep no snapshot');
+    return const {};
+  }
+}
+
+/// Promote a server-authored Bozza that ALREADY arrived complete (O-8a: sync delivers every
+/// in-scope report's staff, materiali, controlli and version) to a working copy, with no request.
+///
+/// [importServerReport] exists because a header-only row must not be opened: its submit would
+/// replace the server's children with the phone's empty set. Now that the aggregate is mirrored,
+/// the same report can be opened offline — the phone already holds those children.
+///
+/// Two preconditions, both refusals rather than best-effort:
+///   * `expectedVersion` must be set. `SyncService._applyReportAggregate` writes it exactly for the
+///     reports whose complete child set the payload carries, so it is this device's only evidence
+///     that "no children here" means "no children on the server" and not "never delivered".
+///   * the row must still be a Bozza: anything further along must not be resubmitted from a stale
+///     copy, the same rule [importServerReport] applies to the server's answer.
+///
+/// Controlli rows are re-keyed to [controlRowId]: sync writes the server's row ids, and the editor
+/// writes by its own convention, so leaving them would make the first edit insert a second answer
+/// for the same checklist item. Staff and materiali keep their server ids — the editor keys those
+/// by the row it was handed.
+Future<void> importServerReportFromMirror({
+  required AppDatabase db,
+  required String reportId,
+}) async {
+  final local = await (db.select(
+    db.draftReports,
+  )..where((r) => r.id.equals(reportId))).getSingleOrNull();
+  if (local == null) throw const ServerReportNotMirroredException();
+  if (local.isLocalOnly) return;
+  if (local.stato != 'Bozza') throw const ServerReportNotEditableException();
+  if (local.expectedVersion == null) throw const ServerReportNotMirroredException();
+
+  final now = DateTime.now().toUtc();
+  await db.transaction(() async {
+    final controlli = await (db.select(
+      db.reportControlli,
+    )..where((c) => c.reportId.equals(reportId))).get();
+    for (final c in controlli) {
+      final keyed = controlRowId(reportId, c.controlId);
+      if (c.id == keyed) continue;
+      await (db.delete(db.reportControlli)..where((r) => r.id.equals(c.id))).go();
+      await db
+          .into(db.reportControlli)
+          .insertOnConflictUpdate(
+            ReportControlliCompanion.insert(
+              id: keyed,
+              tenantId: c.tenantId,
+              createdAt: c.createdAt,
+              updatedAt: Value(c.updatedAt),
+              reportId: reportId,
+              controlId: c.controlId,
+              stringValue: Value(c.stringValue),
+              boolValue: Value(c.boolValue),
+              dateValue: Value(c.dateValue),
+              numberValue: Value(c.numberValue),
+              note: Value(c.note),
+              // The row is moved, not re-created: the answer's own snapshot of what it answers
+              // (schema 52) travels with it, or the report loses the names it shows and the asset
+              // its rows are grouped under the moment it is opened for editing.
+              controlLabel: Value(c.controlLabel),
+              assetId: Value(c.assetId),
+            ),
+          );
+    }
+
+    await (db.update(db.draftReports)..where((r) => r.id.equals(reportId))).write(
+      DraftReportsCompanion(
+        updatedAt: Value(now),
+        // Same meaning as the online import: the row is now this device's working copy, so the
+        // sync tick neither overwrites it nor prunes its children. `expectedVersion` is left as the
+        // sync wrote it — it is the version the phone last saw, and submit compares against it.
+        isLocalOnly: const Value(true),
+        submissionState: const Value('draft'),
+        submissionError: const Value(null),
+        submissionAttempts: const Value(0),
+        submissionErrorTransient: const Value(false),
+      ),
+    );
+  });
+}
 
 /// Fetch report [reportId] and mirror it into Drift in ONE transaction (header with the server id
 /// + children replaced). Throws on fetch failure, or [ServerReportNotEditableException]; in both
@@ -62,13 +177,21 @@ Future<void> importServerReport({
   Future<void> Function()? refreshLookups,
 }) async {
   if (!overwriteLocal) {
-    final local = await (db.select(db.draftReports)..where((r) => r.id.equals(reportId)))
-        .getSingleOrNull();
+    final local = await (db.select(
+      db.draftReports,
+    )..where((r) => r.id.equals(reportId))).getSingleOrNull();
     if (local != null && local.isLocalOnly) return;
   }
 
   final report = await api.fetchReport(reportId);
   if (!report.isBozza) throw const ServerReportNotEditableException();
+
+  // The server's answer rows name nothing: it holds a TicketControl id and nothing about what was
+  // asked (no label, no asset). The phone's own checklist mirror does, so each imported answer gets
+  // the same label/asset snapshot the editor writes when the technician answers on this device
+  // (schema 52) — otherwise the sent-report view of an imported report lists raw control ids and
+  // drops the asset grouping, exactly the state the snapshot columns were added to end.
+  final snapshots = await controlSnapshotsForTicket(db, report.ticketId);
 
   final now = DateTime.now().toUtc();
   await db.transaction(() async {
@@ -95,6 +218,20 @@ Future<void> importServerReport({
             startedAt: Value(report.startedAt),
             endedAt: Value(report.endedAt),
             technicianNotes: Value(report.technicianNotes),
+            // "Il cliente non può firmare": mirrored so a report opened from the server keeps the
+            // reason instead of looking like an unsigned report with no explanation. The server
+            // guarantees a report never carries both, but the signed signature wins here anyway —
+            // the invariant the whole feature rests on is worth enforcing at the boundary.
+            customerSignatureAbsenceReason: Value(
+              report.customerSignatureAllegatoId == null
+                  ? report.customerSignatureAbsenceReason?.wireValue
+                  : null,
+            ),
+            customerSignatureAbsenceNote: Value(
+              report.customerSignatureAllegatoId == null
+                  ? report.customerSignatureAbsenceNote
+                  : null,
+            ),
             customerSignoffText: Value(report.customerSignoffText),
             materialiNotRequired: Value(report.materialiNotRequired),
             isAiAssisted: Value(report.isAiAssisted),
@@ -115,6 +252,11 @@ Future<void> importServerReport({
         );
 
     await (db.delete(db.reportStaffTable)..where((s) => s.reportId.equals(reportId))).go();
+    // The staff rows are recreated below with new ids but the same user ids, so any interval that
+    // survived would re-attach to a colleague whose hours now come from the server — and
+    // `effectiveHours` prefers those intervals over the server's own number. Nothing imports
+    // intervals here on purpose: this payload does not carry them.
+    await (db.delete(db.reportStaffSegments)..where((g) => g.reportId.equals(reportId))).go();
     await (db.delete(db.reportMateriali)..where((m) => m.reportId.equals(reportId))).go();
     await (db.delete(db.reportControlli)..where((c) => c.reportId.equals(reportId))).go();
 
@@ -159,6 +301,7 @@ Future<void> importServerReport({
           );
     }
     for (final o in report.observations) {
+      final snapshot = snapshots[o.ticketControlId];
       await db
           .into(db.reportControlli)
           .insertOnConflictUpdate(
@@ -172,6 +315,8 @@ Future<void> importServerReport({
               boolValue: Value(o.boolValue),
               dateValue: Value(o.dateValue),
               numberValue: Value(o.numberValue),
+              controlLabel: Value(snapshot?.controlLabel),
+              assetId: Value(snapshot?.assetId),
             ),
           );
     }

@@ -79,7 +79,11 @@ void main() {
   });
 
   test('save then read round-trips the raw key and label', () async {
-    await store.save(rawKey: 'sp_abc123', deviceLabel: 'Totem ingresso', exitPin: '1234');
+    await store.save(
+      rawKey: 'sp_abc123',
+      deviceLabel: 'Totem ingresso',
+      exitPin: '1234',
+    );
 
     final creds = await store.read();
     expect(creds, isNotNull);
@@ -87,12 +91,15 @@ void main() {
     expect(creds.deviceLabel, 'Totem ingresso');
   });
 
-  test('the raw key is never stored as plaintext under any other key', () async {
-    await store.save(rawKey: 'sp_abc123', deviceLabel: '', exitPin: '9999');
+  test(
+    'the raw key is never stored as plaintext under any other key',
+    () async {
+      await store.save(rawKey: 'sp_abc123', deviceLabel: '', exitPin: '9999');
 
-    // The PIN itself must never be recoverable from storage — only a hash of it.
-    expect(backing.values, isNot(contains('9999')));
-  });
+      // The PIN itself must never be recoverable from storage — only a hash of it.
+      expect(backing.values, isNot(contains('9999')));
+    },
+  );
 
   test('verifyExitPin accepts the exact PIN used at save time', () async {
     await store.save(rawKey: 'sp_abc123', deviceLabel: '', exitPin: '4321');
@@ -111,7 +118,11 @@ void main() {
   });
 
   test('clear wipes the raw key, label and PIN hash', () async {
-    await store.save(rawKey: 'sp_abc123', deviceLabel: 'Totem', exitPin: '4321');
+    await store.save(
+      rawKey: 'sp_abc123',
+      deviceLabel: 'Totem',
+      exitPin: '4321',
+    );
 
     await store.clear();
 

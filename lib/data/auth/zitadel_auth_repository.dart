@@ -5,13 +5,23 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:passkeys/authenticator.dart';
+// `hide TimeoutException`: passkeys' `types.dart` re-exports its own
+// `TimeoutException`, and a package library outranks a `dart:` platform library when resolving a
+// name that both provide — silently. Without the hide, every `on TimeoutException` in this file
+// matches passkeys' class instead of `dart:async`'s, so a real timeout falls through to the generic
+// `catch (e)`. That is what made a hung 12s refresh come back as `UnknownAuthError` (which signs
+// the user out) instead of `NetworkError`.
+import 'package:passkeys/types.dart' hide TimeoutException;
 
 import '../../core/config/env.dart';
 import '../../core/startup/startup_report.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
+import 'passkey_options.dart';
 import 'pkce.dart';
+import 'retained_owner.dart';
 
 /// Zitadel OIDC implementation of [IAuthRepository].
 ///
@@ -32,10 +42,12 @@ class ZitadelAuthRepository implements IAuthRepository {
     FlutterAppAuth? appAuth,
     FlutterSecureStorage? storage,
     Dio? revocationHttpClient,
+    PasskeyAuthenticator? passkeyAuthenticator,
     bool restore = true,
   }) : _appAuth = appAuth ?? FlutterAppAuth(),
        _storage = storage ?? const FlutterSecureStorage(),
-       _revocationHttpClient = revocationHttpClient ?? Dio() {
+       _revocationHttpClient = revocationHttpClient ?? Dio(),
+       _passkeyAuthenticator = passkeyAuthenticator ?? PasskeyAuthenticator() {
     if (restore) unawaited(_restore());
   }
 
@@ -57,6 +69,8 @@ class ZitadelAuthRepository implements IAuthRepository {
       StreamController<AuthUser?>.broadcast();
 
   AuthUser? _current;
+
+  final PasskeyAuthenticator _passkeyAuthenticator;
 
   // ── IAuthRepository ────────────────────────────────────────────────────
 
@@ -184,6 +198,172 @@ class ZitadelAuthRepository implements IAuthRepository {
     }
   }
 
+  /// Native passkey sign-in: the same authRequestId capture and code exchange as
+  /// [signInWithPassword], with the platform's WebAuthn assertion in between.
+  ///
+  /// The session id/token and the assertion exist only as locals here — nothing
+  /// but the refresh token and the cached identity snapshot is persisted (see
+  /// the class doc). ZITADEL wraps the request options in a top-level `publicKey`
+  /// key; the package expects the unwrapped object, and the assertion goes back
+  /// to the backend as the package's own `toJson()` (never a JSON round-trip of
+  /// the Dart object, which cannot be encoded).
+  @override
+  Future<({AuthUser? user, AuthFailure? failure})> signInWithPasskey(
+    String loginName,
+  ) async {
+    final pkce = Pkce.generate();
+
+    final String authRequestId;
+    try {
+      authRequestId = await _captureAuthRequestId(pkce.challenge);
+    } catch (e) {
+      if (e is AuthFailure) return (user: null, failure: e);
+      return (user: null, failure: _mapError(e));
+    }
+
+    // ── start: backend challenge + ZITADEL session ───────────────────────
+    final String sessionId;
+    final String sessionToken;
+    final AuthenticateRequestType request;
+    try {
+      final response = await _revocationHttpClient.post<dynamic>(
+        '${Env.apiBaseUrl}/api/MobileAuth/passkey/login/start',
+        // No rpId: the server derives it from OIDC_ISSUER, and the contract has
+        // no such field.
+        data: {'authRequestId': authRequestId, 'loginName': loginName},
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      final data = response.data;
+      final rawSessionId = data is Map ? data['sessionId'] : null;
+      final rawSessionToken = data is Map ? data['sessionToken'] : null;
+      final options = data is Map
+          ? data['publicKeyCredentialRequestOptions']
+          : null;
+      // Wrapped, unwrapped, or JSON-encoded by the gateway — see passkey_options.dart.
+      final publicKey = passkeyOptionsMap(
+        options,
+        wrapperKey: 'publicKey',
+        requiredKey: 'challenge',
+      );
+      if (rawSessionId is! String ||
+          rawSessionId.isEmpty ||
+          rawSessionToken is! String ||
+          rawSessionToken.isEmpty ||
+          publicKey == null) {
+        return (
+          user: null,
+          failure: const UnknownAuthError('Malformed passkey start response'),
+        );
+      }
+      sessionId = rawSessionId;
+      sessionToken = rawSessionToken;
+      request = AuthenticateRequestType.fromJson(
+        publicKey,
+        // Do NOT restrict the sheet to credentials already on this device: a passkey held by
+        // Bitwarden/1Password or on another device (hybrid/QR) must be selectable. The default
+        // (`true`) makes the OS throw NoCredentialsAvailable instead of showing those options.
+        preferImmediatelyAvailableCredentials: false,
+      );
+    } on DioException catch (e) {
+      return (user: null, failure: _mapPasskeyHttpError(e));
+    } catch (_) {
+      // A publicKey shape the package rejects must surface as a typed failure,
+      // never escape as a raw FormatException/TypeError.
+      return (
+        user: null,
+        failure: const UnknownAuthError('Malformed passkey start response'),
+      );
+    }
+
+    // ── platform ceremony ────────────────────────────────────────────────
+    final AuthenticateResponseType assertion;
+    try {
+      assertion = await _passkeyAuthenticator.authenticate(request);
+    } on PasskeyAuthCancelledException {
+      // The user dismissed the sheet: benign, never an error banner.
+      return (user: null, failure: const PasskeyCancelled());
+    } on NoCredentialsAvailableException {
+      // This device holds no credential for the account; the copy must not
+      // distinguish it from "the account has no passkey".
+      return (user: null, failure: const PasskeyNotRegistered());
+    } on DomainNotAssociatedException catch (e) {
+      debugPrint(
+        'Passkey domain not associated (check the RP ID and app-site association files): ${e.message}',
+      );
+      return (user: null, failure: const PasskeyUnavailable());
+    } on PasskeyUnsupportedException catch (e) {
+      debugPrint('Passkey authenticator unsupported on this device: $e');
+      return (user: null, failure: const PasskeyUnavailable());
+    } on DeviceNotSupportedException catch (e) {
+      debugPrint('Device does not support passkeys: $e');
+      return (user: null, failure: const PasskeyUnavailable());
+    } catch (e) {
+      return (user: null, failure: _mapError(e));
+    }
+
+    // ── complete: backend verifies the assertion and mints the code ──────
+    final String code;
+    try {
+      final response = await _revocationHttpClient.post<dynamic>(
+        '${Env.apiBaseUrl}/api/MobileAuth/passkey/login/complete',
+        data: {
+          'authRequestId': authRequestId,
+          'sessionId': sessionId,
+          'sessionToken': sessionToken,
+          // The login identity is the session's on the server; never resend
+          // loginName here.
+          'credentialAssertionData': assertion.toJson(),
+        },
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      final data = response.data;
+      final rawCode = data is Map ? data['code'] : null;
+      if (rawCode is! String || rawCode.isEmpty) {
+        return (
+          user: null,
+          failure: const UnknownAuthError(
+            'Malformed passkey complete response',
+          ),
+        );
+      }
+      code = rawCode;
+    } on DioException catch (e) {
+      return (user: null, failure: _mapPasskeyHttpError(e));
+    } catch (e) {
+      return (user: null, failure: _mapError(e));
+    }
+
+    try {
+      final result = await _appAuth.token(
+        TokenRequest(
+          Env.oidcClientId,
+          Env.oidcRedirectUri,
+          issuer: Env.oidcIssuer,
+          authorizationCode: code,
+          codeVerifier: pkce.verifier,
+        ),
+      );
+      final user = _fromTokens(
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        idToken: result.idToken,
+        expiry: result.accessTokenExpirationDateTime,
+      );
+      if (user == null) {
+        return (
+          user: null,
+          failure: const UnknownAuthError('No tokens returned'),
+        );
+      }
+      await _persistRefreshToken(result.refreshToken);
+      await _persistCachedIdentity(user);
+      _emit(user);
+      return (user: user, failure: null);
+    } catch (e) {
+      return (user: null, failure: _mapError(e));
+    }
+  }
+
   /// The in-flight refresh, if any — shared by every concurrent caller instead of each starting
   /// its own token exchange. See [refreshSession] for why this matters.
   Future<({AuthUser? user, AuthFailure? failure})>? _inFlightRefresh;
@@ -214,26 +394,36 @@ class ZitadelAuthRepository implements IAuthRepository {
     }
 
     try {
-      final result = await _appAuth.token(
-        TokenRequest(
-          Env.oidcClientId,
-          Env.oidcRedirectUri,
-          issuer: Env.oidcIssuer,
-          refreshToken: refreshToken,
-          scopes: _scopes,
-          grantType: 'refresh_token',
-        ),
-      ).timeout(_refreshTimeout);
-      final user = _fromTokens(
+      final result = await _appAuth
+          .token(
+            TokenRequest(
+              Env.oidcClientId,
+              Env.oidcRedirectUri,
+              issuer: Env.oidcIssuer,
+              refreshToken: refreshToken,
+              scopes: _scopes,
+              grantType: 'refresh_token',
+            ),
+          )
+          .timeout(_refreshTimeout);
+      final fresh = _fromTokens(
         accessToken: result.accessToken,
         // Zitadel may rotate the refresh token; fall back to the one we sent.
         refreshToken: result.refreshToken ?? refreshToken,
         idToken: result.idToken,
         expiry: result.accessTokenExpirationDateTime,
       );
-      if (user == null) {
+      if (fresh == null) {
         return (user: null, failure: const SessionExpired());
       }
+      // A refresh response does not always carry an id_token, and the access token may be opaque:
+      // the claims then decode to nothing and the user comes back with an EMPTY id. Keep the
+      // identity we already know instead (in memory, else the cached one).
+      final inMemory = _current;
+      final known = (inMemory != null && inMemory.id.isNotEmpty)
+          ? inMemory
+          : _cachedAsUser(await _readCachedIdentity().catchError((_) => null));
+      final user = withKnownIdentity(fresh, known);
       await _persistRefreshToken(user.refreshToken);
       await _persistCachedIdentity(user);
       _emit(user);
@@ -405,13 +595,18 @@ class ZitadelAuthRepository implements IAuthRepository {
     try {
       await _restoreUnguarded();
     } catch (e, st) {
-      reportStartupFailure('Auth session restore failed (signing out locally)', e, st);
+      reportStartupFailure(
+        'Auth session restore failed (signing out locally)',
+        e,
+        st,
+      );
       // Nothing was emitted yet (every emit below returns right after) -> unblock the router.
       if (_current == null) _emit(null);
     }
   }
 
   static const _storageTimeout = Duration(seconds: 5);
+
   /// ONE bound for "a refresh must finish": used on the native `_appAuth.token` call and as the
   /// restore backstop.
   static const _refreshTimeout = Duration(seconds: 12);
@@ -445,6 +640,22 @@ class ZitadelAuthRepository implements IAuthRepository {
       // fall through to the normal sign-out path below.
     }
 
+    // The credentials below are about to go while the local database stays — deliberately, because
+    // a dead refresh token routinely turns up with the outboxes full (offline audit F1). Name its
+    // owner FIRST, while the cached identity still exists: `SessionRecoveryController` gates the
+    // next sign-in on that marker, and without it a different account on a shared device inherits
+    // this one's tickets, customers and sync cursor with no prompt. The interceptor's forced path
+    // does this through `SessionEnder.endForced`; a session that died while the app was closed
+    // never reaches the interceptor, so this path has to do it too (`retained_owner.dart`).
+    Map<String, dynamic>? identity;
+    try {
+      identity = await _readCachedIdentity();
+    } catch (_) {
+      // An unreadable keychain names nobody; the teardown still has to finish (the router is
+      // waiting on an emit).
+    }
+    await recordRetainedOwner(identity?['id']?.toString());
+
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _cachedIdentityKey);
     _emit(null);
@@ -460,6 +671,9 @@ class ZitadelAuthRepository implements IAuthRepository {
   /// so a cold-start-offline session has something to display without ever
   /// putting a bearer token on disk.
   Future<void> _persistCachedIdentity(AuthUser user) async {
+    // Never overwrite a good cached identity with an id-less one: the cache is what an offline cold
+    // start restores from, and an empty id there poisons every later start.
+    if (user.id.isEmpty) return;
     final json = jsonEncode({
       'id': user.id,
       'email': user.email,
@@ -479,6 +693,38 @@ class ZitadelAuthRepository implements IAuthRepository {
     } catch (_) {
       return null;
     }
+  }
+
+  AuthUser? _cachedAsUser(Map<String, dynamic>? cached) {
+    final id = cached?['id']?.toString() ?? '';
+    if (id.isEmpty) return null;
+    return AuthUser(
+      id: id,
+      email: cached?['email']?.toString() ?? '',
+      displayName: cached?['displayName']?.toString(),
+      accessToken: '',
+      refreshToken: '',
+      expiresAt: DateTime.now().toUtc(),
+    );
+  }
+
+  /// [fresh] with the identity fields [known] supplies wherever the refresh response left them
+  /// empty. Tokens always come from [fresh]. Exposed for tests.
+  ///
+  /// Why it matters beyond auth: the user id keys per-account local state, notably the
+  /// "onboarding completed" flag. An empty id keys a flag that was never set, so the onboarding
+  /// flow reappeared on cold start whenever the refresh response had no usable claims.
+  @visibleForTesting
+  static AuthUser withKnownIdentity(AuthUser fresh, AuthUser? known) {
+    if (known == null || fresh.id.isNotEmpty) return fresh;
+    return AuthUser(
+      id: known.id,
+      email: fresh.email.isNotEmpty ? fresh.email : known.email,
+      displayName: fresh.displayName ?? known.displayName,
+      accessToken: fresh.accessToken,
+      refreshToken: fresh.refreshToken,
+      expiresAt: fresh.expiresAt,
+    );
   }
 
   /// Builds a signed-in-but-offline [AuthUser] from the cached identity and
@@ -539,6 +785,27 @@ class ZitadelAuthRepository implements IAuthRepository {
     }
   }
 
+  /// Maps the passkey endpoints' typed error codes (design §9) onto failures.
+  ///
+  /// Any other non-null code is preserved in an [UnknownAuthError] rather than
+  /// lost — e.g. `identity_provider_unavailable` (503) must be diagnosable and
+  /// must never read like a credentials problem. A response with no code at all
+  /// (network, proxy) falls through to the general mapping.
+  AuthFailure _mapPasskeyHttpError(DioException e) {
+    final data = e.response?.data;
+    final code = data is Map && data['code'] is String
+        ? data['code'] as String
+        : null;
+    if (code == null) return _mapError(e);
+    return switch (code) {
+      'no_passkey_registered' => const PasskeyNotRegistered(),
+      'passkey_verification_failed' => const PasskeyVerificationFailed(),
+      'identity_provider_unavailable' => const ServiceUnavailable(),
+      'additional_factor_required' => const AdditionalFactorRequired(),
+      _ => UnknownAuthError(code),
+    };
+  }
+
   AuthFailure _mapError(Object e) {
     // Prefer flutter_appauth's structured error over string-sniffing e.toString() when it's
     // available: `platformErrorDetails.error` is only ever populated from a real OAuth error
@@ -561,6 +828,13 @@ class ZitadelAuthRepository implements IAuthRepository {
     }
 
     final msg = e.toString().toLowerCase();
+    if (e is TimeoutException || msg.contains('timeout')) {
+      // A hung provider call is an unreachable identity provider, not a dead refresh token.
+      // Classifying it as SessionExpired (or as an unclassified error that callers might treat
+      // as terminal) would sign the technician out on a slow network; keep the offline-first
+      // fallback that _restore() and AuthInterceptor already implement.
+      return const NetworkError();
+    }
     if (msg.contains('cancel')) {
       // User dismissed the browser — not a real error; surface benignly.
       return const UnknownAuthError('Accesso annullato');

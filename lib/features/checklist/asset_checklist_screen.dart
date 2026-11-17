@@ -10,8 +10,10 @@ import '../../data/sync/connectivity_provider.dart';
 import '../../domain/checklist/checklist_items.dart';
 import '../../domain/checklist/checklist_models.dart';
 import '../../domain/checklist/control_answer_rules.dart';
+import '../../domain/checklist/control_type.dart' show isBooleanControl;
 import '../../presentation/providers/report_editor_providers.dart';
 import 'bulk_action_sheet.dart';
+import 'check_all_booleans.dart';
 import 'checklist_providers.dart';
 import 'editable_control_tile.dart';
 
@@ -113,7 +115,9 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
           ? const EmptyState(
               icon: LucideIcons.clipboardCheck,
               title: 'Nessun ticket',
-              body: 'Questo rapportino non è collegato a un ticket: non ci sono controlli per asset.',
+              body:
+                  'Questo rapporto di intervento non è collegato a un ticket: '
+                  'non ci sono controlli per asset.',
             )
           : ref
                 .watch(ticketChecklistProvider(ticketId))
@@ -138,6 +142,17 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
       (id) => _frozen[id],
       liveProgress: (id) => live[id],
     );
+    // An empty tree only speaks for the tenant once this ticket has reached the phone — the sync
+    // payload carries a ticket's checklist wholesale, so zero rows under a known ticket is the
+    // real answer. Under a ticket the device has never synced it is a missing download, and
+    // "questo ticket non ha asset con una checklist" states it as a fact about the customer's
+    // site. `!= false`, i.e. the plain sentence stands while the check is still in flight.
+    final mirrorKnown = ref.watch(ticketMirrorKnownProvider(ticketId)).value != false;
+    final unfiltered = _query.filter == ChecklistFilter.all && _query.text.isEmpty;
+    // ...except when the ticket is *omitted*: the banner above already says in full why its
+    // checklist is not here and offers "Scarica checklist", so repeating "non ancora scaricati"
+    // underneath would say the same thing twice and, at 400px, overflow the fixed body column.
+    final notDownloaded = unfiltered && !mirrorKnown && !tree.omitted;
     _lastTree = tree;
     _lastShown = {
       for (final i in items)
@@ -157,11 +172,14 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
         Expanded(
           child: items.isEmpty
               ? EmptyState(
-                  icon: LucideIcons.clipboardCheck,
-                  title: 'Nessun elemento',
-                  body: _query.filter == ChecklistFilter.all && _query.text.isEmpty
-                      ? 'Questo ticket non ha asset con una checklist.'
-                      : 'Nessun asset corrisponde ai filtri scelti.',
+                  icon: notDownloaded ? LucideIcons.cloudOff : LucideIcons.clipboardCheck,
+                  title: notDownloaded ? 'Controlli non ancora scaricati' : 'Nessun elemento',
+                  body: !unfiltered
+                      ? 'Nessun asset corrisponde ai filtri scelti.'
+                      : notDownloaded
+                      ? 'La checklist di questo ticket non è ancora arrivata su questo telefono: '
+                            'comparirà qui dopo la prossima sincronizzazione.'
+                      : 'Questo ticket non ha asset con una checklist.',
                 )
               : CustomScrollView(
                   slivers: [
@@ -277,9 +295,7 @@ class _OmittedBannerState extends ConsumerState<_OmittedBanner> {
           InlineAlert(
             icon: LucideIcons.alertTriangle,
             color: context.colors.amber,
-            message: online
-                ? 'La checklist di questo ticket non è ancora scaricata sul telefono.'
-                : 'La checklist di questo ticket non è ancora scaricata. Collegati a internet per averla.',
+            message: online ? 'La checklist di questo ticket non è ancora scaricata sul telefono.' : 'La checklist di questo ticket non è ancora scaricata. Collegati a internet per averla.',
           ),
           if (_error != null) ...[
             const SizedBox(height: AppSpacing.xs),
@@ -329,16 +345,28 @@ class _ItemView extends StatelessWidget {
             Expanded(
               child: Text(
                 i.libretto.name,
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: context.colors.ink),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: context.colors.ink,
+                ),
               ),
             ),
-            Text('${i.childCount} asset', style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
+            Text(
+              '${i.childCount} asset',
+              style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+            ),
           ],
         ),
       ),
-      AssetHeaderItem i => _AssetHeader(item: i, onToggle: onToggle),
+      AssetHeaderItem i => _AssetHeader(item: i, onToggle: onToggle, reportId: reportId),
       ControlGroupItem i => Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding + 8, AppSpacing.sm, AppSpacing.pagePadding, 2),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.pagePadding + 8,
+          AppSpacing.sm,
+          AppSpacing.pagePadding,
+          2,
+        ),
         child: Text(i.path, style: TextStyle(fontSize: 11, color: context.colors.inkMuted)),
       ),
       ControlItem i =>
@@ -357,10 +385,17 @@ class _ItemView extends StatelessWidget {
             Expanded(
               child: Text(
                 i.label,
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: context.colors.ink),
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: context.colors.ink,
+                ),
               ),
             ),
-            Text('${i.assetCount} asset', style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
+            Text(
+              '${i.assetCount} asset',
+              style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+            ),
           ],
         ),
       ),
@@ -368,23 +403,35 @@ class _ItemView extends StatelessWidget {
   }
 }
 
-class _AssetHeader extends StatelessWidget {
-  const _AssetHeader({required this.item, required this.onToggle});
+class _AssetHeader extends ConsumerWidget {
+  const _AssetHeader({required this.item, required this.onToggle, this.reportId});
 
   final AssetHeaderItem item;
   final ValueChanged<String> onToggle;
 
+  /// Null when this checklist is being read without a rapportino open (the ticket detail card):
+  /// there is no draft to tick rows into, so the button is not offered.
+  final String? reportId;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final a = item.asset;
     final p = item.progress;
     final c = context.colors;
+    final editable = reportId != null;
+    // What "Spunta tutti" would actually act on: the same rows the tap-to-tick input renders.
+    final tickable = editable
+        ? a.controls.where((x) => !x.isRetained && isBooleanControl(x.type)).length
+        : 0;
     return InkWell(
       onTap: a.templated ? () => onToggle(a.assetId) : null,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 56),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.pagePadding,
+            vertical: AppSpacing.sm,
+          ),
           child: Row(
             children: [
               Icon(
@@ -404,7 +451,10 @@ class _AssetHeader extends StatelessWidget {
                       style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: c.ink),
                     ),
                     if ((a.matricola ?? '').isNotEmpty)
-                      Text('Matr. ${a.matricola}', style: TextStyle(fontSize: 12, color: c.inkMuted)),
+                      Text(
+                        'Matr. ${a.matricola}',
+                        style: TextStyle(fontSize: 12, color: c.inkMuted),
+                      ),
                     if (!a.coveredNow)
                       Text('Non più nel ticket', style: TextStyle(fontSize: 12, color: c.amber))
                     else if (!a.templated)
@@ -412,26 +462,76 @@ class _AssetHeader extends StatelessWidget {
                         a.legacyControllato ? 'Senza checklist · controllato' : 'Senza checklist',
                         style: TextStyle(fontSize: 12, color: c.inkMuted),
                       ),
+                    if (a.templated)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        // Progress and its exception badges sit under the name, not beside the
+                        // button: three trailing labels plus "Spunta tutti" is wider than a phone
+                        // header. `Wrap` lets a long badge list fold instead of overflowing.
+                        child: Wrap(
+                          spacing: AppSpacing.sm,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              '${p.answered}/${p.total}',
+                              style: TextStyle(fontSize: 13, color: c.inkMuted),
+                            ),
+                            if (p.requiredMissing > 0)
+                              AppBadge(
+                                label: '${p.requiredMissing} obbl.',
+                                small: true,
+                                fgColor: c.amber,
+                              ),
+                            if (p.exceptions > 0)
+                              AppBadge(label: '${p.exceptions} ecc.', small: true, fgColor: c.red),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
-              if (a.templated) ...[
-                if (p.requiredMissing > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: AppSpacing.sm),
-                    child: AppBadge(label: '${p.requiredMissing} obbl.', small: true, fgColor: c.amber),
+              if (tickable > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: AppSpacing.sm),
+                  // Its own tap target inside the expanding header row, which is what a technician
+                  // wants half the time — expanding a 15-row asset just to tick it is the friction
+                  // the web button already removed.
+                  child: Semantics(
+                    button: true,
+                    label: 'Spunta tutti i controlli di ${a.name}',
+                    child: ExcludeSemantics(
+                      child: TextButton(
+                        onPressed: () => _checkAll(context, ref, a),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          // Default padded hit target: a 36 dp label still gets the 48 dp
+                          // minimum, which the header's own 56 dp height already accommodates.
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                          foregroundColor: c.blue,
+                        ),
+                        child: const Text('Spunta tutti', style: TextStyle(fontSize: 13)),
+                      ),
+                    ),
                   ),
-                if (p.exceptions > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: AppSpacing.sm),
-                    child: AppBadge(label: '${p.exceptions} ecc.', small: true, fgColor: c.red),
-                  ),
-                Text('${p.answered}/${p.total}', style: TextStyle(fontSize: 13, color: c.inkMuted)),
-              ],
+                ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// Ticks every boolean control of this asset in one write. Zero changed means they were all
+  /// ticked already — said out loud, so the button never looks broken.
+  Future<void> _checkAll(BuildContext context, WidgetRef ref, AssetChecklist asset) async {
+    final changed = await checkAllBooleans(ref, reportId!, asset);
+    if (!context.mounted) return;
+    showAppToast(
+      context,
+      message: changed == 0
+          ? 'Tutti i controlli erano già spuntati.'
+          : 'Spuntati $changed controlli.',
+      tone: changed == 0 ? ToastTone.info : ToastTone.success,
     );
   }
 }
@@ -469,7 +569,10 @@ class ControlItemTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (showAssetName)
-                  Text(item.asset.name, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: c.ink)),
+                  Text(
+                    item.asset.name,
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: c.ink),
+                  ),
                 Row(
                   children: [
                     Flexible(
@@ -485,12 +588,18 @@ class ControlItemTile extends StatelessWidget {
                     if (control.isRequired)
                       Padding(
                         padding: const EdgeInsets.only(left: 4),
-                        child: Text('*', style: TextStyle(color: c.red, fontWeight: FontWeight.bold)),
+                        child: Text(
+                          '*',
+                          style: TextStyle(color: c.red, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     if (control.isRetained)
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
-                        child: Text('Non più richiesto', style: TextStyle(fontSize: 11, color: c.amber)),
+                        child: Text(
+                          'Non più richiesto',
+                          style: TextStyle(fontSize: 11, color: c.amber),
+                        ),
                       ),
                   ],
                 ),

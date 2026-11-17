@@ -1,18 +1,26 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/entitlements/entitlement_providers.dart';
+import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../data/worklogs/active_tracker_api_client.dart';
+import '../../features/ticket/ticket_timer_actions.dart';
 import '../../features/ticket/ticket_workflow_api_client.dart';
 import '../../data/timbratura/remote_shift.dart' show OfflineRemoteShiftException;
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../timbra/timbra_providers.dart';
 import 'active_trackers_provider.dart';
+
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// What is running, right now, with the controls to stop it.
@@ -34,11 +42,32 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 ///
 /// - **attendance** — the working day. Pauses and resumes (a break), and ends. Both go through the
 ///   local punch queue, so they work with no signal.
-/// - **cantiere** — a site session. Ends only; the backend has no pause for it.
+/// - **cantiere** — a site session. Ends only; the backend has no pause for it. A session this
+///   device checked into offline is closed in the local punch log and uploaded on reconnect, so
+///   the stop works with no signal too.
 /// - **ticket** — labour on one job. Ends only.
 ///
 /// A pause button that silently did nothing on two of three kinds would be worse than its absence,
 /// so it is only drawn where it exists.
+///
+/// ## QrOnly tenants
+///
+/// The three controls are copies of the Timbra screen's buttons, and that screen already knows a
+/// tenant can require a kiosk scan: `ButtonOnly`/`QrOnly` swaps its buttons for "Scansiona QR".
+/// This row did not, so under `QrOnly` the same technician could start and end a break from Home
+/// without ever scanning (the app allowed it; only the server refused the *button* punch, and the
+/// pause path never reached the wire) while "Ferma" — which does hit the wire — failed. Both are
+/// now the one action that can complete on a `QrOnly` tenant that has not approved today as a
+/// remote day: open the scanner, where the server's `availableActions` decide which transition to
+/// offer.
+///
+/// On an *approved* smart-working day the server relaxes that gate
+/// (`WorkLogService.EnsureClockInMethodAllowedAsync`), so the row gets its Pausa/Ferma back. An
+/// *unknown* answer — no `/auth/me` yet, a cold start, a body without the field — keeps them too:
+/// only an explicit "not approved today" withholds a button punch ([isButtonPunchWithheld]), and a
+/// stale `true` costs one refused punch while a stale `false` costs the day's hours. A running day
+/// must always keep a control that finishes it — see the same function — and the decision is that
+/// function's, never a local `== 'QrOnly'`, so this row and Home's prompt cannot drift apart.
 class ActiveTrackerStrip extends ConsumerWidget {
   const ActiveTrackerStrip({super.key, required this.trackers});
 
@@ -48,7 +77,7 @@ class ActiveTrackerStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // One clock for the whole strip. Until it emits, the rows still show a correct elapsed time
     // computed from the device clock rather than a placeholder.
-    final now = ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc();
+    final now = ref.watch(nowProvider).value ?? DateTime.now().toUtc();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -99,25 +128,104 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
 
   Future<void> _stop() {
     final t = widget.tracker;
+    // Under a QrOnly tenant that has not approved today, the row draws one scanner action instead
+    // of these two — but a punch the server is guaranteed to refuse must not be reachable at all,
+    // and a mid-session revocation can flip the row under a technician's finger. The guard costs
+    // nothing and turns that into the scanner, which is the transition the server will accept.
+    if (t.kind == ActiveTrackerKind.attendance && _qrOnly) return _openScanner();
     return _run(() async {
       switch (t.kind) {
         case ActiveTrackerKind.attendance:
-          await ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider));
+          // The whole-log state, not today's: the same answer that drew "Ferma" decides whether
+          // this tap starts or ends the shift.
+          await ref
+              .read(punchNotifierProvider.notifier)
+              .punch(ref.read(actionableShiftStateProvider));
           _throwIfPunchFailed();
         case ActiveTrackerKind.cantiere:
-          await ref.read(cantiereWorklogApiClientProvider).endCantiere();
+          // A site session this device is holding locally (checked in with no signal) has no
+          // server log to end: `endCantiere()` would come back a 4xx and the technician would stay
+          // clocked in on a screen that told them nothing useful. Closing the interval in the
+          // punch log is exactly what the Timbra screen's own clock-out does offline, and the sync
+          // service uploads the pair when the signal returns.
+          //
+          // Awaited rather than read: Drift answers on a microtask, so a synchronous read here
+          // would sample the provider before its first emission and decide "nothing local" — the
+          // one decision that must not be wrong.
+          final local = await ref.read(localCantiereTimersProvider.future);
+          if (local.any((l) => l.entityId == t.entityId)) {
+            await ref
+                .read(cantiereSessionRepositoryProvider)
+                .addEvent(
+                  id: const Uuid().v4(),
+                  eventTime: DateTime.now().toUtc(),
+                  eventType: 'uscita',
+                );
+            unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
+            if (mounted) {
+              showAppToast(
+                context,
+                message: 'Uscita cantiere registrata: verrà inviata al ritorno della connessione.',
+                tone: ToastTone.warning,
+              );
+            }
+          } else {
+            final clockDisagreement = await ref
+                .read(cantiereWorklogApiClientProvider)
+                .endCantiere();
+            // Same banner as the punch screens: this is the other door the same close comes
+            // through, and the server's answer is the only place the advice exists.
+            if (clockDisagreement != null) {
+              ref.read(cantiereClockDisagreementProvider.notifier).record(clockDisagreement);
+            }
+          }
         case ActiveTrackerKind.ticket:
           final id = t.entityId;
           if (id == null) throw const TicketWorkflowFailure('Intervento non identificato.');
-          await ref.read(ticketWorkflowApiClientProvider).stopTimer(id);
+          // The same clock as the ticket detail's timer bar, through the same function: this
+          // branch used to call the API directly, so "Ferma" with no signal showed "Operazione non
+          // riuscita" and left the clock running. `stopTicketTimer` writes the close to the mirror
+          // and queues it, and says so when the close exists only on this device.
+          final queued = await stopTicketTimer(ref, id);
+          if (queued && mounted) {
+            showAppToast(
+              context,
+              message: 'Fermata registrata: verrà inviata al ritorno della connessione.',
+              tone: ToastTone.warning,
+            );
+          }
       }
     });
   }
 
-  Future<void> _togglePause() => _run(() async {
-    await ref.read(punchNotifierProvider.notifier).togglePause(ref.read(timbraStateProvider));
-    _throwIfPunchFailed();
-  });
+  Future<void> _togglePause() {
+    if (_qrOnly) return _openScanner();
+    return _run(() async {
+      await ref
+          .read(punchNotifierProvider.notifier)
+          .togglePause(ref.read(actionableShiftStateProvider));
+      _throwIfPunchFailed();
+    });
+  }
+
+  /// Whether the button punch this row would fire is one the server would refuse — only an
+  /// explicit non-approved answer on a `QrOnly` tenant reaches this, never an unknown one: the
+  /// technician's totem is on site, and this row may be the only control they have out in the
+  /// field, so an unanswered /auth/me keeps the buttons and lets the server decide.
+  ///
+  /// `hasOpenShift` is the same whole-log signal the timbra panel acts on
+  /// ([actionableShiftStateProvider]), not a hand-written `true`. `startOnly` does not consult it
+  /// today — this row's scanner is always the alternative, so a withheld button can never strand a
+  /// running day — but passing the real answer means a later move to `startOrFinish` cannot
+  /// silently inherit a lie.
+  bool get _qrOnly => isButtonPunchWithheld(
+    surface: ButtonPunchSurface.startOnly,
+    clockInMethod: ref.read(effectiveClockInMethodProvider),
+    smartWorkingToday: ref.read(smartWorkingTodayProvider),
+    hasOpenShift: ref.read(actionableShiftStateProvider).isOnShift,
+  );
+
+  Future<void> _openScanner() async => context.push(AppRoutes.timbraQr);
 
   /// `PunchNotifier.punch()`/`togglePause()` never throw — a repo failure is caught internally
   /// and parked in the notifier's own `state` as `AsyncError`, which is exactly the contract
@@ -138,15 +246,34 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
   Widget build(BuildContext context) {
     final t = widget.tracker;
     // The tracker's own `state` is authoritative (it may describe a break started on another
-    // device); rows without one (older servers) fall back to this device's local state.
-    final localOnPause = ref.watch(timbraStateProvider).isOnPause;
+    // device); rows without one (older servers) fall back to this device's local state — the
+    // whole-log one, so a break left open across midnight is still drawn as one.
+    final localOnPause = ref.watch(actionableShiftStateProvider).isOnPause;
     final onBreak =
         t.kind == ActiveTrackerKind.attendance &&
         (t.state == null ? localOnPause : t.state == ActiveTrackerState.onBreak);
 
     // Pause exists for the working day only. The guard is the server's, so a payroll-locked month
     // states its reason instead of failing on tap.
-    final canPause = t.kind == ActiveTrackerKind.attendance;
+    //
+    // Neither control is drawn while the button punch would be refused: see this class's own doc
+    // comment. The elapsed clock, the "in pausa" badge and the label still come from the tracker,
+    // so the row keeps telling the technician what is running while it sends them to the totem to
+    // change it.
+    //
+    // The rule is [isButtonPunchWithheld]'s, `startOnly` surface: the scanner below is always the
+    // row's alternative, so this is the swap that can never strand a running day. Only an explicit
+    // non-approved answer swaps; an unknown one leaves Ferma/Pausa working, which is the same
+    // answer the timbra panel gives.
+    final qrOnly =
+        t.kind == ActiveTrackerKind.attendance &&
+        isButtonPunchWithheld(
+          surface: ButtonPunchSurface.startOnly,
+          clockInMethod: ref.watch(effectiveClockInMethodProvider),
+          smartWorkingToday: ref.watch(smartWorkingTodayProvider),
+          hasOpenShift: ref.watch(actionableShiftStateProvider).isOnShift,
+        );
+    final canPause = t.kind == ActiveTrackerKind.attendance && !qrOnly;
     final pauseGuard = canPause ? ref.watch(pauseGuardProvider) : null;
 
     // A running ticket clock is the mockup's "hero-task" chip — the job this elapsed time is
@@ -238,16 +365,24 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
                 ),
               )
             else ...[
-              if (canPause)
+              if (qrOnly)
                 _GlassAction(
-                  icon: onBreak ? LucideIcons.play : LucideIcons.coffee,
-                  label: onBreak ? 'Riprendi' : 'Pausa',
-                  blockedReason: pauseGuard != null && pauseGuard.blocked
-                      ? pauseGuard.reason
-                      : null,
-                  onTap: _togglePause,
-                ),
-              _GlassAction(icon: LucideIcons.square, label: 'Ferma', onTap: _stop),
+                  icon: LucideIcons.scanLine,
+                  label: 'Timbra con QR',
+                  onTap: _openScanner,
+                )
+              else ...[
+                if (canPause)
+                  _GlassAction(
+                    icon: onBreak ? LucideIcons.play : LucideIcons.coffee,
+                    label: onBreak ? 'Riprendi' : 'Pausa',
+                    blockedReason: pauseGuard != null && pauseGuard.blocked
+                        ? pauseGuard.reason
+                        : null,
+                    onTap: _togglePause,
+                  ),
+                _GlassAction(icon: LucideIcons.square, label: 'Ferma', onTap: _stop),
+              ],
             ],
           ],
         ),

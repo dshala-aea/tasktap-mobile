@@ -30,7 +30,7 @@ import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
-import '../../data/sync/sync_service.dart';
+import '../../data/sync/sync_freshness_provider.dart';
 import 'cantiere_timbra_screen.dart' show cantieriProvider;
 import '../../core/theme/app_text_styles.dart';
 
@@ -77,6 +77,10 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
   @override
   Widget build(BuildContext context) {
     final cantieriAsync = ref.watch(cantieriProvider);
+    // Same split as the Cantieri tab: "nothing synced here" is a fact about the phone and only
+    // holds before the first completed sync. Once data has landed, an empty picker means the
+    // technician has no cantiere in scope — a different problem, with a different remedy.
+    final neverSynced = ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -98,7 +102,7 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
               // the technician to "an[other] tab" to pull-to-refresh because this screen had none
               // of its own — it does now.
               child: RefreshIndicator(
-                onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                onRefresh: () => refreshWithFeedback(context, ref),
                 child: cantieriAsync.when(
                   loading: () => ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -125,15 +129,23 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
                     if (cantieri.isEmpty) {
                       return ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        children: const [
-                          UnavailableState(
-                            icon: LucideIcons.hardHat,
-                            titolo: 'Nessun cantiere disponibile',
-                            motivo:
-                                'Non risultano cantieri attivi sincronizzati su questo dispositivo. Se ne '
-                                'è stato creato uno di recente, trascina in basso per aggiornare, '
-                                'oppure riprova tra poco.',
-                          ),
+                        children: [
+                          neverSynced
+                              ? const UnavailableState(
+                                  icon: LucideIcons.cloudOff,
+                                  titolo: 'Cantieri non ancora scaricati',
+                                  motivo:
+                                      'Questo telefono non ha ancora completato una '
+                                      'sincronizzazione: i cantieri compariranno qui appena i dati '
+                                      'saranno scaricati.',
+                                )
+                              : const UnavailableState(
+                                  icon: LucideIcons.hardHat,
+                                  titolo: 'Nessun cantiere in corso',
+                                  motivo:
+                                      'Non risultano cantieri attivi tra quelli che ti sono '
+                                      'assegnati. Trascina in basso per aggiornare.',
+                                ),
                         ],
                       );
                     }

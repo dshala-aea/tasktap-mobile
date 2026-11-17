@@ -15,13 +15,13 @@ void main() {
         _wrap(
           const EmptyState(
             icon: LucideIcons.inbox,
-            title: 'Nessun rapportino',
+            title: 'Nessun rapporto',
             body: 'I rapportini che crei appariranno qui.',
           ),
         ),
       );
       expect(find.byIcon(LucideIcons.inbox), findsOneWidget);
-      expect(find.text('Nessun rapportino'), findsOneWidget);
+      expect(find.text('Nessun rapporto'), findsOneWidget);
       expect(
         find.text('I rapportini che crei appariranno qui.'),
         findsOneWidget,
@@ -111,13 +111,13 @@ void main() {
       await tester.pumpWidget(
         _wrap(
           const CompactEmptyState(
-            label: 'Nessun rapportino in coda',
+            label: 'Nessun rapporto in coda',
             reason: 'La sincronizzazione non è ancora riuscita.',
           ),
         ),
       );
 
-      expect(find.text('Nessun rapportino in coda'), findsOneWidget);
+      expect(find.text('Nessun rapporto in coda'), findsOneWidget);
       expect(
         find.text('La sincronizzazione non è ancora riuscita.'),
         findsOneWidget,
@@ -126,7 +126,7 @@ void main() {
         tester.getSemantics(find.byType(CompactEmptyState)),
         matchesSemantics(
           label:
-              'Nessun rapportino in coda. La sincronizzazione non è ancora riuscita.',
+              'Nessun rapporto in coda. La sincronizzazione non è ancora riuscita.',
         ),
       );
 

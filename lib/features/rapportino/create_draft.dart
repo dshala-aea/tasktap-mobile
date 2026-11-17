@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../data/local/app_database.dart';
 import '../../data/reports/cantiere_report_api_client.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
@@ -233,6 +234,14 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
         stringValue: Value(c.stringValue),
         boolValue: Value(c.boolValue),
         dateValue: Value(c.dateValue),
+        // A copy is a copy: every answer column travels, including the number a numeric control
+        // holds and the label/asset snapshot (schema 52) that lets the new report name its own
+        // rows. Dropping them used to leave the duplicate with blank numeric answers and raw
+        // control ids the moment its checklist left the device.
+        numberValue: Value(c.numberValue),
+        note: Value(c.note),
+        controlLabel: Value(c.controlLabel),
+        assetId: Value(c.assetId),
       ),
     );
   }
@@ -309,6 +318,20 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
 /// `IReportService.CreateFromCantiereWorkLogsAsync`'s own doc comment) — no staff row is seeded
 /// here either, for the same reason [createLocalDraft] no longer does: the Ore tile seeds the
 /// creating technician itself, on first open, only if the staff list is still empty.
+///
+/// ## Offline (P2-6)
+///
+/// Everything above needs the server. When the create call cannot reach it — no network, a
+/// timeout, or the server faulting — this degrades to an ordinary local draft via
+/// [createLocalDraft] with the cantiere attached: a client-generated GUID, no seeded hours (the
+/// Ore step's cantiere suggestions come from the local punch log while offline), submitted later
+/// through the normal queue. `ReportSubmitService.SubmitAsync` creates the report on that path and
+/// stamps `CantiereId` from `SubmitReportRequest.CantiereId`, so the cantiere link that used to be
+/// settable only by the server-side create call survives the offline detour.
+///
+/// A 4xx does NOT degrade: a 403 (the caller is not assigned to this cantiere) or a 400 is the
+/// server's answer, and hiding it behind a draft that would fail identically at submit time only
+/// delays the truth.
 Future<String?> createCantiereReportDraft(
   WidgetRef ref, {
   required String cantiereId,
@@ -321,7 +344,34 @@ Future<String?> createCantiereReportDraft(
   if (internalUserId == null) return null;
 
   final api = ref.read(cantiereReportApiClientProvider);
-  final reportId = await api.createFromCantiereWorklogs(cantiereId);
+  final String reportId;
+  try {
+    reportId = await api.createFromCantiereWorklogs(cantiereId);
+  } on DioException catch (e) {
+    // P2-6 — the offline half of this flow. On site, with no usable network or the server
+    // faulting, creating a rapportino must still work: it is the whole point of an offline-first
+    // field app, and it used to fail here with a toast and nothing else. Degrading to an ordinary
+    // local draft (client GUID, cantiere attached) matches the backend's own ruling for the
+    // zero-worklogs case — "fall back to manual entry rather than blocking creation" — and the
+    // hours are then entered by hand and submitted through the normal queue.
+    //
+    // Only a transport failure or a server fault degrades here. A 4xx is the server answering: a
+    // 403 "non sei assegnato a questo cantiere" or a 400 must reach the technician as it does
+    // today, not be papered over with a draft that will fail the same way later.
+    if (!isTransportOrServerFault(e)) rethrow;
+    debugPrint(
+      'createCantiereReportDraft: POST /api/reports/from-cantiere-worklogs failed ($e) — '
+      'creating an offline draft instead, hours to be entered manually.',
+    );
+    return createLocalDraft(
+      ref,
+      title: 'Rapporto di intervento — $cantiereName',
+      cantiereId: cantiereId,
+      customerId: customerId,
+      tenantId: tenantId,
+      workAddress: workAddress,
+    );
+  }
 
   ReportSeedDto seed = const ReportSeedDto(locationId: null, staff: []);
   try {
@@ -356,7 +406,7 @@ Future<String?> createCantiereReportDraft(
       id: reportId,
       tenantId: resolvedTenantId,
       createdAt: now,
-      title: 'Rapportino — $cantiereName',
+      title: 'Rapporto di intervento — $cantiereName',
       insertedUserId: internalUserId,
       locationId: seed.locationId ?? '',
       cantiereId: Value(cantiereId),

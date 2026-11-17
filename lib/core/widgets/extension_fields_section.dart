@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../data/extension_fields/extension_fields_api_client.dart';
+import '../../data/sync/connectivity_provider.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_spacing.dart';
 import '../utils/error_message.dart';
@@ -38,7 +39,12 @@ import 'section_title.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 class ExtensionFieldsSection extends ConsumerStatefulWidget {
-  const ExtensionFieldsSection({super.key, required this.entityType, required this.entityId});
+  const ExtensionFieldsSection({
+    super.key,
+    required this.entityType,
+    required this.entityId,
+    this.canEdit = true,
+  });
 
   /// The backend's own lowercase entity-type key — 'ticket', 'cantiere', 'report',
   /// 'cantiereworklog', … — see `ExtensionFieldsController.DispatchGetAsync`'s dispatch table for
@@ -46,6 +52,10 @@ class ExtensionFieldsSection extends ConsumerStatefulWidget {
   final String entityType;
 
   final String entityId;
+
+  /// Whether the signed-in seat may write these values. False renders the section read-only (no
+  /// save control and no editable fields) instead of offering a save the server would refuse.
+  final bool canEdit;
 
   @override
   ConsumerState<ExtensionFieldsSection> createState() => _ExtensionFieldsSectionState();
@@ -131,6 +141,15 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
 
   @override
   Widget build(BuildContext context) {
+    // Offline, a type whose values the mirror does not carry would render every field blank in
+    // read-only mode with a "sola lettura" note — which reads as "this asset has no custom fields"
+    // when the truth is that the values never reached this device. Rendering nothing is the honest
+    // answer; the fields come back with the connection, not with a stale empty copy.
+    if (!ref.watch(isOnlineProvider) &&
+        !mirroredExtensionValueEntityTypes.contains(widget.entityType)) {
+      return const SizedBox.shrink();
+    }
+
     final defsAsync = ref.watch(extensionFieldDefinitionsProvider(widget.entityType));
 
     return defsAsync.when(
@@ -212,6 +231,16 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
   }
 
   Widget _buildSection(BuildContext context, List<ExtensionFieldDefinitionDto> defs) {
+    // Offline the section is READ-ONLY: the values render from the sync mirror (so a technician
+    // can still see what the office recorded), but saving them needs a connection, and there is no
+    // queued-write path for this endpoint. Hiding the button is the honest affordance — the
+    // alternative is letting a technician type into fields whose save will fail and take the text
+    // with it. This is exactly the case that used to be invisible: the whole section simply did not
+    // appear offline. A seat without the entity's write capability gets the same treatment, even
+    // online: the fields are shown, but there is no actionable save to refuse.
+    final online = ref.watch(isOnlineProvider);
+    final editable = online && widget.canEdit;
+
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.lg),
       child: Column(
@@ -223,17 +252,28 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final d in defs) ...[_buildField(context, d), const SizedBox(height: 16)],
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: AppButton(
-                    label: _isSaving ? 'Salvataggio…' : 'Salva',
-                    onPressed: (!_dirty || _isSaving) ? null : _save,
-                    isLoading: _isSaving,
-                    size: AppButtonSize.sm,
-                    fullWidth: false,
+                for (final d in defs) ...[
+                  _buildField(context, d, editable: editable),
+                  const SizedBox(height: 16),
+                ],
+                if (!editable)
+                  Text(
+                    online
+                        ? 'Sola lettura: non hai i permessi per modificare questi campi.'
+                        : 'Sola lettura finché non torna la connessione.',
+                    style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+                  )
+                else
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: AppButton(
+                      label: _isSaving ? 'Salvataggio…' : 'Salva',
+                      onPressed: (!_dirty || _isSaving) ? null : _save,
+                      isLoading: _isSaving,
+                      size: AppButtonSize.sm,
+                      fullWidth: false,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -247,7 +287,11 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
   /// they showed up on.
   String _labelFor(ExtensionFieldDefinitionDto d) => d.isRequired ? '${d.label} *' : d.label;
 
-  Widget _buildField(BuildContext context, ExtensionFieldDefinitionDto d) {
+  Widget _buildField(
+    BuildContext context,
+    ExtensionFieldDefinitionDto d, {
+    required bool editable,
+  }) {
     switch (d.renderType) {
       case ExtensionFieldRenderType.number:
         return AppTextField(
@@ -255,6 +299,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
           hint: d.placeholder,
           controller: _controllers[d.key],
           keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+          readOnly: !editable,
           onChanged: (_) => setState(() => _dirty = true),
           suffixIcon: (d.unit != null && d.unit!.isNotEmpty)
               ? Padding(
@@ -277,7 +322,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
             Expanded(child: AppFieldLabel(label: d.label, enabled: true)),
             AppToggle(
               value: _otherValues[d.key] == 'true',
-              onChanged: (v) => _setOther(d.key, v.toString()),
+              onChanged: editable ? (v) => _setOther(d.key, v.toString()) : null,
             ),
           ],
         );
@@ -287,6 +332,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
           label: _labelFor(d),
           value: _otherValues[d.key] ?? '',
           onChanged: (v) => _setOther(d.key, v),
+          enabled: editable,
         );
 
       case ExtensionFieldRenderType.select:
@@ -303,6 +349,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
               d.key,
               () => TextEditingController(text: _otherValues[d.key] ?? ''),
             ),
+            readOnly: !editable,
             onChanged: (_) => setState(() => _dirty = true),
           );
         }
@@ -315,7 +362,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
             isExpanded: true,
             decoration: InputDecoration(hintText: d.placeholder ?? 'Seleziona…'),
             items: [for (final c in choices) DropdownMenuItem(value: c, child: Text(c))],
-            onChanged: (v) => v != null ? _setOther(d.key, v) : null,
+            onChanged: editable ? (v) => v != null ? _setOther(d.key, v) : null : null,
           ),
         );
 
@@ -324,6 +371,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
           label: _labelFor(d),
           hint: d.placeholder,
           controller: _controllers[d.key],
+          readOnly: !editable,
           onChanged: (_) => setState(() => _dirty = true),
         );
     }
@@ -337,7 +385,12 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _DateField extends StatelessWidget {
-  const _DateField({required this.label, required this.value, required this.onChanged});
+  const _DateField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+  });
 
   final String label;
 
@@ -346,6 +399,8 @@ class _DateField extends StatelessWidget {
 
   /// Called with a new ISO 'yyyy-MM-dd' string.
   final ValueChanged<String> onChanged;
+
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -356,17 +411,19 @@ class _DateField extends StatelessWidget {
     return AppFieldShell(
       label: label,
       child: AppTappable(
-        onTap: () async {
-          final picked = await showDatePicker(
-            context: context,
-            initialDate: parsed ?? DateTime.now(),
-            firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
-            lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-          );
-          if (picked != null) {
-            onChanged(DateFormat('yyyy-MM-dd').format(picked));
-          }
-        },
+        onTap: enabled
+            ? () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: parsed ?? DateTime.now(),
+                  firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
+                  lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                );
+                if (picked != null) {
+                  onChanged(DateFormat('yyyy-MM-dd').format(picked));
+                }
+              }
+            : null,
         color: c.bg3,
         border: Border.all(color: c.borderLight),
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),

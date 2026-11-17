@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+
 import 'app_tappable.dart';
+
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 /// Key–value display row / column.
@@ -59,7 +61,8 @@ class KeyVal extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         content,
-        if (showDivider) Divider(height: 1, thickness: 1, color: context.colors.borderLight),
+        if (showDivider)
+          Divider(height: 1, thickness: 1, color: context.colors.borderLight),
       ],
     );
   }
@@ -87,7 +90,11 @@ class KeyVal extends StatelessWidget {
           ),
           if (onTap != null) ...[
             const SizedBox(width: 4),
-            Icon(LucideIcons.chevronRight, size: 14, color: context.colors.inkMuted),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 14,
+              color: context.colors.inkMuted,
+            ),
           ],
         ],
       ),
@@ -116,9 +123,15 @@ class KeyVal extends StatelessWidget {
         children: [
           Text(label.toUpperCase(), style: _labelStyle(context)),
           const SizedBox(height: 4),
+          // No `overflow: TextOverflow.ellipsis` here on purpose. RenderParagraph turns that flag
+          // into a non-null ellipsis string regardless of `maxLines` (rendering/paragraph.dart),
+          // and `TextPainter.ellipsis` then truncates at "the first line that is wider than the
+          // width constraint, if maxLines is null" — so on a value with no maxLines it does not
+          // ellipsize a wrapped block, it drops everything past the first line. That is exactly
+          // the bug this variant exists to fix: a Note the office wrote over four lines still
+          // rendered as its first line. Free text must wrap.
           Text(
             value,
-            overflow: TextOverflow.ellipsis,
             style: AppTextStyles.bodyMedium.copyWith(color: context.colors.ink),
           ),
         ],

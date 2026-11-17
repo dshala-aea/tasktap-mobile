@@ -173,7 +173,7 @@ void main() {
   // new_ticket_form_test.dart's identical reasoning): EditTicketScreen calls Navigator.pop() on
   // save, and popping MaterialApp's lone root route is not what production ever does.
   Widget buildLauncher() {
-    return ProviderScope(
+    return ProviderScope(retry: (_, _) => null, 
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),
@@ -624,7 +624,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Prodotti assistenza is drawn read-only: no adder, no chip delete, and it says so', (
+    testWidgets('Asset is drawn read-only: no adder, no chip delete, and it says so', (
       tester,
     ) async {
       await openEditor(tester);
@@ -638,7 +638,7 @@ void main() {
       // would silently be).
       expect(find.text('Non modificabile in questa schermata.'), findsOneWidget);
       expect(find.byKey(const ValueKey('prodotto-adder-0')), findsNothing);
-      expect(find.byKey(const ValueKey('reference-picker-prodotti assistenza')), findsNothing);
+      expect(find.byKey(const ValueKey('reference-picker-asset')), findsNothing);
       // Nothing on this screen offers to remove coverage: this PUT replaces the whole list, and
       // mobile holds no authoritative copy of it to replace with, so a removal here is a deletion
       // of rows the device never knew about.

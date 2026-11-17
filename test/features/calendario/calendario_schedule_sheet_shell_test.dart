@@ -128,7 +128,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           authRepositoryProvider.overrideWithValue(repo),
           appDatabaseProvider.overrideWithValue(db),

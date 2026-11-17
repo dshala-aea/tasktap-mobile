@@ -5,15 +5,21 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/features/dashboard/id_plate_hero_comp.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart'
+    show internalUserIdPrefsKey;
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
@@ -27,15 +33,20 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
 
-Widget _buildDashboard({required AppDatabase db, required MockAuthRepository repo}) {
-  return ProviderScope(
+Widget _buildDashboard({
+  required AppDatabase db,
+  required MockAuthRepository repo,
+}) {
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(MockDio()),
       // PunchNotifier calls this (best-effort, silent GPS capture) on every punch — same reasoning
       // as timbra_screen_test.dart's own override.
-      locationServiceProvider.overrideWithValue(const DisabledLocationService()),
+      locationServiceProvider.overrideWithValue(
+        const DisabledLocationService(),
+      ),
     ],
     child: const MaterialApp(home: DashboardScreen()),
   );
@@ -44,27 +55,37 @@ Widget _buildDashboard({required AppDatabase db, required MockAuthRepository rep
 /// Builds the Dashboard behind a real [GoRouter] with marker screens at the standalone Timbra
 /// route and the (distinct) cantiere-timbra route, so a test can assert *which* route a tile
 /// actually pushes rather than only checking that some text containing "Timbra" is on screen.
-GoRouter _makeQuickActionRouter() => GoRouter(
+GoRouter _makeQuickActionRouter({bool storicoMarker = false}) => GoRouter(
   initialLocation: '/dashboard',
   routes: [
     GoRoute(path: '/dashboard', builder: (_, _) => const DashboardScreen()),
+    if (storicoMarker)
+      GoRoute(
+        path: AppRoutes.storico,
+        builder: (_, _) =>
+            const Scaffold(body: Center(child: Text('STORICO-SCREEN-MARKER'))),
+      ),
     GoRoute(
       path: AppRoutes.timbra,
-      builder: (_, _) => const Scaffold(body: Center(child: Text('TIMBRA-SCREEN-MARKER'))),
+      builder: (_, _) =>
+          const Scaffold(body: Center(child: Text('TIMBRA-SCREEN-MARKER'))),
     ),
     GoRoute(
       path: AppRoutes.cantiereTimbra,
-      builder: (_, _) =>
-          const Scaffold(body: Center(child: Text('CANTIERE-TIMBRA-SCREEN-MARKER'))),
+      builder: (_, _) => const Scaffold(
+        body: Center(child: Text('CANTIERE-TIMBRA-SCREEN-MARKER')),
+      ),
     ),
     GoRoute(
       path: AppRoutes.selezionaCantiere,
-      builder: (_, _) =>
-          const Scaffold(body: Center(child: Text('SELEZIONA-CANTIERE-SCREEN-MARKER'))),
+      builder: (_, _) => const Scaffold(
+        body: Center(child: Text('SELEZIONA-CANTIERE-SCREEN-MARKER')),
+      ),
     ),
     GoRoute(
       path: AppRoutes.timbraQr,
-      builder: (_, _) => const Scaffold(body: Center(child: Text('TIMBRA-QR-SCREEN-MARKER'))),
+      builder: (_, _) =>
+          const Scaffold(body: Center(child: Text('TIMBRA-QR-SCREEN-MARKER'))),
     ),
   ],
 );
@@ -73,13 +94,17 @@ Widget _buildDashboardWithRouter({
   required AppDatabase db,
   required MockAuthRepository repo,
   required GoRouter router,
+  List<Override> extraOverrides = const [],
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(MockDio()),
-      locationServiceProvider.overrideWithValue(const DisabledLocationService()),
+      locationServiceProvider.overrideWithValue(
+        const DisabledLocationService(),
+      ),
+      ...extraOverrides,
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -110,6 +135,10 @@ void main() {
     authStream = StreamController<AuthUser?>.broadcast();
     when(() => repo.authStateChanges).thenAnswer((_) => authStream.stream);
     when(() => repo.currentUser).thenReturn(fakeUser);
+    // The notification cache is scoped to the signed-in INTERNAL user id (see
+    // NotificheNotifier._currentUserId), so the bell only counts rows whose userId matches this
+    // key. Without it the cache reads as empty and the bell never gets a dot.
+    SharedPreferences.setMockInitialValues({internalUserIdPrefsKey: 'u1'});
   });
 
   /// Pumps the dashboard and emits the authenticated user once the
@@ -127,7 +156,9 @@ void main() {
   });
 
   group('DashboardScreen', () {
-    testWidgets('renders hero with user email when no displayName', (tester) async {
+    testWidgets('renders hero with user email when no displayName', (
+      tester,
+    ) async {
       await pumpDashboard(tester);
       // ID-plate hero: the name is the plate's identity line — uppercased, no separate greeting
       // text. "mario@tasktap.io" becomes "MARIO@TASKTAP.IO" on the plate.
@@ -136,7 +167,9 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('the hero is a compact plate, not a tall panel', (tester) async {
+    testWidgets('the hero is a compact plate, not a tall panel', (
+      tester,
+    ) async {
       // minHeight was 430 unconditionally: with no clock running that is most of a phone screen
       // given to an empty gradient with a name at the top, and the day's work starting below the
       // fold. The ID plate always shows its readout row (job count, even at zero), but stays a
@@ -149,7 +182,8 @@ void main() {
       expect(
         heroHeight,
         lessThan(280),
-        reason: 'the plate should stay a compact identity band, not a tall panel',
+        reason:
+            'the plate should stay a compact identity band, not a tall panel',
       );
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -192,23 +226,29 @@ void main() {
     // AppRoutes.timbra became a standalone pushed route once the Timbra bottom-nav tab was
     // replaced by Cantieri; this tile is the new entry point for a technician's own clock in/out.
 
-    testWidgets('shows a Timbra quick action that pushes the standalone Timbra route', (
-      tester,
-    ) async {
-      await pumpDashboard(tester);
+    testWidgets(
+      'shows a Timbra quick action that pushes the standalone Timbra route',
+      (tester) async {
+        await pumpDashboard(tester);
 
-      // Same skipOffstage: false convention as the QuickAction count test above — this tile
-      // sits below the fold in the CustomScrollView at the test viewport's default size.
-      expect(find.textContaining('mie\ntimbrature', skipOffstage: false), findsOneWidget);
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
+        // Same skipOffstage: false convention as the QuickAction count test above — this tile
+        // sits below the fold in the CustomScrollView at the test viewport's default size.
+        expect(
+          find.textContaining('mie\ntimbrature', skipOffstage: false),
+          findsOneWidget,
+        );
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
 
     testWidgets(
       'tapping Le mie timbrature pushes AppRoutes.timbra specifically, not cantiere timbra',
       (tester) async {
         final router = _makeQuickActionRouter();
-        await tester.pumpWidget(_buildDashboardWithRouter(db: db, repo: repo, router: router));
+        await tester.pumpWidget(
+          _buildDashboardWithRouter(db: db, repo: repo, router: router),
+        );
         await tester.pump();
         authStream.add(fakeUser);
         await tester.pumpAndSettle(const Duration(seconds: 2));
@@ -231,36 +271,35 @@ void main() {
       },
     );
 
-    testWidgets(
-      'tapping Timbra cantiere pushes the seleziona-cantiere picker, not CantiereTimbraScreen '
-      'directly',
-      (tester) async {
-        // The generic dashboard entry point has no cantiere context yet — it now lands on the
-        // picker (SelezionaCantiereScreen), which resolves a cantiereId before handing off to
-        // CantiereTimbraScreen. Only CantiereDetailScreen's own "Timbra cantiere" button (which
-        // already knows the cantiere) still goes straight to CantiereTimbraScreen.
-        final router = _makeQuickActionRouter();
-        await tester.pumpWidget(_buildDashboardWithRouter(db: db, repo: repo, router: router));
-        await tester.pump();
-        authStream.add(fakeUser);
-        await tester.pumpAndSettle(const Duration(seconds: 2));
+    testWidgets('tapping Timbra cantiere pushes the seleziona-cantiere picker, not CantiereTimbraScreen '
+        'directly', (tester) async {
+      // The generic dashboard entry point has no cantiere context yet — it now lands on the
+      // picker (SelezionaCantiereScreen), which resolves a cantiereId before handing off to
+      // CantiereTimbraScreen. Only CantiereDetailScreen's own "Timbra cantiere" button (which
+      // already knows the cantiere) still goes straight to CantiereTimbraScreen.
+      final router = _makeQuickActionRouter();
+      await tester.pumpWidget(
+        _buildDashboardWithRouter(db: db, repo: repo, router: router),
+      );
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
 
-        final tile = find.text('Timbra\ncantiere', skipOffstage: false);
-        expect(tile, findsOneWidget);
+      final tile = find.text('Timbra\ncantiere', skipOffstage: false);
+      expect(tile, findsOneWidget);
 
-        await tester.ensureVisible(tile);
-        await tester.pumpAndSettle();
+      await tester.ensureVisible(tile);
+      await tester.pumpAndSettle();
 
-        await tester.tap(tile);
-        await tester.pumpAndSettle();
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
 
-        expect(find.text('SELEZIONA-CANTIERE-SCREEN-MARKER'), findsOneWidget);
-        expect(find.text('CANTIERE-TIMBRA-SCREEN-MARKER'), findsNothing);
+      expect(find.text('SELEZIONA-CANTIERE-SCREEN-MARKER'), findsOneWidget);
+      expect(find.text('CANTIERE-TIMBRA-SCREEN-MARKER'), findsNothing);
 
-        await tester.pumpWidget(const SizedBox.shrink());
-        await tester.pumpAndSettle();
-      },
-    );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
 
     // ── Timbra con QR (Dashboard entry point for the kiosk-scan flow) ───────
     //
@@ -268,9 +307,13 @@ void main() {
     // gives it a one-tap Dashboard entry point too, since there's no Timbra bottom-nav tab to
     // reach it from otherwise.
 
-    testWidgets('tapping Timbra con QR pushes AppRoutes.timbraQr', (tester) async {
+    testWidgets('tapping Timbra con QR pushes AppRoutes.timbraQr', (
+      tester,
+    ) async {
       final router = _makeQuickActionRouter();
-      await tester.pumpWidget(_buildDashboardWithRouter(db: db, repo: repo, router: router));
+      await tester.pumpWidget(
+        _buildDashboardWithRouter(db: db, repo: repo, router: router),
+      );
       await tester.pump();
       authStream.add(fakeUser);
       await tester.pumpAndSettle(const Duration(seconds: 2));
@@ -290,71 +333,172 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows the clock-in prompt, not a placeholder, when no clock is running', (
+    testWidgets(
+      'shows the clock-in prompt, not a placeholder, when no clock is running',
+      (tester) async {
+        await pumpDashboard(tester);
+
+        // No ActiveTrackerStrip and no inert status text — the hero drew a grey glass panel reading
+        // "Non hai interventi attivi al momento" for the ordinary condition of being between jobs,
+        // and the absence of rows already said that on its own. What idle shows instead is a real
+        // action: "Timbra ingresso".
+        expect(find.byType(ActiveTrackerStrip), findsNothing);
+        expect(find.textContaining('attiv'), findsNothing);
+        expect(find.text('Timbra ingresso'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    // ── Smart working on the idle prompt ──────────────────────────────────────
+    //
+    // The hero's one slot starts work, so it reads the shared rule's `startOnly` surface — which
+    // differs from the timbra panel only while a shift is open. An explicit non-approved answer
+    // sends the technician to the scanner; an unknown one does not, because on an approved remote
+    // day the scanner is the one affordance that cannot work. See isButtonPunchWithheld.
+
+    testWidgets(
+      'QrOnly on an approved smart-working day offers the punch, not the scanner',
+      (tester) async {
+        final router = _makeQuickActionRouter();
+        await tester.pumpWidget(
+          _buildDashboardWithRouter(
+            db: db,
+            repo: repo,
+            router: router,
+            extraOverrides: [
+              effectiveClockInMethodProvider.overrideWithValue('QrOnly'),
+              smartWorkingTodayProvider.overrideWithValue(true),
+            ],
+          ),
+        );
+        await tester.pump();
+        authStream.add(fakeUser);
+        await tester.pumpAndSettle(const Duration(seconds: 2));
+
+        expect(find.text('Timbra ingresso'), findsOneWidget);
+        expect(
+          find.text('Timbra con QR'),
+          findsNothing,
+          reason: 'an approved remote worker has no totem to scan at',
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'QrOnly with an unknown smart-working answer keeps the punch, not the scanner',
+      (tester) async {
+        final router = _makeQuickActionRouter();
+        await tester.pumpWidget(
+          _buildDashboardWithRouter(
+            db: db,
+            repo: repo,
+            router: router,
+            extraOverrides: [
+              effectiveClockInMethodProvider.overrideWithValue('QrOnly'),
+              smartWorkingTodayProvider.overrideWithValue(null),
+            ],
+          ),
+        );
+        await tester.pump();
+        authStream.add(fakeUser);
+        await tester.pumpAndSettle(const Duration(seconds: 2));
+
+        // Nobody has answered yet — a cold start, another user's session, /auth/me still in flight.
+        // Guessing "not approved" here would send a remote worker to a totem that is not there.
+        expect(find.text('Timbra ingresso'), findsOneWidget);
+        expect(find.text('Timbra con QR'), findsNothing);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'QrOnly with a non-approved smart-working answer keeps the prompt on the scanner',
+      (tester) async {
+        final router = _makeQuickActionRouter();
+        await tester.pumpWidget(
+          _buildDashboardWithRouter(
+            db: db,
+            repo: repo,
+            router: router,
+            extraOverrides: [
+              effectiveClockInMethodProvider.overrideWithValue('QrOnly'),
+              smartWorkingTodayProvider.overrideWithValue(false),
+            ],
+          ),
+        );
+        await tester.pump();
+        authStream.add(fakeUser);
+        await tester.pumpAndSettle(const Duration(seconds: 2));
+
+        expect(find.text('Timbra ingresso'), findsNothing);
+        expect(find.text('Timbra con QR'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'an in-progress schedule is not a running clock, and does not appear',
+      (tester) async {
+        final dayStart = BusinessTime.fallback().businessToday();
+        await db
+            .into(db.schedules)
+            .insert(
+              SchedulesCompanion.insert(
+                id: 'sched-1',
+                tenantId: 'tenant-1',
+                createdAt: dayStart,
+                activityDate: dayStart,
+                timeStartMinutes: 480,
+                timeEndMinutes: 1020,
+                userId: 'u1',
+                statusId: 2, // In corso
+                locationId: 'loc-1',
+                title: 'Sostituzione caldaia',
+                description: '',
+              ),
+            );
+
+        await pumpDashboard(tester);
+
+        // A schedule marked "In corso" is the calendar's intention, not a clock anybody is being
+        // paid against. The hero used to render it as a card with a 00:00:00 timer — a stopped clock
+        // dressed as a running one, on the surface whose only job is live time.
+        expect(find.byType(ActiveTrackerStrip), findsNothing);
+
+        // It does belong in the day's work, though, and that list used to start at tomorrow: the
+        // dashboard showed today's interventi only as a digit in the stat grid.
+        expect(find.text('Sostituzione caldaia'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('bell shows a dot when there are unread notifications', (
       tester,
     ) async {
-      await pumpDashboard(tester);
-
-      // No ActiveTrackerStrip and no inert status text — the hero drew a grey glass panel reading
-      // "Non hai interventi attivi al momento" for the ordinary condition of being between jobs,
-      // and the absence of rows already said that on its own. What idle shows instead is a real
-      // action: "Timbra ingresso".
-      expect(find.byType(ActiveTrackerStrip), findsNothing);
-      expect(find.textContaining('attiv'), findsNothing);
-      expect(find.text('Timbra ingresso'), findsOneWidget);
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('an in-progress schedule is not a running clock, and does not appear', (
-      tester,
-    ) async {
-      final today = DateTime.now().toUtc();
-      final dayStart = DateTime.utc(today.year, today.month, today.day);
-      await db
-          .into(db.schedules)
-          .insert(
-            SchedulesCompanion.insert(
-              id: 'sched-1',
-              tenantId: 'tenant-1',
-              createdAt: dayStart,
-              activityDate: dayStart,
-              timeStartMinutes: 480,
-              timeEndMinutes: 1020,
-              userId: 'u1',
-              statusId: 2, // In corso
-              locationId: 'loc-1',
-              title: 'Sostituzione caldaia',
-              description: '',
-            ),
-          );
-
-      await pumpDashboard(tester);
-
-      // A schedule marked "In corso" is the calendar's intention, not a clock anybody is being
-      // paid against. The hero used to render it as a card with a 00:00:00 timer — a stopped clock
-      // dressed as a running one, on the surface whose only job is live time.
-      expect(find.byType(ActiveTrackerStrip), findsNothing);
-
-      // It does belong in the day's work, though, and that list used to start at tomorrow: the
-      // dashboard showed today's interventi only as a digit in the stat grid.
-      expect(find.text('Sostituzione caldaia'), findsOneWidget);
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('bell shows a dot when there are unread notifications', (tester) async {
       await pumpDashboard(tester);
 
       final bell = tester.widget<HeaderIconBtn>(
-        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Notifiche'),
+        find.byWidgetPredicate(
+          (w) => w is HeaderIconBtn && w.label == 'Notifiche',
+        ),
       );
       expect(bell.showDot, isFalse);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('bell shows a dot once an unread notification is cached', (tester) async {
+    testWidgets('bell shows a dot once an unread notification is cached', (
+      tester,
+    ) async {
       await db
           .into(db.appNotifications)
           .insert(
@@ -373,9 +517,44 @@ void main() {
       await pumpDashboard(tester);
 
       final bell = tester.widget<HeaderIconBtn>(
-        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Notifiche'),
+        find.byWidgetPredicate(
+          (w) => w is HeaderIconBtn && w.label == 'Notifiche',
+        ),
       );
       expect(bell.showDot, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('bell ignores an unread notification cached for another user', (
+      tester,
+    ) async {
+      // Same row as above, but owned by a different internal user id. `SessionEnder.endForced`
+      // keeps the Drift cache across a sign-out, so this is exactly the retained row a second
+      // technician on the same tablet would find — it must neither show a dot nor reach the list.
+      await db
+          .into(db.appNotifications)
+          .insert(
+            AppNotificationsCompanion.insert(
+              id: 'notif-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.now().toUtc(),
+              userId: 'u2',
+              title: 'Nuovo ticket assegnato',
+              message: 'Ticket #43 assegnato a un altro',
+              type: 'ticket',
+              deliveryType: 'push',
+            ),
+          );
+
+      await pumpDashboard(tester);
+
+      final bell = tester.widget<HeaderIconBtn>(
+        find.byWidgetPredicate(
+          (w) => w is HeaderIconBtn && w.label == 'Notifiche',
+        ),
+      );
+      expect(bell.showDot, isFalse);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -386,32 +565,35 @@ void main() {
     // swapping shape — no confirmation at all that "Turno iniziato" the way there is for a failed
     // punch (TimbraScreen's own inline error text).
 
-    testWidgets('tapping Timbra ingresso shows a confirmation and swaps to the active tracker', (
-      tester,
-    ) async {
-      await pumpDashboard(tester);
-      expect(find.text('Timbra ingresso'), findsOneWidget);
+    testWidgets(
+      'tapping Timbra ingresso shows a confirmation and swaps to the active tracker',
+      (tester) async {
+        await pumpDashboard(tester);
+        expect(find.text('Timbra ingresso'), findsOneWidget);
 
-      await tester.tap(find.text('Timbra ingresso'));
-      // Bounded pumps, not pumpAndSettle: ActiveTrackerStrip watches nowProvider, the same
-      // per-second live clock TimbraScreen's own tests avoid settling against (see
-      // timbra_screen_test.dart's _teardownTimer comment) — pumpAndSettle would never return once
-      // it mounts.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 350)); // punch write + crossfade
-      await tester.pump(); // let the SnackBar's entrance animation start
+        await tester.tap(find.text('Timbra ingresso'));
+        // Bounded pumps, not pumpAndSettle: ActiveTrackerStrip watches nowProvider, the same
+        // per-second live clock TimbraScreen's own tests avoid settling against (see
+        // timbra_screen_test.dart's _teardownTimer comment) — pumpAndSettle would never return once
+        // it mounts.
+        await tester.pump();
+        await tester.pump(
+          const Duration(milliseconds: 350),
+        ); // punch write + crossfade
+        await tester.pump(); // let the SnackBar's entrance animation start
 
-      expect(find.text('Turno iniziato'), findsOneWidget);
-      expect(find.byType(ActiveTrackerStrip), findsOneWidget);
-      expect(find.text('Timbra ingresso'), findsNothing);
+        expect(find.text('Turno iniziato'), findsOneWidget);
+        expect(find.byType(ActiveTrackerStrip), findsOneWidget);
+        expect(find.text('Timbra ingresso'), findsNothing);
 
-      // Disposes by unmounting, same as timbra_screen_test.dart's _teardownTimer — cancels
-      // nowProvider's Timer.periodic instead of leaving it pending past the test.
-      await tester.pumpWidget(const SizedBox.shrink());
-      for (var i = 0; i < 5; i++) {
-        await tester.pump(Duration.zero);
-      }
-    });
+        // Disposes by unmounting, same as timbra_screen_test.dart's _teardownTimer — cancels
+        // nowProvider's Timer.periodic instead of leaving it pending past the test.
+        await tester.pumpWidget(const SizedBox.shrink());
+        for (var i = 0; i < 5; i++) {
+          await tester.pump(Duration.zero);
+        }
+      },
+    );
 
     // ── Phantom toast from the idle prompt left mounted underneath (bug) ────
     //
@@ -424,53 +606,115 @@ void main() {
     // clock-out or break toggle performed on the (now-visible, on top) Timbra page shares that
     // same provider instance and triggered the exact same, wrong, toast — via showAppToast's
     // root overlay, which paints above every route including the one on top.
+    testWidgets('a punch action performed elsewhere does not show "Turno iniziato" from the idle prompt '
+        'left mounted underneath', (tester) async {
+      final container = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repo),
+          appDatabaseProvider.overrideWithValue(db),
+          dioProvider.overrideWithValue(MockDio()),
+          locationServiceProvider.overrideWithValue(
+            const DisabledLocationService(),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: DashboardScreen()),
+        ),
+      );
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      // Idle: the clock-in prompt is mounted and (buggily) listening to the shared provider.
+      expect(find.text('Timbra ingresso'), findsOneWidget);
+
+      // Simulate a clock-OUT performed on another screen (e.g. the pushed standalone Timbra
+      // page) — it shares this exact punchNotifierProvider instance, app-wide.
+      await container
+          .read(punchNotifierProvider.notifier)
+          .punch(const TimbraState(isOnShift: true));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Turno iniziato'), findsNothing);
+
+      // Bounded pumps, not pumpAndSettle — same reasoning as the clock-in test above
+      // (activeTrackersProvider's own poll keeps re-scheduling frames). The container is
+      // explicit (UncontrolledProviderScope doesn't tie its lifecycle to the widget tree), so
+      // it's disposed directly to cancel that poll's Timer — before the final pumps, so the
+      // zero-duration Timer drift's own stream teardown schedules on dispose gets a chance to
+      // fire before the framework's pending-timer check runs.
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(Duration.zero);
+      }
+    });
+
+    testWidgets('shows the next-7-days counter with a self-explanatory label', (
+      tester,
+    ) async {
+      await pumpDashboard(tester);
+      expect(find.text('PROSSIMI 7 GIORNI'), findsOneWidget);
+      expect(find.text('0'), findsWidgets);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('tapping Storico pushes AppRoutes.storico', (tester) async {
+      final router = _makeQuickActionRouter(storicoMarker: true);
+      await tester.pumpWidget(
+        _buildDashboardWithRouter(db: db, repo: repo, router: router),
+      );
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      await tester.tap(find.text('Storico'));
+      await tester.pumpAndSettle();
+      expect(find.text('STORICO-SCREEN-MARKER'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets(
-      'a punch action performed elsewhere does not show "Turno iniziato" from the idle prompt '
-      'left mounted underneath',
+      'hero readouts wrap instead of overflowing at 1.3x on a narrow phone',
       (tester) async {
-        final container = ProviderContainer(
-          overrides: [
-            authRepositoryProvider.overrideWithValue(repo),
-            appDatabaseProvider.overrideWithValue(db),
-            dioProvider.overrideWithValue(MockDio()),
-            locationServiceProvider.overrideWithValue(const DisabledLocationService()),
-          ],
-        );
+        tester.view.physicalSize = const Size(720, 1440);
+        tester.view.devicePixelRatio = 2.0;
+        addTearDown(tester.view.reset);
 
         await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: const MaterialApp(home: DashboardScreen()),
+          MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(
+                size: Size(360, 800),
+                textScaler: TextScaler.linear(1.3),
+              ),
+              child: const Scaffold(
+                body: IdPlateHeroComp(
+                  userName: 'Tecnico',
+                  todayCount: 3,
+                  completedCount: 1,
+                  upcomingCount: 5,
+                ),
+              ),
+            ),
           ),
         );
-        await tester.pump();
-        authStream.add(fakeUser);
-        await tester.pumpAndSettle(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
 
-        // Idle: the clock-in prompt is mounted and (buggily) listening to the shared provider.
-        expect(find.text('Timbra ingresso'), findsOneWidget);
+        expect(tester.takeException(), equals(null));
+        expect(find.text('PROSSIMI 7 GIORNI'), findsOneWidget);
 
-        // Simulate a clock-OUT performed on another screen (e.g. the pushed standalone Timbra
-        // page) — it shares this exact punchNotifierProvider instance, app-wide.
-        await container.read(punchNotifierProvider.notifier).punch(
-          const TimbraState(isOnShift: true),
-        );
-        await tester.pump();
-        await tester.pump();
-
-        expect(find.text('Turno iniziato'), findsNothing);
-
-        // Bounded pumps, not pumpAndSettle — same reasoning as the clock-in test above
-        // (activeTrackersProvider's own poll keeps re-scheduling frames). The container is
-        // explicit (UncontrolledProviderScope doesn't tie its lifecycle to the widget tree), so
-        // it's disposed directly to cancel that poll's Timer — before the final pumps, so the
-        // zero-duration Timer drift's own stream teardown schedules on dispose gets a chance to
-        // fire before the framework's pending-timer check runs.
         await tester.pumpWidget(const SizedBox.shrink());
-        container.dispose();
-        for (var i = 0; i < 5; i++) {
-          await tester.pump(Duration.zero);
-        }
+        await tester.pumpAndSettle();
       },
     );
   });

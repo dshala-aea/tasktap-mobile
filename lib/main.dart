@@ -1,11 +1,15 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+
 import 'firebase_options.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'core/location/location_service.dart';
 import 'core/security/biometric_lock.dart';
 import 'data/sync/sync_service.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -17,10 +21,13 @@ import 'core/time/business_time.dart';
 import 'core/crash_reporting/sentry_crash_reporter.dart';
 import 'core/notifications/deep_link_drainer.dart';
 import 'core/notifications/notification_service.dart';
+import 'core/notifications/push_launch_permission.dart';
+import 'core/notifications/push_reporting.dart';
 import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/account_deactivated_screen.dart';
+import 'core/widgets/app_toast.dart' show showAppToast;
 import 'core/widgets/startup_watchdog.dart';
 import 'core/widgets/suspended_banner.dart';
 import 'data/entitlements/entitlement_providers.dart';
@@ -78,23 +85,39 @@ Future<void> initializePush({
   // The two steps are caught separately so that the recorded failure names which one broke. They
   // used to share a single catch, so "Firebase is not configured" and "the APNs token fetch
   // failed" produced the same sentence in the log and the same silent `false` at every call site.
+  //
+  // Both are also reported: this is the only place that can tell "push is off on this build" from
+  // "push is on and failing later", and on a store build that distinction exists nowhere else.
   try {
     await initFirebase().timeout(timeout);
-  } catch (e) {
+  } catch (e, st) {
     NotificationService.lastError = 'Firebase: $e';
     debugPrint('Firebase init failed (push disabled): $e');
+    reportPushFailure(
+      PushStage.firebaseInit,
+      e,
+      stackTrace: st,
+      onceKey: 'bootstrap-firebase',
+    );
     return;
   }
 
   try {
     await initNotifications().timeout(timeout);
-  } catch (e) {
+  } catch (e, st) {
     NotificationService.lastError = 'Notifiche: $e';
     debugPrint('Notification init failed (push disabled): $e');
+    reportPushFailure(
+      PushStage.messagingInit,
+      e,
+      stackTrace: st,
+      onceKey: 'bootstrap-notifications',
+    );
     return;
   }
 
   NotificationService.isAvailable = true;
+  pushBreadcrumb('push available: Firebase started and listeners are wired');
 }
 
 /// Initialise Supabase and launch the Flutter widget tree.
@@ -120,12 +143,16 @@ Future<void> runTaskTapApp() async {
         // `flutterfire configure` actually generated and keeps in sync going forward; relying on
         // google-services.json/GoogleService-Info.plist alone works on Android today but
         // silently has nothing to find on a platform whose native config file isn't present.
-        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
         // Must be registered here, before runApp, and with a top-level/static function — the OS
         // can spawn a fresh isolate to run this handler while the app is backgrounded/terminated,
         // which has no access to anything set up after this point. It was defined but never
         // actually wired to FirebaseMessaging, so background/terminated pushes never reached it.
-        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+        FirebaseMessaging.onBackgroundMessage(
+          firebaseMessagingBackgroundHandler,
+        );
       },
       initNotifications: () => NotificationService.instance.initialize(),
     );
@@ -162,6 +189,7 @@ Future<void> runTaskTapApp() async {
 
   runApp(
     ProviderScope(
+      retry: (_, _) => null,
       overrides: [
         // Bind the core GPS gate to the Impostazioni setting. Declared in core so
         // core/location does not import a feature; bound here, once, so no call site has to
@@ -170,11 +198,11 @@ Future<void> runTaskTapApp() async {
           (ref) =>
               ref.watch(impostazioniProvider.select((s) => s.geoLocazione)),
         ),
-        // Impostazioni → "Modalità offline" ("Sincronizza dati in background"). Same defect as
-        // the dark-theme toggle used to be: persisted, read nowhere. Binds to HomeShell's
-        // automatic background sync (60s foreground poll + resume sync) — see
-        // backgroundSyncPreferenceProvider's own doc comment for what stays on regardless.
-        backgroundSyncPreferenceProvider.overrideWith(
+        // Impostazioni → "Modalità offline" ("Sincronizza dati in background"). Gates speculative
+        // downloads only, never freshness — see offlineModeProvider's own doc comment (D7). Note
+        // the polarity: `syncOffline == true` IS offline mode, so this is not a "sync allowed"
+        // flag and must never be negated at the override.
+        offlineModeProvider.overrideWith(
           (ref) => ref.watch(impostazioniProvider.select((s) => s.syncOffline)),
         ),
       ],
@@ -210,7 +238,7 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     final service = NotificationService.instance;
     _deepLinks = DeepLinkDrainer(
       take: service.consumePendingDeepLink,
-      isReady: () => ref.read(authStateProvider).valueOrNull != null,
+      isReady: () => ref.read(authStateProvider).value != null,
       push: _router.push,
       clear: service.clearPendingDeepLink,
     );
@@ -218,6 +246,24 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // Cold start: the tap may have been stored before this widget existed. Wait for the first
     // frame so the router is mounted; if auth is still loading, the auth listener drains later.
     WidgetsBinding.instance.addPostFrameCallback((_) => _deepLinks?.drain());
+    // System notification dialog, once per install, after the first frame (never blocks bootstrap).
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _askPushPermissionAtLaunch(),
+    );
+  }
+
+  Future<void> _askPushPermissionAtLaunch() async {
+    final service = NotificationService.instance;
+    await PushLaunchPermission(
+      status: service.authorizationStatus,
+      ask: service.ensurePermission,
+      // A refusal must turn the in-app switch off (it defaults to on); a grant leaves it alone.
+      onDone: (_) async {
+        if (mounted) {
+          await ref.read(impostazioniProvider.notifier).reconcilePushWithOs();
+        }
+      },
+    ).run();
   }
 
   @override
@@ -235,27 +281,47 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // `NotificationService.isAvailable` — see its doc comment for why the
     // FIREBASE_ENABLED dart-define alone isn't a safe enough check.
     ref.listen(authStateProvider, (previous, next) {
-      final user = next.valueOrNull;
+      final user = next.value;
       if (NotificationService.isAvailable && user != null) {
         NotificationService.instance.registerDeviceToken(user.accessToken);
         // A push tapped before sign-in resolved (cold start) is parked; deliver it after the
         // frame so it does not land in the same tick as the router's own auth redirect.
-        WidgetsBinding.instance.addPostFrameCallback((_) => _deepLinks?.drain());
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _deepLinks?.drain(),
+        );
       }
       // Session ended (or a different user signed in): a parked intent belongs to nobody now.
-      final signedOut = next is AsyncData && next.valueOrNull == null;
-      final userChanged = previous?.valueOrNull != null &&
+      final signedOut = next is AsyncData && next.value == null;
+      final userChanged =
+          previous?.value != null &&
           user != null &&
-          previous!.valueOrNull!.id != user.id;
+          previous!.value!.id != user.id;
       if (signedOut || userChanged) _deepLinks?.reset();
     });
 
     // A push arriving in the foreground is the moment we know there is something new; pull it
     // into the local mirror so the badge and the list update without waiting for the technician
     // to open the Notifiche screen. Nothing polled before this, despite a comment claiming it did.
+    //
+    // It also triggers a data sync, not just a notification refresh: the push is sent because
+    // something changed on the server (a ticket assigned, a cantiere opened), so refreshing only
+    // the notification list left the ticket board showing the state from before the change until
+    // the next 60s tick. A push is the cheapest freshness signal the app gets — use it.
     if (NotificationService.isAvailable) {
-      NotificationService.instance.onForegroundMessage = () =>
-          ref.read(notificheProvider.notifier).refresh();
+      NotificationService.instance.onForegroundMessage = () {
+        ref.read(notificheProvider.notifier).refresh();
+        ref.read(syncProvider.notifier).performSync();
+      };
+      NotificationService.instance.onForegroundBanner = (title, body) {
+        final context = rootNavigatorKey.currentContext;
+        final text = [
+          title,
+          body,
+        ].whereType<String>().where((s) => s.trim().isNotEmpty).join(' — ');
+        if (context != null && text.isNotEmpty) {
+          showAppToast(context, message: text);
+        }
+      };
     }
 
     // Impostazioni → "Tema scuro". The switch existed, was persisted to SharedPreferences, and
@@ -292,29 +358,31 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       // real behind the block worth showing.
       builder: (context, child) {
         final isDeactivated = ref.watch(
-          cachedEntitlementProvider.select((e) => e.valueOrNull?.isAccountDeactivated ?? false),
+          cachedEntitlementProvider.select(
+            (e) => e.value?.isAccountDeactivated ?? false,
+          ),
         );
 
         // Outermost: if kiosk/auth loading never finishes, the router never leaves its initial
         // route, so this has to sit above the lock and the router's navigator.
         return StartupWatchdog(
           child: BiometricLock(
-          enabled: biometricLock,
-          // Themed backdrop, not transparent: SuspendedBanner now paints its own safe area (see
-          // its own doc comment) and returns SizedBox.shrink() when the tenant isn't suspended —
-          // with nothing behind that empty state, the status-bar strip would fall back to
-          // whatever the platform default is rather than matching the page underneath.
-          child: ColoredBox(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            child: isDeactivated
-                ? const AccountDeactivatedScreen()
-                : Column(
-                    children: [
-                      const SuspendedBanner(),
-                      Expanded(child: child ?? const SizedBox.shrink()),
-                    ],
-                  ),
-          ),
+            enabled: biometricLock,
+            // Themed backdrop, not transparent: SuspendedBanner now paints its own safe area (see
+            // its own doc comment) and returns SizedBox.shrink() when the tenant isn't suspended —
+            // with nothing behind that empty state, the status-bar strip would fall back to
+            // whatever the platform default is rather than matching the page underneath.
+            child: ColoredBox(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: isDeactivated
+                  ? const AccountDeactivatedScreen()
+                  : Column(
+                      children: [
+                        const SuspendedBanner(),
+                        Expanded(child: child ?? const SizedBox.shrink()),
+                      ],
+                    ),
+            ),
           ),
         );
       },

@@ -98,6 +98,36 @@ class EntitlementRepository {
   /// See [fieldSeatBaselineModules].
   static const fieldSeatBaseline = fieldSeatBaselineModules;
 
+  /// Whether today is an approved smart-working day, as `/api/Auth/me` last said, together with the
+  /// identity of the session that said it. Null value = unknown: this process has never had an
+  /// answer, or the server did not say.
+  ///
+  /// **In memory only, on purpose.** It is not an `Entitlements` column, no migration adds it, and
+  /// [write] never persists it. A stale `true` would claim an approved day that ended overnight; a
+  /// stale `false` would hide the punch button from a technician who has one. Memory dies with the
+  /// process, which is exactly the lifetime this flag has — but memory also outlives a sign-out,
+  /// and this device can be a shared van/tablet, so the answer is bound to its owner below.
+  bool? _smartWorkingToday;
+
+  /// The session identity that produced [_smartWorkingToday] — the same value `EntitlementService`
+  /// validates each answer against. Without it the flag would follow whoever signs in next, which
+  /// is the one thing a fail-open-on-unknown reader must never see.
+  String? _smartWorkingTodayOwnerId;
+
+  /// The approved-day answer belonging to [userId], or null when the last answer came from someone
+  /// else (or from no identifiable session) — **unknown, never "no"**. The ownership check lives
+  /// here, not in each reader, so every caller gets the same rule and none can read a foreign flag.
+  bool? smartWorkingTodayFor(String? userId) =>
+      userId != null && userId == _smartWorkingTodayOwnerId ? _smartWorkingToday : null;
+
+  /// Records what `/api/Auth/me` just said, including null when it said nothing, and who it was
+  /// said to. Called only by `EntitlementService` on a successful, still-current answer, so a
+  /// failed refresh leaves the previous answer alone rather than downgrading it.
+  void setSmartWorkingToday(bool? value, {required String? ownerId}) {
+    _smartWorkingToday = value;
+    _smartWorkingTodayOwnerId = ownerId;
+  }
+
   Future<Entitlement?> read() async {
     final row = await (_db.select(
       _db.entitlements,

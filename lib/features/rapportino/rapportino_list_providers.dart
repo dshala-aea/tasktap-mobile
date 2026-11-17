@@ -2,6 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/local/app_database.dart';
+import '../../data/reference/reference_cache_repository.dart' show referenceCacheProvider;
 import '../../data/sync/draft_submission_state.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 
@@ -67,15 +68,26 @@ final rapportinoControlliProvider = StreamProvider.autoDispose
       return repo.watchControlli(reportId);
     });
 
+/// The asset's name, from the synced `prodottiAssistenza` mirror — the header a report's Controlli
+/// answers are grouped under.
+///
+/// Mirror only, never a request: the view is the record of a finished visit, opened on site with no
+/// signal as often as at the office. A device that has never seen the asset gets `null`, and the
+/// section says "Attrezzatura" rather than inventing or fetching a name.
+final assetNameProvider = FutureProvider.autoDispose.family<String?, String>((ref, assetId) async {
+  final row = await ref.watch(referenceCacheProvider).prodottoAssistenzaById(assetId);
+  return row?.name;
+});
+
 /// Sums the hours actually worked across staff rows, in minutes.
 ///
-/// `hoursWorked` wins whenever it's set, matching `StaffRow.effectiveHours` (the same value these
-/// rows were persisted with by `ReportEditorNotifier._staffToCompanion`) — not just as a no-timer
-/// fallback. Once a timer has been stopped at least once, `hoursWorked` holds the per-segment
-/// accumulated total, while the raw startTime→endTime span also covers any idle gap between a
-/// stop and a later restart (startTime is pinned to the first start). Falling back to the span
-/// here would double-count that gap in the list's own total even though the fix in
-/// `StaffRow.effectiveHours` already keeps it out of what gets saved.
+/// The stored `hoursWorked` *is* `StaffRow.effectiveHours`: `ReportEditorNotifier._staffToCompanion`
+/// persists that value on every write, and it sums the recorded intervals when the row has any and
+/// otherwise takes the declared total. This column therefore holds the same figure the editor
+/// shows — the same rule, not a coincidence — and only a row nothing has ever timed falls through
+/// to the raw startTime→endTime span. That span also covers any idle gap between a stop and a later
+/// restart (startTime is pinned to the first start), which is why reading it in preference to the
+/// stored total would double-count the gap in the list's own total.
 double totalOreMinutes(List<ReportStaffTableData> rows) {
   return rows.fold<double>(0, (acc, r) {
     if (r.hoursWorked != null) return acc + (r.hoursWorked! * 60.0);
@@ -134,8 +146,8 @@ final rapportinoRowSummaryProvider = Provider.autoDispose.family<RapportinoRowSu
   final materialiAsync = ref.watch(rapportinoMaterialiProvider(reportId));
   final oreLabel = ref.watch(rapportinoOreProvider(reportId));
   return RapportinoRowSummary(
-    staffCount: staffAsync.valueOrNull?.length ?? 0,
-    materialiCount: materialiAsync.valueOrNull?.length ?? 0,
+    staffCount: staffAsync.value?.length ?? 0,
+    materialiCount: materialiAsync.value?.length ?? 0,
     oreLabel: oreLabel,
   );
 });
@@ -199,6 +211,13 @@ String rapportinoStatusLabel(DraftReport draft) {
   if (sub == DraftSubmissionState.failed) {
     return kFailedSendStatusLabel;
   }
+  // A row the queue has not sent yet — finished, Invia pressed, waiting for signal or for the
+  // reconnect flush — is not an untouched draft, and "Bozza" said exactly that: the technician who
+  // had just submitted the morning's work saw it listed as unsent. Riepilogo already names this
+  // state; the list said nothing until the draft was reopened.
+  if (sub == DraftSubmissionState.readyToSubmit) {
+    return 'In attesa di invio';
+  }
   return 'Bozza';
 }
 
@@ -223,19 +242,36 @@ bool rapportinoIsInFlight(DraftReport draft) {
 /// (create_draft.dart) and RapportinoViewScreen's rejection banner.
 bool rapportinoIsRejected(DraftReport draft) => draft.stato == 'Respinto';
 
-/// Mirrors the backend's own guard — `ReportStateMachine.CanEditOrDelete`
-/// (TaskTapAPI.Application/Services/Reports/ReportStateMachine.cs) — which now allows edit/delete
-/// through Bozza, Inviato and Respinto, and blocks from Controllato onward (and for Annullato/
-/// NonFatturabile): "before the office review/approval step", not "still a draft". Previously
-/// mobile gated the list's edit/delete actions to `stato == 'Bozza'` only, which under-matched
-/// what the server actually allows once a report has been sent but not yet reviewed.
-bool rapportinoCanEditOrDelete(DraftReport draft) {
-  switch (draft.stato) {
-    case 'Bozza':
-    case 'Inviato':
-    case 'Respinto':
-      return true;
-    default:
-      return false;
-  }
-}
+/// Whether tapping this row opens the EDITOR (Bozza only), or the read-only view.
+///
+/// Owner decision D8 (offline slice O-3 / audit F15): mobile's edit surface is the Bozza — the
+/// only state its submit path can actually produce (`POST /api/reports/submit` moves Bozza →
+/// Inviato; the backend state machine offers no "edit an Inviato" command at all). Routing an
+/// Inviato/Respinto/Controllato/Fatturato row into the editor was corruption, not convenience:
+/// the editor's very first autosave rewrites `stato:'Bozza'` + `isLocalOnly:true` on the row, so
+/// the device showed a false Bozza, sync (which skips `isLocalOnly` rows) never delivered the
+/// office's Controllato/Fatturato again, and any submit was a permanent 400.
+///
+/// The backend's own `ReportStateMachine.CanEditOrDelete` is wider (Bozza/Inviato/Respinto) —
+/// that is the SERVER's edit window, used by the office web app. Mobile deliberately does not
+/// mirror it: it cannot import the children it would need to edit a sent report, and the one
+/// mobile action an Inviato/Respinto does need — rework after a rejection — has its own path
+/// (`createReworkDraft`, offered by RapportinoViewScreen's rejection banner).
+///
+/// A Bozza this device already submitted is excluded too: `submissionState` reaches `submitted`
+/// before the next sync flips `stato` to Inviato, and opening that row as an editable draft would
+/// re-open a report the server already holds.
+bool rapportinoOpensEditor(DraftReport draft) =>
+    draft.stato == 'Bozza' && !rapportinoIsSubmitted(draft);
+
+/// Whether the list may offer delete for this row.
+///
+/// Bozza only, and never mid-send: a `submitting` row's local delete races `markSubmitted`, and
+/// offline the server copy survives and the next sync re-inserts it — a silent resurrection
+/// (06-writes-outbox §6 #2). Reports past Bozza leave through the office Annulla workflow, which
+/// the backend's own delete rejects anyway (ReportStateMachine.CanEditOrDelete blocks Controllato
+/// onward).
+///
+/// "Delete" for a server-known report is online-only — see `_confirmDeleteDraft`.
+bool rapportinoCanDelete(DraftReport draft) =>
+    draft.stato == 'Bozza' && !rapportinoIsSubmitted(draft) && !rapportinoIsInFlight(draft);

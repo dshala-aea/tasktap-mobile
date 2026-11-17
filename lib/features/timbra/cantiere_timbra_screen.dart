@@ -14,13 +14,12 @@
 //     secondary "Altri dettagli" affordance for the occasional rich fields.
 //   - If an active session exists: shows session info + a "Timbra uscita
 //     cantiere" button.
-//   - OFFLINE-FIRST: the online start/end endpoints are tried first (they are
-//     the only path that carries the full rich-field set — see
-//     cantiere_worklog_api_client.dart's own doc comment on why the offline
-//     batch endpoint is narrower); a network-unreachable failure falls back
-//     to a local Drift queue (`cantiere_punches`, via
-//     CantiereSessionRepository) that CantiereTimbraSyncService pushes once
-//     connectivity returns. "Am I on site" is derived primarily from that
+//   - OFFLINE-FIRST: the online start/end endpoints are tried first; either
+//     way the same rich fields travel (the batch endpoint carries both sets
+//     since schema 51 — see cantiere_worklog_api_client.dart's own doc
+//     comment). A network-unreachable failure falls back to a local Drift
+//     queue (`cantiere_punches`, via CantiereSessionRepository) that
+//     CantiereTimbraSyncService pushes once connectivity returns. "Am I on site" is derived primarily from that
 //     local queue — see cantiereActiveSessionProvider below — so the screen
 //     stays usable with no signal at all, matching the personal Timbra
 //     screen's own offline model.
@@ -38,6 +37,7 @@ import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:uuid/uuid.dart';
 
@@ -50,15 +50,22 @@ import '../../core/time/work_time.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
+import '../../data/timbratura/cantiere_session_repository.dart'
+    show cantiereReconciledOrphanMarker;
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../presentation/providers/auth_providers.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
+import '../../core/router/app_router.dart' show AppRoutes;
 import '../cantiere/cantiere_providers.dart';
 import 'chiudi_turno_screen.dart';
+import 'clock_disagreement_note.dart';
 import 'gps_status_indicator.dart';
 import 'teammate_picker_sheet.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -86,7 +93,7 @@ final cantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref) {
 ///
 /// Purely a "richer detail when reachable" source now — see [cantiereActiveSessionProvider] for
 /// the offline-durable signal the screen actually gates its body on.
-class ActiveCantiereLogNotifier extends AutoDisposeAsyncNotifier<CantiereWorkLogDto?> {
+class ActiveCantiereLogNotifier extends AsyncNotifier<CantiereWorkLogDto?> {
   @override
   Future<CantiereWorkLogDto?> build() async {
     final client = ref.watch(cantiereWorklogApiClientProvider);
@@ -109,7 +116,7 @@ class ActiveCantiereLogNotifier extends AutoDisposeAsyncNotifier<CantiereWorkLog
 }
 
 final activeCantiereLogProvider =
-    AutoDisposeAsyncNotifierProvider<ActiveCantiereLogNotifier, CantiereWorkLogDto?>(() {
+    AsyncNotifierProvider.autoDispose<ActiveCantiereLogNotifier, CantiereWorkLogDto?>(() {
       return ActiveCantiereLogNotifier();
     });
 
@@ -121,8 +128,25 @@ final todayCantiereEventsProvider = StreamProvider.autoDispose<List<CantierePunc
 
 /// True when at least one of today's local cantiere events has not yet been synced.
 final cantiereHasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
-  final events = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
-  return events.any((e) => e.isPendingSync);
+  final events = ref.watch(todayCantiereEventsProvider).value ?? [];
+  // The cantiere reconciler's mirrors are pending by construction but never uploaded: the server
+  // already holds them. Counting them leaves the same stuck "Non sincronizzato" state the Timbra
+  // provider had (and the same frozen punch guard).
+  return events.any((e) => e.isPendingSync && e.notes != cantiereReconciledOrphanMarker);
+});
+
+/// The first sync failure recorded against one of today's local cantiere events, if any.
+///
+/// Only a PERMANENT refusal (a 4xx the server will answer the same way again) writes it, and the
+/// sync stops retrying those unattended — so without this the punch would sit there as an
+/// indefinite amber dot with nothing to act on. See CantiereTimbraSyncService.
+final cantiereSyncErrorProvider = Provider.autoDispose<String?>((ref) {
+  final events = ref.watch(todayCantiereEventsProvider).value ?? [];
+  for (final e in events) {
+    final error = e.syncError;
+    if (error != null && error.isNotEmpty) return error;
+  }
+  return null;
 });
 
 /// Sums today's *closed* (ingresso→uscita) intervals on [cantiereId] into a total duration.
@@ -135,7 +159,7 @@ final cantiereHasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
 /// Scoped to one cantiere (not a cross-cantiere daily total) — matches the screen's own context:
 /// "how much have I worked *here* today."
 final cantiereTodayHoursProvider = Provider.autoDispose.family<Duration, String>((ref, cantiereId) {
-  final events = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
+  final events = ref.watch(todayCantiereEventsProvider).value ?? [];
   CantierePunche? opener;
   var total = Duration.zero;
   for (final e in events) {
@@ -164,7 +188,7 @@ String formatHoursMinutes(Duration d) {
 /// falls back to the raw id if the mirror doesn't have it yet (matches the same
 /// not-found-falls-back-to-itself contract used elsewhere in this screen, e.g. colleague names).
 String _cantiereNameFor(WidgetRef ref, String cantiereId) {
-  return ref.watch(cantiereByIdProvider(cantiereId)).valueOrNull?.name ?? cantiereId;
+  return ref.watch(cantiereByIdProvider(cantiereId)).value?.name ?? cantiereId;
 }
 
 /// Elapsed time since [startTime], clamped so it never counts time before the start of the
@@ -347,24 +371,26 @@ class CantiereActiveSession {
   final bool pendingSync;
 }
 
-/// The most recent local 'ingresso' with no closing 'uscita' after it, or null.
-CantiereActiveSession? deriveLocalActiveCantiereSession(List<CantierePunche> events) {
-  CantierePunche? opener;
-  for (final e in events) {
-    switch (e.eventType) {
-      case 'ingresso':
-        opener = e;
-      case 'uscita':
-        opener = null;
-    }
-  }
-  if (opener == null || opener.cantiereId == null) return null;
+/// The most recent local punch of the whole log, on any business day — the row that decides
+/// whether a site visit is still open.
+///
+/// Deliberately not `todayCantiereEventsProvider`: pairing is sequential, so the open interval is
+/// whatever follows the last 'ingresso', and a session started yesterday evening and not yet
+/// closed is still open this morning. A day window would answer "not on site" and offer "Ingresso"
+/// again, whose second opener orphans the first interval.
+final cantiereLatestPunchProvider = StreamProvider.autoDispose<CantierePunche?>((ref) {
+  return ref.watch(cantiereSessionRepositoryProvider).watchLatestPunch();
+});
+
+/// The open site visit implied by the latest punch, or null when it is not an 'ingresso'.
+CantiereActiveSession? activeCantiereSessionFromLatestPunch(CantierePunche? latest) {
+  if (latest == null || latest.eventType != 'ingresso' || latest.cantiereId == null) return null;
   return CantiereActiveSession(
-    cantiereId: opener.cantiereId!,
-    customerId: opener.customerId,
-    ticketId: opener.ticketId,
-    startTime: opener.eventTime,
-    pendingSync: opener.isPendingSync,
+    cantiereId: latest.cantiereId!,
+    customerId: latest.customerId,
+    ticketId: latest.ticketId,
+    startTime: latest.eventTime,
+    pendingSync: latest.isPendingSync,
   );
 }
 
@@ -375,11 +401,10 @@ CantiereActiveSession? deriveLocalActiveCantiereSession(List<CantierePunche> eve
 /// last-known server answer, which covers a session started from another device or surface (e.g.
 /// the office) with nothing queued locally.
 final cantiereActiveSessionProvider = Provider.autoDispose<CantiereActiveSession?>((ref) {
-  final localEvents = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
-  final local = deriveLocalActiveCantiereSession(localEvents);
+  final local = activeCantiereSessionFromLatestPunch(ref.watch(cantiereLatestPunchProvider).value);
   if (local != null) return local;
 
-  final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;
+  final serverLog = ref.watch(activeCantiereLogProvider).value;
   if (serverLog == null) return null;
   final DateTime start;
   try {
@@ -402,31 +427,64 @@ final cantiereActiveSessionProvider = Provider.autoDispose<CantiereActiveSession
   );
 });
 
-/// Crew assignments for a cantiere — GET /api/cantieri/{id}/assegnazioni. Used to derive whether
-/// the current user is lead (see [isLeadForCantiereProvider]) and to populate the teammate
-/// picker's checkbox list.
+/// Crew assignments for a cantiere — GET /api/cantieri/{id}/assegnazioni online, the
+/// `cantiere_crew_assignments` Drift mirror offline. Used to derive whether the current user is
+/// lead (see [isLeadForCantiereProvider]) and to populate the teammate picker's checkbox list.
 ///
-/// A live fetch-and-derive provider, not a Drift mirror: this concept is new and has no local
-/// offline table of its own. Failing (including offline) leaves this provider in `AsyncError`,
-/// which [isLeadForCantiereProvider] reads as "not lead" — the explicit single-button fallback per
-/// the plan's Global Constraints, not a bug.
+/// Two axes, deliberately separate:
+///
+///   - **Freshness (online):** the live answer wins. Online this app always shows the latest server
+///     data, so the fetch is attempted first and its result is returned as-is — the mirror is not
+///     merged into it.
+///   - **Availability (offline):** the mirror is the answer. No network call is attempted and no
+///     timeout is waited out, because there is nothing to wait for: the device already holds the
+///     crew the last sync carried. On a *failed* live fetch while online the mirror is used too, so
+///     a flaky connection degrades to the last known crew instead of to "not lead".
+///
+/// This is what makes the provider offline-safe rather than a live-fetch-and-derive one: before the
+/// mirror existed, being offline left it in `AsyncError`, which [isLeadForCantiereProvider] read as
+/// "not lead" and which emptied the teammate picker — the lead could not start a squad clock-in
+/// without signal even though the punches themselves already queue offline. With the mirror, a
+/// `false` from [isLeadForCantiereProvider] now only ever means "genuinely not lead" or "nothing
+/// mirrored yet" (a device that has never synced with a backend that carries the crew member).
 final cantiereCrewAssignmentsProvider = FutureProvider.autoDispose
     .family<List<CantiereCrewAssignmentDto>, String>((ref, cantiereId) async {
-      final client = ref.watch(cantiereWorklogApiClientProvider);
-      return client.getAssegnazioni(cantiereId);
+      final db = ref.watch(appDatabaseProvider);
+
+      Future<List<CantiereCrewAssignmentDto>> mirrored() async {
+        final rows = await (db.select(
+          db.cantiereCrewAssignments,
+        )..where((a) => a.cantiereId.equals(cantiereId))).get();
+        return rows
+            .map((r) => CantiereCrewAssignmentDto(id: r.id, userId: r.userId, isLead: r.isLead))
+            .toList();
+      }
+
+      // Availability: offline, the mirror answers immediately — no call, no waiting.
+      if (!ref.watch(isOnlineProvider)) return mirrored();
+
+      // Freshness: online, the live answer is the answer; only its failure falls back.
+      try {
+        return await ref.watch(cantiereWorklogApiClientProvider).getAssegnazioni(cantiereId);
+      } catch (e) {
+        debugPrint('cantiereCrewAssignments: live fetch failed, using the mirror ($e)');
+        return mirrored();
+      }
     });
 
 /// Whether the signed-in technician is the lead for the given cantiere, derived from
 /// [cantiereCrewAssignmentsProvider].
 ///
-/// False (never null) while loading, on error, or offline — this screen only ever needs a yes/no
-/// answer to decide which button set to render, and a lead-only affordance has no business
-/// blocking anyone else's — or a temporarily-unreachable lead's — plain single-button clock-in.
+/// False (never null) while loading or when the provider has no answer at all — this screen only
+/// ever needs a yes/no answer to decide which button set to render, and a lead-only affordance has
+/// no business blocking anyone else's plain single-button clock-in. Offline the provider answers
+/// from the Drift mirror, so being offline no longer reads as "not lead" by itself: a true lead
+/// stays lead without signal.
 final isLeadForCantiereProvider = Provider.autoDispose.family<bool, String>((ref, cantiereId) {
   // The internal database Guid, not currentUserProvider.id (the Zitadel OIDC sub) — assignment
   // rows' userId is the internal Guid, so comparing against the sub never matched anyone.
-  final userId = ref.watch(internalUserIdProvider).valueOrNull;
-  final assignments = ref.watch(cantiereCrewAssignmentsProvider(cantiereId)).valueOrNull;
+  final userId = ref.watch(internalUserIdProvider).value;
+  final assignments = ref.watch(cantiereCrewAssignmentsProvider(cantiereId)).value;
   if (userId == null || assignments == null) return false;
   return assignments.any((a) => a.userId == userId && a.isLead);
 });
@@ -513,9 +571,8 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   /// — unreachable through any real navigation today (every caller resolves a cantiereId first;
   /// see this file's own header comment) but kept honest rather than force-unwrapped, so a
   /// malformed deep link reads as "cantiere not found" instead of crashing.
-  CantieriData? get _effectiveCantiere => widget.cantiereId == null
-      ? null
-      : ref.read(cantiereByIdProvider(widget.cantiereId!)).valueOrNull;
+  CantieriData? get _effectiveCantiere =>
+      widget.cantiereId == null ? null : ref.read(cantiereByIdProvider(widget.cantiereId!)).value;
 
   @override
   Widget build(BuildContext context) {
@@ -540,8 +597,13 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 
     final localEventsAsync = ref.watch(todayCantiereEventsProvider);
     final active = ref.watch(cantiereActiveSessionProvider);
-    final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;
+    final serverLog = ref.watch(activeCantiereLogProvider).value;
     final hasPendingSync = ref.watch(cantiereHasPendingSyncProvider);
+    // The server compared this phone's clock with its own receipt instant when the batch landed
+    // and found them far apart. Only the server can make that comparison, so this is the only way
+    // the technician can hear about it. Advisory: the visits are already recorded, and the office
+    // reads the same flag in Correzioni.
+    final clockDisagreement = ref.watch(cantiereClockDisagreementProvider);
 
     // Watched here (not just read via `_effectiveCantiere`) so the screen rebuilds once this
     // resolves — the fixed-cantiere card below also needs its loading/error/not-found states,
@@ -567,6 +629,14 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ScreenHeader(title: 'Timbra cantiere', showBack: true),
+            if (clockDisagreement != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
+                child: ClockDisagreementNote(
+                  seconds: clockDisagreement,
+                  onDismiss: () => ref.read(cantiereClockDisagreementProvider.notifier).dismiss(),
+                ),
+              ),
             Expanded(
               child: localEventsAsync.hasError
                   ? _ErrorBody(
@@ -607,7 +677,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   /// null (disabled) while loading, while the cantiere hasn't resolved, or while "Seleziona
   /// squadra" is chosen but nobody's been picked yet.
   VoidCallback? _primaryStartAction(AsyncValue<CantieriData?> fixedCantiereAsync) {
-    if (_isLoading || fixedCantiereAsync.valueOrNull == null) return null;
+    if (_isLoading || fixedCantiereAsync.value == null) return null;
     switch (_chiTimbra) {
       case _ChiTimbra.io:
         return _handleStartCantiere;
@@ -657,7 +727,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 
     final cantiere = _effectiveCantiere;
     if (cantiere == null) return;
-    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).valueOrNull ?? [];
+    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).value ?? [];
     final selected = await openTeammatePickerSheet(context, assignments: assignments);
     if (!mounted) return;
     setState(() => _squadraSelection = selected);
@@ -672,7 +742,8 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     // Asked before the spinner goes up, not underneath it: a system dialog appearing over a
     // half-started clock-in reads as the app malfunctioning, and the technician cannot tell whether
     // their timbratura went through while they decide.
-    if (!await confirmGpsPurpose(context, ref)) return;
+    await requestGpsPermission(ref);
+    if (!mounted) return;
 
     setState(() {
       _isLoading = true;
@@ -686,9 +757,9 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 
     try {
       final client = ref.read(cantiereWorklogApiClientProvider);
-      // Online-first: the only path that carries the full rich-field set (see this file's own
-      // header comment).
-      await client.startCantiere(
+      // Online-first: the ordinary route, and the one that answers synchronously. The offline
+      // fallback below carries the same rich fields (see this file's own header comment).
+      final clockDisagreement = await client.startCantiere(
         StartCantiereRequest(
           cantiereId: cantiere.id,
           customerId: customerId,
@@ -700,8 +771,17 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
           arrivalLatitude: location?.lat,
           arrivalLongitude: location?.lng,
           weatherConditions: _weatherConditions,
+          // The tap is the event: the server records this instant and measures the gap from its
+          // own receipt time, so a phone with a wrong clock produces a flagged row rather than a
+          // silently shifted one.
+          deviceUtc: DateTime.now().toUtc(),
         ),
       );
+      // The answer to this very request: the server measured this phone against its own receipt
+      // instant and only fills the value in when the two disagreed. Nothing to compare here.
+      if (clockDisagreement != null) {
+        ref.read(cantiereClockDisagreementProvider.notifier).record(clockDisagreement);
+      }
       if (mounted) {
         await ref.read(activeCantiereLogProvider.notifier).refresh();
         setState(() => _isLoading = false);
@@ -724,9 +804,10 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       }
     } on DioException catch (e) {
       if (isOfflineFailure(e)) {
-        // Not reachable — queue locally instead of failing the punch outright. The batch upsert
-        // this syncs through only carries description among the rich fields (see
-        // cantiere_worklog_api_client.dart); the rest are captured for the online path only.
+        // Not reachable — queue locally instead of failing the punch outright. Since schema 51 the
+        // batch upsert this syncs through carries the clock-in rich fields too (see
+        // cantiere_worklog_api_client.dart), so the offline path no longer submits a poorer record
+        // than the online one.
         await ref
             .read(cantiereSessionRepositoryProvider)
             .addEvent(
@@ -739,6 +820,10 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
               description: _description,
               latitude: location?.lat,
               longitude: location?.lng,
+              workOrderNumber: _workOrderNumber,
+              equipmentUsed: _equipmentUsed,
+              teamSize: _teamSize,
+              weatherConditions: _weatherConditions,
             );
         unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
         if (mounted) {
@@ -776,7 +861,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   Future<void> _handleTuttaLaSquadra() async {
     final cantiere = _effectiveCantiere;
     if (cantiere == null) return;
-    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).valueOrNull ?? [];
+    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).value ?? [];
     if (assignments.isEmpty) return;
     await _handleBatchStart(assignments.map((a) => a.userId).toList());
   }
@@ -791,7 +876,8 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       setState(() => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
       return;
     }
-    if (!await confirmGpsPurpose(context, ref)) return;
+    await requestGpsPermission(ref);
+    if (!mounted) return;
 
     setState(() {
       _isLoading = true;
@@ -908,7 +994,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                         child: Consumer(
                           builder: (context, ref, _) {
                             final name =
-                                ref.watch(colleagueNameProvider(f.userId)).valueOrNull ?? f.userId;
+                                ref.watch(colleagueNameProvider(f.userId)).value ?? f.userId;
                             return Text(
                               '$name: $reason',
                               style: TextStyle(
@@ -962,32 +1048,15 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 // neither screen has to reimplement the GPS-purpose gating, offline-fallback detection, or error
 // humanising the check-in side already had right.
 
-/// States what the coordinates are for, before the OS asks for them.
+/// Raises the system location dialog now, if it would appear at all, before the spinner goes up.
 ///
-/// Returns false only when the technician declines the *explanation*. Declining here cancels the
-/// timbratura rather than clocking in without a position, because on a cantiere the arrival and
-/// departure coordinates are the point: a site presence record with no location is not the same
-/// record, and silently downgrading it would hide that from both the technician and the office.
-///
-/// Returns true when no dialog would appear at all — permission already held, already refused
-/// permanently, or the setting turned off. In those cases the existing null-position path is the
-/// honest one and there is nothing to explain.
-Future<bool> confirmGpsPurpose(BuildContext context, WidgetRef ref) async {
-  if (!await ref.read(locationServiceProvider).willPromptForPermission()) return true;
-  if (!context.mounted) return false;
-
-  return askPermissionPurpose(
-    context,
-    icon: LucideIcons.mapPin,
-    titolo: 'Timbratura di cantiere',
-    motivo:
-        'Registriamo dove sei quando entri e quando esci dal cantiere. Serve a dimostrare la '
-        'tua presenza in cantiere, per la sicurezza e per le ore. Due punti, non un percorso.',
-    senzaDiEsso:
-        'Senza posizione la timbratura di cantiere non viene registrata. La timbratura normale '
-        'della giornata, nella scheda Timbra, funziona senza GPS.',
-    cta: 'Consenti la posizione',
-  );
+/// The OS dialog is the only ask — there is no in-app explanation first. Whatever the answer, the
+/// flow continues: a refusal leaves the existing null-position path to handle it, exactly as for a
+/// permission that was already refused permanently or a setting turned off.
+Future<void> requestGpsPermission(WidgetRef ref) async {
+  final service = ref.read(locationServiceProvider);
+  if (!await service.willPromptForPermission()) return;
+  await service.requestPermission();
 }
 
 /// A network error the device cannot reach the server to answer — as opposed to one the server
@@ -1273,6 +1342,12 @@ class _CheckInBody extends ConsumerWidget {
             const SizedBox(height: 16),
           ],
 
+          // Lead-only: scan the crew's rotating badge QRs at the cantiere. The server re-checks.
+          if (isLead && cantiereId != null) ...[
+            _ScanBadgeButton(cantiereId: cantiereId!),
+            const SizedBox(height: 16),
+          ],
+
           AppButton(
             label: 'Inizia timbratura',
             icon: const Icon(LucideIcons.mapPin),
@@ -1491,7 +1566,7 @@ class _ActiveSessionBody extends ConsumerWidget {
     final ticketId = serverLog?.ticketId ?? local.ticketId;
     final ticketLabel = ticketId == null
         ? null
-        : ref.watch(ticketByIdProvider(ticketId)).valueOrNull?.title;
+        : ref.watch(ticketByIdProvider(ticketId)).value?.title;
 
     final closedTodayHours = ref.watch(cantiereTodayHoursProvider(local.cantiereId));
 
@@ -1568,6 +1643,16 @@ class _ActiveSessionBody extends ConsumerWidget {
             ),
           ),
 
+          // A permanent refusal: the server said no and the automatic sweep has stopped retrying,
+          // so this is the one place the technician can learn why the punch is not arriving.
+          if (ref.watch(cantiereSyncErrorProvider) case final syncError?) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              syncError,
+              style: TextStyle(fontSize: 12, height: 1.35, color: context.colors.red),
+            ),
+          ],
+
           const SizedBox(height: 16),
 
           Center(
@@ -1589,6 +1674,12 @@ class _ActiveSessionBody extends ConsumerWidget {
 
           const SizedBox(height: 16),
 
+          // A lead who has clocked in must still be able to scan the crew's badges.
+          if (ref.watch(isLeadForCantiereProvider(local.cantiereId))) ...[
+            _ScanBadgeButton(cantiereId: local.cantiereId),
+            const SizedBox(height: 16),
+          ],
+
           AppButton.danger(
             label: 'Timbra uscita cantiere',
             icon: const Icon(LucideIcons.logOut),
@@ -1596,6 +1687,22 @@ class _ActiveSessionBody extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Lead-only entry to the continuous badge scanner (the server re-checks the lead role).
+class _ScanBadgeButton extends StatelessWidget {
+  const _ScanBadgeButton({required this.cantiereId});
+
+  final String cantiereId;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppButton.secondary(
+      label: 'Scansiona badge',
+      icon: const Icon(LucideIcons.scanLine),
+      onPressed: () => context.push(AppRoutes.cantiereBadgeScanPath(cantiereId)),
     );
   }
 }

@@ -1,4 +1,5 @@
 // dart format width=100
+import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -214,6 +215,68 @@ void main() {
       expect(uploadedForTicket, isEmpty);
     });
 
+    test('a connection that could not be opened leaves the row queued, not failed — the server '
+        'never saw the file, so the reconnect sweep must still send it', () async {
+      when(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/tickets/ticket-5/attachments'),
+          type: DioExceptionType.connectionError,
+        ),
+      );
+
+      final outcome = await queue.upload(
+        ticketId: 'ticket-5',
+        localPath: '/tmp/foto5.jpg',
+        fileName: 'foto5.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 1024,
+        isOnline: true,
+      );
+
+      expect(outcome.isQueuedOffline, isTrue);
+
+      final row = await repo.getById(outcome.localId);
+      expect(row!.state, 'pendingSync');
+      expect(row.error, isNull);
+      expect(uploadedForTicket, isEmpty);
+    });
+
+    test('a timeout keeps the row failed — the server may have stored the file, and there is no '
+        'idempotency key to make a blind resend safe', () async {
+      when(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/tickets/ticket-6/attachments'),
+          type: DioExceptionType.receiveTimeout,
+        ),
+      );
+
+      final outcome = await queue.upload(
+        ticketId: 'ticket-6',
+        localPath: '/tmp/foto6.jpg',
+        fileName: 'foto6.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 1024,
+        isOnline: true,
+      );
+
+      expect(outcome.isFailed, isTrue);
+      expect((await repo.getById(outcome.localId))!.state, 'failed');
+    });
+
     test(
       'processAll does NOT auto-retry a failed attachment — no idempotency key to make a resend safe',
       () async {
@@ -307,6 +370,71 @@ void main() {
       final row = await repo.getById(firstOutcome.localId);
       expect(row!.state, 'submitted');
       expect(row.serverAttachmentId, 'srv-att-5');
+    });
+  });
+
+  group('TicketAttachmentUploadQueue.recoverInterrupted — the app was killed mid-upload', () {
+    test('a row left in submitting is surfaced as failed, and never auto-resent', () async {
+      // `submitting` only ever holds during an attempt, so a row still in it at startup means the
+      // process died before the response arrived. Nothing else reads that state: processAll
+      // sweeps pendingSync only, and the Allegati tab would show "Caricamento…" forever.
+      await repo.insert(
+        id: 'killed-1',
+        ticketId: 'ticket-k',
+        localPath: '/tmp/killed.jpg',
+        fileName: 'killed.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 10,
+        state: PendingTicketAttachmentState.submitting,
+      );
+
+      final surfaced = await queue.recoverInterrupted();
+      expect(surfaced, 1);
+
+      final row = (await repo.getById('killed-1'))!;
+      expect(row.state, 'failed');
+      // Rendered verbatim under "Caricamento non riuscito", so it has to be a sentence.
+      expect(row.error, contains('Caricamento interrotto'));
+
+      // Manual retry by design: the killed request may have reached the server, and the endpoint
+      // has no idempotency key to make an automatic resend safe.
+      await queue.processAll();
+      verifyNever(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      );
+    });
+
+    test('an untouched pendingSync row is still uploaded afterwards', () async {
+      await repo.insert(
+        id: 'waiting-1',
+        ticketId: 'ticket-k',
+        localPath: '/tmp/waiting.jpg',
+        fileName: 'waiting.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 10,
+        state: PendingTicketAttachmentState.pendingSync,
+      );
+      when(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const TicketAttachmentUploadResponse(allegatoId: 'srv-1', contentUrl: '/content/1'),
+      );
+
+      expect(await queue.recoverInterrupted(), 0);
+      await queue.processAll();
+
+      expect((await repo.getById('waiting-1'))!.state, 'submitted');
     });
   });
 

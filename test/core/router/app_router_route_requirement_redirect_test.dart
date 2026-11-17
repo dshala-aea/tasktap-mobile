@@ -1,12 +1,11 @@
 // Integration test for buildRouter's `redirect` callback applying the `_routeRequirements`
-// route-requirement guard (lib/core/router/app_router.dart) to the admin schedule routes.
+// route-requirement guard (lib/core/router/app_router.dart) to the admin routes.
 //
 // Before this guard existed, a technician who navigated straight to an admin route (deep link,
 // restored nav state, guessed URL) would simply render it — authorization only ever hid the tile.
-// This asserts the actual regression this task closes: visiting the admin schedule list's full
-// matched-location path (`/altro/pianificazioni`, traced from the route tree — see
-// app_router.dart's `_routeRequirements` doc comment) while the `pianificazione.schedule.write`
-// capability is denied lands on ForbiddenScreen, not AdminScheduleListScreen.
+// These assert the actual regression this task closes: a route whose capability is denied lands on
+// ForbiddenScreen, not the admin screen, while the matching `.read` holder can still open the list
+// and is stopped only at write leaves (`nuovo`/`nuova`/`modifica`).
 //
 // Mirrors test/presentation/app_shell_test.dart's proven scaffolding for pumping the real
 // TaskTapApp with a working router (mock auth repo, in-memory Drift DB, stubbed sync Dio) rather
@@ -26,6 +25,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/kiosk/kiosk_lock_service.dart';
+import 'package:tasktap_mobile/core/widgets/bottom_nav.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
@@ -37,9 +37,19 @@ import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/admin/customers/admin_customer_form_screen.dart';
 import 'package:tasktap_mobile/features/admin/magazzini/admin_magazzino_list_screen.dart';
+import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_form_screen.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_list_screen.dart';
 import 'package:tasktap_mobile/features/altro/forbidden_screen.dart';
+import 'package:tasktap_mobile/features/dashboard/storico_screen.dart';
+import 'package:tasktap_mobile/features/approvazioni/approvazioni_screen.dart';
 import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/ai_copilot_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/ai_report/ai_sign_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/rapportino_form_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/rapportini_list_screen.dart';
+import 'package:tasktap_mobile/features/smart_working/smart_working_form_screen.dart';
+import 'package:tasktap_mobile/features/ticket/new_ticket_form_screen.dart';
+import 'package:tasktap_mobile/features/ticket/ticket_list_screen.dart';
 import 'package:tasktap_mobile/main.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/kiosk_providers.dart';
@@ -80,7 +90,7 @@ Widget _buildApp({
   final kioskStore = MockKioskStore();
   when(() => kioskStore.read()).thenAnswer((_) async => null);
 
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
@@ -146,14 +156,43 @@ void main() {
   });
 
   testWidgets(
-    'denied pianificazione.schedule.write capability redirects /altro/pianificazioni to /forbidden',
+    'read-only pianificazione.schedule.read can open /altro/pianificazioni',
     (tester) async {
       final cached = Entitlement(
         features: const {'pianificazione'},
-        // Module is offered but the finer-grained write capability is NOT held — the admin
-        // schedule surface must still be unreachable (this is exactly why the guard checks the
-        // capability, not just the module).
+        // The dispatcher can read the schedule surface without holding its write capability;
+        // write actions are hidden/gated further down. The base requirement is `.read`.
         capabilities: const {'pianificazione.schedule.read'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 9, 17),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/pianificazioni');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsNothing);
+      expect(find.byType(AdminScheduleListScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'without pianificazione.schedule.read /altro/pianificazioni redirects to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'pianificazione'},
+        // Module offered, but neither the read nor write capability — the route guard checks the
+        // capability, not just the module.
+        capabilities: const {},
         seatType: 'office',
         fetchedAt: DateTime.utc(2026, 9, 17),
       );
@@ -177,11 +216,38 @@ void main() {
   );
 
   testWidgets(
-    'held pianificazione.schedule.write capability reaches the admin schedule list, not /forbidden',
+    'read-only pianificazione.schedule.read is redirected from /altro/pianificazioni/nuova',
     (tester) async {
       final cached = Entitlement(
         features: const {'pianificazione'},
-        capabilities: const {'pianificazione.schedule.write'},
+        capabilities: const {'pianificazione.schedule.read'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 9, 17),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/pianificazioni/nuova');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'held pianificazione.schedule.read and .write reach the admin schedule list, not /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'pianificazione'},
+        capabilities: const {'pianificazione.schedule.read', 'pianificazione.schedule.write'},
         seatType: 'office',
         fetchedAt: DateTime.utc(2026, 9, 17),
       );
@@ -204,10 +270,65 @@ void main() {
     },
   );
 
+  testWidgets(
+    'denied presenze.absence.approve redirects /altro/approvazioni to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'presenze'},
+        capabilities: const {'presenze.absence.read'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 11, 3),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/approvazioni');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+      expect(find.byType(ApprovazioniScreen), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'held presenze.absence.approve reaches the approval queue, not /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'presenze'},
+        capabilities: const {'presenze.absence.approve'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 11, 3),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/approvazioni');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsNothing);
+      expect(find.byType(ApprovazioniScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
   // Proves the permission-gate sweep's new table rows use the same generic mechanism as
   // pianificazione above, not something pianificazione-specific — one capability-gated admin
   // subtree (magazzino.warehouse.read) and one module-gated operational route (cantieri).
-
   testWidgets(
     'denied magazzino.warehouse.read capability redirects /altro/magazzino/magazzini to /forbidden',
     (tester) async {
@@ -322,4 +443,521 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  // Every write leaf under an admin section that mixes read and write: a seat holding the `.read`
+  // capability but not its `.write` must be stopped at the guard, not admitted to a form the
+  // button-level CapabilityGate would have hidden. One read-only entitlement exercises every path
+  // through the shared harness above; `nuova` is included because sedi and pianificazioni use the
+  // feminine segment.
+  testWidgets('a read-only seat is redirected from every admin write leaf', (tester) async {
+    final cached = Entitlement(
+      features: const {'clienti', 'contratti', 'team', 'magazzino', 'cantieri'},
+      capabilities: const {
+        'clienti.location.read',
+        'contratti.contract.read',
+        'team.squadra.read',
+        'magazzino.article.read',
+        'magazzino.warehouse.read',
+        'cantieri.cantiere.read',
+      },
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    final router = GoRouter.of(context);
+
+    const paths = [
+      '/altro/sedi/nuova',
+      '/altro/contratti/nuovo',
+      '/altro/contratti/abc123/modifica',
+      '/altro/squadre/nuovo',
+      '/altro/squadre/abc123/modifica',
+      '/altro/magazzino/nuovo',
+      '/altro/magazzino/abc123/modifica',
+      '/altro/magazzino/magazzini/nuovo',
+      '/altro/magazzino/magazzini/abc123/modifica',
+      '/altro/cantieri/nuovo',
+      '/altro/cantieri/abc123/modifica',
+    ];
+
+    for (final path in paths) {
+      router.go(path);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+      expect(find.byType(ForbiddenScreen), findsOneWidget, reason: path);
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  // The smart-working form is a real route, not just a `context.push` the list makes and hopes
+  // for: `/altro/smart-working/nuovo` is registered as a child of the list (app_router.dart). Until
+  // it was, the list's FAB threw. Deleting that `routes:` entry must fail the positive case below.
+  testWidgets(
+    'holder of the presenze module reaches /altro/smart-working/nuovo, not /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'presenze'},
+        capabilities: const {},
+        seatType: 'field',
+        fetchedAt: DateTime.utc(2026, 10, 28),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/smart-working/nuovo');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsNothing);
+      expect(find.byType(SmartWorkingFormScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'without the presenze module /altro/smart-working/nuovo redirects to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'interventi'},
+        capabilities: const {},
+        seatType: 'field',
+        fetchedAt: DateTime.utc(2026, 10, 28),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/smart-working/nuovo');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+      expect(find.byType(SmartWorkingFormScreen), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  // /ticket is module-gated for the list, but its only write leaf — the create form at
+  // /ticket/new — must not be reachable by deep link on module entitlement alone.
+  testWidgets(
+    'the interventi module without interventi.ticket.write redirects /ticket/new to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'interventi'},
+        capabilities: const {},
+        seatType: 'field',
+        fetchedAt: DateTime.utc(2026, 11, 9),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/ticket/new');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+      expect(find.byType(NewTicketFormScreen), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'holding interventi.ticket.write reaches /ticket/new, not /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'interventi'},
+        capabilities: const {'interventi.ticket.write'},
+        seatType: 'field',
+        fetchedAt: DateTime.utc(2026, 11, 9),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/ticket/new');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsNothing);
+      expect(find.byType(NewTicketFormScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  // Prodotti has no prodotti.* capability, so its write leaves are closed with the existing
+  // contratti.contract.write proxy while reads stay on the module.
+  testWidgets('prodotti write leaves redirect to /forbidden without contract write', (
+    tester,
+  ) async {
+    final cached = Entitlement(
+      features: const {'prodotti', 'contratti'},
+      capabilities: const {'contratti.contract.read'},
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
+    for (final path in const ['/altro/prodotti/nuovo', '/altro/prodotti/abc123/modifica']) {
+      router.go(path);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+      expect(find.byType(ForbiddenScreen), findsOneWidget, reason: path);
+      expect(find.byType(AdminProdottoFormScreen), findsNothing, reason: path);
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('holding contract write reaches the prodotti write leaves', (tester) async {
+    final cached = Entitlement(
+      features: const {'prodotti', 'contratti'},
+      capabilities: const {'contratti.contract.read', 'contratti.contract.write'},
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final router = GoRouter.of(tester.element(find.byType(Scaffold).first));
+    for (final path in const ['/altro/prodotti/nuovo', '/altro/prodotti/abc123/modifica']) {
+      router.go(path);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+      expect(find.byType(ForbiddenScreen), findsNothing, reason: path);
+      expect(find.byType(AdminProdottoFormScreen), findsOneWidget, reason: path);
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the rapportini editor requires rapportini.report.write', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/editor/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsOneWidget);
+    expect(find.byType(RapportinoFormScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('holding rapportini.report.write reaches the rapportini editor', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {'rapportini.report.write'},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/editor/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsNothing);
+    expect(find.byType(RapportinoFormScreen), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the rapportini view stays read-open on the module', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/view/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  // The AI Copilot drafts a report and the signing step completes one: both are write surfaces
+  // under `/altro/rapportini` and must be listed before the broader module entry, or a read-open
+  // module seat would reach them by deep link.
+  testWidgets('the rapportini copilot requires rapportini.report.write', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/altro/rapportini/copilot');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsOneWidget);
+    expect(find.byType(AiCopilotScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('holding rapportini.report.write reaches the copilot', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {'rapportini.report.write'},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go('/altro/rapportini/copilot');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsNothing);
+    expect(find.byType(AiCopilotScreen), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the rapportini signing route requires rapportini.report.write', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/firma/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsOneWidget);
+    expect(find.byType(AiSignScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('holding rapportini.report.write reaches the signing route', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {'rapportini.report.write'},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    GoRouter.of(tester.element(find.byType(Scaffold).first)).go(
+      '/altro/rapportini/firma/abc123',
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsNothing);
+    expect(find.byType(AiSignScreen), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  // ── Nav swap: Rapportini is shell branch 1, /ticket is a pushed full-screen route ──
+  //
+  // The ticket list used to be branch 1, so these three pin the two things that could silently
+  // regress: the list still renders at its old path, and it no longer renders inside the shell.
+  testWidgets('direct /ticket renders the ticket list without the shell', (tester) async {
+    final cached = Entitlement(
+      features: const {'interventi', 'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 11),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/ticket');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(TicketListScreen), findsOneWidget);
+    expect(
+      find.byType(AppBottomNav),
+      findsNothing,
+      reason: '/ticket is now a root-level full-screen route, not a shell branch',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('direct /altro/rapportini renders the report list', (tester) async {
+    final cached = Entitlement(
+      features: const {'interventi', 'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 11),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/altro/rapportini');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(RapportiniListScreen), findsOneWidget);
+    expect(
+      tester.widget<AppBottomNav>(find.byType(AppBottomNav)).currentIndex,
+      equals(1),
+      reason: 'Rapportini now owns shell branch 1',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('unentitled interventi redirects /ticket to /forbidden', (tester) async {
+    final cached = Entitlement(
+      features: const {'rapportini'},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 11),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/ticket');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsOneWidget);
+    expect(find.byType(TicketListScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('/storico renders StoricoScreen without module gating', (tester) async {
+    final cached = Entitlement(
+      features: const {},
+      capabilities: const {},
+      seatType: 'field',
+      fetchedAt: DateTime.utc(2026, 11, 11),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/storico');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(StoricoScreen), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
 }

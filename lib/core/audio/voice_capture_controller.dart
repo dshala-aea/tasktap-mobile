@@ -1,0 +1,220 @@
+// dart format width=100
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+
+import '../../data/ai/ai_api_client.dart';
+import '../crash_reporting/crash_reporter.dart';
+import 'audio_recorder_service.dart';
+import 'pending_recording_store.dart';
+
+/// A finished recording that holds no audio: the file is a container header, not a take.
+///
+/// Distinct from a short recording on purpose. A take under a second is the technician's to fix
+/// ("parla un po' più a lungo"); an empty one is the recorder's, and no retry of the same words
+/// would change it. See [minCapturedBytes] for why iOS can produce one silently.
+class EmptyRecordingException implements Exception {
+  const EmptyRecordingException(this.bytes);
+
+  /// Size of the dropped file, in bytes — logged, so a handset with no console still leaves a trail.
+  final int bytes;
+
+  @override
+  String toString() => 'La registrazione è vuota ($bytes byte).';
+}
+
+enum RecordingStartResult {
+  started,
+  consentRequired,
+  notSignedIn,
+  permissionDenied,
+  permissionPermanentlyDenied,
+}
+
+/// Orchestrates one voice update: consent, then microphone permission, then record, persist,
+/// upload. Every refusal is a returned [RecordingStartResult], never an exception.
+class VoiceCaptureController {
+  VoiceCaptureController({
+    required this.recorder,
+    required this.permissions,
+    required this.store,
+    required this.consentAccepted,
+    required this.currentUserId,
+    required Future<AiVoiceCapture> Function(File audio, String idempotencyKey) upload,
+  }) : _uploader = upload;
+
+  final AudioRecorderService recorder;
+  final MicPermissionService permissions;
+  final PendingRecordingStore store;
+  final Future<bool> Function() consentAccepted;
+
+  /// The signed-in user, or null when signed out (recording is then refused).
+  final String? Function() currentUserId;
+  final Future<AiVoiceCapture> Function(File audio, String idempotencyKey) _uploader;
+
+  bool get isRecording => _recording;
+
+  /// Emits the saved recording when it ended without [stop] — the 5-minute hard stop or an
+  /// interruption by another app/call. [stop] returns the same value for a manual stop.
+  Stream<PendingRecording> get completed => _completed.stream;
+
+  final _completed = StreamController<PendingRecording>.broadcast();
+  StreamSubscription<Duration>? _sub;
+  String? _ticketId;
+  String? _userId;
+  bool _recording = false;
+  Future<PendingRecording>? _finishing;
+
+  /// The [_finishing] a [cancel] abandoned: its result is deleted, never emitted on [completed].
+  Future<PendingRecording>? _discarded;
+
+  Future<RecordingStartResult> start({String? ticketId}) async {
+    // A recording still running here belongs to a screen that is gone (a screen only calls start
+    // when it is not recording itself): never adopt it, it carries the old ticket id. Release it by
+    // the screens' own rule: a ticket-bound one is stopped and KEPT (offered again on that ticket),
+    // a ticketless one could never be offered again, so it is cancelled and deleted.
+    if (_recording) {
+      if (_ticketId != null) {
+        try {
+          await _finish();
+        } catch (_) {
+          // The recorder may already have ended; whatever it saved stays in the store.
+        }
+      } else {
+        await cancel();
+      }
+    }
+    // A recording still being saved (5-minute stop, interruption) finishes before the recorder restarts.
+    final ending = _finishing;
+    if (ending != null) await ending.then((_) {}, onError: (_) {});
+    if (currentUserId() == null) return RecordingStartResult.notSignedIn;
+    if (!await consentAccepted()) return RecordingStartResult.consentRequired;
+    switch (await permissions.request()) {
+      case MicPermission.denied:
+        return RecordingStartResult.permissionDenied;
+      case MicPermission.permanentlyDenied:
+        return RecordingStartResult.permissionPermanentlyDenied;
+      case MicPermission.granted:
+        break;
+    }
+    _ticketId = ticketId;
+    _userId = currentUserId();
+    await recorder.start();
+    _recording = true;
+    _finishing = null;
+    _sub = recorder.elapsed.listen((d) {
+      if (d >= maxRecordingLength) _finishAndNotify();
+    }, onDone: _finishAndNotify);
+    return RecordingStartResult.started;
+  }
+
+  /// Abandons the recording in progress: stops the recorder, closes its subscription, resets the
+  /// recording state and deletes the file it produced. Nothing is saved and nothing is emitted on
+  /// [completed]. A recording that is already ENDING (the 5-minute stop or an interruption fired, or a
+  /// [stop] is in flight) is still abandoned: once it is saved it is deleted again and not emitted.
+  /// A no-op when idle or once a recording has been fully saved.
+  Future<void> cancel() async {
+    if (!_recording) {
+      final ending = _finishing;
+      if (ending == null) return;
+      _discarded = ending;
+      try {
+        await store.delete(await ending);
+      } catch (_) {
+        // The recorder failed while ending: nothing was saved, so there is nothing to delete.
+      }
+      return;
+    }
+    _recording = false;
+    final sub = _sub;
+    _sub = null;
+    _finishing = null;
+    // Not awaited: nothing depends on the cancel completing.
+    unawaited(sub?.cancel());
+    try {
+      final file = await recorder.stop();
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // The recorder may already have ended (interruption); there is nothing to release.
+    }
+  }
+
+  /// Stops and persists the recording (file + idempotency key) so it survives a failed upload.
+  Future<PendingRecording> stop() => _finish();
+
+  void _finishAndNotify() {
+    if (!_recording) return;
+    final ending = _finish();
+    // A [cancel] that arrived while this was being saved has deleted it again: not emitted.
+    ending.then(
+      (r) {
+        if (!identical(_discarded, ending)) _completed.add(r);
+      },
+      onError: (Object e, StackTrace st) {
+        if (!identical(_discarded, ending)) _completed.addError(e, st);
+      },
+    );
+  }
+
+  Future<PendingRecording> _finish() {
+    final inflight = _finishing;
+    if (inflight != null) return inflight;
+    if (!_recording) return Future.error(StateError('Nessuna registrazione in corso.'));
+    late final Future<PendingRecording> ending;
+    ending = () async {
+      try {
+        _recording = false;
+        await _sub?.cancel();
+        _sub = null;
+        final file = await recorder.stop();
+        // Weighed before it is stored or offered: a header-only file is a broken capture, and the
+        // server's verdict on it (`audio_too_short`) would send the technician back to talk longer
+        // into a microphone that never recorded in the first place.
+        // Zero when the recorder never even created the file (a sandbox that could not be written),
+        // which is still an empty take and must read as one instead of as a FileSystemException.
+        final bytes = await file.exists() ? await file.length() : 0;
+        if (bytes < minCapturedBytes) {
+          debugPrint('Voice capture empty: $bytes bytes, dropped before upload');
+          // The byte count is the only evidence a microphone that never recorded leaves behind, and
+          // `debugPrint` is compiled out of release builds — so the trail this class advertises has
+          // to come from here. Reported, not thrown-and-forgotten: the technician only sees a toast.
+          unawaited(CrashReporter.instance.captureException(EmptyRecordingException(bytes)));
+          if (await file.exists()) await file.delete();
+          throw EmptyRecordingException(bytes);
+        }
+        return await store.add(file, userId: _userId!, ticketId: _ticketId);
+      } finally {
+        // Only while it is in flight: a later [cancel] must never delete a recording that was
+        // already saved and handed to its caller.
+        if (identical(_finishing, ending)) _finishing = null;
+      }
+    }();
+    return _finishing = ending;
+  }
+
+  /// Pending recordings of the current user only.
+  Future<List<PendingRecording>> pendingForCurrentUser() async {
+    final u = currentUserId();
+    return u == null ? const [] : store.list(userId: u);
+  }
+
+  /// Stores the recording with its OWN key and KEEPS the local files, so the operator's own voice
+  /// can be the turn's input. The server replays a repeated key (same `audioRef`, no second
+  /// object), so this is safe to repeat after a restart. The caller deletes the recording only once
+  /// the turn built from it was accepted.
+  Future<AiVoiceCapture> capture(PendingRecording pending) async {
+    if (pending.userId != currentUserId()) {
+      throw StateError('Questa registrazione appartiene a un altro utente.');
+    }
+    return _uploader(pending.file, pending.idempotencyKey);
+  }
+
+  /// [capture], then delete the local files. On any failure they are kept. Prefer [capture] when
+  /// the result still has to reach the server as a turn.
+  Future<AiVoiceCapture> upload(PendingRecording pending) async {
+    final result = await capture(pending);
+    await store.delete(pending);
+    return result;
+  }
+}

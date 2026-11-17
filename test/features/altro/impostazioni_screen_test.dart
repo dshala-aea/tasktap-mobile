@@ -9,17 +9,25 @@
 //   4. App section toggle rows are present.
 //   5. Account section toggle row is present.
 //   6. Toggling a toggle flips its state.
-//   7. Logout row triggers confirm dialog.
+//   7. Last sync row renders "Mai" before the first sync and a relative label after one.
+//   8. Logout row triggers confirm dialog.
 
 import 'dart:async';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
+import 'package:tasktap_mobile/data/auth/session_recovery_providers.dart';
+import 'package:tasktap_mobile/data/auth/unsent_work_counter.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/altro/impostazioni_screen.dart';
@@ -38,9 +46,22 @@ AuthUser _fakeUser({String? displayName}) => AuthUser(
   expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
 );
 
-Widget _buildScreen(MockAuthRepository repo) {
-  return ProviderScope(
-    overrides: [authRepositoryProvider.overrideWithValue(repo)],
+Widget _buildScreen(MockAuthRepository repo, AppDatabase db, {bool tenantGpsEnabled = true}) {
+  return ProviderScope(retry: (_, _) => null, 
+    overrides: [
+      tenantGpsEnabledProvider.overrideWithValue(tenantGpsEnabled),
+      authRepositoryProvider.overrideWithValue(repo),
+      // The logout row now counts unsent work before it shows any dialog; an in-memory DB keeps
+      // the widget test off the real app database file.
+      unsentWorkCounterProvider.overrideWithValue(
+        UnsentWorkCounter(db: db, countVoiceRecordings: () async => 0),
+      ),
+      // The "Preferenze notifiche" entry is behind a CapabilityGate; nothing cached = hidden.
+      cachedEntitlementProvider.overrideWith((ref) async => null),
+      // The "Ultima sincronizzazione" row reads the sync cursor; without this it would build the
+      // real file-backed database and fail on a platform channel in the test host.
+      appDatabaseProvider.overrideWithValue(db),
+    ],
     child: const MaterialApp(home: ImpostazioniScreen()),
   );
 }
@@ -52,19 +73,22 @@ void main() {
 
   late MockAuthRepository repo;
   late StreamController<AuthUser?> authStream;
+  late AppDatabase db;
 
   setUp(() {
+    db = AppDatabase(NativeDatabase.memory());
     repo = MockAuthRepository();
     authStream = StreamController<AuthUser?>.broadcast();
     when(() => repo.authStateChanges).thenAnswer((_) => authStream.stream);
   });
 
   tearDown(() async {
-    authStream.close();
+    await db.close();
+    await authStream.close();
   });
 
-  Future<void> pump(WidgetTester tester, {AuthUser? user}) async {
-    await tester.pumpWidget(_buildScreen(repo));
+  Future<void> pump(WidgetTester tester, {AuthUser? user, bool tenantGpsEnabled = true}) async {
+    await tester.pumpWidget(_buildScreen(repo, db, tenantGpsEnabled: tenantGpsEnabled));
     await tester.pump();
     authStream.add(user);
     await tester.pump();
@@ -91,6 +115,29 @@ void main() {
     await pump(tester, user: user);
 
     expect(find.text('mario@tasktap.io'), findsAtLeast(1));
+    await drain(tester);
+  });
+
+  testWidgets('GPS row is disabled and explained when the tenant turns it off', (tester) async {
+    await pump(tester, tenantGpsEnabled: false);
+
+    final scroller = find.byType(CustomScrollView);
+    await tester.dragUntilVisible(
+      find.text('Geolocalizzazione'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
+    expect(find.text("Disattivata dall'azienda"), findsOneWidget);
+
+    await tester.dragUntilVisible(
+      find.textContaining('tracciamento continuo'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
+    expect(find.textContaining('tracciamento continuo'), findsOneWidget);
+
     await drain(tester);
   });
 
@@ -123,7 +170,7 @@ void main() {
     expect(find.text('Pianificazione'), findsOneWidget);
     expect(find.text('Licenza e abbonamento'), findsOneWidget);
     expect(find.text('Ore e presenze'), findsOneWidget);
-    expect(find.text('Rapportini'), findsOneWidget);
+    expect(find.text('Rapporti di intervento'), findsOneWidget);
     expect(find.text('Menzioni'), findsOneWidget);
     expect(find.text('Ticket in ritardo'), findsOneWidget);
     await drain(tester);
@@ -219,7 +266,44 @@ void main() {
     await drain(tester);
   });
 
-  // ── 7. Logout row triggers dialog ─────────────────────────────────────────
+  // ── 7. Last sync row ───────────────────────────────────────────────────────
+  testWidgets('last sync row says "Mai" before the first sync', (tester) async {
+    final user = _fakeUser(displayName: 'Mario');
+    await pump(tester, user: user);
+
+    final scroller = find.byType(CustomScrollView);
+    await tester.dragUntilVisible(
+      find.text('Ultima sincronizzazione'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
+
+    expect(find.text('Ultima sincronizzazione'), findsOneWidget);
+    expect(find.text('Mai'), findsOneWidget);
+    await drain(tester);
+  });
+
+  testWidgets('last sync row shows a relative label once a sync has happened', (tester) async {
+    await db.setLastSync(DateTime.now().toUtc());
+
+    final user = _fakeUser(displayName: 'Mario');
+    await pump(tester, user: user);
+
+    final scroller = find.byType(CustomScrollView);
+    await tester.dragUntilVisible(
+      find.text('Ultima sincronizzazione'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
+
+    // The hour itself is the machine clock's; "today" is the part the row is responsible for.
+    expect(find.textContaining('Oggi alle '), findsOneWidget);
+    await drain(tester);
+  });
+
+  // ── 8. Logout row triggers dialog ─────────────────────────────────────────
   testWidgets('logout row tap shows confirm dialog', (tester) async {
     when(() => repo.currentUser).thenReturn(null);
     when(() => repo.signOut()).thenAnswer((_) async {});

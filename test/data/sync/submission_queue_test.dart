@@ -42,6 +42,7 @@ Future<void> _insertDraft(
   String? ticketId,
   bool richiedeSecondoIntervento = false,
   String? expectedVersion,
+  String? cantiereId,
   // unique suffix for child rows when inserting multiple drafts in same test
   String? suffix,
 }) async {
@@ -64,6 +65,7 @@ Future<void> _insertDraft(
           technicianSignatureAllegatoId: Value(technicianSigId),
           richiedeSecondoIntervento: Value(richiedeSecondoIntervento),
           expectedVersion: Value(expectedVersion),
+          cantiereId: Value(cantiereId),
         ),
       );
 
@@ -114,6 +116,56 @@ Future<void> _insertDraft(
           ),
         );
   }
+}
+
+/// One technician's row, for the cases the draft helper's lone `user-1` row cannot express: a
+/// colleague on the same rapportino, or a server-hydrated row that still carries a pause.
+Future<void> _insertStaffRow(
+  AppDatabase db, {
+  required String id,
+  required String userId,
+  String reportId = 'report-1',
+  int pauseMinutes = 0,
+}) async {
+  await db
+      .into(db.reportStaffTable)
+      .insert(
+        ReportStaffTableCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          reportId: reportId,
+          userId: userId,
+          pauseMinutes: Value(pauseMinutes),
+        ),
+      );
+}
+
+/// One recorded timer interval, as the timer appends it locally: its own row id, the phone's id
+/// for the tap, and the two UTC instants.
+Future<void> _insertSegment(
+  AppDatabase db, {
+  required String id,
+  String reportId = 'report-1',
+  String userId = 'user-1',
+  required DateTime startUtc,
+  required DateTime endUtc,
+  String? clientId,
+}) async {
+  await db
+      .into(db.reportStaffSegments)
+      .insert(
+        ReportStaffSegmentsCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          reportId: reportId,
+          userId: userId,
+          startUtc: startUtc,
+          endUtc: endUtc,
+          clientId: Value(clientId),
+        ),
+      );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -246,6 +298,134 @@ void main() {
     });
   });
 
+  group('SubmissionQueue._buildRequest — cantiere claims (P2-6)', () {
+    test('carries the draft\'s cantiereId and the phone punches it claims as consumed', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-1',
+        cantiereId: 'cant-1',
+      );
+
+      final asked = <String>[];
+      final q = SubmissionQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        claimedCantiereWorkLogClientIds: (cantiereId) async {
+          asked.add(cantiereId);
+          return ['punch-a', 'punch-b'];
+        },
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await q.processAll();
+
+      expect(asked, ['cant-1'], reason: 'the claim source is asked about this draft\'s cantiere');
+      expect(capturedRequest!.cantiereId, 'cant-1');
+      expect(capturedRequest!.consumedCantiereWorkLogClientIds, ['punch-a', 'punch-b']);
+      // The wire name matters as much as the field: `cantiereId` is what the server binds.
+      final json = capturedRequest!.toJson();
+      expect(json['cantiereId'], 'cant-1');
+      expect(json['consumedCantiereWorkLogClientIds'], ['punch-a', 'punch-b']);
+    });
+
+    test('a draft with no cantiere never asks the claim source', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+
+      var asked = 0;
+      final q = SubmissionQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        claimedCantiereWorkLogClientIds: (_) async {
+          asked++;
+          return ['punch-a'];
+        },
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await q.processAll();
+
+      expect(asked, 0);
+      expect(capturedRequest!.cantiereId, isNull);
+      expect(capturedRequest!.consumedCantiereWorkLogClientIds, isEmpty);
+      expect(
+        capturedRequest!.toJson().containsKey('cantiereId'),
+        isFalse,
+        reason: 'null cantiere means "this client does not own the field", so it is not sent',
+      );
+    });
+
+    test('a failing claim source never blocks the submit', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-1',
+        cantiereId: 'cant-1',
+      );
+
+      final q = SubmissionQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        claimedCantiereWorkLogClientIds: (_) async => throw StateError('local db closed'),
+      );
+
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async => const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        ),
+      );
+
+      await q.processAll();
+
+      final draft = await repo.getDraft('report-1');
+      expect(
+        draft!.submissionState,
+        'submitted',
+        reason:
+            'consumption bookkeeping is corrective, not a precondition: a local read failure '
+            'must not strand a finished rapportino',
+      );
+    });
+  });
+
   group('SubmissionQueue.processAll — no pending allegati', () {
     test('draft with no pending allegati skips to submitting', () async {
       await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
@@ -299,6 +479,200 @@ void main() {
       expect(capturedRequest!.materiali.first.freeTextName, 'Vite');
       // Defaults to false — flagging a follow-up is an explicit technician decision.
       expect(capturedRequest!.richiedeSecondoIntervento, isFalse);
+      // No stored interval means no `segments` key at all: an empty list would be read as
+      // "nothing to send" too, but omitting it keeps the wire byte-identical to a pre-segments
+      // client, which is what a report that was never timer-recorded is.
+      expect(capturedRequest!.staff.first.segments, isEmpty);
+      expect(
+        ((capturedRequest!.toJson()['staff'] as List).first
+            as Map<String, dynamic>)
+            .containsKey('segments'),
+        isFalse,
+      );
+    });
+
+    test('submit carries every stored interval, oldest first, keyed by the phone id of its tap', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+      // A second technician with their own interval: grouping the intervals by `userId` is the one
+      // piece of logic this payload adds, and with a single row a bucket keyed by anything at all
+      // would pass while billing one person's hours to another.
+      await _insertStaffRow(db, id: 'staff-2', userId: 'user-2');
+      // Inserted out of order on purpose: the payload's order is the repository's, not the
+      // insertion order, so a list built straight from the table would fail here.
+      await _insertSegment(
+        db,
+        id: 'seg-2',
+        startUtc: DateTime.utc(2026, 1, 1, 14),
+        endUtc: DateTime.utc(2026, 1, 1, 16),
+        clientId: 'client-b',
+      );
+      await _insertSegment(
+        db,
+        id: 'seg-1',
+        startUtc: DateTime.utc(2026, 1, 1, 8),
+        endUtc: DateTime.utc(2026, 1, 1, 11, 30),
+        clientId: 'client-a',
+      );
+      await _insertSegment(
+        db,
+        id: 'seg-3',
+        userId: 'user-2',
+        startUtc: DateTime.utc(2026, 1, 1, 9),
+        endUtc: DateTime.utc(2026, 1, 1, 10),
+        clientId: 'client-c',
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await queue.processAll();
+
+      final byUser = {
+        for (final s in capturedRequest!.staff) s.userId: s,
+      };
+      expect(byUser.keys, unorderedEquals(['user-1', 'user-2']));
+
+      final segments = byUser['user-1']!.segments;
+      expect(segments.length, 2);
+      // Drift hands a `dateTime()` column back local-kinded, so compare instants, not kinds.
+      expect(segments.map((s) => s.startTime.toUtc()).toList(), [
+        DateTime.utc(2026, 1, 1, 8),
+        DateTime.utc(2026, 1, 1, 14),
+      ]);
+      expect(segments.first.endTime.toUtc(), DateTime.utc(2026, 1, 1, 11, 30));
+      // The id the phone claimed for each tap, verbatim: re-keying it here would make a retried
+      // submit write the same hours a second time.
+      expect(segments.map((s) => s.clientId).toList(), ['client-a', 'client-b']);
+      // Exact lists, not `isNotEmpty`: a bucket that handed every interval to every row would
+      // still be non-empty on both, and would bill one technician's hours to the other.
+      expect(byUser['user-2']!.segments.map((s) => s.clientId).toList(), [
+        'client-c',
+      ]);
+
+      final wireStaff = (capturedRequest!.toJson()['staff'] as List)
+          .cast<Map<String, dynamic>>();
+      final wire =
+          wireStaff.firstWhere((r) => r['userId'] == 'user-1')['segments'] as List;
+      expect(wire.length, 2);
+      expect((wire.first as Map<String, dynamic>)['clientId'], 'client-a');
+      expect(
+        (wire.first as Map<String, dynamic>)['startTime'],
+        '2026-01-01T08:00:00.000Z',
+      );
+      expect(
+        (wireStaff.firstWhere((r) => r['userId'] == 'user-2')['segments'] as List)
+            .single,
+        {'startTime': '2026-01-01T09:00:00.000Z', 'endTime': '2026-01-01T10:00:00.000Z', 'clientId': 'client-c'},
+      );
+    });
+
+    test('a timer-recorded row sends no pause for the intervals to contradict', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+      // A server-hydrated row that already carried a pause and then got a timer run: the server
+      // ignores the pause beside intervals and logs a warning, and the phone has no pause editor,
+      // so sending one is this client's defect to avoid.
+      await _insertStaffRow(
+        db,
+        id: 'staff-2',
+        userId: 'user-2',
+        pauseMinutes: 30,
+      );
+      await _insertSegment(
+        db,
+        id: 'seg-1',
+        userId: 'user-2',
+        startUtc: DateTime.utc(2026, 1, 1, 8),
+        endUtc: DateTime.utc(2026, 1, 1, 10),
+        clientId: 'client-a',
+      );
+      await _insertSegment(
+        db,
+        id: 'seg-2',
+        userId: 'user-2',
+        startUtc: DateTime.utc(2026, 1, 1, 14),
+        endUtc: DateTime.utc(2026, 1, 1, 16),
+        clientId: 'client-b',
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await queue.processAll();
+
+      final recorded = capturedRequest!.staff.firstWhere(
+        (s) => s.userId == 'user-2',
+      );
+      expect(recorded.segments.length, 2);
+      expect(
+        recorded.pauseMinutes,
+        0,
+        reason:
+            'the intervals are authoritative; a pause beside them is a contradiction the server '
+            'drops with a warning',
+      );
+    });
+
+    test('a row with no intervals keeps the pause the server stored', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+      await _insertStaffRow(
+        db,
+        id: 'staff-2',
+        userId: 'user-2',
+        pauseMinutes: 30,
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await queue.processAll();
+
+      final row = capturedRequest!.staff.firstWhere((s) => s.userId == 'user-2');
+      expect(row.segments, isEmpty);
+      expect(
+        row.pauseMinutes,
+        30,
+        reason:
+            'nothing contradicts the pause, and zeroing it would silently discard a stored value',
+      );
     });
 
     test('submit carries richiedeSecondoIntervento=true from draft onto the request', () async {
@@ -1005,6 +1379,27 @@ void main() {
       expect(json['pauseMinutes'], 30);
     });
 
+    test('segment toJson sends the instants as UTC ISO and omits an absent clientId', () {
+      final local = SubmitReportSegmentDto(
+        startTime: DateTime.utc(2026, 1, 1, 8).toLocal(),
+        endTime: DateTime.utc(2026, 1, 1, 10).toLocal(),
+      );
+      final json = local.toJson();
+      expect(json['startTime'], '2026-01-01T08:00:00.000Z');
+      expect(json['endTime'], '2026-01-01T10:00:00.000Z');
+      // A server-only interval has no phone id; sending `clientId: null` is legal on the wire but
+      // the key is meaningless, so it stays off.
+      expect(json.containsKey('clientId'), isFalse);
+      expect(
+        SubmitReportSegmentDto(
+          startTime: DateTime.utc(2026, 1, 1, 8),
+          endTime: DateTime.utc(2026, 1, 1, 10),
+          clientId: 'client-a',
+        ).toJson()['clientId'],
+        'client-a',
+      );
+    });
+
     test('materiale toJson mirrors backend SubmitReportMaterialeDto fields', () {
       const m = SubmitReportMaterialeDto(
         materialeId: 'mat-guid-1',
@@ -1335,7 +1730,11 @@ void main() {
       expect((await repo.getDraft('report-1'))!.submissionState, 'submitted');
     });
 
-    test('a forced send that really has no network becomes a transient failed row', () async {
+    // Reversed deliberately by the offline-submit slice: a forced attempt the network never
+    // carried is not a failed send, so the row goes back to the queue with its whole retry budget
+    // and the calm "In attesa di connessione" state. The full matrix (captive portal, six manual
+    // taps, the attachment-upload path) lives in `submission_queue_offline_test.dart`.
+    test('a forced send that really has no network leaves the row waiting, not failed', () async {
       online = false;
       await _insertDraft(db);
       stubSubmitThrows(
@@ -1344,9 +1743,10 @@ void main() {
       await gated.enqueue('report-1');
       await gated.processAll(force: true);
       final d = (await repo.getDraft('report-1'))!;
-      expect(d.submissionState, 'failed');
-      expect(d.submissionErrorTransient, isTrue);
-      expect(d.submissionError, contains('Nessuna connessione'));
+      expect(d.submissionState, 'readyToSubmit');
+      expect(d.submissionError, isNull);
+      expect(d.submissionAttempts, 0);
+      expect(submitCalls(), 1, reason: 'force means it really tried the network');
     });
 
     test('manual retry() is forced too', () async {
@@ -1548,14 +1948,25 @@ void main() {
       });
     }
 
-    test('a connection error is transient', () async {
+    // A connection error is only "transient" when the device could reach the network and the
+    // server still did not answer — otherwise it is the technician being offline, which the queue
+    // must not charge against the retry budget. `recheck` is the probe's answer; the default in
+    // this group is `false` (nothing reachable), so pin the reachable side explicitly here.
+    test('a connection error with a reachable network is transient', () async {
+      recheck = true;
       await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'k');
       stubSubmitThrows(
         DioException(requestOptions: reqOpts, type: DioExceptionType.connectionTimeout),
       );
       await gated.processAll();
       final draft = (await repo.getDraft('report-1'))!;
+      expect(draft.submissionState, 'failed');
       expect(draft.submissionErrorTransient, isTrue);
+      expect(
+        draft.submissionAttempts,
+        0,
+        reason: 'the server never answered, so this must not spend a retry',
+      );
     });
 
     test('transient retries stop at the cap and the row stays failed', () async {

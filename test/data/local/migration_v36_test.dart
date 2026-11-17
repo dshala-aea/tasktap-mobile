@@ -82,9 +82,17 @@ void main() {
                            'prodotto_assistenza_ids_json', 'repairable_field']) {
             raw.execute('ALTER TABLE pending_tickets DROP COLUMN $c');
           }
-          // The upgrade now continues 36 -> 37 -> 38 -> 39, so the column that last step adds must
-          // be absent too. (38 adds none: it re-creates tickets/pending_tickets in place.)
+          // The upgrade now continues 36 -> 37 -> 38 -> 39 -> 40. `expected_version` (39) must be
+          // absent or its `addColumn` dies on `duplicate column name`. `maintenance_template_id` (40)
+          // is dropped only to reproduce the shape a real v35 database has: step 38's in-place
+          // re-creation of `pending_tickets` puts the column back from the current definition, with a
+          // NULL value — step 38 names it in `newColumns`, and without that its copy would read the
+          // column the old table lacks as the column's own name. Step 40 then adds it only when SQLite
+          // still reports it missing. (38 adds no column of its own: it re-creates tickets and
+          // pending_tickets in place.) No queued row is seeded here, so that value is pinned by
+          // migration_v37/v38_test.dart instead.
           raw.execute('ALTER TABLE draft_reports DROP COLUMN expected_version');
+          raw.execute('ALTER TABLE pending_tickets DROP COLUMN maintenance_template_id');
           raw.execute('PRAGMA user_version = 35');
         },
       ),

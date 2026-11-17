@@ -69,7 +69,7 @@ class _AiDraftActionState extends ConsumerState<AiDraftAction> {
     final available =
         scheduleId != null || ticketId != null || cantiereId != null || seedTranscript.isNotEmpty;
     final quota = ref.watch(aiQuotaProvider);
-    final exhausted = quota.valueOrNull?.exhausted ?? false;
+    final exhausted = quota.value?.exhausted ?? false;
     final disabled = !available || exhausted;
 
     return Padding(

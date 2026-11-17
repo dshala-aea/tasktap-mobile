@@ -1,3 +1,4 @@
+import firebase_messaging
 import Flutter
 import Speech
 import UIKit
@@ -8,7 +9,63 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // UIScene apps register plugins AFTER this method, but Apple requires the
+    // UNUserNotificationCenter delegate to be set before it returns. firebase_messaging
+    // (>= 16.5) documents this explicit call for the UIScene lifecycle.
+    FLTFirebaseMessagingPlugin.configureNotificationCenterDelegate()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // MARK: - APNs registration diagnostics
+  //
+  // `getAPNSToken()` in Dart only says the token is absent, never why. The reason is delivered to
+  // these two callbacks (or they are never called at all, which is itself the answer), so they are
+  // recorded here and read back through the `tasktap/push_diag` channel. Both call `super` FIRST:
+  // FlutterAppDelegate forwards them to the registered plugin delegates, and firebase_messaging
+  // depends on that to receive the APNs token. Only the token's presence is kept, never its bytes.
+  // UIKit delivers these on the main thread, as does the Flutter platform channel, so plain
+  // statics need no lock.
+  private static var apnsRegistered = false
+  private static var apnsRegisteredAt: Date?
+  private static var apnsLastError: String?
+  private static var apnsErrorAt: Date?
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+    AppDelegate.apnsRegistered = !deviceToken.isEmpty
+    AppDelegate.apnsRegisteredAt = Date()
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
+    let nsError = error as NSError
+    let description = "\(nsError.domain):\(nsError.code):\(nsError.localizedDescription)"
+    AppDelegate.apnsLastError = String(description.prefix(200))
+    AppDelegate.apnsErrorAt = Date()
+  }
+
+  /// `tasktap/push_diag` — see `lib/core/notifications/apns_diagnostics.dart`.
+  private func registerPushDiagChannel(_ messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "tasktap/push_diag", binaryMessenger: messenger)
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "apnsStatus":
+        let formatter = ISO8601DateFormatter()
+        var status: [String: Any] = ["registered": AppDelegate.apnsRegistered]
+        if let error = AppDelegate.apnsLastError { status["error"] = error }
+        if let at = AppDelegate.apnsErrorAt { status["errorAt"] = formatter.string(from: at) }
+        if let at = AppDelegate.apnsRegisteredAt { status["registeredAt"] = formatter.string(from: at) }
+        result(status)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
@@ -16,6 +73,7 @@ import UIKit
     let messenger = engineBridge.applicationRegistrar.messenger()
     registerDictationChannel(messenger)
     registerKioskLockChannel(messenger)
+    registerPushDiagChannel(messenger)
   }
 
   /// Whether this handset can recognise Italian speech without sending audio to Apple.

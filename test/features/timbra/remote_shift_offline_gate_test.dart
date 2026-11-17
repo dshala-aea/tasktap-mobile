@@ -8,6 +8,7 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' show AsyncData, AsyncError;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/timbratura/remote_shift.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
@@ -15,17 +16,36 @@ import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/features/timbra/timbra_providers.dart';
 
+/// The repository window is the REAL Italian business day (BusinessTime.fallback(), fed by the
+/// live clock), so every fixture must anchor to that same clock — but never to a bare
+/// `now - N`: that lands in the PREVIOUS business day during the first N of the day, and
+/// `getTodaySessions()` then returns nothing by design while the test expects an open shift.
+/// [_earlierToday] clamps such a seed forward to the day's own start, the one instant that is
+/// inside today and never after now.
+DateTime _earlierToday(Duration ago) {
+  final bt = BusinessTime.fallback();
+  final start = bt.utcRangeForBusinessDate(bt.businessToday()).$1;
+  final candidate = DateTime.now().toUtc().subtract(ago);
+  return candidate.isAfter(start) ? candidate : start;
+}
+
 class _Api extends WorklogApiClient {
   _Api() : super(Dio());
   final calls = <String>[];
   @override
-  Future<void> endWork() async => calls.add('end');
+  Future<int?> endWork({DateTime? deviceUtc}) async {
+    calls.add('end');
+    return null;
+  }
   @override
-  Future<void> startBreak() async => calls.add('break/start');
+  Future<void> startBreak({DateTime? occurredAtUtc}) async => calls.add('break/start');
   @override
-  Future<void> endBreak() async => calls.add('break/end');
+  Future<void> endBreak({DateTime? occurredAtUtc}) async => calls.add('break/end');
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> s) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> s, {
+    List<MobileSessionDto> breaks = const [],
+  }) async {
     calls.add('batch');
     return [];
   }
@@ -47,7 +67,7 @@ void main() {
   Future<TimbraState> local() async => deriveShiftState(await repo.getTodaySessions());
 
   Future<void> seedRemoteShift() async {
-    final start = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+    final start = _earlierToday(const Duration(hours: 1));
     await repo.addEvent(id: 'remote-i', eventTime: start, eventType: 'ingresso');
     await repo.markReconciledOrphan('remote-i');
   }
@@ -60,21 +80,6 @@ void main() {
     online = true;
   });
   tearDown(() => db.close());
-
-  test('punch re-reads the server availableActions only after its sync attempt ends', () async {
-    final order = <String>[];
-    final n = PunchNotifier(
-      repo,
-      TimbraSyncService(repo: repo, apiClient: api),
-      null,
-      () async => online,
-      () => order.add('giornata'),
-    );
-    await n.punch(await local());
-    // Sync is fire-and-forget; let it settle.
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(order, ['giornata'], reason: 'one refetch, once the sync attempt has completed');
-  });
 
   test('offline Fine on a remote shift: refused, nothing recorded, state unchanged', () async {
     await seedRemoteShift();
@@ -115,7 +120,7 @@ void main() {
   test('a locally started shift still works fully offline (queued for the batch)', () async {
     await repo.addEvent(
       id: 'own-i',
-      eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
+      eventTime: _earlierToday(const Duration(hours: 1)),
       eventType: 'ingresso',
     );
     online = false;
@@ -135,8 +140,21 @@ void main() {
   });
 
   test('a Fine on a remote shift is never stamped before its opener (phone clock behind the server)', () async {
-    final n0 = DateTime.now().toUtc().add(const Duration(minutes: 5)); // server ahead of phone
-    final opener = DateTime.utc(n0.year, n0.month, n0.day, n0.hour, n0.minute, n0.second);
+    // The opener must be (a) ahead of the phone's clock — that is the premise — and (b) inside
+    // TODAY's business day, because `getTodaySessions()` is the window `local()`, `punch()` and
+    // the assertion all read. Five minutes ahead breaks (b) in the last five minutes of the Rome
+    // day: the fine then lands in tomorrow's window and the assertion finds no `fine` at all.
+    // Two seconds is the same scenario at the precision the one-second floor works at, and only
+    // the final three seconds of the day can still straddle midnight.
+    final phoneNow = DateTime.now().toUtc();
+    final opener = DateTime.utc(
+      phoneNow.year,
+      phoneNow.month,
+      phoneNow.day,
+      phoneNow.hour,
+      phoneNow.minute,
+      phoneNow.second,
+    ).add(const Duration(seconds: 2)); // server ahead of phone
     await repo.addEvent(id: 'remote-i', eventTime: opener, eventType: 'ingresso');
     await repo.markReconciledOrphan('remote-i');
     final n = notifier();

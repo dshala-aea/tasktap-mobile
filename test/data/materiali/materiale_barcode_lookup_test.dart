@@ -66,6 +66,7 @@ void main() {
   tearDown(() async => db.close());
 
   ProviderContainer buildContainer({bool isOnline = true}) => ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(mockDio),
@@ -115,7 +116,12 @@ void main() {
       expect(match.code, 'ART-001');
       expect(match.name, 'Tubo rame 15mm');
       expect(match.unitOfMeasure, 'm');
-      verifyNever(() => mockDio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')));
+      verifyNever(
+        () => mockDio.get<Map<String, dynamic>>(
+          any(),
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      );
     });
 
     testWidgets('an orphan barcode (parent Materiale missing) falls through to a live lookup', (
@@ -136,12 +142,20 @@ void main() {
             ),
           );
       when(
-        () => mockDio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')),
+        () => mockDio.get<Map<String, dynamic>>(
+          any(),
+          queryParameters: any(named: 'queryParameters'),
+        ),
       ).thenAnswer(
         (_) async => Response<Map<String, dynamic>>(
           requestOptions: RequestOptions(path: '/api/materiali/lookup'),
           statusCode: 200,
-          data: {'id': 'mat-missing', 'code': 'ART-009', 'name': 'Recovered live', 'unitOfMeasure': null},
+          data: {
+            'id': 'mat-missing',
+            'code': 'ART-009',
+            'name': 'Recovered live',
+            'unitOfMeasure': null,
+          },
         ),
       );
 
@@ -155,16 +169,22 @@ void main() {
   });
 
   group('live fallback', () {
-    testWidgets('no local match, online, backend has it — returns the live result', (
-      tester,
-    ) async {
+    testWidgets('no local match, online, backend has it — returns the live result', (tester) async {
       when(
-        () => mockDio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')),
+        () => mockDio.get<Map<String, dynamic>>(
+          any(),
+          queryParameters: any(named: 'queryParameters'),
+        ),
       ).thenAnswer(
         (_) async => Response<Map<String, dynamic>>(
           requestOptions: RequestOptions(path: '/api/materiali/lookup'),
           statusCode: 200,
-          data: {'id': 'mat-live', 'code': 'ART-LIVE', 'name': 'Solo online', 'unitOfMeasure': 'pz'},
+          data: {
+            'id': 'mat-live',
+            'code': 'ART-LIVE',
+            'name': 'Solo online',
+            'unitOfMeasure': 'pz',
+          },
         ),
       );
 
@@ -181,7 +201,10 @@ void main() {
       tester,
     ) async {
       when(
-        () => mockDio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')),
+        () => mockDio.get<Map<String, dynamic>>(
+          any(),
+          queryParameters: any(named: 'queryParameters'),
+        ),
       ).thenThrow(
         DioException(
           requestOptions: RequestOptions(path: '/api/materiali/lookup'),
@@ -208,7 +231,12 @@ void main() {
       final match = await _lookup(tester, container, '0000000000000');
 
       expect(match, isNull);
-      verifyNever(() => mockDio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')));
+      verifyNever(
+        () => mockDio.get<Map<String, dynamic>>(
+          any(),
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      );
     });
   });
 }

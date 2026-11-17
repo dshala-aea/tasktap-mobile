@@ -3,11 +3,14 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
 import '../../data/local/app_database.dart';
 import '../../data/reports/draft_report_repository.dart';
 import '../../data/sync/sync_service.dart';
+import '../../domain/reports/customer_signature_absence_reason.dart';
 import '../../domain/reports/draft_validation.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -20,6 +23,20 @@ import '../../domain/reports/draft_validation.dart';
 
 /// Which step is currently shown in the multi-step editor.
 enum RapportinoStep { dati, staff, materiali, controlli, firme, allegati, review }
+
+/// One recorded work interval, as the device holds it.
+///
+/// [id] doubles as the wire `clientId`: it is the phone's own name for this tap, so a replayed
+/// submit collapses server-side instead of counting the hours twice.
+class StaffSegment {
+  const StaffSegment({required this.id, required this.startUtc, required this.endUtc});
+
+  final String id;
+  final DateTime startUtc;
+  final DateTime endUtc;
+
+  Duration get duration => endUtc.difference(startUtc);
+}
 
 /// Represents one staff/technician row being edited.
 class StaffRow {
@@ -34,6 +51,7 @@ class StaffRow {
     this.startTime,
     this.endTime,
     this.pauseMinutes = 0,
+    this.segments = const [],
     // Timer state (not persisted; recalculated on resume)
     this.timerRunning = false,
     this.timerStartedAt,
@@ -50,6 +68,13 @@ class StaffRow {
   final DateTime? endTime;
   final int pauseMinutes;
 
+  /// The intervals this row's hours were measured from, oldest first as `getSegments` returns
+  /// them. Empty for a row whose hours came from the office, a manual edit, or a client older
+  /// than this table. Emptiness is meant to be the editor's only evidence that these hours were
+  /// not measured here — where there is no interval there is nothing this device could have timed,
+  /// so the hours are not its to re-derive.
+  final List<StaffSegment> segments;
+
   // Live timer fields (transient — not in Drift)
   final bool timerRunning;
   final DateTime? timerStartedAt;
@@ -64,38 +89,58 @@ class StaffRow {
     DateTime? startTime,
     DateTime? endTime,
     int? pauseMinutes,
+    List<StaffSegment>? segments,
     bool? timerRunning,
     DateTime? timerStartedAt,
     bool clearTimer = false,
+    // null means "keep" for every parameter above, which cannot express a deliberate erase.
+    // These three are the erases a row actually needs: a total no interval can explain, and a
+    // start→end range a range-less worklog suggestion no longer describes.
+    bool clearHoursWorked = false,
+    bool clearStartTime = false,
+    bool clearEndTime = false,
   }) {
     return StaffRow(
       id: id,
       userId: userId ?? this.userId,
       displayName: displayName ?? this.displayName,
-      hoursWorked: hoursWorked ?? this.hoursWorked,
+      hoursWorked: clearHoursWorked ? null : (hoursWorked ?? this.hoursWorked),
       kmTraveled: kmTraveled ?? this.kmTraveled,
       vehicle: vehicle ?? this.vehicle,
       notes: notes ?? this.notes,
-      startTime: startTime ?? this.startTime,
-      endTime: endTime ?? this.endTime,
+      startTime: clearStartTime ? null : (startTime ?? this.startTime),
+      endTime: clearEndTime ? null : (endTime ?? this.endTime),
       pauseMinutes: pauseMinutes ?? this.pauseMinutes,
+      segments: segments ?? this.segments,
       timerRunning: timerRunning ?? this.timerRunning,
       timerStartedAt: clearTimer ? null : (timerStartedAt ?? this.timerStartedAt),
     );
   }
 
-  /// Effective hours: `hoursWorked` when set, else the timer's start→end span minus pauses.
+  /// Effective hours: the sum of the recorded intervals when there are any, else `hoursWorked`,
+  /// else the timer's start→end span minus pauses.
   ///
-  /// `hoursWorked` wins whenever it's set — not just as a no-timer fallback — for two reasons:
-  /// [ReportEditorNotifier.stopTimer] already accumulates it per-segment (each stop adds just
-  /// that run's duration), so once a timer has been stopped at least once, the raw
-  /// startTime→endTime span covers every segment PLUS any idle gap between a stop and a later
-  /// restart (startTime is pinned to the very first start; only [pauseMinutes] — never surfaced
-  /// in the UI — could subtract it). And a manual "Ore" edit after using the timer only ever
-  /// touches `hoursWorked` (see step_ore.dart) — if the span won instead, that edit would render
-  /// in the field but be silently ignored everywhere it's actually used (the total, the DB save,
-  /// the submit payload).
+  /// The intervals outrank `hoursWorked` because they are the evidence it is merely summarising:
+  /// they are what the timer actually measured, so they exclude the idle gap between a stop and a
+  /// later restart that the raw span would include (startTime is pinned to the very first start,
+  /// and only [pauseMinutes] — never surfaced in the UI — could subtract it).
+  ///
+  /// `hoursWorked` still wins over the span whenever there are no intervals, and not just as a
+  /// no-timer fallback: a manual "Ore" edit only ever touches `hoursWorked` (see step_ore.dart) —
+  /// if the span won instead, that edit would render in the field but be silently ignored
+  /// everywhere it's actually used (the total, the DB save, the submit payload).
+  ///
+  /// The figure can sit a few minutes off the `HoursWorked` the office stores: the server
+  /// re-derives it per band and rounds each interval to whole minutes and each band to two
+  /// decimals (`TimeClassificationService.ClassifySegments`). The intervals still outrank a stored
+  /// total, because a total the intervals do not explain is the number the submit discards.
   double get effectiveHours {
+    if (segments.isNotEmpty) {
+      // Summed in milliseconds and divided once: `inMinutes` truncates per interval, so k
+      // sub-minute runs would otherwise contribute nothing at all — silently unpaid time.
+      final millis = segments.fold<int>(0, (sum, s) => sum + s.duration.inMilliseconds);
+      return millis / 3600000.0;
+    }
     if (hoursWorked != null) return hoursWorked!;
     if (startTime != null && endTime != null) {
       final worked = endTime!.difference(startTime!).inMinutes - pauseMinutes;
@@ -166,6 +211,8 @@ class ControlloRow {
     this.dateValue,
     this.numberValue,
     this.note,
+    this.controlLabel,
+    this.assetId,
   });
 
   final String id;
@@ -180,6 +227,14 @@ class ControlloRow {
   /// answer; a blank/omitted note never erases a stored one server-side.
   final String? note;
 
+  /// The control's label and asset as the checklist showed them when this answer was typed.
+  ///
+  /// Persisted with the answer (see `ReportControlli.controlLabel`) because the server's copy of a
+  /// report holds only the control id: without a snapshot, the sent report could only be read back
+  /// on a device that still had the ticket's checklist, and printed GUIDs everywhere else.
+  final String? controlLabel;
+  final String? assetId;
+
   ControlloRow copyWith({
     String? stringValue,
     bool? boolValue,
@@ -187,6 +242,8 @@ class ControlloRow {
     double? numberValue,
     String? note,
     bool clearNote = false,
+    String? controlLabel,
+    String? assetId,
   }) {
     return ControlloRow(
       id: id,
@@ -197,6 +254,8 @@ class ControlloRow {
       dateValue: dateValue ?? this.dateValue,
       numberValue: numberValue ?? this.numberValue,
       note: clearNote ? null : (note ?? this.note),
+      controlLabel: controlLabel ?? this.controlLabel,
+      assetId: assetId ?? this.assetId,
     );
   }
 }
@@ -250,9 +309,12 @@ class ReportEditorState {
     this.richiedeSecondoIntervento = false,
     this.customerSignatureLocalPath,
     this.customerSignatureAllegatoId,
+    this.customerSignatureAbsenceReason,
+    this.customerSignatureAbsenceNote,
     this.technicianSignatureLocalPath,
     this.technicianSignatureAllegatoId,
     this.technicianSignaturePrefillSuppressed = false,
+    this.customerSignoffText,
     this.allegatoRows = const [],
     this.isSaving = false,
     this.saveError,
@@ -312,12 +374,29 @@ class ReportEditorState {
   // Step 5 — Firme
   final String? customerSignatureLocalPath;
   final String? customerSignatureAllegatoId;
+
+  /// Why the customer did not sign ("Il cliente non può firmare"), or null when the customer
+  /// signed or nothing was recorded. Mutually exclusive with [customerSignatureAllegatoId]; see
+  /// `DraftReports.customerSignatureAbsenceReason`'s doc comment.
+  final CustomerSignatureAbsenceReason? customerSignatureAbsenceReason;
+
+  /// Free text explaining [customerSignatureAbsenceReason] — required when it is `altro`, optional
+  /// otherwise. Null when there is nothing to say.
+  final String? customerSignatureAbsenceNote;
+
   final String? technicianSignatureLocalPath;
   final String? technicianSignatureAllegatoId;
 
   /// See `DraftReports.technicianSignaturePrefillSuppressed`'s doc comment — persisted so it
   /// survives `StepRiepilogo`/this notifier being recreated on sheet close+reopen.
   final bool technicianSignaturePrefillSuppressed;
+
+  /// What the customer is signing off on, captured on the same step as the signatures — the field
+  /// the web calls "Dichiarazione cliente" and the office calls "Osservazioni cliente"
+  /// (`Report.CustomerSignoffText`). Tri-state like [diagnosi]: null = never touched (a draft whose
+  /// text came from an AI-confirmed report keeps it — the submit body omits null), '' = the
+  /// technician cleared it.
+  final String? customerSignoffText;
 
   // Step 6 — Allegati (photos)
   final List<AllegatoRow> allegatoRows;
@@ -368,6 +447,8 @@ class ReportEditorState {
     endedAt: null,
     documentTemplateId: null,
     customerSignatureAllegatoId: customerSignatureAllegatoId,
+    customerSignatureAbsenceReason: customerSignatureAbsenceReason?.wireValue,
+    customerSignatureAbsenceNote: customerSignatureAbsenceNote,
     technicianSignatureAllegatoId: technicianSignatureAllegatoId,
     technicianSignaturePrefillSuppressed: technicianSignaturePrefillSuppressed,
     strumentiPrefilled: false,
@@ -380,7 +461,7 @@ class ReportEditorState {
     controllatoDa: null,
     fatturatoAt: null,
     materialiNotRequired: materialiNotRequired,
-    customerSignoffText: null,
+    customerSignoffText: customerSignoffText,
     customerSignoffAt: null,
     richiedeSecondoIntervento: richiedeSecondoIntervento,
     isLocalOnly: true,
@@ -418,9 +499,12 @@ class ReportEditorState {
     bool? richiedeSecondoIntervento,
     String? customerSignatureLocalPath,
     String? customerSignatureAllegatoId,
+    CustomerSignatureAbsenceReason? customerSignatureAbsenceReason,
+    String? customerSignatureAbsenceNote,
     String? technicianSignatureLocalPath,
     String? technicianSignatureAllegatoId,
     bool? technicianSignaturePrefillSuppressed,
+    String? customerSignoffText,
     List<AllegatoRow>? allegatoRows,
     bool? isSaving,
     String? saveError,
@@ -436,6 +520,8 @@ class ReportEditorState {
     bool clearTicketFreeText = false,
     bool clearCantiereFreeText = false,
     bool clearCustomerSignature = false,
+    bool clearCustomerSignatureAbsence = false,
+    bool clearCustomerSignatureAbsenceNote = false,
     bool clearTechnicianSignature = false,
     bool clearSaveError = false,
   }) {
@@ -471,6 +557,13 @@ class ReportEditorState {
       customerSignatureAllegatoId: clearCustomerSignature
           ? null
           : (customerSignatureAllegatoId ?? this.customerSignatureAllegatoId),
+      customerSignatureAbsenceReason: clearCustomerSignatureAbsence
+          ? null
+          : (customerSignatureAbsenceReason ?? this.customerSignatureAbsenceReason),
+      customerSignatureAbsenceNote:
+          clearCustomerSignatureAbsence || clearCustomerSignatureAbsenceNote
+          ? null
+          : (customerSignatureAbsenceNote ?? this.customerSignatureAbsenceNote),
       technicianSignatureLocalPath: clearTechnicianSignature
           ? null
           : (technicianSignatureLocalPath ?? this.technicianSignatureLocalPath),
@@ -479,6 +572,7 @@ class ReportEditorState {
           : (technicianSignatureAllegatoId ?? this.technicianSignatureAllegatoId),
       technicianSignaturePrefillSuppressed:
           technicianSignaturePrefillSuppressed ?? this.technicianSignaturePrefillSuppressed,
+      customerSignoffText: customerSignoffText ?? this.customerSignoffText,
       allegatoRows: allegatoRows ?? this.allegatoRows,
       isSaving: isSaving ?? this.isSaving,
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
@@ -498,14 +592,22 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     required ReportEditorState initialState,
     required DraftReportRepository repo,
     ILocationService? locationService,
+    DateTime Function()? clock,
   }) : _repo = repo,
        _locationService = locationService ?? const DisabledLocationService(),
+       _now = clock ?? DateTime.now,
        super(initialState) {
     ready = _hydrate();
   }
 
   final DraftReportRepository _repo;
   final ILocationService _locationService;
+
+  /// Injectable so a test can drive the timer's two instants instead of racing the wall clock.
+  /// `stopTimer`'s minimum-duration rule is invisible on a fast machine — two `DateTime.now()`
+  /// calls a microsecond apart land in the same stored second only by luck — so the rule cannot
+  /// be pinned through real time.
+  final DateTime Function() _now;
 
   /// Resolves once hydration has either applied the draft's saved data or given up.
   ///
@@ -515,6 +617,18 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// before calling setters, so a test's own state changes can't race hydration and get
   /// silently reverted by it.
   late final Future<void> ready;
+
+  /// Set when this editor was opened on a report it must never write to: a SERVER-known row
+  /// (`isLocalOnly == false`) that is no longer a Bozza. Every autosave becomes a no-op.
+  ///
+  /// This is the write-side half of owner decision D8 (offline slice O-3). The list routes
+  /// Inviato/Respinto/Controllato/Fatturato to the read-only view, but the editor route is still
+  /// reachable (a deep link, a stale navigation), and `_buildHeaderCompanion` hardcodes
+  /// `stato:'Bozza'` + `isLocalOnly:true` — the exact pair that corrupts a synced report (audit
+  /// F15): the device then shows a false Bozza, SyncService._upsertDraftReports skips the row
+  /// forever (so Controllato/Fatturato never arrive again), and any submit is a permanent 400.
+  /// Guarding the write here means that corruption cannot happen whatever opened the screen.
+  bool _readOnly = false;
 
   // ── Hydration ─────────────────────────────────────────────────────────────
   //
@@ -555,7 +669,17 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       return;
     }
 
+    // A server-known report past Bozza is read-only on mobile (owner decision D8): it is never
+    // hydrated into an editable state and never written back. See [_readOnly]. Reached only if
+    // something opened the editor route directly — the list sends these rows to the view.
+    if (!draft.isLocalOnly && draft.stato != 'Bozza') {
+      _readOnly = true;
+      if (state.isLoading) state = state.copyWith(isLoading: false);
+      return;
+    }
+
     final staff = await _repo.getStaff(draft.id);
+    final segments = await _repo.getSegments(draft.id);
     final materiali = await _repo.getMateriali(draft.id);
     final controlli = await _repo.getControlli(draft.id);
     final allegati = await _repo.getAllegati(draft.id);
@@ -581,6 +705,16 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
         ? technicianSignatureRows.first.storagePath
         : null;
     final metadata = _parseMetadataJson(draft.metadataJson);
+    // The intervals are one collection for the whole report, so they hang off `userId`, exactly
+    // like the staff rows do. Grouping here (rather than a query per row) is what puts each
+    // technician's own intervals beside their row, which is where both `effectiveHours` and
+    // anything building a submit body will look for them.
+    final segmentsByUser = <String, List<StaffSegment>>{};
+    for (final g in segments) {
+      (segmentsByUser[g.userId] ??= []).add(
+        StaffSegment(id: g.id, startUtc: g.startUtc, endUtc: g.endUtc),
+      );
+    }
     if (!mounted) return;
 
     state = state.copyWith(
@@ -613,6 +747,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
             startTime: s.startTime,
             endTime: s.endTime,
             pauseMinutes: s.pauseMinutes,
+            segments: segmentsByUser[s.userId] ?? const [],
           ),
       ],
       materialeRows: [
@@ -639,6 +774,10 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
             dateValue: c.dateValue,
             numberValue: c.numberValue,
             note: c.note,
+            // Carried through, not re-derived: editing an existing answer must not silently drop
+            // the name the report was saved with.
+            controlLabel: c.controlLabel,
+            assetId: c.assetId,
           ),
       ],
       allegatoRows: [
@@ -657,9 +796,18 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       richiedeSecondoIntervento: draft.richiedeSecondoIntervento,
       customerSignatureAllegatoId: draft.customerSignatureAllegatoId,
       customerSignatureLocalPath: customerSignatureLocalPath,
+      customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.fromWire(
+        draft.customerSignatureAbsenceReason,
+      ),
+      customerSignatureAbsenceNote: draft.customerSignatureAbsenceNote,
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
       technicianSignatureLocalPath: technicianSignatureLocalPath,
       technicianSignaturePrefillSuppressed: draft.technicianSignaturePrefillSuppressed,
+      // Hydrated like every other column, and for two reasons: the field must show the text a
+      // reopened draft already holds (an AI-confirmed report's acceptance sentence included), and
+      // the very next autosave — `_buildHeaderCompanion` writes every column from `state` — would
+      // otherwise null the stored value out from under it.
+      customerSignoffText: draft.customerSignoffText,
       tenantId: draft.tenantId,
       insertedUserId: draft.insertedUserId,
       isLoading: false,
@@ -808,36 +956,147 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> removeStaff(String staffId) async {
+    // Read the userId before dropping the row: the intervals are keyed by
+    // `(reportId, userId)`, not by the staff row's own id, so that is the only handle that can
+    // still find them once the row is gone.
+    final removed = state.staffRows.where((r) => r.id == staffId).toList();
     final updated = state.staffRows.where((r) => r.id != staffId).toList();
     state = state.copyWith(staffRows: updated);
     await _repo.deleteStaff(staffId);
+    if (removed.isNotEmpty) {
+      await _repo.deleteSegmentsForStaff(state.reportId, removed.first.userId);
+    }
     await _autosaveHeader();
   }
 
   /// Start on-screen travel/work timer for a staff row.
+  ///
+  /// A row that carries a typed total and no recorded intervals loses that total here. The server
+  /// recomputes `HoursWorked` from the intervals on submit, so a total no interval explains cannot
+  /// survive the first stop anyway — clearing it at the start is the only moment where the number
+  /// goes away while the technician is looking at it, instead of at the next save.
+  ///
+  /// After this the row shows a running timer and no total, which is exactly what the office will
+  /// see once the first interval is submitted.
   Future<void> startTimer(String staffId) async {
     final row = state.staffRows.firstWhere((r) => r.id == staffId);
+    final now = _now().toUtc();
+    // A row typed by hand, or corrected by the office and re-imported, arrives with a total and
+    // nothing measuring it. The start discards that total — and the end of its span too, because
+    // `effectiveHours` falls through to `endTime - startTime` once `hoursWorked` is null, so
+    // leaving the end behind would not clear the row: it would quietly replace the typed 3 h with
+    // the 8 h the old span happens to cover, and `_staffToCompanion` would persist that.
+    //
+    // `endTime` is half the test, not a detail: a row with a null total but a span is one whose
+    // hours still come from that span, so the span is the number being discarded. Requiring a
+    // total would leave that row keeping its end, and the next save would persist the span.
+    final discarding = row.segments.isEmpty && (row.hoursWorked != null || row.endTime != null);
     final started = row.copyWith(
       timerRunning: true,
-      timerStartedAt: DateTime.now().toUtc(),
-      startTime: row.startTime ?? DateTime.now().toUtc(),
+      timerStartedAt: now,
+      startTime: discarding ? now : (row.startTime ?? now),
+      clearEndTime: discarding,
+      clearHoursWorked: discarding,
     );
     await updateStaff(started);
   }
 
-  /// Stop on-screen timer and compute hoursWorked.
+  /// Stop on-screen timer, record the interval, and recompute hoursWorked from the intervals.
+  ///
+  /// A run the timer cannot measure — one stopped before its start's stored second has passed —
+  /// is dropped instead of recorded, so no interval the server would reject ever reaches Drift.
   Future<void> stopTimer(String staffId) async {
     final row = state.staffRows.firstWhere((r) => r.id == staffId);
-    final now = DateTime.now().toUtc();
+    final now = _now().toUtc();
+    final startedAt = row.timerStartedAt;
+    // Drift stores `dateTime()` as whole seconds, so a run shorter than the second it started in
+    // arrives at the server as `start == end` — and `ReportSubmitService` rejects that as
+    // `report_segment_out_of_order`, a permanent 400 that no affordance on this row can clear.
+    // The server's own message is the rule: "Stop the timer once the run has been going for at
+    // least a minute." Compared on the stored unit, not on microseconds, so a tap that rounds
+    // away is dropped here rather than discovered by the office.
+    final startsInSameStoredSecond =
+        startedAt != null &&
+        now.millisecondsSinceEpoch ~/ 1000 <= startedAt.millisecondsSinceEpoch ~/ 1000;
+    final added = startedAt == null || startsInSameStoredSecond
+        ? const <StaffSegment>[]
+        : [
+            StaffSegment(
+              // A UUID, not a readable `seg-<epoch>`: the server binds `Id` and `ClientId` as
+              // `Guid`, so any other string fails to deserialize and the whole submit 400s. The
+              // local id and the claimed `ClientId` are the same value, so a replayed tap
+              // collapses onto the row it already wrote instead of recording the hours twice.
+              id: const Uuid().v4(),
+              startUtc: startedAt,
+              endUtc: now,
+            ),
+          ];
+    final newSegments = [...row.segments, ...added];
     final stopped = row.copyWith(
       timerRunning: false,
       endTime: now,
-      hoursWorked:
-          row.effectiveHours +
-          (row.timerStartedAt != null ? now.difference(row.timerStartedAt!).inMinutes / 60.0 : 0.0),
+      segments: newSegments,
       clearTimer: true,
     );
-    await updateStaff(stopped);
+    // Hours go on the row too, derived from the intervals: the office web and every older client
+    // read `hoursWorked` and nothing else, so leaving it stale is what made the two disagree.
+    await updateStaff(
+      newSegments.isEmpty ? stopped : stopped.copyWith(hoursWorked: stopped.effectiveHours),
+    );
+    // Only the interval THIS stop measured, never the hydrated ones. Sync writes a server
+    // interval's `clientId` from the payload — a different uuid from its `id`, and null for one
+    // recorded by an older client. Re-upserting those rows would overwrite that claim with our own
+    // id and reset `createdAt`, so the device would afterwards claim a client id it never sent and
+    // the server's replay key would stop matching.
+    await _repo.upsertSegments([
+      for (final s in added)
+        ReportStaffSegmentsCompanion.insert(
+          id: s.id,
+          tenantId: state.tenantId,
+          createdAt: now,
+          reportId: state.reportId,
+          userId: row.userId,
+          startUtc: s.startUtc,
+          endUtc: s.endUtc,
+          clientId: Value(s.id),
+        ),
+    ]);
+  }
+
+  /// Replaces a row's recorded intervals with hours the technician chose by hand.
+  ///
+  /// A worklog suggestion applied over the timer is a manual correction, not an addition: the
+  /// server derives `HoursWorked` from the intervals on submit, so a row holding both would
+  /// disagree with itself and the next save would quietly undo the correction. The intervals are
+  /// deleted from Drift, not merely dropped from state — the rows outlive this notifier, and a
+  /// later hydrate or submit would resurrect the total just overridden. Clearing them also makes
+  /// the Ore field editable again, in the same gesture.
+  ///
+  /// The row's start→end span is cleared when the suggestion has none of its own: a sum over
+  /// several sessions describes no single range, and leaving yesterday's "Inizio/Fine" beside it
+  /// would label the total with hours it does not describe.
+  Future<void> overrideStaffHours(
+    StaffRow row, {
+    required double hoursWorked,
+    DateTime? startTime,
+    DateTime? endTime,
+  }) async {
+    // Re-resolved, not used as passed: the caller holds the row it built its tile from, and a sync
+    // may have landed while a confirmation dialog was open. Only the identity is taken from the
+    // argument.
+    final matches = state.staffRows.where((r) => r.id == row.id);
+    final current = matches.isEmpty ? row : matches.first;
+    await _repo.deleteSegmentsForStaff(state.reportId, current.userId);
+    await updateStaff(
+      current.copyWith(
+        segments: const [],
+        hoursWorked: hoursWorked,
+        startTime: startTime,
+        endTime: endTime,
+        clearStartTime: startTime == null,
+        clearEndTime: endTime == null,
+      ),
+    );
   }
 
   // ── Step 3: Materiali ──────────────────────────────────────────────────────
@@ -875,6 +1134,13 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     await _autosave();
   }
 
+  /// The customer's signoff text, typed on the same step as the signatures. See
+  /// [ReportEditorState.customerSignoffText] for the null/''/text contract the submit body relies on.
+  Future<void> setCustomerSignoffText(String value) async {
+    state = state.copyWith(customerSignoffText: value);
+    await _autosave();
+  }
+
   /// Records that an AI draft was applied to this rapportino.
   ///
   /// No matching "unset": provenance is not a preference. See [ReportEditorState.isAiAssisted].
@@ -902,9 +1168,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// Drops a local answer (the technician cleared it): nothing is sent for that control, and a
   /// blank never wipes what the server already holds.
   Future<void> removeControllo(String rowId) async {
-    state = state.copyWith(
-      controlloRows: state.controlloRows.where((c) => c.id != rowId).toList(),
-    );
+    state = state.copyWith(controlloRows: state.controlloRows.where((c) => c.id != rowId).toList());
     await _repo.deleteControllo(rowId);
   }
 
@@ -989,7 +1253,39 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     state = state.copyWith(
       customerSignatureLocalPath: localPath,
       customerSignatureAllegatoId: allegatoId,
+      // A signed report cannot also say the customer could not sign. Capture is itself a
+      // deliberate signing act, so any previously recorded reason no longer applies.
+      clearCustomerSignatureAbsence: true,
     );
+    await _autosave();
+  }
+
+  /// Records (or replaces) why the customer did not sign — "Il cliente non può firmare".
+  ///
+  /// [note] is trimmed and stored as null when blank. When [reason] is `altro` the UI requires a
+  /// non-empty note before enabling Salva; this method trusts that and simply stores what it is
+  /// given, because the same call also has to serve "Modifica motivo" for a reason that carries an
+  /// optional note.
+  ///
+  /// Clearing the reason (passing null) is deliberately a separate method
+  /// ([clearCustomerSignatureAbsence]) so an accidental null cannot silently erase a recorded
+  /// reason.
+  Future<void> setCustomerSignatureAbsence({
+    required CustomerSignatureAbsenceReason reason,
+    String? note,
+  }) async {
+    final trimmed = note?.trim();
+    state = state.copyWith(
+      customerSignatureAbsenceReason: reason,
+      customerSignatureAbsenceNote: (trimmed?.isEmpty ?? true) ? null : trimmed,
+      clearCustomerSignatureAbsenceNote: trimmed?.isEmpty ?? true,
+    );
+    await _autosave();
+  }
+
+  /// Removes the recorded absence reason and its note.
+  Future<void> clearCustomerSignatureAbsence() async {
+    state = state.copyWith(clearCustomerSignatureAbsence: true);
     await _autosave();
   }
 
@@ -1102,6 +1398,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   /// Persist the full draft header to Drift.  Child rows are saved
   /// individually in their respective methods.
   Future<void> _autosave() async {
+    // A read-only editor (see [_readOnly]) must never touch the row: the companion below writes
+    // `stato:'Bozza'` + `isLocalOnly:true`, which is the F15 corruption.
+    if (_readOnly) return;
     state = state.copyWith(isSaving: true, clearSaveError: true);
     try {
       await _repo.saveDraft(_buildHeaderCompanion());
@@ -1113,6 +1412,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
 
   /// Autosave header only (not full state rebuild — used after child mutations).
   Future<void> _autosaveHeader() async {
+    if (_readOnly) return;
     try {
       await _repo.saveDraft(_buildHeaderCompanion());
     } catch (_) {
@@ -1148,8 +1448,13 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       isAiAssisted: Value(state.isAiAssisted),
       richiedeSecondoIntervento: Value(state.richiedeSecondoIntervento),
       customerSignatureAllegatoId: Value(state.customerSignatureAllegatoId),
+      // The wire int, not the enum's ordinal — see
+      // `DraftReports.customerSignatureAbsenceReason`'s doc comment.
+      customerSignatureAbsenceReason: Value(state.customerSignatureAbsenceReason?.wireValue),
+      customerSignatureAbsenceNote: Value(state.customerSignatureAbsenceNote),
       technicianSignatureAllegatoId: Value(state.technicianSignatureAllegatoId),
       technicianSignaturePrefillSuppressed: Value(state.technicianSignaturePrefillSuppressed),
+      customerSignoffText: Value(state.customerSignoffText),
       stato: const Value('Bozza'),
       isLocalOnly: const Value(true),
     );
@@ -1241,6 +1546,10 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       dateValue: Value(row.dateValue),
       numberValue: Value(row.numberValue),
       note: Value(row.note),
+      // The row's own name and asset, captured while the checklist that names it is still in hand.
+      // A sent report has to render itself later, and the server's copy carries only the control id.
+      controlLabel: Value(row.controlLabel),
+      assetId: Value(row.assetId),
     );
   }
 }

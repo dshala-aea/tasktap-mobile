@@ -122,5 +122,11 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <!-- Optional spoken AI replies (flutter_tts). On Android 11+ the TTS engine is invisible
+             without this query, so `flutter_tts` reports no engine and the speaker action stays
+             silent. Copied from flutter_tts 4.2.5's README. -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
     </queries>
 </manifest>

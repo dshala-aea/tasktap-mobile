@@ -29,7 +29,9 @@ class _Repo implements IWorkSessionRepository {
     double? longitude,
     double? gpsAccuracyMeters,
   }) async {
-    sessions.add(WorkSession(id: id, eventTime: eventTime, eventType: eventType, isPendingSync: true));
+    sessions.add(
+      WorkSession(id: id, eventTime: eventTime, eventType: eventType, isPendingSync: true),
+    );
   }
 
   @override
@@ -50,9 +52,23 @@ class _Repo implements IWorkSessionRepository {
   @override
   Future<List<WorkSession>> getTodaySessions() async => List.of(sessions);
   @override
+  Stream<List<WorkSession>> watchAllSessions() => Stream.value(sessions);
+  @override
+  Future<List<WorkSession>> getAllSessions() async => List.of(sessions);
+  @override
+  Future<List<WorkSession>> getPendingSessions() async =>
+      sessions.where((s) => s.isPendingSync).toList();
+  @override
+  Future<int> getPendingCount() async =>
+      sessions.where((s) => s.isPendingSync && s.notes != reconciledOrphanMarker).length;
+  @override
   Stream<List<WorkSession>> watchTodaySessions() => Stream.value(sessions);
   @override
   Future<void> clearToday() async {}
+  @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({Duration within = const Duration(days: 7)}) =>
+      const Stream<List<WorkSession>>.empty();
+
   @override
   Future<void> markSyncFailed(String id) async {
     final i = sessions.indexWhere((s) => s.id == id);
@@ -92,14 +108,31 @@ class _Api extends WorklogApiClient {
   }
 
   @override
-  Future<void> endWork() => _rest('end');
-  @override
-  Future<void> startBreak() => _rest('break/start');
-  @override
-  Future<void> endBreak() => _rest('break/end');
+  Future<int?> endWork({DateTime? deviceUtc}) async {
+    await _rest('end');
+    return null;
+  }
+
+  /// The instant each break punch told the server the tap happened, in call order.
+  final breakInstants = <DateTime?>[];
 
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
+  Future<void> startBreak({DateTime? occurredAtUtc}) {
+    breakInstants.add(occurredAtUtc);
+    return _rest('break/start');
+  }
+
+  @override
+  Future<void> endBreak({DateTime? occurredAtUtc}) {
+    breakInstants.add(occurredAtUtc);
+    return _rest('break/end');
+  }
+
+  @override
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> sessions, {
+    List<MobileSessionDto> breaks = const [],
+  }) async {
     batches.add(sessions);
     return [];
   }
@@ -178,21 +211,32 @@ void main() {
     active = [_srv(ActiveTrackerState.working, _t0)];
   });
 
-  test('Fine on a backfilled shift => POST /worklog/end, event synced, refresh requested', () async {
-    final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(2))]);
-    await svc(repo).syncNow();
+  test(
+    'Fine on a backfilled shift => POST /worklog/end, event synced, refresh requested',
+    () async {
+      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(2))]);
+      await svc(repo).syncNow();
 
-    expect(api.calls, ['end']);
-    expect(api.batches, isEmpty, reason: 'the batch matches by ClientId and cannot see this shift');
-    expect(repo.isPending('f'), isFalse);
-    expect(applied, 1);
-  });
+      expect(api.calls, ['end']);
+      expect(
+        api.batches,
+        isEmpty,
+        reason: 'the batch matches by ClientId and cannot see this shift',
+      );
+      expect(repo.isPending('f'), isFalse);
+      expect(applied, 1);
+    },
+  );
 
   test('Pausa alone => break/start', () async {
-    final repo = _Repo([_remoteIngresso(), _cmd('p', 'pausa', _ago(3))]);
+    final tapped = _ago(3);
+    final repo = _Repo([_remoteIngresso(), _cmd('p', 'pausa', tapped)]);
     await svc(repo).syncNow();
     expect(api.calls, ['break/start']);
     expect(repo.isPending('p'), isFalse);
+    // The tap's own instant travels with it: without it the break would start when the queue
+    // drained, and its duration — which decides paid vs unpaid — would be the queue's latency.
+    expect(api.breakInstants, [tapped]);
   });
 
   test('a Pausa and a Ripresa queued together are never sent (they cancel out)', () async {
@@ -209,14 +253,18 @@ void main() {
   });
 
   test('a backfilled (marked) pausa is not a command; only the tap after it is', () async {
+    final tapped = _ago(3);
     final repo = _Repo([
       _remoteIngresso(),
       _remoteMarked('bp', 'pausa', _t0.add(const Duration(hours: 1))),
-      _cmd('r', 'ripresa', _ago(3)),
+      _cmd('r', 'ripresa', tapped),
     ]);
     active = [_srv(ActiveTrackerState.onBreak, _t0, startedAt: _ago(3000))];
     await svc(repo).syncNow();
     expect(api.calls, ['break/end']);
+    // The ripresa closes the break at the instant it was tapped, so the break measures the rest the
+    // technician actually took rather than the time it spent queued.
+    expect(api.breakInstants, [tapped]);
   });
 
   test('offline tap stays queued, then executes once on the next sync', () async {
@@ -247,24 +295,29 @@ void main() {
       api.error = _status(code);
       await svc(repo).syncNow();
 
-      expect(api.calls, ['break/start'], reason: 'order matters: stop at the first transient failure');
+      expect(api.calls, [
+        'break/start',
+      ], reason: 'order matters: stop at the first transient failure');
       expect(repo.isPending('p'), isTrue);
       expect(repo.isPending('r'), isTrue);
     });
   }
 
   for (final code in [400, 404, 409, 422]) {
-    test('HTTP $code is permanent: dropped (not looped) and the reconciler is asked to converge', () async {
-      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(2))]);
-      api.error = _status(code);
-      await svc(repo).syncNow();
+    test(
+      'HTTP $code is permanent: dropped (not looped) and the reconciler is asked to converge',
+      () async {
+        final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(2))]);
+        api.error = _status(code);
+        await svc(repo).syncNow();
 
-      expect(repo.isPending('f'), isFalse);
-      expect(applied, 1);
+        expect(repo.isPending('f'), isFalse);
+        expect(applied, 1);
 
-      await svc(repo).syncNow();
-      expect(api.calls, ['end'], reason: 'no retry loop');
-    });
+        await svc(repo).syncNow();
+        expect(api.calls, ['end'], reason: 'no retry loop');
+      },
+    );
   }
 
   test('a locally started shift keeps using the mobile batch, never the REST endpoints', () async {
@@ -280,17 +333,20 @@ void main() {
     expect(applied, 0);
   });
 
-  test('remote shift ended by a tap, then a NEW local shift: REST for the first, batch for the second', () async {
-    final repo = _Repo([
-      _remoteIngresso(),
-      _cmd('f', 'fine', _ago(2)),
-      _cmd('i2', 'ingresso', _ago(1)),
-    ]);
-    await svc(repo).syncNow();
+  test(
+    'remote shift ended by a tap, then a NEW local shift: REST for the first, batch for the second',
+    () async {
+      final repo = _Repo([
+        _remoteIngresso(),
+        _cmd('f', 'fine', _ago(2)),
+        _cmd('i2', 'ingresso', _ago(1)),
+      ]);
+      await svc(repo).syncNow();
 
-    expect(api.calls, ['end']);
-    expect(api.batches.single.single.clientId, 'i2');
-  });
+      expect(api.calls, ['end']);
+      expect(api.batches.single.single.clientId, 'i2');
+    },
+  );
 
   test('a still-queued remote command is not marked synced by the batch path', () async {
     final repo = _Repo([
@@ -314,15 +370,18 @@ void main() {
       expect(notices, isEmpty);
     });
 
-    test('past the TTL it is dropped with a visible message and the reconciler is asked to converge', () async {
-      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(121))]);
-      await svc(repo).syncNow();
+    test(
+      'past the TTL it is dropped with a visible message and the reconciler is asked to converge',
+      () async {
+        final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(121))]);
+        await svc(repo).syncNow();
 
-      expect(api.calls, isEmpty, reason: 'the server clock would stamp a stale tap with "now"');
-      expect(repo.isPending('f'), isFalse);
-      expect(notices, ['Timbratura non inviata, riprova']);
-      expect(applied, 1);
-    });
+        expect(api.calls, isEmpty, reason: 'the server clock would stamp a stale tap with "now"');
+        expect(repo.isPending('f'), isFalse);
+        expect(notices, ['Timbratura non inviata, riprova']);
+        expect(applied, 1);
+      },
+    );
   });
 
   group('state check before a retry (lost response must not double-deliver)', () {
@@ -395,41 +454,47 @@ void main() {
   });
 
   group('restart safety: state check first, always', () {
-    test('a fresh service instance (restart) never resends blind a tap that is not brand new', () async {
-      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(10))]);
-      // The previous process sent it (response lost); ANOTHER shift has begun since.
-      active = [_srv(ActiveTrackerState.working, _t0.add(const Duration(hours: 2)))];
-      await svc(repo).syncNow();
+    test(
+      'a fresh service instance (restart) never resends blind a tap that is not brand new',
+      () async {
+        final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(10))]);
+        // The previous process sent it (response lost); ANOTHER shift has begun since.
+        active = [_srv(ActiveTrackerState.working, _t0.add(const Duration(hours: 2)))];
+        await svc(repo).syncNow();
 
-      expect(api.calls, isEmpty, reason: 'must not end the newer shift');
-      expect(repo.isPending('f'), isFalse);
-    });
+        expect(api.calls, isEmpty, reason: 'must not end the newer shift');
+        expect(repo.isPending('f'), isFalse);
+      },
+    );
 
-    test('the first send of an instance on a tap younger than 3s skips the check; the next one does not', () async {
-      var fetches = 0;
-      final repo = _Repo([_remoteIngresso(), _cmd('p', 'pausa', _ago(2))]);
-      final s = TimbraSyncService(
-        repo: repo,
-        apiClient: api,
-        clock: () => _now,
-        fetchActive: () async {
-          fetches++;
-          return active!;
-        },
-      );
-      await s.syncNow();
-      expect(api.calls, ['break/start']);
-      expect(fetches, 0);
+    test(
+      'the first send of an instance on a tap younger than 3s skips the check; the next one does not',
+      () async {
+        var fetches = 0;
+        final repo = _Repo([_remoteIngresso(), _cmd('p', 'pausa', _ago(2))]);
+        final s = TimbraSyncService(
+          repo: repo,
+          apiClient: api,
+          clock: () => _now,
+          fetchActive: () async {
+            fetches++;
+            return active!;
+          },
+        );
+        await s.syncNow();
+        expect(api.calls, ['break/start']);
+        expect(fetches, 0);
 
-      repo.sessions.add(_cmd('f', 'fine', _ago(1)));
-      await s.syncNow();
-      expect(api.calls, ['break/start', 'end']);
-      expect(fetches, 1, reason: 'not the first send any more: verify before sending');
-    });
+        repo.sessions.add(_cmd('f', 'fine', _ago(1)));
+        await s.syncNow();
+        expect(api.calls, ['break/start', 'end']);
+        expect(fetches, 1, reason: 'not the first send any more: verify before sending');
+      },
+    );
   });
 
-  group('batch refused with a NON-conflict 4xx: events are held, never retired', () {
-    final held = <(String, DioException, String)>[
+  group('batch refused with a permanent 4xx: the server decides, the queue drains', () {
+    final refused = <(String, DioException, String)>[
       ('403', _problem(403, null), serverErrorMessage),
       ('400', _problem(400, null), serverErrorMessage),
       ('404', _problem(404, null), serverErrorMessage),
@@ -448,10 +513,9 @@ void main() {
       ),
     ];
 
-    for (final (name, error, message) in held) {
-      test('$name: stays pending, data untouched, one accurate message, capped at 5 attempts', () async {
+    for (final (name, error, message) in refused) {
+      test('$name: retired (kept for support), not pending, one message, sent once', () async {
         final repo = _Repo([_cmd('i', 'ingresso', _ago(10)), _cmd('f', 'fine', _ago(5))]);
-        final before = List.of(repo.sessions);
         final failing = _FailingBatchApi(error);
         final s = TimbraSyncService(
           repo: repo,
@@ -461,51 +525,38 @@ void main() {
           clock: () => clock,
         );
 
-        for (var i = 0; i < 12; i++) {
+        for (var i = 0; i < 6; i++) {
           await s.syncNow();
-          clock = clock.add(const Duration(hours: 1)); // well past any backoff
+          clock = clock.add(const Duration(hours: 1));
         }
 
-        expect(failing.batchCalls, 5, reason: 'cap of 5 attempts per app session');
-        expect(repo.isPending('i') && repo.isPending('f'), isTrue);
-        expect(repo.sessions.map((e) => e.notes), [null, null], reason: 'no marker, nothing retired');
-        expect(repo.sessions.map((e) => e.id), before.map((e) => e.id));
-        expect(applied, 0);
+        expect(failing.batchCalls, 1, reason: 'refused once, never retried: nothing is pending');
+        expect(repo.isPending('i') || repo.isPending('f'), isFalse);
+        expect(repo.sessions.map((e) => e.notes), [syncFailedMarker, syncFailedMarker]);
+        expect(applied, 1, reason: 'the reconciler is told to adopt the server\'s view');
         expect(notices, [message], reason: 'ONE message per failure kind');
       });
     }
 
-    test('backoff: an immediate second attempt is not made', () async {
-      final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
-      final failing = _FailingBatchApi(_problem(403, null));
-      final s = TimbraSyncService(repo: repo, apiClient: failing, clock: () => clock);
-      await s.syncNow();
-      await s.syncNow();
-      expect(failing.batchCalls, 1);
-    });
-
-    test('a manual sync clears the hold', () async {
-      final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
-      final failing = _FailingBatchApi(_problem(403, null));
-      final s = TimbraSyncService(repo: repo, apiClient: failing, clock: () => clock);
-      await s.syncNow();
-      await s.syncNow(manual: true);
-      expect(failing.batchCalls, 2);
-    });
-
-    test('401 stays transient: no message, no hold', () async {
+    test('401 stays transient: no message, nothing retired, retried', () async {
       final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
       final failing = _FailingBatchApi(_status(401));
-      final s = TimbraSyncService(repo: repo, apiClient: failing, onNotice: notices.add, clock: () => clock);
+      final s = TimbraSyncService(
+        repo: repo,
+        apiClient: failing,
+        onNotice: notices.add,
+        clock: () => clock,
+      );
       await s.syncNow();
       await s.syncNow();
       expect(failing.batchCalls, 2);
+      expect(repo.isPending('i'), isTrue);
       expect(notices, isEmpty);
     });
   });
 
   group('a permanently failing batch (e.g. 409 active_session_exists)', () {
-    test('retires the dead events, tells the user, and hands the shift to the REST path', () async {
+    test('is retired, the user is told how many events were kept, the server view wins', () async {
       final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
       final failing = _FailingBatchApi(_problem(409, 'active_session_exists'));
       final service = TimbraSyncService(
@@ -517,16 +568,16 @@ void main() {
       );
       await service.syncNow();
 
-      expect(repo.isPending('i'), isFalse, reason: 'no longer blocks the reconciler (hasUnsynced)');
-      expect(repo.sessions.single.notes, syncFailedMarker, reason: 'kept for support, distinct marker');
-      expect(repo.sessions.single.notes, isNot(reconciledOrphanMarker));
+      // The phone only suggests; the server already holds an open row, so the queue drains and the
+      // office resolves it. The event stays on the device under a support-only marker.
+      expect(repo.isPending('i'), isFalse);
+      expect(repo.sessions.single.notes, syncFailedMarker);
       expect(notices.single, startsWith(batchConflictMessage));
       expect(notices.single, contains('1 evento conservato'));
       expect(applied, 1);
-      expect(failing.batchCalls, 1);
 
       await service.syncNow();
-      expect(failing.batchCalls, 1, reason: 'no retry loop');
+      expect(failing.batchCalls, 1, reason: 'nothing left to send');
     });
 
     test('a transient batch failure (no response) is untouched', () async {
@@ -544,7 +595,10 @@ class _FailingBatchApi extends WorklogApiClient {
   final Object error;
   int batchCalls = 0;
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> s) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> s, {
+    List<MobileSessionDto> breaks = const [],
+  }) async {
     batchCalls++;
     throw error;
   }

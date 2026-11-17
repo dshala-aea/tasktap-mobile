@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:drift/drift.dart';
+
 import '../local/app_database.dart';
 import '../sync/draft_submission_state.dart';
 
@@ -64,11 +65,89 @@ class DraftReportRepository {
   Future<void> deleteDraft(String reportId) async {
     await _db.transaction(() async {
       await (_db.delete(_db.reportStaffTable)..where((s) => s.reportId.equals(reportId))).go();
+      // The segments hang off the same report as the staff rows above — a deleted rapportino must
+      // not leave the intervals that justified its hours behind.
+      await (_db.delete(_db.reportStaffSegments)..where((g) => g.reportId.equals(reportId))).go();
       await (_db.delete(_db.reportMateriali)..where((m) => m.reportId.equals(reportId))).go();
       await (_db.delete(_db.reportControlli)..where((c) => c.reportId.equals(reportId))).go();
+      await (_db.delete(_db.reportStrumenti)..where((s) => s.reportId.equals(reportId))).go();
       await (_db.delete(_db.reportAllegati)..where((a) => a.entityId.equals(reportId))).go();
       await (_db.delete(_db.draftReports)..where((r) => r.id.equals(reportId))).go();
     });
+  }
+
+  // ── Strumenti ──────────────────────────────────────────────────────────────
+  //
+  // `report_strumenti` holds two origins (see the table's doc comment): server rows (isLocal
+  // false, replaced by sync) and the selection authored on this device (isLocal true). The editor
+  // and the submit builder only ever read/write the local ones, plus the server ones once as a
+  // seed.
+
+  /// The selection authored on this device for [reportId].
+  Future<List<ReportStrumentoRow>> getLocalStrumenti(String reportId) {
+    return (_db.select(_db.reportStrumenti)
+          ..where((s) => s.reportId.equals(reportId) & s.isLocal.equals(true))
+          ..orderBy([(s) => OrderingTerm.asc(s.name), (s) => OrderingTerm.asc(s.id)]))
+        .get();
+  }
+
+  /// The instruments the server holds for [reportId] (synced down, isLocal false).
+  Future<List<ReportStrumentoRow>> getServerStrumenti(String reportId) {
+    return (_db.select(
+      _db.reportStrumenti,
+    )..where((s) => s.reportId.equals(reportId) & s.isLocal.equals(false))).get();
+  }
+
+  /// The local instrument catalogue (every active tenant instrument the last sync delivered).
+  Future<List<StrumentoRow>> getStrumentiCatalogue() => _db.select(_db.strumenti).get();
+
+  /// Writes the first selection for a draft and flips `strumentiPrefilled` in ONE transaction, so
+  /// a crash cannot leave a selection without the flag (it would be re-seeded over the technician's
+  /// edits) or the flag without a selection.
+  Future<void> seedLocalStrumenti(
+    String reportId,
+    List<ReportStrumentiCompanion> rows, {
+    required bool markPrefilled,
+  }) {
+    return _db.transaction(() async {
+      for (final r in rows) {
+        await _db.into(_db.reportStrumenti).insertOnConflictUpdate(r);
+      }
+      if (markPrefilled) {
+        await (_db.update(_db.draftReports)..where((d) => d.id.equals(reportId))).write(
+          const DraftReportsCompanion(strumentiPrefilled: Value(true)),
+        );
+      }
+    });
+  }
+
+  Future<void> upsertLocalStrumento(ReportStrumentiCompanion row) async {
+    await _db.into(_db.reportStrumenti).insertOnConflictUpdate(row);
+  }
+
+  /// Writes only the columns [change] carries (the notes) on the local row of one instrument.
+  Future<void> updateLocalStrumentoNotes(
+    String reportId,
+    String strumentoId,
+    ReportStrumentiCompanion change,
+  ) async {
+    await (_db.update(_db.reportStrumenti)..where(
+          (s) =>
+              s.reportId.equals(reportId) &
+              s.strumentoId.equals(strumentoId) &
+              s.isLocal.equals(true),
+        ))
+        .write(change);
+  }
+
+  Future<void> deleteLocalStrumento(String reportId, String strumentoId) async {
+    await (_db.delete(_db.reportStrumenti)..where(
+          (s) =>
+              s.reportId.equals(reportId) &
+              s.strumentoId.equals(strumentoId) &
+              s.isLocal.equals(true),
+        ))
+        .go();
   }
 
   // ── Staff ──────────────────────────────────────────────────────────────────
@@ -90,6 +169,34 @@ class DraftReportRepository {
           ..where((s) => s.reportId.equals(reportId))
           ..orderBy([(s) => OrderingTerm.asc(s.createdAt)]))
         .watch();
+  }
+
+  // ── Staff segments ─────────────────────────────────────────────────────────
+  //
+  // The intervals a staff row's hours were measured from. They are keyed by `(reportId, userId)`,
+  // matching the server's own row, and are shared with SyncService: a sync replaces them for
+  // every report in its payload's version set (see `_applyReportAggregate`). No merge path here on
+  // purpose — the payload is the authority once the report is server-known.
+
+  /// A report's intervals, oldest first. Ordered here rather than relying on rowid: a hydrated
+  /// list only looks chronological by luck otherwise, and the order it arrives in is the order the
+  /// editor holds and a submit body would serialise.
+  Future<List<ReportStaffSegment>> getSegments(String reportId) =>
+      (_db.select(_db.reportStaffSegments)
+            ..where((s) => s.reportId.equals(reportId))
+            ..orderBy([(s) => OrderingTerm.asc(s.startUtc), (s) => OrderingTerm.asc(s.id)]))
+          .get();
+
+  Future<void> upsertSegments(List<ReportStaffSegmentsCompanion> rows) async {
+    await _db.batch((b) => b.insertAllOnConflictUpdate(_db.reportStaffSegments, rows));
+  }
+
+  /// Intervals belong to `(reportId, userId)`, so removing the technician removes their taps —
+  /// a re-added colleague must not inherit the previous person's intervals.
+  Future<void> deleteSegmentsForStaff(String reportId, String userId) async {
+    await (_db.delete(
+      _db.reportStaffSegments,
+    )..where((s) => s.reportId.equals(reportId) & s.userId.equals(userId))).go();
   }
 
   // ── Materiali ──────────────────────────────────────────────────────────────

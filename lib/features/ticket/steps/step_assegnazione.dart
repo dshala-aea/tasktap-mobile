@@ -1,13 +1,18 @@
 // dart format width=100
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../data/sync/connectivity_provider.dart' show isOnlineProvider;
+import '../../../data/sync/sync_freshness_provider.dart';
+import '../../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../new_ticket_form_state.dart';
 import '../ticket_api_client.dart';
 import 'blamed_field_notice.dart';
+
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -15,15 +20,53 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 3 — Assegnazione
 //
-// Optional: assign a technician. Fetches from backend API (no Users table
-// in Drift). Shows a loading state, or a message if offline.
+// Optional: assign a technician. The live `/api/users` list while online; the
+// synced `colleagues` mirror offline (or when the call itself fails), so a
+// ticket created on site can still be assigned instead of defaulting to nobody.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Provider that fetches technicians from the backend.
-final techniciansProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
-  final client = ref.watch(ticketApiClientProvider);
-  return client.fetchTechnicians();
+/// The tenant's technicians: the live list online, the mirrored colleagues otherwise.
+///
+/// Shared beyond this step — the admin pickers (contract → generate schedules, magazzino
+/// assignment, schedule form) read the same provider — so the fallback is deliberately the same
+/// map shape the API returns rather than a new type.
+final techniciansProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  if (ref.watch(isOnlineProvider)) {
+    try {
+      return await ref.watch(ticketApiClientProvider).fetchTechnicians();
+    } catch (e) {
+      // A radio that says online but cannot reach the server is the case the mirror exists for;
+      // the technician picker must not collapse to "nobody" on it.
+      debugPrint('techniciansProvider: live fetch failed ($e) — using the colleagues mirror');
+    }
+  }
+  final db = ref.watch(appDatabaseProvider);
+  final rows = await (db.select(
+    db.colleagues,
+  )..orderBy([(c) => OrderingTerm.asc(c.displayName)])).get();
+  return [
+    for (final c in rows)
+      {
+        'id': c.id,
+        'displayName': c.displayName,
+        // The sync carries one display name; the split is presentation only, for the callers that
+        // build "firstName lastName" themselves (this step) rather than reading `displayName`.
+        'firstName': _firstNameOf(c.displayName),
+        'lastName': _lastNameOf(c.displayName),
+        'email': null,
+      },
+  ];
 });
+
+String _firstNameOf(String displayName) {
+  final parts = displayName.trim().split(RegExp(r'\s+'));
+  return parts.first;
+}
+
+String _lastNameOf(String displayName) {
+  final parts = displayName.trim().split(RegExp(r'\s+'));
+  return parts.length < 2 ? '' : parts.skip(1).join(' ');
+}
 
 class StepAssegnazione extends ConsumerStatefulWidget {
   const StepAssegnazione({
@@ -48,6 +91,11 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
   @override
   Widget build(BuildContext context) {
     final techsAsync = ref.watch(techniciansProvider);
+    // An empty colleagues mirror is "this phone has not downloaded the anagrafica yet", not
+    // "there are no technicians" — the provider's fallback can only be trusted once a sync has
+    // filled it.
+    final colleaguesUnknown =
+        !ref.watch(isOnlineProvider) && ref.watch(hasSyncedAtLeastOnceProvider).value == false;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -113,7 +161,10 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
               return Padding(
                 padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Text(
-                  'Nessun tecnico disponibile.',
+                  colleaguesUnknown
+                      ? 'Tecnici non ancora scaricati su questo telefono: puoi assegnare dopo la '
+                            'prossima sincronizzazione, oppure selezionare "Nessuna assegnazione".'
+                      : 'Nessun tecnico disponibile.',
                   style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
                 ),
               );

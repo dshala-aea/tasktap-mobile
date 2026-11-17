@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/time/business_time_providers.dart';
@@ -28,8 +29,9 @@ final authRepositoryProvider = Provider<IAuthRepository>((ref) {
 
 // ── Session teardown ────────────────────────────────────────────────────────
 
-/// The teardown every "end this session" path runs — the logout button and the interceptor's forced
-/// sign-out alike. See [SessionEnder] for why there is only one.
+/// The one object every "end this session" path goes through — the logout button (`end()`, which
+/// wipes) and the interceptor's forced sign-out (`endForced()`, which keeps the local data). See
+/// [SessionEnder] for why they are deliberately different endings.
 ///
 /// A provider rather than a bare function so both callers get the *same* collaborators the app is
 /// really using: `dioProvider` (a `Provider<Dio>`, built once) reads this from inside the
@@ -59,7 +61,7 @@ final authStateProvider = StreamProvider<AuthUser?>((ref) {
 ///
 /// Returns null while loading or when unauthenticated.
 final currentUserProvider = Provider<AuthUser?>((ref) {
-  return ref.watch(authStateProvider).valueOrNull;
+  return ref.watch(authStateProvider).value;
 });
 
 /// The signed-in user's INTERNAL database Guid (`Users.Id` on the backend) — never the Zitadel
@@ -136,12 +138,45 @@ class LoginNotifier extends StateNotifier<LoginState> {
     }
   }
 
+  Future<void> signInWithPasskey(String loginName) async {
+    state = const LoginState(isLoading: true);
+    final result = await _repo.signInWithPasskey(loginName);
+
+    if (result.failure is AdditionalFactorRequired) {
+      // Same fallback as the password path: the account needs a factor this native flow cannot
+      // submit. The browser can satisfy whatever Zitadel's hosted UI supports, so hand off
+      // silently instead of showing an error.
+      await signIn();
+      return;
+    }
+
+    if (result.failure is PasskeyCancelled) {
+      // Dismissing the OS passkey sheet is a deliberate no-op, not an error: clear the spinner
+      // and show nothing.
+      state = const LoginState();
+      return;
+    }
+    if (result.failure != null) {
+      state = LoginState(failure: result.failure);
+    } else {
+      state = const LoginState();
+    }
+  }
+
   Future<void> signOut() async {
-    // One sequence, shared with the forced path — the interceptor ends a session through the same
-    // `SessionEnder` (see `sessionEnderProvider`), because when this teardown lived here and a
-    // narrower one lived there, a forced sign-out left the previous user's database and prefs on
-    // the device.
+    // The CONSENTED ending: the logout dialog already told the technician how much unsent work
+    // this discards (see `UnsentWorkCounter` / `logout_flow.dart`). The forced path goes through
+    // the same `SessionEnder` but `endForced()`, which keeps the local data — a dead session is
+    // not consent to lose a day's work (audit F1).
     await _ref.read(sessionEnderProvider).end();
+    // `loginProvider` is autoDispose and nothing is listening to it on the sign-out path: the
+    // ending itself is what tears the authenticated tree down, so this notifier is usually already
+    // disposed by the time the await returns (the router has moved to the login screen, which
+    // builds a fresh one). Writing `state` then throws "Tried to use LoginNotifier after dispose
+    // was called" — and, in a test container, fails the sign-out itself for a state write nobody
+    // would ever read. Everything that matters (the repository sign-out, the wipe, the zone reset)
+    // already happened inside `end()`.
+    if (!mounted) return;
     state = const LoginState();
   }
 

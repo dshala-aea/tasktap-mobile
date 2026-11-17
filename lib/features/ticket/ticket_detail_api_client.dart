@@ -42,6 +42,20 @@ class TicketDetailApiClient {
     return items.cast<Map<String, dynamic>>().map(TicketReportSummary.fromJson).toList();
   }
 
+  /// Ids of every prodotto assistenza this ticket covers: `GET /api/tickets/{id}` is the one place
+  /// that lists the coverage authoritatively (`prodottoAssistenzaIds`), plus the legacy singular
+  /// `prodottoAssistenzaId` that older tickets carry. The local `ticket_assets` mirror is a
+  /// checklist-sync artifact and is NOT a coverage list, so it is deliberately not used here.
+  Future<List<String>> fetchCoveredProdottoIds(String ticketId) async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/tickets/$ticketId');
+    final data = response.data ?? const <String, dynamic>{};
+    final ids = <String>{
+      ...((data['prodottoAssistenzaIds'] as List<dynamic>?) ?? const []).whereType<String>(),
+      if (data['prodottoAssistenzaId'] is String) data['prodottoAssistenzaId'] as String,
+    };
+    return ids.toList();
+  }
+
   /// Files uploaded directly to the ticket (not via a rapportino).
   Future<List<TicketAttachmentDto>> fetchAttachments(String ticketId) async {
     final response = await _dio.get<List<dynamic>>('/api/Tickets/$ticketId/attachments');
@@ -226,6 +240,23 @@ class TicketReportSummary {
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
+
+  /// The same summary from the device's own Drift row, for the offline Report tab (O-8b). The
+  /// mirror stores `stato` as the enum NAME — the shape the sync payload carries — and this reuses
+  /// the wire parser so both paths agree on the label.
+  factory TicketReportSummary.fromMirror({
+    required String id,
+    required String title,
+    required String stato,
+    required DateTime createdAt,
+  }) {
+    return TicketReportSummary(
+      id: id,
+      title: title,
+      stato: _parseStato(stato),
+      createdAt: createdAt,
+    );
+  }
 }
 
 /// One file attached directly to the ticket (Allegati tab).
@@ -286,6 +317,7 @@ class TicketMaterialeWriteRow {
     required this.quantity,
     this.unitOfMeasure,
     this.notes,
+    this.magazzinoId,
   });
 
   final String? materialeId;
@@ -294,12 +326,17 @@ class TicketMaterialeWriteRow {
   final String? unitOfMeasure;
   final String? notes;
 
+  /// Optional source warehouse for a planned line. Fabbisogno is planning only, so this never
+  /// books a stock movement; null means "no source" and is valid.
+  final String? magazzinoId;
+
   Map<String, dynamic> toJson() => {
     'materialeId': materialeId,
     'freeTextName': freeTextName,
     'quantity': quantity,
     'unitOfMeasure': unitOfMeasure,
     'notes': notes,
+    'magazzinoId': magazzinoId,
   };
 }
 
@@ -338,6 +375,8 @@ class TicketMaterialeDto {
     this.unitaMisura,
     this.note,
     required this.disponibile,
+    this.magazzinoId,
+    this.magazzinoNome,
   });
 
   final String id;
@@ -349,6 +388,13 @@ class TicketMaterialeDto {
   final String? note;
   final bool disponibile;
 
+  /// Optional source warehouse for this planned line. Null means no source; fabbisogno never
+  /// consumes stock, so this is provenance for planning and display only.
+  final String? magazzinoId;
+
+  /// The source warehouse's name, resolved by the server (or by the local mirror offline).
+  final String? magazzinoNome;
+
   factory TicketMaterialeDto.fromJson(Map<String, dynamic> json) {
     return TicketMaterialeDto(
       id: json['id'] as String,
@@ -359,6 +405,8 @@ class TicketMaterialeDto {
       unitaMisura: json['unitaMisura'] as String?,
       note: json['note'] as String?,
       disponibile: json['disponibile'] as bool? ?? true,
+      magazzinoId: json['magazzinoId'] as String?,
+      magazzinoNome: json['magazzinoNome'] as String?,
     );
   }
 }

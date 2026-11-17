@@ -1,0 +1,577 @@
+import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/sync_dto.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart';
+
+/// O-8a/O-8b: the report aggregate reaches the device.
+///
+/// The payload used to carry report HEADERS only, so a report the technician did not author here
+/// opened as a blank shell — Squadra, Materiali, Controlli and Foto all empty. These tests pin the
+/// delivery, and as hard as the delivery they pin the two guards that make it safe:
+///
+///   • a locally-owned draft's children are never replaced (that is unsent work);
+///   • the payload's own in-scope report set is the only authority to delete on — a report absent
+///     from it is no evidence of anything, and a payload from an older backend is no evidence at
+///     all.
+class MockDio extends Mock implements Dio {}
+
+const _absent = Object();
+
+Response<Map<String, dynamic>> _ok(Map<String, dynamic> data) => Response(
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: '/api/sync/mobile'),
+);
+
+Map<String, dynamic> _scope(Map<String, Object?> ids) => {
+  'schedules': null,
+  'tickets': null,
+  'locations': null,
+  'customers': null,
+  'cantieri': null,
+  'agents': null,
+  'draftReports': null,
+  'submittedReports': null,
+  'materiali': null,
+  'materialiBarcodes': null,
+  'strumenti': null,
+  ...ids,
+};
+
+Map<String, dynamic> _payload({
+  List<Map<String, dynamic>> draftReports = const [],
+  Object? scope = _absent,
+  Object? reportStaff = _absent,
+  Object? reportMateriali = _absent,
+  Object? reportControlli = _absent,
+  Object? allegati = _absent,
+  Object? reportVersions = _absent,
+}) => {
+  'syncedAt': '2026-10-21T08:00:00Z',
+  'since': null,
+  if (!identical(scope, _absent)) 'scope': scope,
+  'schedules': <Object>[],
+  'draftReports': draftReports,
+  'submittedReports': <Object>[],
+  'customers': <Object>[],
+  'locations': <Object>[],
+  'tickets': <Object>[],
+  'ticketMateriali': <Object>[],
+  'materiali': <Object>[],
+  'materialiBarcodes': <Object>[],
+  'cantieri': <Object>[],
+  'ticketStatuses': <Object>[],
+  'ticketTypes': <Object>[],
+  'colleagues': <Object>[],
+  if (!identical(reportStaff, _absent)) 'reportStaff': reportStaff,
+  if (!identical(reportMateriali, _absent)) 'reportMateriali': reportMateriali,
+  if (!identical(reportControlli, _absent)) 'reportControlli': reportControlli,
+  if (!identical(allegati, _absent)) 'allegati': allegati,
+  if (!identical(reportVersions, _absent)) 'reportVersions': reportVersions,
+};
+
+Map<String, dynamic> _staffJson(
+  String id,
+  String reportId, {
+  int hoursSource = 0,
+  List<Map<String, dynamic>> segments = const [],
+}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-10-20T08:00:00Z',
+  'reportId': reportId,
+  'userId': 'user-1',
+  'hoursWorked': 2.5,
+  'kmTraveled': 12,
+  'pauseMinutes': 15,
+  'hoursSource': hoursSource,
+  'segments': segments,
+};
+
+Map<String, dynamic> _segmentJson(
+  String id, {
+  required String reportId,
+  required String startUtc,
+  required String endUtc,
+  String? clientId,
+}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-10-20T08:00:00Z',
+  'updatedAt': null,
+  'reportId': reportId,
+  'userId': 'user-1',
+  'startUtc': startUtc,
+  'endUtc': endUtc,
+  'clientId': clientId,
+};
+
+Map<String, dynamic> _materialeJson(String id, String reportId) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-10-20T08:00:00Z',
+  'reportId': reportId,
+  'freeTextName': 'Guarnizione',
+  'quantity': 3,
+};
+
+Map<String, dynamic> _controlloJson(String id, String reportId) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-10-20T08:00:00Z',
+  'reportId': reportId,
+  'ticketControlId': 'tc-1',
+  'boolValue': true,
+  'note': 'ok',
+};
+
+Map<String, dynamic> _allegatoJson(
+  String id, {
+  required int entityType,
+  required String entityId,
+  bool isActive = true,
+  int kind = 0,
+  String? contentHash = 'abc123',
+}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-10-20T08:00:00Z',
+  'entityType': entityType,
+  'entityId': entityId,
+  'fileName': '$id.jpg',
+  'contentType': 'image/jpeg',
+  'sizeBytes': 2048,
+  'kind': kind,
+  'uploadedByUserId': 'user-1',
+  'isActive': isActive,
+  'contentHash': contentHash,
+};
+
+Map<String, dynamic> _versionJson(String reportId, String version) => {
+  'reportId': reportId,
+  'version': version,
+};
+
+void main() {
+  late AppDatabase db;
+  late MockDio dio;
+  late SyncService svc;
+
+  setUp(() {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    db = AppDatabase(NativeDatabase.memory());
+    dio = MockDio();
+    svc = SyncService(db: db, dio: dio);
+  });
+
+  tearDown(() => db.close());
+
+  void respond(Map<String, dynamic> body) {
+    when(
+      () => dio.get<Map<String, dynamic>>(
+        any(),
+        queryParameters: any(named: 'queryParameters'),
+      ),
+    ).thenAnswer((_) async => _ok(body));
+  }
+
+  Future<void> seedReport(
+    String id, {
+    bool isLocalOnly = false,
+    String stato = 'Bozza',
+  }) => db
+      .into(db.draftReports)
+      .insert(
+        DraftReportsCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 10, 20),
+          title: 'Rapportino $id',
+          insertedUserId: 'user-1',
+          locationId: 'loc-1',
+          stato: Value(stato),
+          isLocalOnly: Value(isLocalOnly),
+        ),
+      );
+
+  Future<void> seedStaffRow(String id, String reportId) => db
+      .into(db.reportStaffTable)
+      .insert(
+        ReportStaffTableCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 10, 20),
+          reportId: reportId,
+          userId: 'user-1',
+        ),
+      );
+
+  Future<void> seedAllegato(
+    String id, {
+    required int entityType,
+    required String entityId,
+    bool isPendingUpload = false,
+  }) => db
+      .into(db.reportAllegati)
+      .insert(
+        ReportAllegatiCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 10, 20),
+          fileName: '$id.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 10,
+          storagePath: isPendingUpload ? '/tmp/$id.jpg' : 'https://old',
+          url: isPendingUpload ? '/tmp/$id.jpg' : 'https://old',
+          entityType: entityType,
+          entityId: entityId,
+          uploadedByUserId: 'user-1',
+          isPendingUpload: Value(isPendingUpload),
+        ),
+      );
+
+  Future<List<String>> staffIds(String reportId) async {
+    final rows = await (db.select(
+      db.reportStaffTable,
+    )..where((r) => r.reportId.equals(reportId))).get();
+    return rows.map((r) => r.id).toList();
+  }
+
+  Future<void> seedSegment(
+    String id,
+    String reportId, {
+    String startUtc = '2026-10-20T08:00:00Z',
+    String endUtc = '2026-10-20T09:00:00Z',
+  }) => db
+      .into(db.reportStaffSegments)
+      .insert(
+        ReportStaffSegmentsCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 10, 20),
+          reportId: reportId,
+          userId: 'user-1',
+          startUtc: DateTime.parse(startUtc),
+          endUtc: DateTime.parse(endUtc),
+        ),
+      );
+
+  Future<List<String>> segmentIds(String reportId) async {
+    final rows = await (db.select(
+        db.reportStaffSegments,
+      )..where((g) => g.reportId.equals(reportId)))
+        .get();
+    return rows.map((g) => g.id).toList();
+  }
+
+  test('children of an in-scope report land in the mirror', () async {
+    await seedReport('r-1');
+    respond(
+      _payload(
+        reportStaff: [_staffJson('s-1', 'r-1')],
+        reportMateriali: [_materialeJson('m-1', 'r-1')],
+        reportControlli: [_controlloJson('c-1', 'r-1')],
+        reportVersions: [_versionJson('r-1', '42')],
+      ),
+    );
+
+    await svc.sync();
+
+    expect(await staffIds('r-1'), ['s-1']);
+    final materiali = await db.select(db.reportMateriali).get();
+    expect(materiali.single.freeTextName, 'Guarnizione');
+    final controlli = await db.select(db.reportControlli).get();
+    expect(controlli.single.controlId, 'tc-1');
+    expect(controlli.single.note, 'ok');
+
+    final report = await (db.select(
+      db.draftReports,
+    )..where((r) => r.id.equals('r-1'))).getSingle();
+    expect(report.expectedVersion, '42');
+  });
+
+  test('the answer snapshot survives a sync that replaces its row', () async {
+    await seedReport('r-1');
+    // The answer as this device filed it: the label and the asset it belonged to (schema 52). The
+    // payload carries neither — the server's row holds the TicketControl id and nothing about what
+    // was asked — so a replace that simply re-inserted would strip the report of the names it shows
+    // and of the asset its rows are grouped under, on every sync, right after the technician sent it.
+    await db
+        .into(db.reportControlli)
+        .insert(
+          ReportControlliCompanion.insert(
+            id: 'c-old',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 10, 20),
+            reportId: 'r-1',
+            controlId: 'tc-1',
+            boolValue: const Value(true),
+            controlLabel: const Value('Pressione impianto'),
+            assetId: const Value('asset-1'),
+          ),
+        );
+    respond(
+      _payload(
+        // `reportStaff` is what marks the payload as carrying the aggregate at all (the server
+        // always sends the collection, empty or not), so it has to be present for the replace to
+        // run — the point of this test is the replace, not its trigger.
+        reportStaff: const [],
+        reportControlli: [_controlloJson('c-1', 'r-1')],
+        reportVersions: [_versionJson('r-1', '42')],
+      ),
+    );
+
+    await svc.sync();
+
+    final row = (await db.select(db.reportControlli).get()).single;
+    expect(row.id, 'c-1', reason: 'the payload is still the authority on the row itself');
+    expect(row.controlLabel, 'Pressione impianto');
+    expect(row.assetId, 'asset-1');
+  });
+
+  test('the intervals nested in a staff row land with that row', () async {
+    await seedReport('r-1');
+    respond(
+      _payload(
+        reportStaff: [
+          _staffJson(
+            's-1',
+            'r-1',
+            hoursSource: 1,
+            segments: [
+              _segmentJson(
+                'g-1',
+                reportId: 'r-1',
+                startUtc: '2026-10-20T08:00:00Z',
+                endUtc: '2026-10-20T09:00:00Z',
+                clientId: 'c-1',
+              ),
+              _segmentJson(
+                'g-2',
+                reportId: 'r-1',
+                startUtc: '2026-10-20T10:00:00Z',
+                endUtc: '2026-10-20T11:30:00Z',
+              ),
+              // A nested interval is written under the report being replaced, never under the one
+              // its own body claims: a disagreeing `reportId` must not be able to hang a segment
+              // on a report this pass knows nothing about.
+              _segmentJson(
+                'g-3',
+                reportId: 'r-other',
+                startUtc: '2026-10-20T12:00:00Z',
+                endUtc: '2026-10-20T12:30:00Z',
+              ),
+            ],
+          ),
+        ],
+        reportVersions: [_versionJson('r-1', '42')],
+      ),
+    );
+
+    await svc.sync();
+
+    // The intervals are a child of the staff row on the wire, not a payload collection of their
+    // own: they land under the report the loop is replacing, with the staff row's technician.
+    final rows =
+        await (db.select(db.reportStaffSegments)
+              ..orderBy([(g) => OrderingTerm(expression: g.startUtc)]))
+            .get();
+    expect(rows.map((g) => g.id), ['g-1', 'g-2', 'g-3']);
+    expect(rows.first.reportId, 'r-1');
+    expect(rows.first.userId, 'user-1');
+    expect(
+      rows.last.reportId,
+      'r-1',
+      reason: 'the nested body does not get to choose the report',
+    );
+    // `.toUtc()` on the value, not on the expectation: `dateTime()` decodes local-kinded.
+    expect(rows.first.startUtc.toUtc(), DateTime.utc(2026, 10, 20, 8));
+    expect(rows.first.endUtc.toUtc(), DateTime.utc(2026, 10, 20, 9));
+    expect(
+      rows.first.clientId,
+      'c-1',
+      reason: 'a replayed submit collapses onto the rows the phone already wrote',
+    );
+    expect(rows.last.clientId, isNull);
+
+    // The row also carries WHY its hours are what they are. It is an int on the wire, read through
+    // the same helper as `pauseMinutes` with Legacy (0) as the fallback, so pin the value: a
+    // renamed key would otherwise fall back to 0 in silence while `wireKeys` still matched.
+    expect(
+      SyncReportStaffDto.fromJson(
+        _staffJson('s-1', 'r-1', hoursSource: 1),
+      ).hoursSource,
+      1,
+    );
+  });
+
+  test('a child the office deleted is removed, and only that report\'s', () async {
+    await seedReport('r-1');
+    await seedReport('r-2');
+    await seedStaffRow('s-old', 'r-1');
+    await seedStaffRow('s-keep', 'r-2');
+    await seedSegment('g-old', 'r-1');
+    await seedSegment('g-keep', 'r-2');
+
+    // r-1 is still in scope but has no staff line any more; r-2 is absent from the in-scope set
+    // entirely, which is no evidence of a deletion.
+    respond(
+      _payload(
+        reportStaff: const [],
+        reportVersions: [_versionJson('r-1', '43')],
+      ),
+    );
+
+    await svc.sync();
+
+    expect(await staffIds('r-1'), isEmpty);
+    expect(await staffIds('r-2'), ['s-keep']);
+    expect(await segmentIds('r-1'), isEmpty);
+    expect(await segmentIds('r-2'), ['g-keep']);
+  });
+
+  test('a locally-owned draft keeps its own children', () async {
+    await seedReport('r-1', isLocalOnly: true);
+    await seedStaffRow('s-local', 'r-1');
+    await seedSegment('g-local', 'r-1');
+
+    respond(
+      _payload(
+        // The server's own row carries an interval of its own, so the assertion below also proves
+        // the INSERT skips this report and not merely that the delete does.
+        reportStaff: [
+          _staffJson(
+            's-server',
+            'r-1',
+            segments: [
+              _segmentJson(
+                'g-server',
+                reportId: 'r-1',
+                startUtc: '2026-10-20T08:00:00Z',
+                endUtc: '2026-10-20T09:00:00Z',
+              ),
+            ],
+          ),
+        ],
+        reportVersions: [_versionJson('r-1', '43')],
+      ),
+    );
+
+    await svc.sync();
+
+    expect(await staffIds('r-1'), ['s-local']);
+    expect(
+      await segmentIds('r-1'),
+      ['g-local'],
+      reason: 'the timer intervals of unsent work are this device\'s own, like the row itself',
+    );
+    final report = await (db.select(
+      db.draftReports,
+    )..where((r) => r.id.equals('r-1'))).getSingle();
+    // The imported copy's version is captured at import time and must survive a sync.
+    expect(report.expectedVersion, isNull);
+  });
+
+  test('children of a report this device does not hold are not written', () async {
+    respond(
+      _payload(
+        reportStaff: [_staffJson('s-1', 'r-missing')],
+        reportVersions: [_versionJson('r-missing', '1')],
+      ),
+    );
+
+    await svc.sync();
+
+    expect(await staffIds('r-missing'), isEmpty);
+  });
+
+  test('a payload with no aggregate leaves the mirror untouched', () async {
+    await seedReport('r-1');
+    await seedStaffRow('s-old', 'r-1');
+
+    respond(_payload());
+
+    await svc.sync();
+
+    expect(await staffIds('r-1'), ['s-old']);
+  });
+
+  test(
+    'a report attachment lands with a fetchable url and no fake local path',
+    () async {
+      await seedReport('r-1');
+      respond(
+        _payload(
+          allegati: [
+            _allegatoJson('a-1', entityType: 1, entityId: 'r-1', kind: 1),
+          ],
+          reportVersions: [_versionJson('r-1', '1')],
+        ),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.reportAllegati).get();
+      final a = rows.single;
+      expect(a.id, 'a-1');
+      expect(
+        a.storagePath,
+        isEmpty,
+        reason: 'the bytes are on the server, not here',
+      );
+      expect(a.url, '/api/reports/r-1/attachments/a-1/content');
+      expect(a.kind, 1);
+      expect(a.contentHash, 'abc123');
+      expect(a.isPendingUpload, isFalse);
+    },
+  );
+
+  test('a capture still waiting to upload survives the replace', () async {
+    await seedReport('r-1');
+    await seedAllegato(
+      'a-pending',
+      entityType: 1,
+      entityId: 'r-1',
+      isPendingUpload: true,
+    );
+
+    respond(
+      _payload(
+        allegati: const [],
+        reportVersions: [_versionJson('r-1', '1')],
+      ),
+    );
+
+    await svc.sync();
+
+    final rows = await db.select(db.reportAllegati).get();
+    expect(rows.map((r) => r.id), ['a-pending']);
+  });
+
+  test('ticket attachments are pruned only against the ticket manifest', () async {
+    await seedAllegato('t-1', entityType: 0, entityId: 'ticket-1');
+
+    respond(_payload(allegati: const [], reportVersions: const []));
+    await svc.sync();
+    expect(
+      (await db.select(db.reportAllegati).get()).map((r) => r.id),
+      ['t-1'],
+      reason: 'no manifest means no evidence that the ticket lost its files',
+    );
+
+    respond(
+      _payload(
+        scope: _scope({
+          'tickets': ['ticket-1'],
+        }),
+        allegati: [_allegatoJson('t-2', entityType: 0, entityId: 'ticket-1')],
+      ),
+    );
+    await svc.sync();
+    expect((await db.select(db.reportAllegati).get()).map((r) => r.id), ['t-2']);
+  });
+}

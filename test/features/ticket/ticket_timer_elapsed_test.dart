@@ -6,7 +6,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tasktap_mobile/core/time/business_time.dart';
-import 'package:tasktap_mobile/features/ticket/ticket_detail_screen.dart';
+import 'package:tasktap_mobile/features/ticket/ticket_timer_hero.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_workflow_api_client.dart';
 
 TicketWorkLogDto _running(DateTime workDate, Duration start) => TicketWorkLogDto(

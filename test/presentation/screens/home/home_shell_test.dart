@@ -81,7 +81,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(dio),
@@ -136,7 +136,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(dio),

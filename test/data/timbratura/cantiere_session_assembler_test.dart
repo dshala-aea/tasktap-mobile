@@ -18,6 +18,13 @@ CantierePunche _cp(
   String? description,
   double? latitude,
   double? longitude,
+  String? safetyNotes,
+  double? departureLatitude,
+  double? departureLongitude,
+  String? workOrderNumber,
+  String? equipmentUsed,
+  int? teamSize,
+  String? weatherConditions,
 }) => CantierePunche(
   id: id,
   eventType: type,
@@ -29,6 +36,13 @@ CantierePunche _cp(
   description: description,
   latitude: latitude,
   longitude: longitude,
+  safetyNotes: safetyNotes,
+  departureLatitude: departureLatitude,
+  departureLongitude: departureLongitude,
+  workOrderNumber: workOrderNumber,
+  equipmentUsed: equipmentUsed,
+  teamSize: teamSize,
+  weatherConditions: weatherConditions,
 );
 
 void main() {
@@ -130,6 +144,146 @@ void main() {
         _cp('stable-uuid-abc', 'ingresso', t, cantiereId: 'cant-1', customerId: 'cust-1'),
       ]);
       expect(intervals[0].clientId, 'stable-uuid-abc');
+    });
+
+    group('the clock-out screen\'s own fields', () {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+
+      test('safety note and departure GPS are carried from the uscita', () {
+        final intervals = assembleCantiereIntervals([
+          _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+          _cp(
+            'id-2',
+            'uscita',
+            t2,
+            safetyNotes: 'area recintata',
+            departureLatitude: 45.4660,
+            departureLongitude: 9.1880,
+          ),
+        ]);
+        expect(intervals[0].safetyNotes, 'area recintata');
+        expect(intervals[0].departureLatitude, 45.4660);
+        expect(intervals[0].departureLongitude, 9.1880);
+      });
+
+      test('a description typed on leaving wins over the arrival note — the online end route '
+          'overwrites the row with it, so an offline close must produce the same record', () {
+        final intervals = assembleCantiereIntervals([
+          _cp(
+            'id-1',
+            'ingresso',
+            t1,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            description: 'arrivo in cantiere',
+          ),
+          _cp('id-2', 'uscita', t2, description: 'sostituito il quadro'),
+        ]);
+        expect(intervals[0].description, 'sostituito il quadro');
+      });
+
+      test('an uscita with no note keeps the arrival description', () {
+        final intervals = assembleCantiereIntervals([
+          _cp(
+            'id-1',
+            'ingresso',
+            t1,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            description: 'arrivo in cantiere',
+          ),
+          _cp('id-2', 'uscita', t2),
+        ]);
+        expect(intervals[0].description, 'arrivo in cantiere');
+      });
+
+      test('a still-open interval carries no clock-out fields, even if its opener has the columns '
+          'set (they belong to the uscita only)', () {
+        final intervals = assembleCantiereIntervals([
+          _cp(
+            'id-1',
+            'ingresso',
+            t1,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            safetyNotes: 'nota impossibile',
+          ),
+        ]);
+        expect(intervals[0].endTime, isNull);
+        expect(intervals[0].safetyNotes, isNull);
+      });
+    });
+
+    group('the clock-in screen\'s own fields', () {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+
+      test('work order, equipment, crew size and weather are carried from the ingresso', () {
+        final intervals = assembleCantiereIntervals([
+          _cp(
+            'id-1',
+            'ingresso',
+            t1,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            workOrderNumber: 'OL-2026-118',
+            equipmentUsed: 'piattaforma aerea',
+            teamSize: 3,
+            weatherConditions: 'pioggia leggera',
+          ),
+          _cp('id-2', 'uscita', t2),
+        ]);
+        expect(intervals[0].workOrderNumber, 'OL-2026-118');
+        expect(intervals[0].equipmentUsed, 'piattaforma aerea');
+        expect(intervals[0].teamSize, 3);
+        expect(intervals[0].weatherConditions, 'pioggia leggera');
+      });
+
+      test('a still-open interval keeps them too — they are arrival data, not a close field', () {
+        final intervals = assembleCantiereIntervals([
+          _cp(
+            'id-1',
+            'ingresso',
+            t1,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            workOrderNumber: 'OL-2026-118',
+          ),
+        ]);
+        expect(intervals[0].endTime, isNull);
+        expect(intervals[0].workOrderNumber, 'OL-2026-118');
+      });
+
+      test('an uscita does not overwrite the arrival values with its own columns', () {
+        // Defensive: only the ingresso screen asks for these, but a row carrying them on the
+        // 'uscita' must not win — the online close route never touches them either.
+        final intervals = assembleCantiereIntervals([
+          _cp(
+            'id-1',
+            'ingresso',
+            t1,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            workOrderNumber: 'OL-001',
+            teamSize: 2,
+          ),
+          _cp('id-2', 'uscita', t2, workOrderNumber: 'OL-999', teamSize: 9),
+        ]);
+        expect(intervals[0].workOrderNumber, 'OL-001');
+        expect(intervals[0].teamSize, 2);
+      });
+
+      test('fields left empty on arrival stay null', () {
+        final intervals = assembleCantiereIntervals([
+          _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+          _cp('id-2', 'uscita', t2),
+        ]);
+        expect(intervals[0].workOrderNumber, isNull);
+        expect(intervals[0].equipmentUsed, isNull);
+        expect(intervals[0].teamSize, isNull);
+        expect(intervals[0].weatherConditions, isNull);
+      });
     });
   });
 }

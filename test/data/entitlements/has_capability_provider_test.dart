@@ -20,7 +20,10 @@ void main() {
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
-    container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+    container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
+    );
   });
 
   tearDown(() async {
@@ -38,7 +41,13 @@ void main() {
           fetchedAt: DateTime.utc(2026, 9, 23),
         );
 
-    final result = await container.read(hasCapabilityProvider('clienti.customer.write').future);
+    container.listen(
+      hasCapabilityProvider('clienti.customer.write'),
+      (_, _) {},
+    );
+    final result = await container.read(
+      hasCapabilityProvider('clienti.customer.write').future,
+    );
 
     expect(result, isTrue);
   });
@@ -53,13 +62,25 @@ void main() {
           fetchedAt: DateTime.utc(2026, 9, 23),
         );
 
-    final result = await container.read(hasCapabilityProvider('clienti.customer.write').future);
+    container.listen(
+      hasCapabilityProvider('clienti.customer.write'),
+      (_, _) {},
+    );
+    final result = await container.read(
+      hasCapabilityProvider('clienti.customer.write').future,
+    );
 
     expect(result, isFalse);
   });
 
   test('false, not an exception, when nothing has ever been cached', () async {
-    final result = await container.read(hasCapabilityProvider('clienti.customer.write').future);
+    container.listen(
+      hasCapabilityProvider('clienti.customer.write'),
+      (_, _) {},
+    );
+    final result = await container.read(
+      hasCapabilityProvider('clienti.customer.write').future,
+    );
 
     expect(result, isFalse);
   });

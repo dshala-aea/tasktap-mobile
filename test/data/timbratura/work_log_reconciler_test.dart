@@ -40,6 +40,11 @@ import 'package:tasktap_mobile/features/timbra/timbra_providers.dart' show deriv
 
 class _FakeRepo implements IWorkSessionRepository {
   @override
+  Stream<List<WorkSession>> watchSyncFailedSessions({
+    Duration within = const Duration(days: 7),
+  }) => const Stream<List<WorkSession>>.empty();
+
+  @override
   Future<void> markSyncFailed(String id) async {}
 
   final List<WorkSession> sessions;
@@ -64,6 +69,20 @@ class _FakeRepo implements IWorkSessionRepository {
 
   @override
   Future<List<WorkSession>> getTodaySessions() async => List.of(sessions);
+
+  @override
+  Stream<List<WorkSession>> watchAllSessions() => Stream.value(sessions);
+
+  @override
+  Future<List<WorkSession>> getAllSessions() async => List.of(sessions);
+
+  @override
+  Future<List<WorkSession>> getPendingSessions() async =>
+      sessions.where((s) => s.isPendingSync).toList();
+
+  @override
+  Future<int> getPendingCount() async =>
+      sessions.where((s) => s.isPendingSync && s.notes != reconciledOrphanMarker).length;
 
   @override
   Future<void> markSynced(List<String> ids) async {}

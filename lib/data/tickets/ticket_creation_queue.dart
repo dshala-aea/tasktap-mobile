@@ -113,6 +113,7 @@ class TicketCreationQueue {
     String? contractId,
     String? commessaId,
     String? cantiereId,
+    String? maintenanceTemplateId,
     List<String> prodottoAssistenzaIds = const [],
     List<String> tags = const [],
     required bool isOnline,
@@ -134,6 +135,7 @@ class TicketCreationQueue {
       contractId: contractId,
       commessaId: commessaId,
       cantiereId: cantiereId,
+      maintenanceTemplateId: maintenanceTemplateId,
       prodottoAssistenzaIds: prodottoAssistenzaIds,
       tags: tags,
       state: isOnline ? PendingTicketState.submitting : PendingTicketState.pendingSync,
@@ -184,6 +186,7 @@ class TicketCreationQueue {
     String? contractId,
     String? commessaId,
     String? cantiereId,
+    String? maintenanceTemplateId,
     List<String> prodottoAssistenzaIds = const [],
     List<String> tags = const [],
     required bool isOnline,
@@ -204,6 +207,7 @@ class TicketCreationQueue {
       contractId: contractId,
       commessaId: commessaId,
       cantiereId: cantiereId,
+      maintenanceTemplateId: maintenanceTemplateId,
       prodottoAssistenzaIds: prodottoAssistenzaIds,
       tags: tags,
     );
@@ -212,11 +216,7 @@ class TicketCreationQueue {
       // The corrected payload has never been sent, so the row is a genuinely unsent one — not a
       // failed send. `pendingSync` says that in the state's own words and clears the 404 sentence
       // `updateFields` deliberately left untouched.
-      await _repo.updateState(
-        id: id,
-        state: PendingTicketState.pendingSync,
-        clearError: true,
-      );
+      await _repo.updateState(id: id, state: PendingTicketState.pendingSync, clearError: true);
       return TicketCreationOutcome.queuedOffline(id);
     }
     return _attempt(id);
@@ -284,6 +284,7 @@ class TicketCreationQueue {
         contractId: t.contractId,
         commessaId: t.commessaId,
         cantiereId: t.cantiereId,
+        maintenanceTemplateId: t.maintenanceTemplateId,
         prodottoAssistenzaIds: decodePendingStringList(t.prodottoAssistenzaIdsJson),
         tags: decodePendingStringList(t.tagsJson),
         // The local row id, unchanged across every attempt — that is the whole

@@ -10,7 +10,7 @@
 //
 // Event vocabulary:
 //   'ingresso' — opens a new interval (site context set here)
-//   'uscita'   — closes the open interval (no context of its own)
+//   'uscita'   — closes the open interval; carries the clock-out screen's own fields
 // ══════════════════════════════════════════════════════════════════════════════
 
 import '../local/app_database.dart';
@@ -29,6 +29,13 @@ class CantiereWorkInterval {
     this.endTime,
     this.latitude,
     this.longitude,
+    this.safetyNotes,
+    this.departureLatitude,
+    this.departureLongitude,
+    this.workOrderNumber,
+    this.equipmentUsed,
+    this.teamSize,
+    this.weatherConditions,
   });
 
   /// Stable identifier derived from the opening event's id.
@@ -38,6 +45,9 @@ class CantiereWorkInterval {
   final String cantiereId;
   final String customerId;
   final String? ticketId;
+
+  /// Work description: the opener's, unless the clock-out carried one — see
+  /// [assembleCantiereIntervals]'s 'uscita' rule.
   final String? description;
 
   /// UTC timestamp of the interval start ('ingresso' event).
@@ -50,11 +60,27 @@ class CantiereWorkInterval {
   final double? latitude;
   final double? longitude;
 
+  /// The clock-out screen's fields, carried from the closing ('uscita') event. Null on an
+  /// interval that is still open on the device, and on one whose closing event recorded none.
+  final String? safetyNotes;
+  final double? departureLatitude;
+  final double? departureLongitude;
+
+  /// The clock-in screen's fields, carried from the opening ('ingresso') event — arrival data, the
+  /// server writes them only when the punch is created. Null when the technician filled none in.
+  final String? workOrderNumber;
+  final String? equipmentUsed;
+  final int? teamSize;
+  final String? weatherConditions;
+
   @override
   String toString() =>
       'CantiereWorkInterval(clientId: $clientId, cantiereId: $cantiereId, '
       'customerId: $customerId, ticketId: $ticketId, start: $startTime, end: $endTime, '
-      'lat: $latitude, lng: $longitude)';
+      'lat: $latitude, lng: $longitude, safetyNotes: $safetyNotes, '
+      'departureLat: $departureLatitude, departureLng: $departureLongitude, '
+      'workOrder: $workOrderNumber, equipment: $equipmentUsed, teamSize: $teamSize, '
+      'weather: $weatherConditions)';
 }
 
 // ── Assembler ─────────────────────────────────────────────────────────────────
@@ -63,11 +89,21 @@ class CantiereWorkInterval {
 ///
 /// Rules:
 /// - `ingresso` → opens interval; clientId = event id; carries site context.
-/// - `uscita`   → closes the open interval with that timestamp as endTime.
-/// - An open interval (no closing event yet) → endTime null (active).
-/// - A close event with no open interval, or an event missing its site context, is ignored
-///   (defensive — shouldn't happen in normal flow).
-List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events) {
+/// - `uscita`   → closes the open interval with that timestamp as endTime, and contributes the
+///   clock-out fields (description, safety note, departure GPS).
+/// - An open interval (no closing event yet) → endTime null (active). A close with no open
+///   interval, or an event missing its site context, is ignored (defensive — shouldn't happen in
+///   normal flow).
+///
+/// [businessDateOf] maps an instant to the business calendar date it belongs to (see
+/// timbra_session_assembler.dart's identical parameter). The upload queue is no longer day-scoped,
+/// so one call can carry several days: an 'ingresso' from a LATER day must not close a still-open
+/// interval it finds — that would invent up to a full day of worksite time — so it leaves it open
+/// instead. An 'uscita' from a later day still closes it: a genuine overnight visit.
+List<CantiereWorkInterval> assembleCantiereIntervals(
+  List<CantierePunche> events, {
+  DateTime Function(DateTime instant)? businessDateOf,
+}) {
   final intervals = <CantiereWorkInterval>[];
 
   String? openClientId;
@@ -78,8 +114,19 @@ List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events
   DateTime? openStart;
   double? openLatitude;
   double? openLongitude;
+  String? openWorkOrderNumber;
+  String? openEquipmentUsed;
+  int? openTeamSize;
+  String? openWeatherConditions;
 
-  void closeOpen(DateTime endTime) {
+  /// [endTime] is null when the interval must stay open (see [businessDateOf] above).
+  ///
+  /// [closing] is the 'uscita' event doing the closing, when there is one. Its own fields are the
+  /// clock-out screen's answers and win over the opener's where the two overlap
+  /// ([CantierePunche.description]): the online `end` route overwrites the row's Description with
+  /// whatever was typed on leaving, so an offline close that kept the arrival note instead would
+  /// submit a different record than the same visit made online.
+  void closeOpen(DateTime? endTime, {CantierePunche? closing}) {
     // Captured-and-mutated variables are never promoted by flow analysis, even after a null
     // check — so the check has to run against local, single-assignment copies instead.
     final clientId = openClientId;
@@ -95,11 +142,21 @@ List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events
         cantiereId: cantiereId,
         customerId: customerId,
         ticketId: openTicketId,
-        description: openDescription,
+        description: closing?.description ?? openDescription,
         startTime: start,
         endTime: endTime,
         latitude: openLatitude,
         longitude: openLongitude,
+        // Only meaningful together with a real end: an interval left open has not reached the
+        // clock-out screen yet, so it can carry no safety note and no departure fix.
+        safetyNotes: endTime == null ? null : closing?.safetyNotes,
+        departureLatitude: endTime == null ? null : closing?.departureLatitude,
+        departureLongitude: endTime == null ? null : closing?.departureLongitude,
+        // Arrival data: unchanged by the close, whichever way the interval ends.
+        workOrderNumber: openWorkOrderNumber,
+        equipmentUsed: openEquipmentUsed,
+        teamSize: openTeamSize,
+        weatherConditions: openWeatherConditions,
       ),
     );
     openClientId = null;
@@ -110,6 +167,10 @@ List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events
     openStart = null;
     openLatitude = null;
     openLongitude = null;
+    openWorkOrderNumber = null;
+    openEquipmentUsed = null;
+    openTeamSize = null;
+    openWeatherConditions = null;
   }
 
   for (final e in events) {
@@ -117,8 +178,14 @@ List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events
 
     switch (e.eventType) {
       case 'ingresso':
-        // Close any accidentally-open interval (defensive: shouldn't happen in normal flow).
-        closeOpen(t);
+        // Close any accidentally-open interval (defensive: shouldn't happen in normal flow) —
+        // unless it opened on an earlier business day, in which case it stays open (see above).
+        final openStartNow = openStart;
+        final crossesDay =
+            openStartNow != null &&
+            businessDateOf != null &&
+            businessDateOf(openStartNow) != businessDateOf(t);
+        closeOpen(crossesDay ? null : t);
         openClientId = e.id;
         openCantiereId = e.cantiereId;
         openCustomerId = e.customerId;
@@ -127,9 +194,13 @@ List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events
         openStart = t;
         openLatitude = e.latitude;
         openLongitude = e.longitude;
+        openWorkOrderNumber = e.workOrderNumber;
+        openEquipmentUsed = e.equipmentUsed;
+        openTeamSize = e.teamSize;
+        openWeatherConditions = e.weatherConditions;
 
       case 'uscita':
-        closeOpen(t);
+        closeOpen(t, closing: e);
 
       default:
         // Unknown event type — ignore.
@@ -158,6 +229,10 @@ List<CantiereWorkInterval> assembleCantiereIntervals(List<CantierePunche> events
         endTime: null,
         latitude: openLatitude,
         longitude: openLongitude,
+        workOrderNumber: openWorkOrderNumber,
+        equipmentUsed: openEquipmentUsed,
+        teamSize: openTeamSize,
+        weatherConditions: openWeatherConditions,
       ),
     );
   }

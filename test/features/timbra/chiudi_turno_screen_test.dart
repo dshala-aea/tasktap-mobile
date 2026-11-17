@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
@@ -46,7 +47,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   Future<List<CantiereWorkLogDto>> getActive() async => [];
 
   @override
-  Future<void> endCantiere([EndCantiereRequest? request]) async {
+  Future<int?> endCantiere([EndCantiereRequest? request]) async {
     if (endShouldThrow) {
       throw DioException(
         requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
@@ -62,6 +63,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
       );
     }
     endRequests.add(request);
+    return null;
   }
 
   @override
@@ -90,6 +92,19 @@ AppDatabase _makeDb() {
   return AppDatabase(NativeDatabase.memory());
 }
 
+/// An instant inside today's business day that is never after now: [ago] ago, or the day's own
+/// start when [ago] reaches back past it. Anchoring to `now - ago` alone put the seed in the
+/// PREVIOUS business day during the first [ago] of the day, so the sync service's today-window
+/// query saw no opening event and the queued 'uscita' had nothing to close. Anchoring to the
+/// day's start alone would seed a future instant during the day's first hours, so the interval's
+/// end would precede its start.
+DateTime _earlierToday(Duration ago) {
+  final bt = BusinessTime.fallback();
+  final start = bt.utcRangeForBusinessDate(bt.businessToday()).$1;
+  final candidate = DateTime.now().toUtc().subtract(ago);
+  return candidate.isAfter(start) ? candidate : start;
+}
+
 /// Pumps a placeholder "Home" screen with a button that pushes ChiudiTurnoScreen, matching how
 /// `_ActiveSessionBody` really reaches it (`Navigator.push`, not a named route — see that
 /// button's own doc comment). Lets a successful end's `Navigator.pop()` land somewhere real,
@@ -102,7 +117,7 @@ Widget _buildHarness({
   String? ticketId,
   DateTime? startTime,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       cantiereWorklogApiClientProvider.overrideWithValue(apiClient),
@@ -257,7 +272,7 @@ void main() {
           .insert(
             CantierePunchesCompanion.insert(
               id: 'e-ingresso',
-              eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
+              eventTime: _earlierToday(const Duration(hours: 1)),
               eventType: 'ingresso',
               cantiereId: const Value('cant-1'),
               // assembleCantiereIntervals() drops an interval with no customerId carried from its

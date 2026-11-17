@@ -40,7 +40,7 @@ void main() {
 
   tearDown(() async => db.close());
 
-  Widget wrap(Widget child) => ProviderScope(
+  Widget wrap(Widget child) => ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(mockDio),

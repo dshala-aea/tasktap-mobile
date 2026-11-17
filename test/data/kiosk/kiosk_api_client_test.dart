@@ -14,7 +14,9 @@ Dio _dioResolving(Map<String, dynamic> data) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
-        handler.resolve(Response(requestOptions: options, statusCode: 200, data: data));
+        handler.resolve(
+          Response(requestOptions: options, statusCode: 200, data: data),
+        );
       },
     ),
   );
@@ -53,12 +55,32 @@ Dio _dioRejectingWithType(DioExceptionType type) {
 
 void main() {
   test('fetchQr returns the token and expiry on 200', () async {
-    final client = KioskApiClient(dio: _dioResolving({'token': 'abc:123:xyz', 'expiresInSeconds': 60}));
+    final client = KioskApiClient(
+      dio: _dioResolving({'token': 'abc:123:xyz', 'expiresInSeconds': 60}),
+    );
 
     final result = await client.fetchQr('sp_test');
 
     expect(result.token, 'abc:123:xyz');
     expect(result.expiresInSeconds, 60);
+  });
+
+  test('provision returns the per-device key and server time on 200', () async {
+    final client = KioskApiClient(
+      dio: _dioResolving({
+        'deviceId': 'abcdef01-1111-1111-1111-111111111111',
+        'signingKey': 'a2V5',
+        'expiresInSeconds': 300,
+        'serverTimeUtc': '2026-11-13T12:00:30Z',
+      }),
+    );
+
+    final result = await client.provision('sp_test');
+
+    expect(result.deviceId, 'abcdef01-1111-1111-1111-111111111111');
+    expect(result.signingKey, 'a2V5');
+    expect(result.expiresInSeconds, 300);
+    expect(result.serverTimeUtc, DateTime.utc(2026, 11, 13, 12, 0, 30));
   });
 
   test('fetchQr sends the raw key as X-Api-Key, never Authorization', () async {
@@ -69,7 +91,11 @@ void main() {
         onRequest: (options, handler) {
           capturedHeaders = options.headers;
           handler.resolve(
-            Response(requestOptions: options, statusCode: 200, data: {'token': 't', 'expiresInSeconds': 60}),
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {'token': 't', 'expiresInSeconds': 60},
+            ),
           );
         },
       ),
@@ -88,7 +114,11 @@ void main() {
     await expectLater(
       client.fetchQr('sp_bad'),
       throwsA(
-        isA<KioskApiException>().having((e) => e.reason, 'reason', KioskApiFailureReason.invalidOrRevoked),
+        isA<KioskApiException>().having(
+          (e) => e.reason,
+          'reason',
+          KioskApiFailureReason.invalidOrRevoked,
+        ),
       ),
     );
   });
@@ -98,16 +128,30 @@ void main() {
 
     await expectLater(
       client.fetchQr('sp_test'),
-      throwsA(isA<KioskApiException>().having((e) => e.reason, 'reason', KioskApiFailureReason.notEntitled)),
+      throwsA(
+        isA<KioskApiException>().having(
+          (e) => e.reason,
+          'reason',
+          KioskApiFailureReason.notEntitled,
+        ),
+      ),
     );
   });
 
   test('a connection error maps to network, not invalidOrRevoked', () async {
-    final client = KioskApiClient(dio: _dioRejectingWithType(DioExceptionType.connectionError));
+    final client = KioskApiClient(
+      dio: _dioRejectingWithType(DioExceptionType.connectionError),
+    );
 
     await expectLater(
       client.fetchQr('sp_test'),
-      throwsA(isA<KioskApiException>().having((e) => e.reason, 'reason', KioskApiFailureReason.network)),
+      throwsA(
+        isA<KioskApiException>().having(
+          (e) => e.reason,
+          'reason',
+          KioskApiFailureReason.network,
+        ),
+      ),
     );
   });
 
@@ -116,7 +160,13 @@ void main() {
 
     await expectLater(
       client.fetchQr('sp_test'),
-      throwsA(isA<KioskApiException>().having((e) => e.reason, 'reason', KioskApiFailureReason.unknown)),
+      throwsA(
+        isA<KioskApiException>().having(
+          (e) => e.reason,
+          'reason',
+          KioskApiFailureReason.unknown,
+        ),
+      ),
     );
   });
 }

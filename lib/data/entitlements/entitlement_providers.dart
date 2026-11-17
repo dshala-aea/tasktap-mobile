@@ -10,6 +10,8 @@
 // asymmetry is deliberate.
 // ══════════════════════════════════════════════════════════════════════════════
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/time/business_time_providers.dart';
@@ -55,9 +57,124 @@ final cachedEntitlementProvider = FutureProvider<Entitlement?>((ref) {
 /// 'Both' before the first successful /auth/me — matching the same "no answer means allow"
 /// asymmetry the rest of this file's entitlement reads already use.
 final effectiveClockInMethodProvider = Provider<String>((ref) {
-  final cached = ref.watch(cachedEntitlementProvider).valueOrNull;
+  final cached = ref.watch(cachedEntitlementProvider).value;
   return cached?.clockInMethod ?? 'Both';
 });
+
+/// Whether today is an approved smart-working day for the signed-in technician.
+///
+/// null = unknown (never refreshed, the process restarted, nobody is signed in, or the last answer
+/// belongs to a different user). Callers must fail OPEN on null: unknown must neither hide the punch
+/// button nor claim an approved day.
+///
+/// The identity gate — not merely the presence of a user — is load-bearing. The flag is
+/// memory-only, so it survives a sign-out (a cold start is the only thing that clears it), and this
+/// device can be a shared van/tablet where the next person belongs to another tenant
+/// (`SessionEnder`'s own class comment). Someone being signed in therefore proves nothing about
+/// whose answer is in hand; the repository records the session that answered and hands it back only
+/// to that same user, so this read is correct by construction, not by invalidating from outside.
+final smartWorkingTodayProvider = Provider<bool?>((ref) {
+  final signedIn = ref.watch(authStateProvider).value;
+  if (signedIn == null) return null;
+  return ref.watch(entitlementRepositoryProvider).smartWorkingTodayFor(signedIn.id);
+});
+
+/// What the button punch being drawn is used for on the surface asking.
+///
+/// Both surfaces follow the same rule — withhold only on an explicit `false` — and differ in one
+/// respect only: what an open shift does to it. See [isButtonPunchWithheld].
+enum ButtonPunchSurface {
+  /// A control whose fallback is the kiosk scanner: Home's idle prompt, and the tracker row's own
+  /// action button. An explicit `false` withholds it here whatever else is true — on a day the
+  /// tenant has not approved, the scanner is the sanctioned punch rather than a detour.
+  startOnly,
+
+  /// The timbra control panel, where the same button ends the shift as well as starting it.
+  /// Same rule, except that an open shift keeps the control regardless of the answer, because
+  /// there it is also the way to pause and to finish.
+  startOrFinish,
+}
+
+/// Whether the button punch must give way to the kiosk scanner right now.
+///
+/// The one place this is decided, so Home's prompt, the tracker row and the timbra panel cannot
+/// drift apart. The server relaxes a QrOnly tenant's gate for an approved smart-working day and for
+/// nothing else (`WorkLogService.EnsureClockInMethodAllowedAsync`), so `true` is relief — never
+/// `null`, which merely says nobody has answered yet (cold start, signed out, a different user,
+/// before /auth/me).
+///
+/// Only an explicit `false` withholds anything, and only on a QrOnly tenant; `null` never does. An
+/// unknown answer leaves the scanner as the one affordance that cannot work — there is no totem in
+/// the technician's kitchen — so guessing "not approved" there would strand exactly the person this
+/// feature exists for. A stale `true` would be a lie, but it costs one refused punch and a visible
+/// error; a stale `false` costs the day's hours.
+///
+/// The single exception is the finishing half: **the flag may remove a way to START work, never a
+/// way to finish it.** A mid-shift approval revocation (or a night shift crossing the business-day
+/// rollover) must not leave an open shift with no control to pause or end it, so
+/// [ButtonPunchSurface.startOrFinish] keeps its button while [hasOpenShift] is true.
+bool isButtonPunchWithheld({
+  required ButtonPunchSurface surface,
+  required String clockInMethod,
+  required bool? smartWorkingToday,
+  required bool hasOpenShift,
+}) {
+  if (clockInMethod != 'QrOnly') return false;
+  // `null` is not an answer, so it never withholds — see the doc comment above.
+  if (smartWorkingToday != false) return false;
+  return switch (surface) {
+    ButtonPunchSurface.startOnly => true,
+    ButtonPunchSurface.startOrFinish => !hasOpenShift,
+  };
+}
+
+/// Fetches `/auth/me`'s entitlement answer now, and invalidates the cache-reading providers on
+/// every successful answer — not only on a change. A failed refresh answers `false`, so it does not
+/// churn the UI into re-reading a cache that did not move.
+///
+/// **That `updated` is "the server answered", not "the answer changed", is load-bearing — do not
+/// turn it into a change flag.** Today it is what makes the smart-working chip pick up an approval
+/// (or a cancellation) granted while the app sat sleeping: the flag is memory-only and per-day, so
+/// after a resume the cached value is yesterday's, and only this invalidation re-reads it. Gate the
+/// invalidation on "did it change" and a `false` written before a day boundary would survive the
+/// refresh that brought the approval — the chip would stay hidden and
+/// [isButtonPunchWithheld] would keep withholding a punch the server would now accept. That is the
+/// expensive direction: a stale `true` costs one refused punch with a visible message, a stale
+/// `false` costs the day's hours.
+///
+/// Called by [initEntitlementRefreshWatcher] (app start + reconnect) and by HomeShell on every app
+/// resume: a tenant that changed this user's timbratura mode, seat type or modules while the app sat
+/// backgrounded is exactly the change nothing used to pick up — reconnect never fires on a device
+/// that never lost its network interface, so the answer stayed at whatever it was at launch.
+Future<void> refreshEntitlements(WidgetRef ref) =>
+    ref.read(_entitlementRefresherProvider).refresh();
+
+/// The refresh itself, on a `Ref` owned by the provider container.
+///
+/// The invalidations happen AFTER the `/auth/me` round trip, and a widget that asked for the
+/// refresh can be gone by then — HomeShell unmounted by a sign-out, a settings screen popped while
+/// the request was in flight. Invalidating through the widget's `WidgetRef` at that point throws
+/// `StateError: Using "ref" when a widget is about to or has been unmounted is unsafe` (crash
+/// report, 2026-11-16, `entitlement_providers.dart:150`). A container-scoped `Ref` has the same
+/// lifetime as the cache it is invalidating, so the answer still lands where it was going.
+class _EntitlementRefresher {
+  const _EntitlementRefresher(this._ref);
+
+  final Ref _ref;
+
+  Future<void> refresh() async {
+    final updated = await _ref.read(entitlementServiceProvider).refresh();
+    if (!updated) return;
+    _ref.invalidate(cachedEntitlementProvider);
+    _ref.invalidate(hasFeatureProvider);
+    // Not backed by a FutureProvider, so nothing else would rebuild a reader after the refresh.
+    _ref.invalidate(smartWorkingTodayProvider);
+  }
+}
+
+final _entitlementRefresherProvider = Provider<_EntitlementRefresher>(
+  (ref) => _EntitlementRefresher(ref),
+);
 
 /// Call once on app start, alongside initAuthReconnectWatcher.
 ///
@@ -71,16 +188,10 @@ final effectiveClockInMethodProvider = Provider<String>((ref) {
 /// remount (e.g. forced sign-out → re-login) leaves the old closure's `ref` in the listener list
 /// forever, and the next reconnect throws on that stale entry.
 VoidCallback initEntitlementRefreshWatcher(WidgetRef ref) {
-  Future<void> refresh() async {
-    final updated = await ref.read(entitlementServiceProvider).refresh();
-    // Only invalidate on a real change — a failed refresh must not churn the UI into
-    // re-reading a cache that did not move.
-    if (updated) {
-      ref.invalidate(cachedEntitlementProvider);
-      ref.invalidate(hasFeatureProvider);
-    }
-  }
-
-  refresh();
-  return ref.read(connectivityProvider.notifier).onReconnect(refresh);
+  // The refresher, not the widget: the reconnect closure outlives this build, and a `WidgetRef`
+  // captured in it is exactly the stale entry the cancel function below exists to prevent. Even a
+  // missed cancel now costs nothing — the container-scoped refresher has no widget to outlive.
+  final refresher = ref.read(_entitlementRefresherProvider);
+  unawaited(refresher.refresh());
+  return ref.read(connectivityProvider.notifier).onReconnect(refresher.refresh);
 }

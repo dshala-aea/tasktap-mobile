@@ -75,8 +75,9 @@ class GeoMapCard extends StatelessWidget {
       // — but falling back rather than propagating keeps this card's contract simple either way:
       // no coordinates, same fallback as "no address" or "address unresolvable".
       error: (e, _) => AppMapCard(address: address),
-      data: (point) =>
-          point == null ? AppMapCard(address: address) : _EmbeddedMap(point: point, address: address),
+      data: (point) => point == null
+          ? AppMapCard(address: address)
+          : _EmbeddedMap(point: point, address: address),
     );
   }
 }

@@ -80,20 +80,66 @@ void main() {
     expect(result.endTime, isNull);
   });
 
-  test('kioskScan parses a clock-out response including endTime', () async {
+  // The wire shape, not the one this test used to invent. `ClockResultToActionResult` answers
+  // clock-out with `{action, workLogId, startTime, endTime}`, and both times come from
+  // `ClockResult(string Action, Guid WorkLogId, TimeSpan StartTime, TimeSpan? EndTime)` — a
+  // TimeSpan, which System.Text.Json writes in its invariant "c" format (`hh:mm:ss`, or
+  // `d.hh:mm:ss` past a day), never as an ISO datetime. The previous fixture fed
+  // `'2026-09-16T17:00:00Z'` and so pinned a shape the server has never produced: the real one
+  // raised FormatException inside `kioskScan` on every clock-out, escaped the widget's only
+  // `on KioskScanException` catch, and left the technician on a spinner forever. Clock-in
+  // omits `endTime` entirely, which is why only ending a turn hung.
+  test('kioskScan parses the TimeSpan clock-out response the server actually sends', () async {
     final client = WorklogApiClient(
       _dioResolving({
         'action': 'out',
         'workLogId': 'wl-2',
-        'startTime': '2026-09-16T08:00:00Z',
-        'endTime': '2026-09-16T17:00:00Z',
+        'startTime': '08:00:00',
+        'endTime': '17:00:00',
       }),
     );
 
     final result = await client.kioskScan(token: args.token, userId: args.userId);
 
     expect(result.action, 'out');
-    expect(result.endTime, DateTime.parse('2026-09-16T17:00:00Z'));
+    expect(result.endTime, const Duration(hours: 17));
+  });
+
+  test('a TimeSpan past a day keeps its day part', () async {
+    final client = WorklogApiClient(
+      _dioResolving({
+        'action': 'out',
+        'workLogId': 'wl-3',
+        'startTime': '00:00:00',
+        'endTime': '1.08:12:34',
+      }),
+    );
+
+    final result = await client.kioskScan(token: args.token, userId: args.userId);
+
+    expect(result.endTime, const Duration(days: 1, hours: 8, minutes: 12, seconds: 34));
+  });
+
+  // The punch has already landed server-side by the time the body is parsed, so an echo the
+  // client cannot read is worth less than a screen that keeps working: an unparseable endTime
+  // must degrade to null, never throw. Throwing here is what turned a successful clock-out into
+  // a frozen spinner.
+  test('an unreadable endTime degrades to null instead of throwing', () async {
+    for (final endTime in <Object?>[null, '', 'not-a-time', 42]) {
+      final client = WorklogApiClient(
+        _dioResolving({
+          'action': 'out',
+          'workLogId': 'wl-4',
+          'startTime': '08:00:00',
+          'endTime': endTime,
+        }),
+      );
+
+      final result = await client.kioskScan(token: args.token, userId: args.userId);
+
+      expect(result.action, 'out', reason: 'endTime was $endTime');
+      expect(result.endTime, isNull, reason: 'endTime was $endTime');
+    }
   });
 
   test('402 maps to notEntitled', () async {

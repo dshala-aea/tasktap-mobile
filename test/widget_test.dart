@@ -64,7 +64,7 @@ void main() {
     Future.microtask(() => authStream.add(null));
 
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           authRepositoryProvider.overrideWithValue(repo),
           appDatabaseProvider.overrideWithValue(db),

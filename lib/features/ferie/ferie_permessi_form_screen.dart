@@ -9,6 +9,7 @@ import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ferie/absence_request_api_client.dart';
 import '../admin/admin_widgets.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -30,6 +31,7 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
   bool _isSaving = false;
+  bool _submitAttempted = false;
 
   @override
   void dispose() {
@@ -40,9 +42,10 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
   Future<void> _pickStartDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _startDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 730)),
+      initialDate: _startDate.isBefore(_earliestStart) ? _earliestStart : _startDate,
+      firstDate: _earliestStart,
+      // The server caps a request at one year (`range_too_long`) — do not offer a range it rejects.
+      lastDate: _earliestStart.add(const Duration(days: 366)),
     );
     if (picked != null) {
       setState(() {
@@ -55,9 +58,9 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
   Future<void> _pickEndDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _endDate,
+      initialDate: _endDate.isBefore(_startDate) ? _startDate : _endDate,
       firstDate: _startDate,
-      lastDate: DateTime.now().add(const Duration(days: 730)),
+      lastDate: _startDate.add(const Duration(days: 366)),
     );
     if (picked != null) setState(() => _endDate = picked);
   }
@@ -83,13 +86,42 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
 
   bool get _partialTimeValid =>
       !_partialTime ||
-      (_type == 1 && _isSameDay(_startDate, _endDate) && _startTime != null && _endTime != null);
+      (kPermessoAbsenceTypes.contains(_type) &&
+          _isSameDay(_startDate, _endDate) &&
+          _startTime != null &&
+          _endTime != null);
+
+  /// "Altri congedi/permessi" carries no category of its own — the note IS the request, and the
+  /// server refuses it without one (`reason_required_for_altri`).
+  bool get _reasonRequired => _type == kAltriCongediPermessiType;
+
+  bool get _canSubmit =>
+      _partialTimeValid && (!_reasonRequired || _reasonCtrl.text.trim().isNotEmpty);
+
+  /// Malattia is the one type that may be backdated — a sick day is reported after it starts. Every
+  /// other type must start today or later, so the picker does not offer a day the server rejects.
+  DateTime get _earliestStart => _type == 2
+      ? DateTime.now().subtract(const Duration(days: 30))
+      : DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
   static bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
+  static const _noteRequiredMessage = 'Il motivo è obbligatorio per «Altri congedi/permessi»';
+  static const _partialTimeMessage =
+      'Per un permesso a ore indica un solo giorno e l\u2019ora di inizio e di fine';
+
   Future<void> _save() async {
-    if (!_partialTimeValid) return;
+    if (!_canSubmit) {
+      // Never a silently dead button: say what is missing, inline and in a toast.
+      setState(() => _submitAttempted = true);
+      showAppToast(
+        context,
+        message: !_partialTimeValid ? _partialTimeMessage : _noteRequiredMessage,
+        tone: ToastTone.error,
+      );
+      return;
+    }
     if (!ensureOnlineOrWarn(context, ref)) return;
 
     setState(() => _isSaving = true);
@@ -150,8 +182,10 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
               initialValue: _type,
               isExpanded: true,
               items: [
-                for (var i = 0; i < kAbsenceTypeLabels.length; i++)
-                  DropdownMenuItem(value: i, child: Text(kAbsenceTypeLabels[i])),
+                // The nine types the client asked for. The legacy `Permesso` (1) is deliberately
+                // absent: it still renders on old rows but must not be fileable again.
+                for (final t in kSelectableAbsenceTypes)
+                  DropdownMenuItem(value: t, child: Text(kAbsenceTypeLabels[t])),
               ],
               onChanged: (t) => t != null ? setState(() => _type = t) : null,
             ),
@@ -185,12 +219,37 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
           ],
           const SizedBox(height: 16),
 
-          AppTextField(label: 'Motivo (facoltativo)', controller: _reasonCtrl, maxLines: 2),
+          if (_submitAttempted && !_partialTimeValid) ...[
+            InlineAlert(message: _partialTimeMessage, icon: Icons.error_outline),
+            const SizedBox(height: 16),
+          ],
+          AppTextField(
+            label: _reasonRequired ? 'Motivo (obbligatorio)' : 'Motivo (facoltativo)',
+            controller: _reasonCtrl,
+            maxLines: 2,
+            // The submit button reads the note when the type needs one, so it must repaint as the
+            // technician types.
+            onChanged: (_) => setState(() {}),
+          ),
+          if (_reasonRequired && _reasonCtrl.text.trim().isEmpty) ...[
+            const SizedBox(height: 6),
+            if (_submitAttempted)
+              InlineAlert(message: _noteRequiredMessage, icon: Icons.error_outline)
+            else
+              Text(
+                _noteRequiredMessage,
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 12,
+                  color: context.colors.inkMuted,
+                ),
+              ),
+          ],
           const SizedBox(height: 32),
 
           AppButton(
             label: 'Invia richiesta',
-            onPressed: _isSaving || !_partialTimeValid ? null : _save,
+            onPressed: _isSaving ? null : _save,
             isLoading: _isSaving,
           ),
         ],

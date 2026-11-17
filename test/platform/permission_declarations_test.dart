@@ -40,10 +40,16 @@ void main() {
     /// Each entry: the call that triggers the OS prompt, and the key iOS demands for it.
     const required = <String, (String trigger, String key)>{
       'camera': ('ImageSource.camera', 'NSCameraUsageDescription'),
-      'photo library': ('ImageSource.gallery', 'NSPhotoLibraryUsageDescription'),
+      'photo library': (
+        'ImageSource.gallery',
+        'NSPhotoLibraryUsageDescription',
+      ),
       'location': ('Geolocator', 'NSLocationWhenInUseUsageDescription'),
       'microphone': ('SpeechToText', 'NSMicrophoneUsageDescription'),
-      'speech recognition': ('SpeechToText', 'NSSpeechRecognitionUsageDescription'),
+      'speech recognition': (
+        'SpeechToText',
+        'NSSpeechRecognitionUsageDescription',
+      ),
     };
 
     for (final entry in required.entries) {
@@ -76,11 +82,16 @@ void main() {
       for (final m in matches) {
         final key = m.group(1)!;
         final text = m.group(2)!.trim();
-        expect(text.length, greaterThan(40), reason: '$key is too terse to be a real purpose');
+        expect(
+          text.length,
+          greaterThan(40),
+          reason: '$key is too terse to be a real purpose',
+        );
         expect(
           text.toLowerCase(),
           contains('tasktap'),
-          reason: '$key should name the app and the reason, not just the permission',
+          reason:
+              '$key should name the app and the reason, not just the permission',
         );
       }
     });
@@ -104,9 +115,45 @@ void main() {
         expect(
           source.contains(entry.value),
           isTrue,
-          reason: '${entry.key} is declared but lib/ never calls ${entry.value}',
+          reason:
+              '${entry.key} is declared but lib/ never calls ${entry.value}',
         );
       }
+    });
+  });
+
+  /// Export compliance is the one App Store question that ships with the binary rather than being
+  /// answered once in a form. Without the key, every upload lands at "Missing Compliance" in App
+  /// Store Connect and stays undeliverable to testers until someone fills the questionnaire in by
+  /// hand — a step that is easy to miss precisely because the build itself succeeded.
+  group('App Store export compliance', () {
+    test('the non-exempt encryption answer ships inside the bundle', () {
+      expect(
+        plist,
+        matches(RegExp(r'<key>ITSAppUsesNonExemptEncryption</key>\s*<true/>')),
+        reason:
+            'SQLCipher encrypts the offline database at rest, which is non-exempt encryption. '
+            'The App Store export-compliance answer must say so.',
+      );
+    });
+
+    test('the database encryption and its build hook are deliberate', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      expect(
+        pubspec,
+        contains('source: sqlcipher'),
+        reason: 'the offline database is encrypted at rest with SQLCipher',
+      );
+
+      final db = File('lib/data/local/app_database.dart').readAsStringSync();
+      expect(
+        RegExp(
+          r'passphrase|PRAGMA key|sqlcipher',
+          caseSensitive: false,
+        ).hasMatch(db),
+        isTrue,
+        reason: 'app_database.dart must apply the SQLCipher key through Drift setup',
+      );
     });
   });
 
@@ -132,7 +179,8 @@ void main() {
         expect(
           source.contains(entry.value),
           isTrue,
-          reason: '${entry.key} is declared but lib/ never calls ${entry.value}',
+          reason:
+              '${entry.key} is declared but lib/ never calls ${entry.value}',
         );
       }
     });

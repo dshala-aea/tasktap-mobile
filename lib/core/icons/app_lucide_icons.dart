@@ -238,6 +238,12 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  // A day spent working remotely, in the smart-working chip.
+  static const IconData laptop = IconData(
+    0xf382,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData link = IconData(
     0xf397,
     fontFamily: 'Lucide',
@@ -245,6 +251,12 @@ class LucideIcons {
   );
   static const IconData locateFixed = IconData(
     0xf3ac,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  // A closed ticket's bottom bar: nothing more may be recorded on it.
+  static const IconData lock = IconData(
+    0xf3ae,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
@@ -301,6 +313,14 @@ class LucideIcons {
 
   static const IconData micOff = IconData(
     0xf3d4,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
+  /// The assistant's own mark. Lucide's `sparkles`, the glyph every assistant UI uses for
+  /// "generated/suggested" — its codepoint copied from lucide_icons 0.257.0 like the rest.
+  static const IconData sparkles = IconData(
+    0xf4e8,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
@@ -465,6 +485,16 @@ class LucideIcons {
   );
   static const IconData users2 = IconData(
     0xf575,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData volume2 = IconData(
+    0xf585,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData volumeX = IconData(
+    0xf586,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );

@@ -1,33 +1,88 @@
 // dart format width=100
 import 'dart:convert';
 
-import 'package:drift/drift.dart';
 import 'package:rxdart/rxdart.dart';
 
 import '../../domain/checklist/checklist_models.dart';
 import '../../domain/checklist/control_type.dart';
 import 'app_database.dart';
 
-/// Reads the per-asset checklist mirror as a [TicketChecklist]. Everything here is local: it works
-/// with zero network.
+/// Reads the checklist mirror. Everything here is local: it works with zero network.
+///
+/// [watchTicketChecklist] builds the per-asset tree; the ticket-level rows (`prodottoAssistenzaId`
+/// null) are not assets, so they ride along on [TicketChecklist.ticketLevel] instead of being
+/// dropped, and [watchTicketControlRows]/[watchControlGroups] expose the raw rows a feature-layer
+/// mapper can turn into the server's checklist tree without any network call.
 class ChecklistReadRepository {
   ChecklistReadRepository(this._db);
 
   final AppDatabase _db;
 
+  /// Every mirrored control row of one ticket — ticket-level and per-asset alike. Raw rows, no
+  /// feature DTOs: the shape `GET /api/tickets/{id}/controls` returns is built in the feature
+  /// layer (`ticket_controls_mirror.dart`).
+  Stream<List<TicketControlRow>> watchTicketControlRows(String ticketId) =>
+      (_db.select(_db.ticketControls)..where((c) => c.ticketId.equals(ticketId))).watch();
+
+  /// The synced `control_groups` table. Shared by every ticket on the same template version, so
+  /// callers narrow it themselves (see `ticketControlGroupsFromMirror`).
+  Stream<List<ControlGroupRow>> watchControlGroups() => _db.select(_db.controlGroups).watch();
+
+  /// One-shot reads of the same two tables, for a caller whose answer is a single [Future] rather
+  /// than a live view (`ticketControlsProvider`, which cannot re-emit once the tab is built).
+  ///
+  /// Deliberately not `watchTicketControlRows(...).first`: a query stream emits on its own
+  /// schedule, so a future that awaits only the first event inherits that schedule for no benefit,
+  /// and the subscription is cancelled the moment its first event lands — pure overhead.
+  Future<List<TicketControlRow>> getTicketControlRows(String ticketId) =>
+      (_db.select(_db.ticketControls)..where((c) => c.ticketId.equals(ticketId))).get();
+
+  Future<List<ControlGroupRow>> getControlGroups() => _db.select(_db.controlGroups).get();
+
+  /// Whether [ticketId] itself reached this device in a sync payload.
+  ///
+  /// This is the first half of the "can the mirror be trusted for this ticket" test. The payload
+  /// carries a ticket's checklist wholesale — controls, coverage, assets — so a ticket the device
+  /// knows has a mirror that is its own complete answer, empty result included. A ticket that was
+  /// never synced proves nothing: zero rows there is "unknown", not "no controls".
+  Future<bool> hasSyncedTicket(String ticketId) async =>
+      await (_db.select(_db.tickets)..where((t) => t.id.equals(ticketId))).getSingleOrNull() !=
+      null;
+
+  /// Whether the last payload that carried [ticketId] deliberately left its checklist out (size
+  /// cap) and the batched re-request (`checklist_refetch_service`) has not delivered it yet.
+  ///
+  /// The second half of the same test: while this is true the mirror is known to be incomplete, so
+  /// it must not be read as "this ticket has no controls".
+  Future<bool> isChecklistOmitted(String ticketId) async =>
+      await (_db.select(
+        _db.checklistOmittedTickets,
+      )..where((o) => o.ticketId.equals(ticketId))).getSingleOrNull() !=
+      null;
+
   Stream<TicketChecklist> watchTicketChecklist(String ticketId) {
-    final controls =
-        (_db.select(_db.ticketControls)..where(
-              (c) => c.ticketId.equals(ticketId) & c.prodottoAssistenzaId.isNotNull(),
-            ))
-            .watch();
-    final coverage = (_db.select(_db.ticketAssets)..where((a) => a.ticketId.equals(ticketId))).watch();
+    // No prodottoAssistenzaId filter: ticket-level rows must reach [TicketChecklist.ticketLevel].
+    // The asset tree below ignores them by construction (it only keys rows by a non-null asset id),
+    // so tickets with no ticket-level rows build exactly the tree they always did.
+    final controls = (_db.select(
+      _db.ticketControls,
+    )..where((c) => c.ticketId.equals(ticketId))).watch();
+    final coverage = (_db.select(
+      _db.ticketAssets,
+    )..where((a) => a.ticketId.equals(ticketId))).watch();
     final assets = _db.select(_db.assets).watch();
     final groups = _db.select(_db.controlGroups).watch();
-    final omitted =
-        (_db.select(_db.checklistOmittedTickets)..where((o) => o.ticketId.equals(ticketId))).watch();
-    return Rx.combineLatest5<List<TicketControlRow>, List<TicketAssetRow>, List<AssetRow>,
-        List<ControlGroupRow>, List<ChecklistOmittedTicketRow>, TicketChecklist>(
+    final omitted = (_db.select(
+      _db.checklistOmittedTickets,
+    )..where((o) => o.ticketId.equals(ticketId))).watch();
+    return Rx.combineLatest5<
+      List<TicketControlRow>,
+      List<TicketAssetRow>,
+      List<AssetRow>,
+      List<ControlGroupRow>,
+      List<ChecklistOmittedTicketRow>,
+      TicketChecklist
+    >(
       controls,
       coverage,
       assets,
@@ -61,6 +116,12 @@ class ChecklistReadRepository {
       if (id != null) (rowsByAsset[id] ??= []).add(c);
     }
     final ids = {...coverageById.keys, ...rowsByAsset.keys};
+    // Rows with no asset belong to the ticket itself. They take no part in the asset tree below,
+    // but [TicketChecklist.hasAnything] must not claim the ticket has nothing.
+    final ticketLevel = _sortedControls([
+      for (final c in controls)
+        if (c.prodottoAssistenzaId == null) _toControl(c),
+    ]);
 
     AssetChecklist make(String id) {
       final cov = coverageById[id];
@@ -110,6 +171,7 @@ class ChecklistReadRepository {
       librettos: librettos,
       standalone: standalone,
       omitted: omitted,
+      ticketLevel: ticketLevel,
     );
   }
 
@@ -178,7 +240,9 @@ class ChecklistReadRepository {
     for (final id in needed) {
       final g = groupById[id]!;
       // A parent that never arrived makes its child a root rather than losing it.
-      final parent = g.parentGroupId != null && groupById.containsKey(g.parentGroupId) ? g.parentGroupId : null;
+      final parent = g.parentGroupId != null && groupById.containsKey(g.parentGroupId)
+          ? g.parentGroupId
+          : null;
       (children[parent] ??= []).add(g);
     }
     ChecklistGroup node(ControlGroupRow g) => ChecklistGroup(

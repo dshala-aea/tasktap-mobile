@@ -48,6 +48,22 @@ void main() {
   );
 
   test(
+    'activeOnly: false keeps archived contracts, which is what the customer detail section shows',
+    () async {
+      await repo.upsertContracts([
+        contract('c1', 'cu1', name: 'Zeta'),
+        contract('c2', 'cu1', name: 'Alfa'),
+        contract('c3', 'cu1', name: 'Cessato', active: false),
+        contract('c4', 'cu2', name: 'Altro cliente'),
+      ]);
+
+      final rows = await repo.contractsForCustomer('cu1', activeOnly: false);
+
+      expect(rows.map((r) => r.name), ['Alfa', 'Cessato', 'Zeta']);
+    },
+  );
+
+  test(
     'prune removes a deleted contract of a customer the payload carries',
     () async {
       await repo.upsertContracts([

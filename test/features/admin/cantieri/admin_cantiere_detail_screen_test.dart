@@ -19,8 +19,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/core/auth/access.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
@@ -72,6 +76,11 @@ class _FakeAdminApiClient extends AdminApiClient {
   Future<List<Map<String, dynamic>>> fetchReports({
     String? stato,
     String? cantiereId,
+    String? customerId,
+    String? locationId,
+    String? ticketId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
     int page = 1,
     int pageSize = 50,
   }) async => _reports;
@@ -153,13 +162,24 @@ Widget _buildScreen({
   // matches that: true, unlike ticket_detail_screen_test.dart's own harness which defaults to
   // false. Only the new commessa row (Gap 6) reads isOnlineProvider at all.
   bool isOnline = true,
+  Set<String> capabilities = const {'cantieri.cantiere.write', 'rapportini.report.write'},
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       adminApiClientProvider.overrideWithValue(api),
       isOnlineProvider.overrideWithValue(isOnline),
-      // Explicit null (not left unoverridden) so "Crea rapportino" — the only control that reads
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(
+          Entitlement(
+            features: const {},
+            capabilities: capabilities,
+            seatType: 'office',
+            fetchedAt: DateTime.utc(2026, 1, 1),
+          ),
+        ),
+      ),
+      // Explicit null (not left unoverridden) so "Crea rapporto" — the only control that reads
       // this — has a deterministic, unauthenticated starting point.
       currentUserProvider.overrideWithValue(null),
       // Same determinism for the internal id createLocalDraft actually keys its refusal on — left
@@ -196,9 +216,12 @@ Future<void> _pumpScreen(
   required AdminApiClient api,
   String id = 'cant-1',
   bool isOnline = true,
+  Set<String> capabilities = const {'cantieri.cantiere.write', 'rapportini.report.write'},
 }) async {
   await tester.binding.setSurfaceSize(const Size(800, 2400));
-  await tester.pumpWidget(_buildScreen(db: db, api: api, id: id, isOnline: isOnline));
+  await tester.pumpWidget(
+    _buildScreen(db: db, api: api, id: id, isOnline: isOnline, capabilities: capabilities),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -379,7 +402,7 @@ void main() {
 
       expect(find.text('Nessuna ora registrata'), findsOneWidget);
       expect(find.text('Nessun intervento'), findsOneWidget);
-      expect(find.text('Nessun rapportino'), findsOneWidget);
+      expect(find.text('Nessun rapporto di intervento'), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -445,6 +468,82 @@ void main() {
     });
   });
 
+  // The two lists that used to be live-only. Both entities are already mirrored (`db.tickets`
+  // carries `cantiereId`, `db.draft_reports` too), so offline the sections can answer from the
+  // device — but the sync payload is technician-scoped, so the answer is partial and must say so
+  // rather than let an empty or short list read as the cantiere's full truth.
+  group('Interventi / Rapportini offline (mirror fallback)', () {
+    testWidgets('offline, tickets come from the mirror and the list says it is partial', (
+      tester,
+    ) async {
+      await _seedCantiere(db);
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 'tic-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 10, 2),
+              title: 'Perdita dal collettore',
+              customerId: 'cus-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 0,
+              cantiereId: const Value('cant-1'),
+              numero: const Value('2026-00107'),
+            ),
+          );
+
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient(), isOnline: false);
+
+      expect(find.text('Perdita dal collettore'), findsOneWidget);
+      expect(find.textContaining('potrebbero mancare interventi'), findsOneWidget);
+      await _teardown(tester);
+    });
+
+    testWidgets('offline on a never-synced device, it says unavailable — not "nessun intervento"', (
+      tester,
+    ) async {
+      await _seedCantiere(db);
+      // No setLastSync: the mirror is empty because nothing was ever downloaded, which is not the
+      // same claim as "this cantiere has no tickets".
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient(), isOnline: false);
+
+      expect(find.text('Interventi non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun intervento'), findsNothing);
+      await _teardown(tester);
+    });
+
+    testWidgets('offline, reports come from the mirror with their stored stato', (tester) async {
+      await _seedCantiere(db);
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'rep-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 9, 30),
+              title: 'Sostituzione valvola',
+              insertedUserId: 'user-1',
+              locationId: 'loc-1',
+              cantiereId: const Value('cant-1'),
+              // Drift holds the enum's name, the API sends the ordinal — the mapping must land on
+              // the same label either way.
+              stato: const Value('Inviato'),
+            ),
+          );
+
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient(), isOnline: false);
+
+      expect(find.text('Sostituzione valvola'), findsOneWidget);
+      expect(find.text('INVIATO'), findsOneWidget);
+      expect(find.textContaining('potrebbero mancare rapporti di intervento'), findsOneWidget);
+      await _teardown(tester);
+    });
+  });
+
   // Feature audit module #13, Gap 6 (not the same as the module-#8 "Gap 6" group above — the
   // numbering restarts per module): mobile already syncs `Cantiere.commessaId` locally but showed
   // it nowhere in the UI.
@@ -483,9 +582,9 @@ void main() {
     });
   });
 
-  group('Crea rapportino', () {
+  group('Crea rapporto', () {
     // Only exercised up to (not through) context.push here: this harness's MaterialApp has no
-    // GoRouter installed, matching ticket_detail_screen_test.dart's own "Crea rapportino" test —
+    // GoRouter installed, matching ticket_detail_screen_test.dart's own "Crea rapporto" test —
     // it renders the button but never taps it, for the same reason. The prefill payload itself
     // (cantiereId/customerId/tenantId/workAddress) is verified directly against createLocalDraft
     // in create_draft_test.dart, without needing a router at all.
@@ -493,7 +592,7 @@ void main() {
       await _seedCantiere(db);
       await _pumpScreen(tester, db: db, api: _FakeAdminApiClient());
 
-      expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('Crea rapporto di intervento'), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -501,12 +600,106 @@ void main() {
       await _seedCantiere(db);
       await _pumpScreen(tester, db: db, api: _FakeAdminApiClient());
 
-      await tester.tap(find.text('Crea rapportino'));
+      await tester.tap(find.text('Crea rapporto di intervento'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Accedi per creare un rapportino.'), findsOneWidget);
+      expect(find.text('Accedi per creare un rapporto di intervento.'), findsOneWidget);
       // Nothing was created — createLocalDraft refuses before ever reaching the repository.
       expect(await db.select(db.draftReports).get(), isEmpty);
+      await _teardown(tester);
+    });
+  });
+
+  group('capability gates', () {
+    testWidgets('without cantieri.cantiere.write every write affordance is hidden', (tester) async {
+      await _seedCantiere(db);
+      final api = _FakeAdminApiClient(
+        cantiereDetail: {
+          'contacts': [
+            {'id': 'contact-1', 'name': 'Mario Rossi'},
+          ],
+          'assignments': [
+            {'id': 'assign-1', 'userId': 'u1', 'role': 'Elettricista'},
+          ],
+        },
+      );
+      await _pumpScreen(tester, db: db, api: api, capabilities: const {'rapportini.report.write'});
+
+      // The edit FAB stays on screen as the primary affordance, dimmed, and explains the refusal
+      // instead of silently disappearing.
+      expect(find.byType(AppFab), findsOneWidget);
+      await tester.tap(find.byType(AppFab));
+      await tester.pumpAndSettle();
+      expect(find.text(noPermissionReason), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina cantiere'),
+        findsNothing,
+      );
+      expect(find.byTooltip('Aggiungi contatto'), findsNothing);
+      expect(find.byTooltip('Modifica contatto'), findsNothing);
+      expect(find.byTooltip('Elimina contatto'), findsNothing);
+      expect(find.byTooltip('Aggiungi persona'), findsNothing);
+      expect(find.byIcon(LucideIcons.userMinus), findsNothing);
+      // The rapportino action is not a cantiere write and stays.
+      expect(find.text('Crea rapporto di intervento'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('without rapportini.report.write the rapportino action is hidden', (tester) async {
+      await _seedCantiere(db);
+      await _pumpScreen(
+        tester,
+        db: db,
+        api: _FakeAdminApiClient(),
+        capabilities: const {'cantieri.cantiere.write'},
+      );
+
+      expect(find.text('Crea rapporto di intervento'), findsNothing);
+      // The cantiere's own write affordances are unaffected by the report gate.
+      expect(find.byType(AppFab), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('with rapportini.report.write the rapportino action is offered', (tester) async {
+      await _seedCantiere(db);
+      await _pumpScreen(
+        tester,
+        db: db,
+        api: _FakeAdminApiClient(),
+        capabilities: const {'cantieri.cantiere.write', 'rapportini.report.write'},
+      );
+
+      expect(find.text('Crea rapporto di intervento'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('with cantieri.cantiere.write the write affordances are offered', (tester) async {
+      await _seedCantiere(db);
+      final api = _FakeAdminApiClient(
+        cantiereDetail: {
+          'contacts': [
+            {'id': 'contact-1', 'name': 'Mario Rossi'},
+          ],
+          'assignments': [
+            {'id': 'assign-1', 'userId': 'u1', 'role': 'Elettricista'},
+          ],
+        },
+      );
+      await _pumpScreen(tester, db: db, api: api);
+
+      expect(find.byType(AppFab), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina cantiere'),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Aggiungi contatto'), findsOneWidget);
+      expect(find.byTooltip('Modifica contatto'), findsOneWidget);
+      expect(find.byTooltip('Aggiungi persona'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.userMinus), findsOneWidget);
+
       await _teardown(tester);
     });
   });

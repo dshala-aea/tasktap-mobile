@@ -40,7 +40,7 @@ Future<bool?> _isSatisfiedWith(
   final completer = Completer<Entitlement?>();
 
   await tester.pumpWidget(
-    ProviderScope(
+    ProviderScope(retry: (_, _) => null, 
       overrides: [
         cachedEntitlementProvider.overrideWith((ref) {
           return neverResolves ? completer.future : Future.value(entitlement);

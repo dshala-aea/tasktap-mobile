@@ -463,6 +463,7 @@ class AdminApiClient {
     required DateTime activityDate,
     required int timeStartMinutes,
     required int timeEndMinutes,
+
     /// Everyone directly assigned (ADR-0022 §1). Replaces the scalar `userId`. Null is "this
     /// request says nothing about direct assignment" (leave it alone); an empty list is "clear
     /// it" — which is why the all-zeros-GUID sentinel is gone, a list can say it directly.
@@ -692,7 +693,7 @@ class AdminApiClient {
   ///
   /// Exists so the squadra list/detail screens can derive a per-squadra member count (Gap 7 of the
   /// feature audit) and each member's last-access timestamp (Gap 6) from ONE bulk fetch, shared via
-  /// `allUsersWithSquadraProvider` — chosen over the two N+1 alternatives: a
+  /// `allUsersProvider` — chosen over the two N+1 alternatives: a
   /// `GET /api/squadre/{id}/membri` call per squadra row on the list screen (N calls, N = squadra
   /// count, just to answer "how many"), or a live `GET /api/users/{id}` call per member row on the
   /// detail screen (N calls, N = member count, for a field the bulk list already carries). The call
@@ -910,12 +911,21 @@ class AdminApiClient {
   /// own `customerId` query param (Gap 8 of the feature audit — a customer's Prodotti section
   /// needs this scoped, not a client-side filter over an unpaginated fetch that could miss rows
   /// past the default 20-item page).
+  ///
+  /// [q] is the backend's free-text search (`ListQuery.Q`: name, code, serial number, marca, modello,
+  /// category, description) — searching is the server's job, never a filter over the first page.
   Future<List<Map<String, dynamic>>> fetchProdottiAssistenza({
     String? customerId,
+    String? q,
   }) async {
+    final term = q?.trim();
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/prodottoassistenza',
-      queryParameters: {'customerId': ?customerId, 'pageSize': 100},
+      queryParameters: {
+        'customerId': ?customerId,
+        if (term != null && term.isNotEmpty) 'q': term,
+        'pageSize': 100,
+      },
     );
     return pagedItems(res.data);
   }
@@ -1126,11 +1136,11 @@ class AdminApiClient {
   }
 
   /// Live contract detail — `GET /api/contracts/{id}` (`ContractsController.GetById`). Feature
-  /// audit module #11, Gap D: a technician viewing a ticket/cantiere tied to a contract has no
-  /// local Drift mirror to read it from (contracts, like Contratti's other sub-resources, are
-  /// never synced to the device — see `fetchContracts`'s own doc comment), so this fetches the
-  /// single contract live the same way `fetchCantiereDetail`/`fetchSquadraDetail` do for their
-  /// entities.
+  /// audit module #11, Gap D. Contracts *are* mirrored (the `contracts` list in the sync
+  /// payload), but the mirror carries only the list-shaped fields — no `price`, `condizioni`,
+  /// `frequency*`, `autoRenewal` or `scadenzaGiorni` — so the detail reads still ask the server
+  /// first and fall back to the mirror through `contractByIdProvider`, the same shape
+  /// `fetchCantiereDetail`/`fetchSquadraDetail` use for their entities.
   Future<Map<String, dynamic>?> fetchContractById(String id) async {
     final res = await _dio.get<Map<String, dynamic>>('/api/contracts/$id');
     return res.data;
@@ -1383,6 +1393,13 @@ class AdminApiClient {
     // Rapportini documenting work on a cantiere (Gap 6) — `GET /api/reports?cantiereId=`, same
     // filter web's RapportiniSection uses (frontend/src/features/cantieri/api.ts).
     String? cantiereId,
+    // The rest of the server's own list filters (`GET /api/Reports`, see the OpenAPI snapshot):
+    // the admin list's Filtri sheet passes its facets here instead of only filtering the page.
+    String? customerId,
+    String? locationId,
+    String? ticketId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
     int page = 1,
     int pageSize = 50,
   }) async {
@@ -1393,6 +1410,11 @@ class AdminApiClient {
       queryParameters: {
         'stato': ?stato,
         'cantiereId': ?cantiereId,
+        'customerId': ?customerId,
+        'locationId': ?locationId,
+        'ticketId': ?ticketId,
+        'dateFrom': ?dateFrom?.toUtc().toIso8601String(),
+        'dateTo': ?dateTo?.toUtc().toIso8601String(),
         'page': page,
         'pageSize': pageSize,
       },

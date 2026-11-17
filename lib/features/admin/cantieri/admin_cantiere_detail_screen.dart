@@ -1,25 +1,33 @@
 // dart format width=100
 import 'dart:async';
 
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/auth/access.dart';
 import '../../../core/router/app_router.dart';
-import '../../../core/time/business_time.dart'
-    show formatWorkDate, parseDateOnly;
+import '../../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/app_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
+import '../../../data/sync/connectivity_provider.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../rapportino/create_draft.dart';
 import '../../ticket/ticket_providers.dart';
 import '../admin_api_client.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -49,17 +57,30 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cantiereAsync = ref.watch(adminCantiereDetailProvider(cantiereId));
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'cantieri.cantiere.write',
+    );
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
+      // The edit FAB is the screen's primary affordance: keep it on screen when the seat cannot
+      // write, dimmed, and explain the refusal instead of silently removing the way to edit.
       floatingActionButton: Padding(
         padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-        child: AppFab(
-          icon: LucideIcons.pencil,
-          tooltip: 'Modifica',
-          onPressed: () async {
-            await context.push<bool>('/altro/cantieri/$cantiereId/modifica');
-          },
+        child: Opacity(
+          opacity: canWrite ? 1 : 0.45,
+          child: AppFab(
+            icon: LucideIcons.pencil,
+            tooltip: canWrite ? 'Modifica' : noPermissionReason,
+            onPressed: () async {
+              if (!canWrite) {
+                showAppToast(context, message: noPermissionReason, tone: ToastTone.warning);
+                return;
+              }
+              await context.push<bool>('/altro/cantieri/$cantiereId/modifica');
+            },
+          ),
         ),
       ),
       body: SafeArea(
@@ -69,13 +90,24 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
               ErrorState(onRetry: () => ref.invalidate(adminCantiereDetailProvider(cantiereId))),
           data: (cantiere) {
             if (cantiere == null) {
-              return const UnavailableState(
-                titolo: 'Cantiere non disponibile',
-                motivo:
-                    "L'elenco cantieri non è ancora sincronizzato sul "
-                    'dispositivo, quindi questo cantiere non può essere '
-                    'letto dalla cache locale anche se esiste sul server.',
-              );
+              // A missing row on a synced device is a deletion, not a download problem — the old
+              // single message promised a sync that would never bring it back.
+              return ref.watch(hasSyncedAtLeastOnceProvider).value == false
+                  ? const UnavailableState(
+                      icon: LucideIcons.cloudOff,
+                      titolo: 'Cantiere non disponibile',
+                      motivo:
+                          "L'elenco cantieri non è ancora sincronizzato sul "
+                          'dispositivo, quindi questo cantiere non può essere '
+                          'letto dalla cache locale anche se esiste sul server.',
+                    )
+                  : const UnavailableState(
+                      icon: LucideIcons.hardHat,
+                      titolo: 'Cantiere non trovato',
+                      motivo:
+                          'Questo cantiere non è più disponibile: potrebbe essere stato '
+                          'eliminato.',
+                    );
             }
             return _CantiereDetailBody(cantiere: cantiere, cantiereId: cantiereId);
           },
@@ -126,6 +158,11 @@ class _CantiereDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final entitlement = ref.watch(cachedEntitlementProvider).value;
+    final canWrite = capabilityHeld(entitlement, 'cantieri.cantiere.write');
+    // Minting a rapportino from a cantiere writes a report, not the cantiere itself: a technician
+    // may document the work without being allowed to edit the site record.
+    final canWriteReport = capabilityHeld(entitlement, 'rapportini.report.write');
     final startLabel = cantiere.startDate != null
         ? DateFormat('dd/MM/yyyy').format(cantiere.startDate!.toLocal())
         : '—';
@@ -134,8 +171,9 @@ class _CantiereDetailBody extends ConsumerWidget {
         : '—';
 
     // Feature audit module #13, Gap 6: mobile already syncs `Cantiere.commessaId` but showed it
-    // nowhere. Resolved the same way as the ticket detail screen's own commessa row — live-
-    // fetched via the shared commessaByIdProvider, no local mirror exists for commesse.
+    // nowhere. Resolved the same way as the ticket detail screen's own commessa row — through the
+    // shared commessaByIdProvider, which is online-then-mirror over the `commesse` reference
+    // cache (ReferenceCacheRepository.commessaById), so the row still resolves on site.
     final commessaId = cantiere.commessaId;
     final commessaAsync = commessaId == null ? null : ref.watch(commessaByIdProvider(commessaId));
     final commessaLabel = commessaAsync?.when(
@@ -152,12 +190,13 @@ class _CantiereDetailBody extends ConsumerWidget {
             subtitle: cantiere.city ?? '',
             showBack: true,
             actions: [
-              HeaderIconBtn(
-                icon: LucideIcons.trash2,
-                label: 'Elimina cantiere',
-                glass: true,
-                onTap: () => _deleteCantiere(context, ref, cantiereId),
-              ),
+              if (canWrite)
+                HeaderIconBtn(
+                  icon: LucideIcons.trash2,
+                  label: 'Elimina cantiere',
+                  glass: true,
+                  onTap: () => _deleteCantiere(context, ref, cantiereId),
+                ),
             ],
           ),
         ),
@@ -222,21 +261,22 @@ class _CantiereDetailBody extends ConsumerWidget {
         // to Rapportini and start blank, typing the customer/address/cantiere link by hand. Same
         // prefill contract as Ticket detail's own "Crea rapportino" (createLocalDraft): every
         // field this screen already knows goes straight into the draft.
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              0,
-              AppSpacing.pagePadding,
-              AppSpacing.pagePadding,
-            ),
-            child: AppButton(
-              label: 'Crea rapportino',
-              icon: const Icon(LucideIcons.fileText),
-              onPressed: () => _createRapportino(context, ref, cantiere),
+        if (canWriteReport)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+              ),
+              child: AppButton(
+                label: 'Crea rapporto di intervento',
+                icon: const Icon(LucideIcons.fileText),
+                onPressed: () => _createRapportino(context, ref, cantiere),
+              ),
             ),
           ),
-        ),
 
         // ── Contatti (Gap 1) ────────────────────────────────────────────
         SliverToBoxAdapter(child: _ContactsSection(cantiereId: cantiereId)),
@@ -263,7 +303,7 @@ class _CantiereDetailBody extends ConsumerWidget {
 
     final id = await createLocalDraft(
       ref,
-      title: 'Rapportino — ${cantiere.name}',
+      title: 'Rapporto di intervento — ${cantiere.name}',
       cantiereId: cantiere.id,
       customerId: cantiere.customerId,
       tenantId: cantiere.tenantId,
@@ -271,7 +311,11 @@ class _CantiereDetailBody extends ConsumerWidget {
     );
     if (!context.mounted) return;
     if (id == null) {
-      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+      showAppToast(
+        context,
+        message: 'Accedi per creare un rapporto di intervento.',
+        tone: ToastTone.warning,
+      );
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
@@ -291,19 +335,106 @@ final adminCantiereRemoteDetailProvider = FutureProvider.autoDispose
       return api.fetchCantiereDetail(id);
     });
 
+/// Rows a cantiere section can show, and whether they came from the device.
+///
+/// The two are kept apart on purpose: the mirror only ever holds this technician's slice (sync is
+/// technician-scoped), so an offline list is a *partial* view of the cantiere and the section has
+/// to say so. Returning a bare list would let the screen state "Nessun intervento" for a cantiere
+/// whose other tickets simply have not been downloaded.
+class CantiereSectionRows {
+  const CantiereSectionRows(this.rows, {required this.fromMirror});
+
+  final List<Map<String, dynamic>> rows;
+  final bool fromMirror;
+}
+
 /// Interventi (tickets) raised on this cantiere.
-final adminCantiereTicketsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>((ref, id) async {
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchCantiereTickets(id);
-    });
+///
+/// Online the list is the server's. Offline — or when the call dies in transport — it answers
+/// from `db.tickets`, which already carries `cantiereId` (schema 12). A device that has never
+/// synced has nothing to answer with and says so via [TicketDetailOfflineException] rather than
+/// claiming the cantiere has no tickets.
+final adminCantiereTicketsProvider = FutureProvider.autoDispose.family<CantiereSectionRows, String>(
+  (ref, id) async {
+    Future<CantiereSectionRows> fromMirror() async {
+      final db = ref.watch(appDatabaseProvider);
+      final rows =
+          await (db.select(db.tickets)
+                ..where((t) => t.cantiereId.equals(id))
+                ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+              .get();
+      if (rows.isEmpty && await db.getLastSync() == null) {
+        throw const TicketDetailOfflineException();
+      }
+      return CantiereSectionRows([
+        for (final t in rows)
+          {'id': t.id, 'title': t.title, 'numero': t.numero, 'statusId': t.statusId},
+      ], fromMirror: true);
+    }
+
+    if (ref.watch(isOnlineProvider)) {
+      try {
+        final rows = await ref.watch(adminApiClientProvider).fetchCantiereTickets(id);
+        return CantiereSectionRows(rows, fromMirror: false);
+      } catch (e) {
+        if (!isTransportOrServerFault(e)) rethrow;
+      }
+    }
+    return fromMirror();
+  },
+);
 
 /// Rapportini documenting work on this cantiere.
-final adminCantiereReportsProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String>((ref, id) async {
-      final api = ref.watch(adminApiClientProvider);
-      return api.fetchReports(cantiereId: id);
-    });
+///
+/// Same split as [adminCantiereTicketsProvider], answered from `db.draft_reports` (which sync
+/// fills with both drafts and submitted reports, `cantiereId` included). The mirror therefore
+/// holds this technician's reports, not the tenant's — hence [CantiereSectionRows.fromMirror].
+final adminCantiereReportsProvider = FutureProvider.autoDispose.family<CantiereSectionRows, String>(
+  (ref, id) async {
+    // Drift stores the enum's own name (`ReportStatoEnum` string); the list below renders the
+    // ordinal the server's anonymous projection sends. Kept next to the mapping so the two
+    // shapes cannot drift apart silently.
+    const statoOrdinals = {
+      'Bozza': 0,
+      'Inviato': 1,
+      'Controllato': 2,
+      'Fatturato': 3,
+      'Respinto': 4,
+      'Annullato': 5,
+    };
+
+    Future<CantiereSectionRows> fromMirror() async {
+      final db = ref.watch(appDatabaseProvider);
+      final rows =
+          await (db.select(db.draftReports)
+                ..where((r) => r.cantiereId.equals(id))
+                ..orderBy([(r) => OrderingTerm.desc(r.createdAt)]))
+              .get();
+      if (rows.isEmpty && await db.getLastSync() == null) {
+        throw const TicketDetailOfflineException();
+      }
+      return CantiereSectionRows([
+        for (final r in rows)
+          {
+            'id': r.id,
+            'title': r.title,
+            'stato': statoOrdinals[r.stato] ?? 0,
+            'createdAt': r.createdAt.toIso8601String(),
+          },
+      ], fromMirror: true);
+    }
+
+    if (ref.watch(isOnlineProvider)) {
+      try {
+        final rows = await ref.watch(adminApiClientProvider).fetchReports(cantiereId: id);
+        return CantiereSectionRows(rows, fromMirror: false);
+      } catch (e) {
+        if (!isTransportOrServerFault(e)) rethrow;
+      }
+    }
+    return fromMirror();
+  },
+);
 
 /// Hours logged on this cantiere.
 final adminCantiereWorkLogsProvider = FutureProvider.autoDispose
@@ -324,17 +455,24 @@ class _ContactsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detailAsync = ref.watch(adminCantiereRemoteDetailProvider(cantiereId));
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'cantieri.cantiere.write',
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionTitle(
           title: 'Contatti',
-          action: IconButton(
-            icon: const Icon(LucideIcons.plus),
-            tooltip: 'Aggiungi contatto',
-            onPressed: () => _openContactSheet(context, ref, cantiereId: cantiereId, contact: null),
-          ),
+          action: canWrite
+              ? IconButton(
+                  icon: const Icon(LucideIcons.plus),
+                  tooltip: 'Aggiungi contatto',
+                  onPressed: () =>
+                      _openContactSheet(context, ref, cantiereId: cantiereId, contact: null),
+                )
+              : null,
         ),
         detailAsync.when(
           loading: () => const Padding(
@@ -369,28 +507,34 @@ class _ContactsSection extends ConsumerWidget {
                     leading: const RowIconTile(icon: LucideIcons.user),
                     title: name.isNotEmpty ? name : 'Contatto',
                     subtitle: subtitleParts.isNotEmpty ? subtitleParts.join(' · ') : null,
-                    meta: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(LucideIcons.pencil, size: 18),
-                          tooltip: 'Modifica contatto',
-                          onPressed: () =>
-                              _openContactSheet(context, ref, cantiereId: cantiereId, contact: c),
-                        ),
-                        IconButton(
-                          icon: const Icon(LucideIcons.trash2, size: 18),
-                          tooltip: 'Elimina contatto',
-                          onPressed: () => _deleteContact(
-                            context,
-                            ref,
-                            cantiereId: cantiereId,
-                            contactId: c['id'] as String,
-                            name: name,
-                          ),
-                        ),
-                      ],
-                    ),
+                    meta: canWrite
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(LucideIcons.pencil, size: 18),
+                                tooltip: 'Modifica contatto',
+                                onPressed: () => _openContactSheet(
+                                  context,
+                                  ref,
+                                  cantiereId: cantiereId,
+                                  contact: c,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(LucideIcons.trash2, size: 18),
+                                tooltip: 'Elimina contatto',
+                                onPressed: () => _deleteContact(
+                                  context,
+                                  ref,
+                                  cantiereId: cantiereId,
+                                  contactId: c['id'] as String,
+                                  name: name,
+                                ),
+                              ),
+                            ],
+                          )
+                        : null,
                     showDivider: entry.key < contacts.length - 1,
                   );
                 }).toList(),
@@ -607,17 +751,23 @@ class _CrewSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detailAsync = ref.watch(adminCantiereRemoteDetailProvider(cantiereId));
+    final canWrite = capabilityHeld(
+      ref.watch(cachedEntitlementProvider).value,
+      'cantieri.cantiere.write',
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionTitle(
           title: 'Personale',
-          action: IconButton(
-            icon: const Icon(LucideIcons.userPlus),
-            tooltip: 'Aggiungi persona',
-            onPressed: () => _openAddSheet(context, ref),
-          ),
+          action: canWrite
+              ? IconButton(
+                  icon: const Icon(LucideIcons.userPlus),
+                  tooltip: 'Aggiungi persona',
+                  onPressed: () => _openAddSheet(context, ref),
+                )
+              : null,
         ),
         detailAsync.when(
           loading: () => const Padding(
@@ -646,21 +796,23 @@ class _CrewSection extends ConsumerWidget {
                   final role = a['role'] as String?;
                   final nome = userId.isEmpty
                       ? null
-                      : ref.watch(colleagueNameProvider(userId)).valueOrNull;
+                      : ref.watch(colleagueNameProvider(userId)).value;
                   return ListRow(
                     leading: AppAvatar(name: nome ?? '?', size: 36),
                     title: nome ?? 'Persona non sincronizzata',
                     subtitle: role != null && role.isNotEmpty ? role : null,
-                    meta: IconButton(
-                      icon: const Icon(LucideIcons.userMinus, size: 18),
-                      tooltip: 'Rimuovi dal cantiere',
-                      onPressed: () => _removeAssignment(
-                        context,
-                        ref,
-                        assignmentId: a['id'] as String,
-                        nome: nome ?? 'questa persona',
-                      ),
-                    ),
+                    meta: canWrite
+                        ? IconButton(
+                            icon: const Icon(LucideIcons.userMinus, size: 18),
+                            tooltip: 'Rimuovi dal cantiere',
+                            onPressed: () => _removeAssignment(
+                              context,
+                              ref,
+                              assignmentId: a['id'] as String,
+                              nome: nome ?? 'questa persona',
+                            ),
+                          )
+                        : null,
                     showDivider: entry.key < assignments.length - 1,
                   );
                 }).toList(),
@@ -897,7 +1049,7 @@ class _WorkLogsSection extends ConsumerWidget {
                   final userId = log['userId'] as String?;
                   final userName = userId == null
                       ? null
-                      : ref.watch(colleagueNameProvider(userId)).valueOrNull;
+                      : ref.watch(colleagueNameProvider(userId)).value;
                   return ListRow(
                     leading: const RowIconTile(icon: LucideIcons.clock),
                     title: userName ?? dateLabel,
@@ -929,7 +1081,7 @@ class _TicketsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ticketsAsync = ref.watch(adminCantiereTicketsProvider(cantiereId));
-    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? const {};
+    final statusMap = ref.watch(ticketStatusMapProvider).value ?? const {};
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -940,10 +1092,18 @@ class _TicketsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => AppSectionError(
-            onRetry: () => ref.invalidate(adminCantiereTicketsProvider(cantiereId)),
-          ),
-          data: (tickets) {
+          error: (e, _) => UnavailableState.forFetchError(
+            offline: e is TicketDetailOfflineException,
+            icon: LucideIcons.ticket,
+            offlineTitle: 'Interventi non disponibili offline',
+            offlineBody:
+                'Questo dispositivo non ha ancora scaricato gli interventi. Riprova quando '
+                'torni online.',
+            errorTitle: 'Impossibile caricare gli interventi',
+            errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+          ).paddedForTab(),
+          data: (data) {
+            final tickets = data.rows;
             if (tickets.isEmpty) {
               return const EmptyState(
                 icon: LucideIcons.ticket,
@@ -954,22 +1114,25 @@ class _TicketsSection extends ConsumerWidget {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: Column(
-                children: tickets.asMap().entries.map((entry) {
-                  final t = entry.value;
-                  final title = t['title'] as String? ?? 'Intervento';
-                  final numero = t['numero'] as String?;
-                  final statusId = t['statusId'] as int?;
-                  final statusLabel = statusMap[statusId] ?? 'Aperto';
-                  final id = t['id'] as String?;
-                  return ListRow(
-                    leading: const RowIconTile(icon: LucideIcons.ticket),
-                    title: title,
-                    subtitle: numero != null && numero.isNotEmpty ? numero : null,
-                    meta: StatusPill(stato: statusLabel, small: true),
-                    onTap: id == null ? null : () => context.push('/ticket/$id'),
-                    showDivider: entry.key < tickets.length - 1,
-                  );
-                }).toList(),
+                children: [
+                  if (data.fromMirror) const _MirrorNotice(what: 'interventi'),
+                  ...tickets.asMap().entries.map((entry) {
+                    final t = entry.value;
+                    final title = t['title'] as String? ?? 'Intervento';
+                    final numero = t['numero'] as String?;
+                    final statusId = t['statusId'] as int?;
+                    final statusLabel = statusMap[statusId] ?? 'Aperto';
+                    final id = t['id'] as String?;
+                    return ListRow(
+                      leading: const RowIconTile(icon: LucideIcons.ticket),
+                      title: title,
+                      subtitle: numero != null && numero.isNotEmpty ? numero : null,
+                      meta: StatusPill(stato: statusLabel, small: true),
+                      onTap: id == null ? null : () => context.push('/ticket/$id'),
+                      showDivider: entry.key < tickets.length - 1,
+                    );
+                  }),
+                ],
               ),
             );
           },
@@ -1007,51 +1170,96 @@ class _ReportsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionTitle(title: 'Rapportini'),
+        const SectionTitle(title: 'Rapporti di intervento'),
         reportsAsync.when(
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => AppSectionError(
-            onRetry: () => ref.invalidate(adminCantiereReportsProvider(cantiereId)),
-          ),
-          data: (reports) {
+          error: (e, _) => UnavailableState.forFetchError(
+            offline: e is TicketDetailOfflineException,
+            icon: LucideIcons.fileText,
+            offlineTitle: 'Rapporti di intervento non disponibili offline',
+            offlineBody:
+                'Questo dispositivo non ha ancora scaricato i rapporti di intervento. Riprova quando '
+                'torni online.',
+            errorTitle: 'Impossibile caricare i rapporti di intervento',
+            errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+          ).paddedForTab(),
+          data: (data) {
+            final reports = data.rows;
             if (reports.isEmpty) {
               return const EmptyState(
                 icon: LucideIcons.fileText,
-                title: 'Nessun rapportino',
-                body: 'Non risultano rapportini collegati a questo cantiere.',
+                title: 'Nessun rapporto di intervento',
+                body: 'Non risultano rapporti di intervento collegati a questo cantiere.',
               );
             }
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: Column(
-                children: reports.asMap().entries.map((entry) {
-                  final r = entry.value;
-                  final title = r['title'] as String? ?? 'Rapportino';
-                  final stato = r['stato'];
-                  final statoLabel =
-                      _statoLabels[stato is int ? stato : int.tryParse('$stato')] ?? 'Bozza';
-                  final createdAt = DateTime.tryParse(r['createdAt'] as String? ?? '');
-                  final dateLabel = createdAt != null
-                      ? DateFormat('dd/MM/yyyy', 'it').format(createdAt.toLocal())
-                      : null;
-                  final id = r['id'] as String?;
-                  return ListRow(
-                    leading: const RowIconTile(icon: LucideIcons.fileText),
-                    title: title,
-                    subtitle: dateLabel,
-                    meta: StatusPill(stato: statoLabel, small: true),
-                    onTap: id == null ? null : () => context.push('/altro/rapportini/view/$id'),
-                    showDivider: entry.key < reports.length - 1,
-                  );
-                }).toList(),
+                children: [
+                  if (data.fromMirror) const _MirrorNotice(what: 'rapporti di intervento'),
+                  ...reports.asMap().entries.map((entry) {
+                    final r = entry.value;
+                    final title = r['title'] as String? ?? 'Rapporto di intervento';
+                    final stato = r['stato'];
+                    final statoLabel =
+                        _statoLabels[stato is int ? stato : int.tryParse('$stato')] ?? 'Bozza';
+                    final createdAt = DateTime.tryParse(r['createdAt'] as String? ?? '');
+                    final dateLabel = createdAt != null
+                        ? DateFormat('dd/MM/yyyy', 'it').format(createdAt.toLocal())
+                        : null;
+                    final id = r['id'] as String?;
+                    return ListRow(
+                      leading: const RowIconTile(icon: LucideIcons.fileText),
+                      title: title,
+                      subtitle: dateLabel,
+                      meta: StatusPill(stato: statoLabel, small: true),
+                      onTap: id == null ? null : () => context.push('/altro/rapportini/view/$id'),
+                      showDivider: entry.key < reports.length - 1,
+                    );
+                  }),
+                ],
               ),
             );
           },
         ),
       ],
+    );
+  }
+}
+
+/// Says, above a list the device answered from its own mirror, that the list is what this phone
+/// happens to hold — never the cantiere's full population.
+///
+/// The sync payload is technician-scoped, so an office user opening a cantiere's tickets offline
+/// sees only the ones their own sync carried. Without this line the absence of a colleague's
+/// ticket looks like the cantiere having no such ticket at all, which is the one claim a partial
+/// mirror cannot make.
+class _MirrorNotice extends StatelessWidget {
+  const _MirrorNotice({required this.what});
+
+  final String what;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.wifiOff, size: 14, color: c.inkMuted),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Dati salvati sul dispositivo: potrebbero mancare $what non ancora scaricati.',
+              style: TextStyle(fontSize: 12, color: c.inkMuted, height: 1.3),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

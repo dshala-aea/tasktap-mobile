@@ -191,4 +191,24 @@ class BusinessTime {
       ),
     );
   }
+
+  /// [instantOfLegacyLabel]'s inverse: the legacy label of [instant] — its civil
+  /// date and time of day in the Rome frame. Seconds precision by construction;
+  /// feeding the result back through [instantOfLegacyLabel] returns [instant]
+  /// truncated to the second.
+  ///
+  /// For the one caller that has a local punch instant and no server DTO: the
+  /// rapportino's hours suggestion, which reads this device's open timbratura
+  /// offline. It formats [timeOfDay] with `formatTimeSpan`, the same `HH:mm:ss`
+  /// the backend's `StartTime` column carries.
+  (DateTime civilDate, Duration timeOfDay) legacyLabelOf(DateTime instant) {
+    final z = tz.TZDateTime.from(
+      instant.toUtc(),
+      tz.getLocation(kLegacyLabelZoneId),
+    );
+    return (
+      DateTime.utc(z.year, z.month, z.day),
+      Duration(hours: z.hour, minutes: z.minute, seconds: z.second),
+    );
+  }
 }

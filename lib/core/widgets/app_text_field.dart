@@ -48,6 +48,7 @@ class AppTextField extends StatelessWidget {
     this.autofillHints,
     this.initialValue,
     this.autofocus = false,
+    this.counterText,
   });
 
   /// Multiline convenience constructor.
@@ -69,6 +70,7 @@ class AppTextField extends StatelessWidget {
     this.focusNode,
     this.initialValue,
     this.autofocus = false,
+    this.counterText,
   }) : keyboardType = TextInputType.multiline,
        textInputAction = TextInputAction.newline,
        obscureText = false,
@@ -94,6 +96,9 @@ class AppTextField extends StatelessWidget {
   final Iterable<String>? autofillHints;
   final String? initialValue;
   final bool autofocus;
+
+  /// Overrides the character counter shown with [maxLength]; '' hides it, null keeps the default.
+  final String? counterText;
 
   @override
   Widget build(BuildContext context) {
@@ -143,6 +148,7 @@ class AppTextField extends StatelessWidget {
               prefixIcon: prefixIcon,
               suffixIcon: suffixIcon,
               isDense: true,
+              counterText: counterText,
             ),
           ),
         ],

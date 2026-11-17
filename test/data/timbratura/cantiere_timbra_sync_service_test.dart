@@ -5,6 +5,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/timbratura/cantiere_session_assembler.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
@@ -13,9 +14,14 @@ import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart'
 
 class _FakeRepo implements ICantiereSessionRepository {
   final List<CantierePunche> events;
-  final List<String> markedSynced = [];
 
-  _FakeRepo(this.events);
+  /// Pending rows that are NOT in [events] — i.e. a backlog from an earlier business day. The real
+  /// repository's `getPendingEvents()` is day-agnostic; this models that.
+  final List<CantierePunche> pendingBeyondToday;
+  final List<String> markedSynced = [];
+  final Map<String, String?> syncErrors = {};
+
+  _FakeRepo(this.events, {this.pendingBeyondToday = const []});
 
   @override
   Future<void> addEvent({
@@ -28,13 +34,47 @@ class _FakeRepo implements ICantiereSessionRepository {
     String? description,
     double? latitude,
     double? longitude,
+    String? safetyNotes,
+    double? departureLatitude,
+    double? departureLongitude,
+    String? workOrderNumber,
+    String? equipmentUsed,
+    int? teamSize,
+    String? weatherConditions,
   }) async {}
 
   @override
   Stream<List<CantierePunche>> watchTodayEvents() => Stream.value(events);
 
+  /// The screen's "is a session open" read — the latest punch of the whole log. This fake holds
+  /// one day's events, so its last row is that punch.
+  @override
+  Stream<CantierePunche?> watchLatestPunch() =>
+      Stream.value(events.isEmpty ? null : events.last);
+
   @override
   Future<List<CantierePunche>> getTodayEvents() async => events;
+
+  @override
+  Future<List<CantierePunche>> getPendingEvents() async =>
+      [...events.where((e) => e.isPendingSync), ...pendingBeyondToday];
+
+  // Not exercised by these tests (the sync never asks); implemented off the same assembler the
+  // real repository uses so the fake stays a faithful stand-in for the interface.
+  @override
+  Future<List<CantiereWorkInterval>> getClosedIntervalsFor(String cantiereId) async => [
+    for (final i in assembleCantiereIntervals(events))
+      if (i.cantiereId == cantiereId && i.endTime != null) i,
+  ];
+
+  @override
+  Future<List<String>> getClosedIntervalClientIds(String cantiereId) async =>
+      [for (final i in await getClosedIntervalsFor(cantiereId)) i.clientId];
+
+  @override
+  Future<int> getPendingCount() async => (await getPendingEvents())
+      .where((e) => e.notes != cantiereReconciledOrphanMarker)
+      .length;
 
   @override
   Future<void> markSynced(List<String> ids) async {
@@ -42,7 +82,29 @@ class _FakeRepo implements ICantiereSessionRepository {
   }
 
   @override
-  Future<void> markSyncError(String id, String message) async {}
+  Future<void> markSyncError(String id, String? message) async {
+    syncErrors[id] = message;
+    final i = events.indexWhere((e) => e.id == id);
+    if (i == -1) return;
+    final e = events[i];
+    events[i] = CantierePunche(
+      id: e.id,
+      eventTime: e.eventTime,
+      eventType: e.eventType,
+      cantiereId: e.cantiereId,
+      customerId: e.customerId,
+      ticketId: e.ticketId,
+      description: e.description,
+      latitude: e.latitude,
+      longitude: e.longitude,
+      safetyNotes: e.safetyNotes,
+      departureLatitude: e.departureLatitude,
+      departureLongitude: e.departureLongitude,
+      notes: e.notes,
+      isPendingSync: e.isPendingSync,
+      syncError: message,
+    );
+  }
 
   @override
   Future<void> markReconciledOrphan(String id) async {}
@@ -59,10 +121,30 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   final List<List<CantiereMobileSessionDto>> calls = [];
   bool shouldThrow = false;
 
+  /// Closes drained through the online `end` route — the orphan-close path. A normal pair must
+  /// never appear here: those belong to the batch.
+  final List<EndCantiereRequest> endedCalls = [];
+  Object? endErrorToThrow;
+
+  /// When set, [upsertSessions] throws exactly this instead of [shouldThrow]'s generic exception —
+  /// for the classification tests, which need a real server answer.
+  Object? errorToThrow;
+
+  /// What the server would echo per session: the gap it judged a disagreement, or null.
+  int? clockDisagreementSeconds;
+
+  @override
+  Future<int?> endCantiere([EndCantiereRequest? request]) async {
+    if (endErrorToThrow != null) throw endErrorToThrow!;
+    endedCalls.add(request ?? const EndCantiereRequest());
+    return null;
+  }
+
   @override
   Future<List<CantiereMobileSessionResult>> upsertSessions(
     List<CantiereMobileSessionDto> sessions,
   ) async {
+    if (errorToThrow != null) throw errorToThrow!;
     if (shouldThrow) throw Exception('Network error');
     calls.add(List.of(sessions));
     return sessions
@@ -73,6 +155,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
             startTime: s.startTime,
             endTime: s.endTime,
             isActive: s.endTime == null,
+            clockDisagreementSeconds: clockDisagreementSeconds,
           ),
         )
         .toList();
@@ -89,6 +172,14 @@ CantierePunche _cp(
   String? customerId,
   String? ticketId,
   String? notes,
+  String? description,
+  String? safetyNotes,
+  double? departureLatitude,
+  double? departureLongitude,
+  String? workOrderNumber,
+  String? equipmentUsed,
+  int? teamSize,
+  String? weatherConditions,
 }) => CantierePunche(
   id: id,
   eventType: type,
@@ -98,6 +189,14 @@ CantierePunche _cp(
   customerId: customerId,
   ticketId: ticketId,
   notes: notes,
+  description: description,
+  safetyNotes: safetyNotes,
+  departureLatitude: departureLatitude,
+  departureLongitude: departureLongitude,
+  workOrderNumber: workOrderNumber,
+  equipmentUsed: equipmentUsed,
+  teamSize: teamSize,
+  weatherConditions: weatherConditions,
 );
 
 void main() {
@@ -136,6 +235,47 @@ void main() {
       expect(dtos[0].endTime, t2);
     });
 
+    test('hands the server\'s clock-disagreement answer to the caller, once per batch', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+      final events = [
+        _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+        _cp('id-2', 'uscita', t2),
+      ];
+      final repo = _FakeRepo(events);
+      final api = _FakeApiClient()..clockDisagreementSeconds = 720;
+      final reported = <int>[];
+      final svc = CantiereTimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        onClockDisagreement: reported.add,
+      );
+
+      await svc.syncNow();
+
+      // One report, not one per session: every session carried the same send-time reading.
+      expect(reported, [720]);
+    });
+
+    test('says nothing when the server judged the drift ordinary', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final events = [_cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1')];
+      final repo = _FakeRepo(events);
+      // Null is what the server answers for ordinary drift, a client with no clock, and an older
+      // backend alike — the service must not invent a gap of its own.
+      final api = _FakeApiClient();
+      final reported = <int>[];
+      final svc = CantiereTimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        onClockDisagreement: reported.add,
+      );
+
+      await svc.syncNow();
+
+      expect(reported, isEmpty);
+    });
+
     test('markSynced receives both event ids', () async {
       final t1 = DateTime.utc(2026, 6, 23, 8);
       final t2 = DateTime.utc(2026, 6, 23, 17);
@@ -150,6 +290,168 @@ void main() {
       await svc.syncNow();
 
       expect(repo.markedSynced, containsAll(['id-1', 'id-2']));
+    });
+
+    /// The clock-out screen's fields must survive the queue. Sending the interval without them
+    /// makes an offline clock-out a poorer record than the same visit closed with signal, and the
+    /// safety note is the one field on that screen a compliance audit actually asks for.
+    test('the clock-out fields ride on the closing DTO', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+      final events = [
+        _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+        _cp(
+          'id-2',
+          'uscita',
+          t2,
+          safetyNotes: 'area recintata',
+          departureLatitude: 45.4660,
+          departureLongitude: 9.1880,
+        ),
+      ];
+      final repo = _FakeRepo(events);
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      final dto = api.calls[0][0];
+      expect(dto.endTime, t2);
+      expect(dto.safetyNotes, 'area recintata');
+      expect(dto.departureLatitude, 45.4660);
+      expect(dto.departureLongitude, 9.1880);
+    });
+
+    /// The clock-in half of the same rule: a technician who clocked in with no signal used to
+    /// arrive at the office with no work order, no equipment, no crew size and no weather — the
+    /// fields the job is priced from.
+    test('the clock-in fields ride on the opening DTO', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+      final events = [
+        _cp(
+          'id-1',
+          'ingresso',
+          t1,
+          cantiereId: 'cant-1',
+          customerId: 'cust-1',
+          workOrderNumber: 'OL-2026-118',
+          equipmentUsed: 'piattaforma aerea',
+          teamSize: 3,
+          weatherConditions: 'pioggia leggera',
+        ),
+        _cp('id-2', 'uscita', t2),
+      ];
+      final repo = _FakeRepo(events);
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      final dto = api.calls[0][0];
+      expect(dto.workOrderNumber, 'OL-2026-118');
+      expect(dto.equipmentUsed, 'piattaforma aerea');
+      expect(dto.teamSize, 3);
+      expect(dto.weatherConditions, 'pioggia leggera');
+      // ...and on the wire, where the server reads them.
+      final json = dto.toJson();
+      expect(json['workOrderNumber'], 'OL-2026-118');
+      expect(json['teamSize'], 3);
+    });
+
+    group('a close whose clock-in happened online', () {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final t2 = DateTime.utc(2026, 6, 23, 17);
+
+      /// Clocked in through the online `start` route (no local row), clocked out with no signal.
+      /// The batch cannot carry this: it matches on a clientId the server-created punch was never
+      /// given, so upserting would open a second, empty shift. The row used to stay pending
+      /// forever while the server kept the visit open.
+      test('is closed through the online end route, not the batch', () async {
+        final events = [
+          _cp(
+            'id-close',
+            'uscita',
+            t2,
+            description: 'finito',
+            safetyNotes: 'area recintata',
+            departureLatitude: 45.4660,
+            departureLongitude: 9.1880,
+          ),
+        ];
+        final repo = _FakeRepo(events);
+        final api = _FakeApiClient();
+        final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+        await svc.syncNow();
+
+        expect(api.calls, isEmpty, reason: 'the batch has no opener to pair this close with');
+        expect(api.endedCalls.length, 1);
+        final ended = api.endedCalls.single;
+        expect(ended.description, 'finito');
+        expect(ended.safetyNotes, 'area recintata');
+        expect(ended.departureLatitude, 45.4660);
+        expect(repo.markedSynced, contains('id-close'));
+        expect(repo.syncErrors['id-close'], isNull);
+      });
+
+      /// The server answering 404 means it has no open session left: the office closed it, or an
+      /// earlier attempt landed and only the reply was lost. Either way the visit is closed.
+      test('a 404 from the end route still counts as delivered', () async {
+        final api = _FakeApiClient()
+          ..endErrorToThrow = DioException(
+            requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
+            type: DioExceptionType.badResponse,
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
+              statusCode: 404,
+            ),
+          );
+        final repo = _FakeRepo([_cp('id-close', 'uscita', t2)]);
+        final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+        await svc.syncNow();
+
+        expect(repo.markedSynced, contains('id-close'));
+        expect(repo.syncErrors['id-close'], isNull);
+      });
+
+      /// A close the server refuses outright is a decision, not a delivery: held with a message so
+      /// the technician can act on it, exactly like a refused batch.
+      test('a permanent refusal is held with a message, not marked synced', () async {
+        final api = _FakeApiClient()
+          ..endErrorToThrow = DioException(
+            requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
+            type: DioExceptionType.badResponse,
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/api/cantiereworklog/end'),
+              statusCode: 400,
+              data: 'La timbratura è già stata corretta in ufficio.',
+            ),
+          );
+        final repo = _FakeRepo([_cp('id-close', 'uscita', t2)]);
+        final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+        await svc.syncNow();
+
+        expect(repo.markedSynced, isNot(contains('id-close')));
+        expect(repo.syncErrors['id-close'], isNotNull);
+      });
+
+      /// The normal shape must not drift onto the end route: a paired visit is one batch call.
+      test('a paired visit never calls the end route', () async {
+        final repo = _FakeRepo([
+          _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+          _cp('id-2', 'uscita', t2),
+        ]);
+        final api = _FakeApiClient();
+        final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+        await svc.syncNow();
+
+        expect(api.calls.length, 1);
+        expect(api.endedCalls, isEmpty);
+      });
     });
 
     test('active interval has null endTime in DTO', () async {
@@ -197,4 +499,173 @@ void main() {
       expect(repo.markedSynced, isEmpty);
     });
   });
+
+  // ── P0-2: the queue is not day-scoped ───────────────────────────────────────
+  group('CantiereTimbraSyncService.syncNow — multi-day backlog', () {
+    test('a pending event dated yesterday is assembled and POSTed', () async {
+      final start = DateTime.utc(2026, 6, 22, 8);
+      final end = DateTime.utc(2026, 6, 22, 17);
+      final repo = _FakeRepo(
+        [],
+        pendingBeyondToday: [
+          _cp('y-1', 'ingresso', start, cantiereId: 'cant-1', customerId: 'cust-1'),
+          _cp('y-2', 'uscita', end),
+        ],
+      );
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(api.calls.length, 1);
+      final dto = api.calls.single.single;
+      expect(dto.clientId, 'y-1');
+      expect(dto.startTime, start);
+      expect(dto.endTime, end);
+      expect(repo.markedSynced, containsAll(['y-1', 'y-2']));
+    });
+
+    test('a multi-day backlog is assembled and sent one day at a time', () async {
+      final day1Start = DateTime.utc(2026, 6, 22, 8);
+      final day1End = DateTime.utc(2026, 6, 22, 17);
+      final day2Start = DateTime.utc(2026, 6, 23, 9);
+      final day2End = DateTime.utc(2026, 6, 23, 18);
+      final repo = _FakeRepo([], pendingBeyondToday: [
+        _cp('d1-in', 'ingresso', day1Start, cantiereId: 'cant-1', customerId: 'cust-1'),
+        _cp('d1-out', 'uscita', day1End),
+        _cp('d2-in', 'ingresso', day2Start, cantiereId: 'cant-2', customerId: 'cust-1'),
+        _cp('d2-out', 'uscita', day2End),
+      ]);
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(api.calls.length, 2, reason: 'one POST per business day');
+      expect(api.calls[0].single.clientId, 'd1-in');
+      expect(api.calls[0].single.endTime, day1End);
+      expect(api.calls[1].single.clientId, 'd2-in');
+      expect(api.calls[1].single.endTime, day2End);
+      expect(repo.markedSynced, containsAll(['d1-in', 'd1-out', 'd2-in', 'd2-out']));
+    });
+
+    test('an unclosed day is not closed by the next day\'s clock-in', () async {
+      final day1Start = DateTime.utc(2026, 6, 22, 8);
+      final day2Start = DateTime.utc(2026, 6, 23, 9);
+      final day2End = DateTime.utc(2026, 6, 23, 18);
+      final repo = _FakeRepo([], pendingBeyondToday: [
+        _cp('d1-in', 'ingresso', day1Start, cantiereId: 'cant-1', customerId: 'cust-1'),
+        _cp('d2-in', 'ingresso', day2Start, cantiereId: 'cant-1', customerId: 'cust-1'),
+        _cp('d2-out', 'uscita', day2End),
+      ]);
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(api.calls[0].single.endTime, isNull, reason: 'day 1 stays open, not a 25-hour visit');
+      expect(api.calls[1].single.endTime, day2End);
+    });
+
+    test('an overnight site visit is sent as one closed interval, in the day it began', () async {
+      final start = DateTime.utc(2026, 6, 22, 22);
+      final end = DateTime.utc(2026, 6, 23, 6);
+      final repo = _FakeRepo([], pendingBeyondToday: [
+        _cp('n-1', 'ingresso', start, cantiereId: 'cant-1', customerId: 'cust-1'),
+        _cp('n-2', 'uscita', end),
+      ]);
+      final api = _FakeApiClient();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(api.calls.length, 1);
+      expect(api.calls.single.single.clientId, 'n-1');
+      expect(api.calls.single.single.endTime, end);
+      expect(repo.markedSynced, containsAll(['n-1', 'n-2']));
+    });
+  });
+
+  // ── P0-3: failures are classified, never swallowed ──────────────────────────
+  group('CantiereTimbraSyncService.syncNow — failure classification', () {
+    test('a 400 marks the error, keeps the events pending, and stops auto-retrying', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final repo = _FakeRepo([
+        _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+      ]);
+      final api = _FakeApiClient()..errorToThrow = _serverRefusal(400);
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(repo.syncErrors.keys, ['id-1']);
+      expect(repo.syncErrors['id-1'], isNotEmpty);
+      expect(repo.markedSynced, isEmpty, reason: 'a refused event is never marked synced');
+      expect((await repo.getTodayEvents()).single.isPendingSync, isTrue);
+      expect(
+        await repo.getPendingCount(),
+        1,
+        reason: 'it is still unsent work, so the counter must show it',
+      );
+
+      // A later automatic run must not hammer the same refused bytes.
+      api.errorToThrow = null;
+      await svc.syncNow();
+      expect(api.calls, isEmpty);
+    });
+
+    test('a 500 keeps the events pending and backs off instead of marking an error', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final repo = _FakeRepo([
+        _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+      ]);
+      final api = _FakeApiClient()..errorToThrow = _serverRefusal(500);
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(repo.syncErrors, isEmpty);
+      expect(repo.markedSynced, isEmpty);
+      expect((await repo.getTodayEvents()).single.isPendingSync, isTrue);
+
+      // Backed off: an immediate automatic retry does not reach the server.
+      api.errorToThrow = null;
+      await svc.syncNow();
+      expect(api.calls, isEmpty);
+
+      // A manual sync clears the hold and sends.
+      await svc.syncNow(manual: true);
+      expect(api.calls.length, 1);
+    });
+
+    test('a manual sync releases events held by a permanent refusal', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final repo = _FakeRepo([
+        _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+      ]);
+      final api = _FakeApiClient()..errorToThrow = _serverRefusal(422);
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+      expect(repo.syncErrors['id-1'], isNotEmpty);
+
+      api.errorToThrow = null;
+      await svc.syncNow(manual: true);
+
+      expect(repo.syncErrors['id-1'], isNull);
+      expect(api.calls.length, 1);
+      expect(repo.markedSynced, contains('id-1'));
+    });
+  });
 }
+
+/// A real server answer, as `ProblemDetails` (the backend writes `code` at the root).
+DioException _serverRefusal(int status) => DioException(
+  requestOptions: RequestOptions(path: '/api/cantiereworklog/mobile/sessions'),
+  response: Response<Map<String, dynamic>>(
+    requestOptions: RequestOptions(path: '/api/cantiereworklog/mobile/sessions'),
+    statusCode: status,
+    data: {'title': 'Refused', 'code': 'invalid_request'},
+  ),
+  type: DioExceptionType.badResponse,
+);

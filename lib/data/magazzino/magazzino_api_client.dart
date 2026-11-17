@@ -261,9 +261,9 @@ class MagazzinoApiClient {
       '/api/magazzino',
       queryParameters: {'isActive': ?isActive, 'tipo': ?tipo, 'pageSize': 200},
     );
-    return pagedItems(
-      response.data,
-    ).map(MagazzinoDto.fromJson).toList(growable: false);
+    return pagedItems(response.data)
+        .map(MagazzinoDto.fromJson)
+        .toList(growable: false);
   }
 
   /// GET /api/magazzino/furgone/{userId}

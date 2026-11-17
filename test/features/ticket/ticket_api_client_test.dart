@@ -175,6 +175,51 @@ void main() {
       expect(body.containsKey('prodottoAssistenzaIds'), isFalse);
     });
 
+    // Ticket parity with web's TicketCreatePanel: CreateTicketRequest carries a chosen maintenance
+    // checklist template as `maintenanceTemplateId`.
+    test('sends maintenanceTemplateId when provided', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/tickets', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse({'id': 'tick-1'}, '/api/tickets'));
+
+      await client.createTicket(
+        title: 'Perdita idrica',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        maintenanceTemplateId: 'tpl-1',
+      );
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>('/api/tickets', data: captureAny(named: 'data')),
+      ).captured;
+      final body = captured.first as Map<String, dynamic>;
+      expect(body['maintenanceTemplateId'], 'tpl-1');
+    });
+
+    test('sends maintenanceTemplateId as absent when not provided, never as null', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/tickets', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse({'id': 'tick-1'}, '/api/tickets'));
+
+      await client.createTicket(
+        title: 'Perdita idrica',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+      );
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>('/api/tickets', data: captureAny(named: 'data')),
+      ).captured;
+      final body = captured.first as Map<String, dynamic>;
+      // The wizard's default option means "let the server resolve the template from type/contract";
+      // an explicit null would read as "clear it" for a ticket that has none to clear.
+      expect(body.containsKey('maintenanceTemplateId'), isFalse);
+    });
+
     test('omits dueDate/technicianNotes/agentId/tags when not provided', () async {
       when(
         () => mockDio.post<Map<String, dynamic>>('/api/tickets', data: any(named: 'data')),
@@ -199,6 +244,7 @@ void main() {
       expect(body.containsKey('contractId'), isFalse);
       expect(body.containsKey('commessaId'), isFalse);
       expect(body.containsKey('cantiereId'), isFalse);
+      expect(body.containsKey('maintenanceTemplateId'), isFalse);
       expect(body.containsKey('prodottoAssistenzaIds'), isFalse);
     });
   });

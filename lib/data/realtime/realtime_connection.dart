@@ -68,7 +68,7 @@ extension type RealtimeEvent._(({String type, Map<String, dynamic> data}) _value
 /// return), not a tenant-wide broadcast. Mirrors [RealtimeEvent]'s `extension type` pattern for
 /// structural consistency with the rest of this file.
 extension type RealtimeNotificationMessage._(
-  ({String id, String title, String message, DateTime createdAt}) _value
+  ({String id, String title, String message, DateTime createdAt}) _value,
 ) {
   factory RealtimeNotificationMessage.fromHubPayload(Map<String, dynamic> raw) =>
       RealtimeNotificationMessage._((

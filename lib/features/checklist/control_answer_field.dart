@@ -90,6 +90,10 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
         dateValue: date,
         numberValue: number,
         note: note,
+        // The name and asset travel with the answer: the sent report reads them back by itself,
+        // long after this device may have lost the ticket's checklist.
+        controlLabel: _c.label,
+        assetId: _c.assetId,
       ),
     );
   }
@@ -122,9 +126,7 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
 
   @override
   Widget build(BuildContext context) {
-    final existing = ref.watch(
-      controlAnswersProvider(widget.reportId).select((m) => m[_c.id]),
-    );
+    final existing = ref.watch(controlAnswersProvider(widget.reportId).select((m) => m[_c.id]));
     final shown = existing ?? _c.stored;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -162,7 +164,22 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
 
   Widget _input(ChecklistAnswer shown) {
     switch (_c.type) {
+      // A check, not a choice. `checkbox` used to share the Sì/No pair below, which made a tick
+      // read as one answer between two when it is really an assertion — and made the two control
+      // types indistinguishable on screen even though the catalogue and the web editor keep them
+      // apart.
       case ControlType.checkbox:
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: AppCheckbox(
+            value: shown.boolValue == true,
+            label: _c.label,
+            isRequired: _c.isRequired,
+            // Unticking writes `false`, matching the web editor: false is an answer (and the
+            // exception the checklist reports upstream), not "not yet answered".
+            onChanged: (v) => _commit(_answer(boolValue: v)),
+          ),
+        );
       case ControlType.trueFalse:
         return Row(
           children: [
@@ -197,7 +214,9 @@ class _ControlAnswerFieldState extends ConsumerState<ControlAnswerField> {
         final value = shown.dateValue;
         return AdminDateField(
           label: 'Valore',
-          value: value != null ? DateFormat('dd/MM/yyyy').format(value.toLocal()) : 'Seleziona data',
+          value: value != null
+              ? DateFormat('dd/MM/yyyy').format(value.toLocal())
+              : 'Seleziona data',
           onTap: () async {
             final picked = await showDatePicker(
               context: context,

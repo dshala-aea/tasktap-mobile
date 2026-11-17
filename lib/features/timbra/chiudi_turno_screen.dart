@@ -16,7 +16,7 @@
 // *values* moved (from that screen's own `_closingDescription`/`_safetyNotes` state to this
 // screen's own text controllers) — the GPS-purpose gating, offline-fallback detection, and error
 // humanising themselves are the exact same shared top-level functions
-// (`confirmGpsPurpose`/`isOfflineFailure`/`cantiereNetworkErrorMessage`) cantiere_timbra_screen.dart
+// (`requestGpsPermission`/`isOfflineFailure`/`cantiereNetworkErrorMessage`) cantiere_timbra_screen.dart
 // exports for this reason. Do not reimplement that logic differently here.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -36,6 +36,7 @@ import '../../core/time/business_time_providers.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
+import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../cantiere/cantiere_providers.dart';
 import 'cantiere_timbra_screen.dart'
@@ -44,7 +45,7 @@ import 'cantiere_timbra_screen.dart'
         activeCantiereLogProvider,
         cantiereNetworkErrorMessage,
         clampedElapsedSinceMidnight,
-        confirmGpsPurpose,
+        requestGpsPermission,
         formatHoursMinutes,
         isOfflineFailure;
 import 'gps_status_indicator.dart';
@@ -98,7 +99,8 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
   /// than just happening to submit it empty, a deliberate fast path distinct from "Conferma
   /// uscita" with blank fields.
   Future<void> _confirm({bool skipNotes = false}) async {
-    if (!await confirmGpsPurpose(context, ref)) return;
+    await requestGpsPermission(ref);
+    if (!mounted) return;
 
     setState(() {
       if (skipNotes) {
@@ -112,17 +114,27 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
     final description = skipNotes ? null : _blankToNull(_descriptionCtrl.text);
     final safetyNotes = skipNotes ? null : _blankToNull(_safetyNotesCtrl.text);
 
+    // Fetched once, outside the try/catch: `LocationService` never throws (see its own doc
+    // comment), and both the online call and the offline fallback need the same position —
+    // cantiere_timbra_screen.dart's `_handleEndCantiere` does exactly this.
+    final location = await ref.read(locationServiceProvider).getCurrentPosition();
+
     try {
-      final location = await ref.read(locationServiceProvider).getCurrentPosition();
       final client = ref.read(cantiereWorklogApiClientProvider);
-      await client.endCantiere(
+      final clockDisagreement = await client.endCantiere(
         EndCantiereRequest(
           description: description,
           departureLatitude: location?.lat,
           departureLongitude: location?.lng,
           safetyNotes: safetyNotes,
+          // See StartCantiereRequest.deviceUtc — the same instant-as-witness, gap-as-evidence rule.
+          deviceUtc: DateTime.now().toUtc(),
         ),
       );
+      // The row's final value (the stronger of its two halves), already filtered by the server.
+      if (clockDisagreement != null) {
+        ref.read(cantiereClockDisagreementProvider.notifier).record(clockDisagreement);
+      }
       _onEndedSuccessfully(offline: false);
     } on DioException catch (e) {
       if (isOfflineFailure(e)) {
@@ -133,6 +145,13 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
               eventTime: DateTime.now().toUtc(),
               eventType: 'uscita',
               description: description,
+              // The same three fields the online `end` call sends. Dropping them here made an
+              // offline clock-out a poorer record than the same visit closed with signal: no
+              // safety note, no departure fix. They queue on the 'uscita' row and the batch
+              // upsert carries them (CantiereMobileSessionDto.departureLatitude/…).
+              safetyNotes: safetyNotes,
+              departureLatitude: location?.lat,
+              departureLongitude: location?.lng,
             );
         unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
         _onEndedSuccessfully(offline: true);
@@ -176,7 +195,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
     final ticketId = widget.ticketId;
     final ticketLabel = ticketId == null
         ? null
-        : ref.watch(ticketByIdProvider(ticketId)).valueOrNull?.title;
+        : ref.watch(ticketByIdProvider(ticketId)).value?.title;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -206,7 +225,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  cantiereAsync.valueOrNull?.name ?? 'Cantiere',
+                                  cantiereAsync.value?.name ?? 'Cantiere',
                                   style: AppTextStyles.titleMedium.copyWith(
                                     color: context.colors.ink,
                                   ),

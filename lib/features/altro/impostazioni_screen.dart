@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/config/app_info_provider.dart';
+import '../../core/location/location_service.dart';
 import '../../core/dictation/dictation_service.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/router/app_router.dart';
+import '../../core/time/last_sync_label.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/sync/sync_service.dart' show lastSyncProvider;
 import '../../presentation/providers/auth_providers.dart';
 import 'biometric_setup.dart';
 import 'impostazioni_provider.dart';
+import 'logout_action.dart';
+import 'passkey_settings_section.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -31,6 +39,7 @@ class ImpostazioniScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final settings = ref.watch(impostazioniProvider);
     final notifier = ref.read(impostazioniProvider.notifier);
+    final tenantGpsEnabled = ref.watch(tenantGpsEnabledProvider);
     final appInfoAsync = ref.watch(appInfoProvider);
 
     final displayName = user?.displayName ?? user?.email ?? '';
@@ -40,7 +49,9 @@ class ImpostazioniScreen extends ConsumerWidget {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(child: ScreenHeader(title: 'Impostazioni', showBack: true)),
+            SliverToBoxAdapter(
+              child: ScreenHeader(title: 'Impostazioni', showBack: true),
+            ),
 
             // ── Profile card ───────────────────────────────────────────────
             SliverToBoxAdapter(
@@ -48,7 +59,9 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Notifiche — canali ────────────────────────────────────────
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Notifiche')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Notifiche'),
+            ),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -61,7 +74,8 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Notifiche push',
                     subtitle: 'Ricevi avvisi in tempo reale',
                     value: settings.pushAbilitate,
-                    onChanged: (_) => _togglePush(context, settings.pushAbilitate, notifier),
+                    onChanged: (_) =>
+                        _togglePush(context, settings.pushAbilitate, notifier),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.mail,
@@ -83,7 +97,9 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Notifiche — categorie ─────────────────────────────────────
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Notifiche attive')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Notifiche attive'),
+            ),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -92,21 +108,24 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Interventi',
                     subtitle: 'Nuovi interventi assegnati',
                     value: settings.notificheInterventi,
-                    onChanged: (_) => notifier.toggle(key: 'notificheInterventi'),
+                    onChanged: (_) =>
+                        notifier.toggle(key: 'notificheInterventi'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.alertTriangle,
                     title: 'Ticket in ritardo',
                     subtitle: 'Avviso quando un ticket supera la scadenza',
                     value: settings.notificheTicketRitardo,
-                    onChanged: (_) => notifier.toggle(key: 'notificheTicketRitardo'),
+                    onChanged: (_) =>
+                        notifier.toggle(key: 'notificheTicketRitardo'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.calendar,
                     title: 'Pianificazione',
                     subtitle: 'Promemoria e cambi di programmazione',
                     value: settings.notifichePianificazione,
-                    onChanged: (_) => notifier.toggle(key: 'notifichePianificazione'),
+                    onChanged: (_) =>
+                        notifier.toggle(key: 'notifichePianificazione'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.shieldCheck,
@@ -120,14 +139,16 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Ore e presenze',
                     subtitle: 'Invio e approvazione di ore e presenze',
                     value: settings.notificheOrePresenze,
-                    onChanged: (_) => notifier.toggle(key: 'notificheOrePresenze'),
+                    onChanged: (_) =>
+                        notifier.toggle(key: 'notificheOrePresenze'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.fileText,
-                    title: 'Rapportini',
-                    subtitle: 'Aggiornamenti sui rapportini',
+                    title: 'Rapporti di intervento',
+                    subtitle: 'Aggiornamenti sui rapporti di intervento',
                     value: settings.notificheRapportini,
-                    onChanged: (_) => notifier.toggle(key: 'notificheRapportini'),
+                    onChanged: (_) =>
+                        notifier.toggle(key: 'notificheRapportini'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.atSign,
@@ -141,27 +162,59 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
+            // ── Notifiche — per tipo ──────────────────────────────────────
+            //
+            // The switches above are families; this opens one switch per event. Hidden unless the
+            // user holds `sistema.notification.read` (the route is guarded by the same capability).
+            SliverToBoxAdapter(
+              child: CapabilityGate(
+                capability: 'sistema.notification.read',
+                child: Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.md),
+                  child: _SettingsGroup(
+                    children: [
+                      _LinkRow(
+                        icon: LucideIcons.bell,
+                        title: 'Preferenze notifiche',
+                        subtitle: 'Scegli quali avvisi ricevere, uno per uno',
+                        onTap: () =>
+                            context.push(AppRoutes.altroPreferenzeNotifiche),
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
             // ── App ───────────────────────────────────────────────────────
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'App')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'App'),
+            ),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
-                  // Same fix as "Tema scuro" below and "Autenticazione biometrica" in Account:
-                  // persisted, read nowhere. Now drives HomeShell's automatic background sync
-                  // (60s foreground poll + resume sync) via backgroundSyncPreferenceProvider,
-                  // bound in main.dart.
+                  // Bound in main.dart to offlineModeProvider. What it gates changed with owner
+                  // decision D7: it no longer stops background sync (freshness must never be
+                  // switchable off — a technician with the toggle on still gets current data the
+                  // moment the phone has signal), it only stops the speculative download of
+                  // attachments nobody has opened yet. The subtitle says what it now does; the
+                  // old one promised a behaviour that is deliberately gone.
                   _ToggleRow(
                     icon: LucideIcons.wifiOff,
                     title: 'Modalità offline',
-                    subtitle: 'Sincronizza dati in background',
+                    subtitle: 'Risparmia dati: nessun download anticipato',
                     value: settings.syncOffline,
                     onChanged: (_) => notifier.toggle(key: 'syncOffline'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.mapPin,
                     title: 'Geolocalizzazione',
-                    subtitle: 'Registra la posizione a inizio e fine cantiere',
-                    value: settings.geoLocazione,
+                    subtitle: tenantGpsEnabled
+                        ? 'Registra la posizione a inizio e fine cantiere'
+                        : "Disattivata dall'azienda",
+                    value: tenantGpsEnabled && settings.geoLocazione,
+                    enabled: tenantGpsEnabled,
                     onChanged: (_) => notifier.toggle(key: 'geoLocazione'),
                   ),
                   _ToggleRow(
@@ -176,8 +229,12 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
+            const SliverToBoxAdapter(child: _GpsNotice()),
+
             // ── Account ───────────────────────────────────────────────────
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Account')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Account'),
+            ),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -193,6 +250,18 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
+            // ── Accesso con passkey ───────────────────────────────────────
+            //
+            // Sits next to the biometric switch: both protect this handset, and both are
+            // opt-in per device. Passkeys also let the technician sign in without a password,
+            // so the card states the device-lock warning before offering the action.
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(top: AppSpacing.md),
+                child: PasskeySettingsSection(),
+              ),
+            ),
+
             // ── Privacy ───────────────────────────────────────────────────
             //
             // A real gap the Vetro mockup called for: a Privacy entry point from Impostazioni.
@@ -200,7 +269,9 @@ class ImpostazioniScreen extends ConsumerWidget {
             // screen (see i_miei_dati_screen.dart's own header comment) — one row here, not the
             // mockup's separate "Esporta"/"Consensi" pair, since both would point at the same
             // real screen.
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Privacy')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Privacy'),
+            ),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -222,13 +293,30 @@ class ImpostazioniScreen extends ConsumerWidget {
             // of that is something the app can turn on. What it can do is say which part is
             // missing, so a technician who cannot find the microphone gets an answer instead of
             // filing a bug, and so a fleet can be checked without instrumenting a build.
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Dettatura')),
-            const SliverToBoxAdapter(child: _SettingsGroup(children: [_DictationDiagnosticsRow()])),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Dettatura'),
+            ),
+            const SliverToBoxAdapter(
+              child: _SettingsGroup(children: [_DictationDiagnosticsRow()]),
+            ),
 
             // ── Sistema ───────────────────────────────────────────────────
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Sistema')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Sistema'),
+            ),
             SliverToBoxAdapter(
-              child: _SettingsGroup(children: [_LogoutSettingRow(ref: ref)]),
+              child: _SettingsGroup(
+                children: [
+                  _LastSyncRow(),
+                  _LinkRow(
+                    icon: LucideIcons.clock,
+                    title: 'Coda di sincronizzazione',
+                    subtitle: 'Timbrature in attesa o rifiutate: rivedi, elimina, riprova',
+                    onTap: () => context.push(AppRoutes.altroCodaSync),
+                  ),
+                  _LogoutSettingRow(ref: ref),
+                ],
+              ),
             ),
 
             // ── Version footer ─────────────────────────────────────────────
@@ -257,7 +345,9 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
-            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: context.navClearance),
+            ),
           ],
         ),
       ),
@@ -303,23 +393,9 @@ class ImpostazioniScreen extends ConsumerWidget {
 
     final service = NotificationService.instance;
 
-    // Already granted in a previous run: no purpose sheet, no OS dialog, just honour the switch.
+    // Already granted in a previous run: no OS dialog, just honour the switch. Otherwise the
+    // system permission dialog is the only ask (no in-app pre-prompt).
     if (!await service.hasPermission()) {
-      if (!context.mounted) return;
-      final wants = await askPermissionPurpose(
-        context,
-        icon: LucideIcons.bell,
-        titolo: 'Avvisi sul lavoro',
-        motivo:
-            'Ti avvisiamo quando ti viene assegnato un intervento, quando cambia un appuntamento '
-            'e quando un rapportino ha bisogno di te. Nient\'altro.',
-        senzaDiEsso:
-            'Senza notifiche l\'app funziona lo stesso: trovi tutto in Dashboard e in Calendario, '
-            'ma lo scopri quando apri l\'app.',
-        cta: 'Attiva le notifiche',
-      );
-      if (!wants) return;
-
       if (!await service.ensurePermission()) {
         if (!context.mounted) return;
         showAppToast(
@@ -377,7 +453,10 @@ class _ProfileCard extends StatelessWidget {
       child: AppCard(
         child: Row(
           children: [
-            AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 48),
+            AppAvatar(
+              name: displayName.isNotEmpty ? displayName : (email ?? '?'),
+              size: 48,
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -478,6 +557,7 @@ class _ToggleRow extends StatelessWidget {
     required this.subtitle,
     required this.value,
     required this.onChanged,
+    this.enabled = true,
     this.showDivider = true,
   });
 
@@ -486,15 +566,21 @@ class _ToggleRow extends StatelessWidget {
   final String subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
+  final bool enabled;
   final bool showDivider;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(minHeight: 56),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: 10,
+      ),
       decoration: BoxDecoration(
-        border: showDivider ? Border(bottom: BorderSide(color: context.colors.borderLight)) : null,
+        border: showDivider
+            ? Border(bottom: BorderSide(color: context.colors.borderLight))
+            : null,
       ),
       child: Row(
         children: [
@@ -505,7 +591,12 @@ class _ToggleRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(title, style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink)),
+                Text(
+                  title,
+                  style: AppTextStyles.titleMedium.copyWith(
+                    color: context.colors.ink,
+                  ),
+                ),
                 Text(
                   subtitle,
                   style: TextStyle(
@@ -549,7 +640,10 @@ class _LinkRow extends StatelessWidget {
       onTap: onTap,
       child: Container(
         constraints: const BoxConstraints(minHeight: 56),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.base,
+          vertical: 10,
+        ),
         decoration: BoxDecoration(
           border: showDivider
               ? Border(bottom: BorderSide(color: context.colors.borderLight))
@@ -564,7 +658,12 @@ class _LinkRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(title, style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink)),
+                  Text(
+                    title,
+                    style: AppTextStyles.titleMedium.copyWith(
+                      color: context.colors.ink,
+                    ),
+                  ),
                   Text(
                     subtitle,
                     style: TextStyle(
@@ -576,10 +675,47 @@ class _LinkRow extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: context.colors.inkMuted,
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Last sync row
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// When this phone last refreshed what it shows. Read-only, and deliberately so: a sync is a
+/// consequence of being online, not a preference, and nothing here lets the technician start one
+/// that the background poll would not start anyway.
+///
+/// It exists because "is this current?" was previously answerable only by remembering. A
+/// technician looking at a ticket list in a basement has no other way to tell whether they are
+/// seeing this morning's office edits or last week's.
+class _LastSyncRow extends ConsumerWidget {
+  const _LastSyncRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lastSync = ref.watch(lastSyncProvider);
+
+    return ListRow(
+      leading: RowIconTile(icon: LucideIcons.refreshCw, size: 34, iconSize: 17),
+      title: 'Ultima sincronizzazione',
+      subtitle: lastSync.when(
+        // No spinner: it resolves from one local row, so this is a frame or two, and a spinner
+        // that flashes on every open reads as work happening when none is.
+        loading: () => '…',
+        error: (_, _) => 'Non disponibile',
+        data: (value) => formatLastSyncLabel(value),
+      ),
+      showDivider: true,
     );
   }
 }
@@ -598,7 +734,10 @@ class _LogoutSettingRow extends StatelessWidget {
       leading: Container(
         width: 34,
         height: 34,
-        decoration: BoxDecoration(color: context.colors.redSoft, borderRadius: AppRack.insetShape),
+        decoration: BoxDecoration(
+          color: context.colors.redSoft,
+          borderRadius: AppRack.insetShape,
+        ),
         child: Icon(LucideIcons.logOut, size: 17, color: context.colors.red),
       ),
       title: 'Esci dall\'account',
@@ -608,17 +747,12 @@ class _LogoutSettingRow extends StatelessWidget {
     );
   }
 
-  Future<void> _confirmLogout(BuildContext context) async {
-    final confirmed = await confirmDeleteDialog(
-      context,
-      title: 'Esci dall\'account',
-      message: 'Sei sicuro di voler uscire dall\'account?',
-      confirmLabel: 'Esci',
-    );
-    if (confirmed) {
-      await ref.read(loginProvider.notifier).signOut();
-    }
-  }
+  /// Logout is destructive on this device (it wipes the local database), so it must say what it
+  /// destroys. The shared action in `logout_action.dart` counts unsent work and decides between
+  /// the generic confirmation and the count-naming dialog — the same action the Altro hub and the
+  /// Profilo screen use, so no surface can offer a logout that skips the count.
+  Future<void> _confirmLogout(BuildContext context) =>
+      confirmLogout(context, ref);
 }
 
 /// What this handset can and cannot do about dictation, item by item.
@@ -636,21 +770,37 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
     final capability = ref.watch(dictationCapabilityProvider);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.base, AppSpacing.md, AppSpacing.base, 14),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.base,
+        AppSpacing.md,
+        AppSpacing.base,
+        14,
+      ),
       child: capability.when(
-        loading: () => const _DictationLine(label: 'Verifica in corso…', state: null),
-        error: (_, _) => const _DictationLine(label: 'Verifica non riuscita', state: false),
+        loading: () =>
+            const _DictationLine(label: 'Verifica in corso…', state: null),
+        error: (_, _) =>
+            const _DictationLine(label: 'Verifica non riuscita', state: false),
         data: (c) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              c.canDictate ? 'Dettatura disponibile' : 'Dettatura non disponibile',
-              style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
+              c.canDictate
+                  ? 'Dettatura disponibile'
+                  : 'Dettatura non disponibile',
+              style: AppTextStyles.titleMedium.copyWith(
+                color: context.colors.ink,
+              ),
             ),
             const SizedBox(height: 10),
-            _DictationLine(label: 'Riconoscimento vocale', state: c.recognizerAvailable),
             _DictationLine(
-              label: c.italianLocaleId == null ? 'Italiano' : 'Italiano (${c.italianLocaleId})',
+              label: 'Riconoscimento vocale',
+              state: c.recognizerAvailable,
+            ),
+            _DictationLine(
+              label: c.italianLocaleId == null
+                  ? 'Italiano'
+                  : 'Italiano (${c.italianLocaleId})',
               state: c.italianAvailable,
             ),
             // The one that decides it. Everything else can be true and dictation still refused,
@@ -660,7 +810,10 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
               label: 'Funziona offline (sul dispositivo)',
               state: c.onDeviceRecognitionAvailable,
             ),
-            _DictationLine(label: 'Microfono consentito', state: c.microphoneGranted),
+            _DictationLine(
+              label: 'Microfono consentito',
+              state: c.microphoneGranted,
+            ),
             if (!c.canDictate) ...[
               const SizedBox(height: 10),
               Text(
@@ -674,13 +827,22 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Puoi comunque compilare il rapportino scrivendo normalmente.',
+                'Puoi comunque compilare il rapporto di intervento scrivendo normalmente.',
                 style: TextStyle(
                   fontFamily: 'Archivo',
                   fontSize: 11,
                   height: 1.4,
                   color: context.colors.inkMuted,
                 ),
+              ),
+              // The answer is cached for the run of the app: after granting the microphone or
+              // installing the Italian pack in Settings and coming back, this is how it is asked
+              // again without restarting TaskTap.
+              TextButton(
+                key: const ValueKey('dictation-recheck'),
+                onPressed: () => ref.invalidate(dictationCapabilityProvider),
+                style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                child: const Text('Ricontrolla'),
               ),
             ],
           ],
@@ -714,7 +876,48 @@ class _DictationLine extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 12,
+                color: context.colors.inkMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One-line employee information notice for the GPS control. The legal information-notice template
+/// and the tenant/admin switch are handed off; this states the behaviour in the app itself.
+class _GpsNotice extends StatelessWidget {
+  const _GpsNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        0,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.mapPin, size: 14, color: context.colors.inkMuted),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'La posizione viene registrata solo in momenti puntuali (timbratura, rapporto, '
+              "caricamento). Non c'è tracciamento continuo in background. Il titolare può "
+              "disattivare la geolocalizzazione per tutta l'azienda.",
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.35,
+                color: context.colors.inkMuted,
+              ),
             ),
           ),
         ],

@@ -37,7 +37,10 @@ class InlineAlert extends StatelessWidget {
     final tone = color ?? context.colors.red;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: tone.withAlpha(20),
         border: Border.all(color: tone.withAlpha(80)),
@@ -51,7 +54,10 @@ class InlineAlert extends StatelessWidget {
             const SizedBox(width: AppSpacing.sm),
           ],
           Expanded(
-            child: Text(message, style: AppTextStyles.bodySmall.copyWith(color: tone)),
+            child: Text(
+              message,
+              style: AppTextStyles.bodySmall.copyWith(color: tone),
+            ),
           ),
         ],
       ),

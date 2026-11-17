@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/widgets/inline_alert.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -31,12 +32,7 @@ const String kBlamedFieldNotice = 'Il riferimento non è più valido: scegline u
 /// otherwise — so a step can list one of these above every field it owns unconditionally, with no
 /// caller-side conditionals, and an ordinary (non-repair) wizard draws none of them.
 class BlamedFieldNotice extends StatelessWidget {
-  const BlamedFieldNotice({
-    super.key,
-    required this.field,
-    required this.blamedField,
-    this.detail,
-  });
+  const BlamedFieldNotice({super.key, required this.field, required this.blamedField, this.detail});
 
   /// The request field this notice sits above, spelled as the server names it in the problem body
   /// ("customerId", "agentId", …) — the same vocabulary [TicketCreationQueue.repairableFieldOf]

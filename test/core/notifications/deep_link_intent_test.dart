@@ -21,11 +21,49 @@ void main() {
       expect(_route('Report'), AppRoutes.rapportiniView('abc-1'));
       expect(_route('Report'), '/altro/rapportini/view/abc-1');
     });
-    test('AbsenceRequest -> ferie list', () {
+    test('AbsenceRequest without a notification type -> ferie list', () {
       expect(_route('AbsenceRequest'), AppRoutes.altroFerie);
+    });
+    test('AbsenceRequestSubmitted -> the approval queue', () {
+      final intent = DeepLinkIntent.fromNotification(
+        type: 'AbsenceRequestSubmitted',
+        entityType: 'AbsenceRequest',
+        entityId: 'a-1',
+      );
+      expect(intent!.resolveRoute(), AppRoutes.approvazioni(tab: 'assenze'));
+    });
+    test('AbsenceRequestDecided -> the requester\'s own ferie list', () {
+      final intent = DeepLinkIntent.fromNotification(
+        type: 'AbsenceRequestDecided',
+        entityType: 'AbsenceRequest',
+        entityId: 'a-1',
+      );
+      expect(intent!.resolveRoute(), AppRoutes.altroFerie);
     });
     test('Schedule -> calendario', () {
       expect(_route('Schedule'), AppRoutes.calendario);
+    });
+  });
+
+  group('DeepLinkIntent.fromNotification (notification fallback)', () {
+    test('an entity-less notification with an id resolves to the detail page', () {
+      final intent = DeepLinkIntent.fromNotification(
+        type: 'SystemAnnouncement',
+        notificationId: 'n-1',
+      );
+      expect(intent, isNotNull);
+      expect(intent!.resolveRoute(), '/altro/notifiche/n-1');
+    });
+    test('without an id it still resolves to nothing (existing behaviour)', () {
+      expect(DeepLinkIntent.fromNotification(type: 'SystemAnnouncement'), isNull);
+    });
+    test('an entity pair still wins over the notification id', () {
+      final intent = DeepLinkIntent.fromNotification(
+        entityType: 'Ticket',
+        entityId: 't-1',
+        notificationId: 'n-1',
+      );
+      expect(intent!.resolveRoute(), '/ticket/t-1');
     });
   });
 

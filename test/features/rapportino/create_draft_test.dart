@@ -1,7 +1,7 @@
 // dart format width=100
 // test/features/rapportino/create_draft_test.dart
 //
-// Tests for createReworkDraft — the "Rilavora" affordance a rejected (Respinto) rapportino
+// Tests for createReworkDraft — the "Rielabora" affordance a rejected (Respinto) rapportino
 // gets on RapportinoViewScreen (mobile audit item #1).
 //
 // The backend's ReportStateMachine only allows Bozza → Inviato (CanInvia requires
@@ -48,9 +48,15 @@ class _FakeCantiereReportApiClient extends CantiereReportApiClient {
   /// zero-worklogs fallback also covers a network drop between the two calls.
   Object? throwsOnFetchStaff;
 
+  /// When set, [createFromCantiereWorklogs] throws it instead of returning an id — used to prove
+  /// the P2-6 offline fallback (transport/5xx) and that a 4xx still surfaces to the technician.
+  Object? throwsOnCreate;
+
   @override
   Future<String> createFromCantiereWorklogs(String cantiereId) async {
     calledWithCantiereId = cantiereId;
+    final failure = throwsOnCreate;
+    if (failure != null) throw failure;
     return reportIdToReturn;
   }
 
@@ -200,6 +206,47 @@ Future<String?> _callCreateCantiereReportDraft(
   return result;
 }
 
+/// Same as [_callCreateCantiereReportDraft], but catches whatever the call throws instead of
+/// letting it escape the button callback (an uncaught async error would fail the test rather than
+/// let it assert on the failure, which is the point for the 4xx case).
+Future<(String?, Object?)> _callCantiereDraftCapturingError(
+  WidgetTester tester,
+  ProviderContainer container, {
+  required String cantiereId,
+  required String cantiereName,
+}) async {
+  String? result;
+  Object? error;
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Consumer(
+          builder: (context, ref, _) {
+            return ElevatedButton(
+              onPressed: () async {
+                try {
+                  result = await createCantiereReportDraft(
+                    ref,
+                    cantiereId: cantiereId,
+                    cantiereName: cantiereName,
+                  );
+                } catch (e) {
+                  error = e;
+                }
+              },
+              child: const Text('go'),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('go'));
+  await tester.pumpAndSettle();
+  return (result, error);
+}
+
 DraftReportsCompanion _rejectedReportCompanion({String id = 'report-1'}) =>
     DraftReportsCompanion.insert(
       id: id,
@@ -233,18 +280,21 @@ void main() {
 
   tearDown(() async => db.close());
 
-  ProviderContainer buildContainer({AuthUser? user, CantiereReportApiClient? cantiereReportApi}) =>
-      ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          currentUserProvider.overrideWithValue(user),
-          // Mirrors currentUserProvider's null-ness: no signed-in user means no resolved internal
-          // id either, matching the real app's "never fetched /api/Auth/me" state.
-          internalUserIdProvider.overrideWith((ref) async => user != null ? _testInternalUserId : null),
-          if (cantiereReportApi != null)
-            cantiereReportApiClientProvider.overrideWithValue(cantiereReportApi),
-        ],
-      );
+  ProviderContainer buildContainer({
+    AuthUser? user,
+    CantiereReportApiClient? cantiereReportApi,
+  }) => ProviderContainer(
+    retry: (_, _) => null,
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      currentUserProvider.overrideWithValue(user),
+      // Mirrors currentUserProvider's null-ness: no signed-in user means no resolved internal
+      // id either, matching the real app's "never fetched /api/Auth/me" state.
+      internalUserIdProvider.overrideWith((ref) async => user != null ? _testInternalUserId : null),
+      if (cantiereReportApi != null)
+        cantiereReportApiClientProvider.overrideWithValue(cantiereReportApi),
+    ],
+  );
 
   group('createLocalDraft', () {
     testWidgets('generates a real GUID id, not a draft-<timestamp> string', (tester) async {
@@ -257,7 +307,8 @@ void main() {
       expect(
         _guidPattern.hasMatch(id!),
         isTrue,
-        reason: 'must satisfy POST /api/reports/{id:guid}/attachments — a draft-<timestamp> '
+        reason:
+            'must satisfy POST /api/reports/{id:guid}/attachments — a draft-<timestamp> '
             'string never matches that route',
       );
     });
@@ -271,7 +322,7 @@ void main() {
       final id = await _callCreateLocalDraft(
         tester,
         container,
-        title: 'Rapportino — Cantiere Via Roma',
+        title: 'Rapporto di intervento — Cantiere Via Roma',
         cantiereId: 'cant-1',
         customerId: 'cust-1',
         tenantId: 'tenant-1',
@@ -291,7 +342,7 @@ void main() {
       final id = await _callCreateLocalDraft(
         tester,
         container,
-        title: 'Rapportino — Cantiere Via Roma',
+        title: 'Rapporto di intervento — Cantiere Via Roma',
         workAddress: 'Via Roma 10, Milano, 20100',
       );
 
@@ -309,25 +360,24 @@ void main() {
       expect(draft!.metadataJson, isNull);
     });
 
-    testWidgets(
-      'does not seed a staff row — the Ore tile does that itself, on first open',
-      (tester) async {
-        final container = buildContainer(user: _testUser);
-        addTearDown(container.dispose);
+    testWidgets('does not seed a staff row — the Ore tile does that itself, on first open', (
+      tester,
+    ) async {
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
 
-        final id = await _callCreateLocalDraft(tester, container, title: 'Nuovo rapportino');
+      final id = await _callCreateLocalDraft(tester, container, title: 'Nuovo rapportino');
 
-        final staff = await repo.getStaff(id!);
-        expect(
-          staff,
-          isEmpty,
-          reason:
-              'a staff row existing before the technician ever opened Ore used to prefill the '
-              'list with a misleading entry; seeding now happens on Ore\'s first open instead '
-              '(rapportino_form_screen_test.dart), not at draft-creation time',
-        );
-      },
-    );
+      final staff = await repo.getStaff(id!);
+      expect(
+        staff,
+        isEmpty,
+        reason:
+            'a staff row existing before the technician ever opened Ore used to prefill the '
+            'list with a misleading entry; seeding now happens on Ore\'s first open instead '
+            '(rapportino_form_screen_test.dart), not at draft-creation time',
+      );
+    });
   });
 
   group('createReworkDraft', () {
@@ -348,10 +398,8 @@ void main() {
       tester,
     ) async {
       await repo.createDraft(
-        _rejectedReportCompanion(id: 'report-cant').copyWith(
-          ticketId: const Value(null),
-          cantiereId: const Value('cant-1'),
-        ),
+        _rejectedReportCompanion(id: 'report-cant')
+            .copyWith(ticketId: const Value(null), cantiereId: const Value('cant-1')),
       );
       final source = (await repo.getDraft('report-cant'))!;
 
@@ -443,6 +491,10 @@ void main() {
           reportId: 'report-1',
           controlId: 'ctrl-1',
           stringValue: const Value('120 bar'),
+          numberValue: const Value(120),
+          note: const Value('misurato a freddo'),
+          controlLabel: const Value('Pressione impianto'),
+          assetId: const Value('asset-1'),
         ),
       );
 
@@ -467,6 +519,12 @@ void main() {
       expect(newControlli, hasLength(1));
       expect(newControlli.single.controlId, 'ctrl-1');
       expect(newControlli.single.stringValue, '120 bar');
+      // A copy carries every answer column, not just the text one: a numeric answer, the note, and
+      // the label/asset snapshot that lets the duplicate name its own rows without the checklist.
+      expect(newControlli.single.numberValue, 120);
+      expect(newControlli.single.note, 'misurato a freddo');
+      expect(newControlli.single.controlLabel, 'Pressione impianto');
+      expect(newControlli.single.assetId, 'asset-1');
 
       // The rejected report's own child rows are untouched.
       expect((await repo.getStaff('report-1')).single.id, 's-1');
@@ -560,6 +618,105 @@ void main() {
   });
 
   group('createCantiereReportDraft', () {
+    testWidgets('degrades to a local draft when the create call cannot reach the server (P2-6)', (
+      tester,
+    ) async {
+      final api = _FakeCantiereReportApiClient()
+        ..throwsOnCreate = DioException.connectionError(
+          requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+          reason: 'offline',
+        );
+      final container = buildContainer(user: _testUser, cantiereReportApi: api);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateCantiereReportDraft(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
+
+      // The create POST was attempted, then the fallback minted its own draft.
+      expect(api.calledWithCantiereId, 'cant-1');
+      expect(id, isNotNull);
+      expect(
+        _guidPattern.hasMatch(id!),
+        isTrue,
+        reason: 'a submit needs a real GUID — the offline draft is what it will be sent under',
+      );
+
+      final draft = await repo.getDraft(id);
+      expect(draft, isNotNull);
+      expect(
+        draft!.cantiereId,
+        'cant-1',
+        reason:
+            'the cantiere link is what makes the submit claim this site\'s punches; losing it '
+            'offline would silently detach the rapportino from the worksite',
+      );
+      expect(draft.title, 'Rapporto di intervento — Cantiere Via Roma');
+      expect(draft.isLocalOnly, isTrue);
+      expect(draft.stato, 'Bozza');
+    });
+
+    testWidgets('a 5xx also degrades — the server faulting is not the technician\'s problem', (
+      tester,
+    ) async {
+      final api = _FakeCantiereReportApiClient()
+        ..throwsOnCreate = DioException(
+          requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+            statusCode: 503,
+          ),
+          type: DioExceptionType.badResponse,
+        );
+      final container = buildContainer(user: _testUser, cantiereReportApi: api);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateCantiereReportDraft(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
+
+      final draft = await repo.getDraft(id!);
+      expect(draft!.cantiereId, 'cant-1');
+    });
+
+    testWidgets('a 4xx still surfaces — the server answered, so a denial is not papered over', (
+      tester,
+    ) async {
+      final api = _FakeCantiereReportApiClient()
+        ..throwsOnCreate = DioException(
+          requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/reports/from-cantiere-worklogs'),
+            statusCode: 403,
+          ),
+          type: DioExceptionType.badResponse,
+        );
+      final container = buildContainer(user: _testUser, cantiereReportApi: api);
+      addTearDown(container.dispose);
+
+      final (id, error) = await _callCantiereDraftCapturingError(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
+
+      expect(
+        error,
+        isA<DioException>().having((e) => e.response?.statusCode, 'statusCode', 403),
+        reason:
+            '"non sei assegnato a questo cantiere" must reach the technician: a local draft '
+            'would only fail the same way later, with no explanation',
+      );
+      expect(id, isNull);
+    });
+
     testWidgets('reuses the backend-issued report id for the local draft', (tester) async {
       final api = _FakeCantiereReportApiClient(reportIdToReturn: 'server-report-1');
       final container = buildContainer(user: _testUser, cantiereReportApi: api);
@@ -578,7 +735,7 @@ void main() {
       final draft = await repo.getDraft('server-report-1');
       expect(draft, isNotNull, reason: 'the local draft must be keyed by the backend report id');
       expect(draft!.cantiereId, 'cant-1');
-      expect(draft.title, 'Rapportino — Cantiere Via Roma');
+      expect(draft.title, 'Rapporto di intervento — Cantiere Via Roma');
       expect(draft.isLocalOnly, isTrue);
       expect(draft.stato, 'Bozza');
       expect(draft.ticketId, isNull, reason: 'a cantiere-originated draft has no ticket link');
@@ -760,24 +917,23 @@ void main() {
       expect(draft!.metadataJson, contains('Via Roma 10, Milano, 20100'));
     });
 
-    testWidgets(
-      'refuses (returns null) with no signed-in author, without calling the backend',
-      (tester) async {
-        final api = _FakeCantiereReportApiClient();
-        final container = buildContainer(user: null, cantiereReportApi: api);
-        addTearDown(container.dispose);
+    testWidgets('refuses (returns null) with no signed-in author, without calling the backend', (
+      tester,
+    ) async {
+      final api = _FakeCantiereReportApiClient();
+      final container = buildContainer(user: null, cantiereReportApi: api);
+      addTearDown(container.dispose);
 
-        final id = await _callCreateCantiereReportDraft(
-          tester,
-          container,
-          cantiereId: 'cant-1',
-          cantiereName: 'Cantiere Via Roma',
-        );
+      final id = await _callCreateCantiereReportDraft(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
 
-        expect(id, isNull);
-        expect(api.calledWithCantiereId, isNull);
-        expect(await db.select(db.draftReports).get(), isEmpty);
-      },
-    );
+      expect(id, isNull);
+      expect(api.calledWithCantiereId, isNull);
+      expect(await db.select(db.draftReports).get(), isEmpty);
+    });
   });
 }

@@ -15,6 +15,7 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/drift.dart' as drift show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -23,7 +24,9 @@ import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/timbratura/cantiere_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_providers.dart';
@@ -57,6 +60,10 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   final List<CantiereCrewAssignmentDto> assegnazioni;
   final bool assegnazioniShouldThrow;
 
+  /// How many times the crew endpoint was hit. The offline test asserts 0: the provider answers
+  /// from the Drift mirror there.
+  int getAssegnazioniCalls = 0;
+
   /// Captures the [StartCantiereRequest] passed to startCantiere.
   final List<StartCantiereRequest> startedRequests = [];
 
@@ -76,6 +83,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   Future<List<CantiereCrewAssignmentDto>> getAssegnazioni(
     String cantiereId,
   ) async {
+    getAssegnazioniCalls++;
     if (assegnazioniShouldThrow) {
       throw DioException(
         requestOptions: RequestOptions(
@@ -113,7 +121,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
       activeLog != null ? [activeLog!] : [];
 
   @override
-  Future<void> startCantiere(StartCantiereRequest request) async {
+  Future<int?> startCantiere(StartCantiereRequest request) async {
     if (startShouldThrow) {
       throw DioException(
         requestOptions: RequestOptions(path: '/api/cantiereworklog/start'),
@@ -121,6 +129,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
       );
     }
     startedRequests.add(request);
+    return null;
   }
 
   // The offline-fallback/error-handling behaviour of the end-of-session call itself moved to
@@ -129,8 +138,9 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   // (see the 'active session' group's own navigation test below), so there's no throw branch here
   // to exercise from this file.
   @override
-  Future<void> endCantiere([EndCantiereRequest? request]) async {
+  Future<int?> endCantiere([EndCantiereRequest? request]) async {
     endCalled = true;
+    return null;
   }
 
   @override
@@ -191,11 +201,18 @@ Widget _buildScreen({
   String? customerId,
   String? cantiereId,
   AuthUser? currentUser,
+  // `cantiereCrewAssignmentsProvider` reads the Drift crew mirror when offline instead of calling
+  // the client, so the pre-existing lead-branching tests (which all run through the fake client)
+  // have to say they are online. The offline tests pass false and seed the mirror themselves.
+  bool online = true,
+  // When set, the screen is mounted under this router so `context.push` works.
+  GoRouter? router,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       cantiereWorklogApiClientProvider.overrideWithValue(apiClient),
+      isOnlineProvider.overrideWithValue(online),
       locationServiceProvider.overrideWithValue(
         locationService ?? _FakeLocationService(),
       ),
@@ -207,13 +224,15 @@ Widget _buildScreen({
       // here since _testUser.id ('me') already IS what the fake assignment rows use as userId.
       internalUserIdProvider.overrideWith((ref) async => currentUser?.id),
     ],
-    child: MaterialApp(
-      home: CantiereTimbraScreen(
-        ticketId: ticketId,
-        customerId: customerId,
-        cantiereId: cantiereId,
-      ),
-    ),
+    child: router != null
+        ? MaterialApp.router(routerConfig: router)
+        : MaterialApp(
+            home: CantiereTimbraScreen(
+              ticketId: ticketId,
+              customerId: customerId,
+              cantiereId: cantiereId,
+            ),
+          ),
   );
 }
 
@@ -238,7 +257,10 @@ Future<void> _teardown(WidgetTester tester) async {
 /// [hour]:00 after the start of the current business (default Rome) day, as a UTC instant.
 DateTime _businessTodayAt(int hour) {
   final bt = BusinessTime.fallback();
-  return bt.utcRangeForBusinessDate(bt.businessToday()).$1.add(Duration(hours: hour));
+  return bt
+      .utcRangeForBusinessDate(bt.businessToday())
+      .$1
+      .add(Duration(hours: hour));
 }
 
 void main() {
@@ -273,7 +295,9 @@ void main() {
             ),
           );
       final api = _FakeApiClient();
-      await tester.pumpWidget(_buildScreen(db: db, apiClient: api, cantiereId: 'cant-1'));
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1'),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Timbra cantiere'), findsOneWidget);
@@ -292,7 +316,9 @@ void main() {
             ),
           );
       final api = _FakeApiClient();
-      await tester.pumpWidget(_buildScreen(db: db, apiClient: api, cantiereId: 'cant-1'));
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1'),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Inizia timbratura'), findsOneWidget);
@@ -426,20 +452,21 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('drops the row entirely when the mirror does not hold the ticket', (
-      tester,
-    ) async {
-      // Nothing seeded. The honest answer is silence: printing the id back would name the job
-      // with something the technician cannot match to anything in front of them.
-      final api = _FakeApiClient(activeLog: _activeLog());
-      await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+    testWidgets(
+      'drops the row entirely when the mirror does not hold the ticket',
+      (tester) async {
+        // Nothing seeded. The honest answer is silence: printing the id back would name the job
+        // with something the technician cannot match to anything in front of them.
+        final api = _FakeApiClient(activeLog: _activeLog());
+        await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('TICKET'), findsNothing);
-      expect(find.textContaining('tick-1'), findsNothing);
-      await _teardown(tester);
-    });
+        expect(find.text('TICKET'), findsNothing);
+        expect(find.textContaining('tick-1'), findsNothing);
+        await _teardown(tester);
+      },
+    );
 
     testWidgets(
       'tapping Timbra uscita cantiere pushes ChiudiTurnoScreen instead of ending in place',
@@ -563,27 +590,24 @@ void main() {
       },
     );
 
-    testWidgets(
-      'the start button stays disabled, not just the card message, when the fixed cantiere is '
-      'not found',
-      (tester) async {
-        // Regression for the button previously staying enabled through both the loading and
-        // not-found direct-entry states, falling through to the self-contradictory "Seleziona un
-        // cantiere prima di timbrare." on a screen with no picker at all.
-        final api = _FakeApiClient();
-        await tester.pumpWidget(
-          _buildScreen(db: db, apiClient: api, cantiereId: 'missing-id'),
-        );
-        await tester.pumpAndSettle();
+    testWidgets('the start button stays disabled, not just the card message, when the fixed cantiere is '
+        'not found', (tester) async {
+      // Regression for the button previously staying enabled through both the loading and
+      // not-found direct-entry states, falling through to the self-contradictory "Seleziona un
+      // cantiere prima di timbrare." on a screen with no picker at all.
+      final api = _FakeApiClient();
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'missing-id'),
+      );
+      await tester.pumpAndSettle();
 
-        final button = tester.widget<AppButton>(
-          find.widgetWithText(AppButton, 'Inizia timbratura'),
-        );
-        expect(button.onPressed, isNull);
+      final button = tester.widget<AppButton>(
+        find.widgetWithText(AppButton, 'Inizia timbratura'),
+      );
+      expect(button.onPressed, isNull);
 
-        await _teardown(tester);
-      },
-    );
+      await _teardown(tester);
+    });
 
     testWidgets(
       'the start button stays disabled while the fixed cantiere is still loading',
@@ -597,7 +621,7 @@ void main() {
 
         final api = _FakeApiClient();
         await tester.pumpWidget(
-          ProviderScope(
+          ProviderScope(retry: (_, _) => null, 
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               cantiereWorklogApiClientProvider.overrideWithValue(api),
@@ -712,6 +736,166 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
     }
+
+    GoRouter badgeRouter() => GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const CantiereTimbraScreen(
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+          ),
+        ),
+        GoRoute(
+          path: '/cantiere-badge-scan/:cantiereId',
+          builder: (_, state) =>
+              Text('SCANNER ${state.pathParameters['cantiereId']}'),
+        ),
+      ],
+    );
+
+    testWidgets('entry_point_hidden_for_non_lead', (tester) async {
+      await seedCantiere(db);
+      final api = _FakeApiClient(
+        assegnazioni: [
+          CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: false),
+        ],
+      );
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          apiClient: api,
+          currentUser: _testUser,
+          router: badgeRouter(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inizia timbratura'), findsOneWidget);
+      expect(find.text('Scansiona badge'), findsNothing);
+      await _teardown(tester);
+    });
+
+    testWidgets('entry_point_opens_scanner_for_lead', (tester) async {
+      await seedCantiere(db);
+      final api = _FakeApiClient(
+        assegnazioni: [
+          CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+        ],
+      );
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          apiClient: api,
+          currentUser: _testUser,
+          router: badgeRouter(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Scansiona badge'), findsOneWidget);
+      await tester.tap(find.text('Scansiona badge'));
+      await tester.pumpAndSettle();
+      expect(find.text('SCANNER cant-1'), findsOneWidget);
+      await _teardown(tester);
+    });
+
+    testWidgets('entry_point_visible_for_lead_during_active_shift', (
+      tester,
+    ) async {
+      await seedCantiere(db);
+      final api = _FakeApiClient(
+        activeLog: _activeLog(),
+        assegnazioni: [
+          CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+        ],
+      );
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          apiClient: api,
+          currentUser: _testUser,
+          router: badgeRouter(),
+        ),
+      );
+      // The elapsed ticker never settles: fixed pumps (see the active-session notes above).
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Timbra uscita cantiere'), findsOneWidget);
+      expect(find.text('Scansiona badge'), findsOneWidget);
+      await tester.tap(find.text('Scansiona badge'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('SCANNER cant-1'), findsOneWidget);
+      await _teardown(tester);
+    });
+
+    testWidgets('entry point hidden for a non-lead during an active shift', (
+      tester,
+    ) async {
+      await seedCantiere(db);
+      final api = _FakeApiClient(
+        activeLog: _activeLog(),
+        assegnazioni: [
+          CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: false),
+        ],
+      );
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          apiClient: api,
+          currentUser: _testUser,
+          router: badgeRouter(),
+        ),
+      );
+      // The elapsed ticker never settles: fixed pumps (see the active-session notes above).
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Timbra uscita cantiere'), findsOneWidget);
+      expect(find.text('Scansiona badge'), findsNothing);
+      await _teardown(tester);
+    });
+
+    testWidgets('offline: the mirrored crew still makes the technician lead', (
+      tester,
+    ) async {
+      await seedCantiere(db);
+      await db
+          .into(db.cantiereCrewAssignments)
+          .insert(
+            CantiereCrewAssignmentsCompanion.insert(
+              id: 'a1',
+              cantiereId: 'cant-1',
+              userId: 'me',
+              isLead: const Value(true),
+            ),
+          );
+      // Would throw if the offline path ever called it — the mirror answer must not depend on it.
+      final api = _FakeApiClient(assegnazioniShouldThrow: true);
+
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          apiClient: api,
+          cantiereId: 'cant-1',
+          customerId: 'cust-1',
+          currentUser: _testUser,
+          online: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text("Per chi registri l'ingresso?"), findsOneWidget);
+      expect(
+        api.getAssegnazioniCalls,
+        0,
+        reason: 'offline is answered from the Drift mirror',
+      );
+
+      await _teardown(tester);
+    });
 
     testWidgets(
       '"Tutta la squadra" calls batchStart with every assigned userId',
@@ -911,52 +1095,49 @@ void main() {
       },
     );
 
-    testWidgets(
-      'disables Inizia timbratura with an inline hint while "Seleziona squadra" is chosen but '
-      'nobody has been picked yet',
-      (tester) async {
-        await seedCantiere(db);
-        final api = _FakeApiClient(
-          assegnazioni: const [
-            CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
-            CantiereCrewAssignmentDto(
-              id: 'a2',
-              userId: 'teammate-1',
-              isLead: false,
-            ),
-          ],
-        );
-
-        await tester.pumpWidget(
-          _buildScreen(
-            db: db,
-            apiClient: api,
-            cantiereId: 'cant-1',
-            currentUser: _testUser,
+    testWidgets('disables Inizia timbratura with an inline hint while "Seleziona squadra" is chosen but '
+        'nobody has been picked yet', (tester) async {
+      await seedCantiere(db);
+      final api = _FakeApiClient(
+        assegnazioni: const [
+          CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+          CantiereCrewAssignmentDto(
+            id: 'a2',
+            userId: 'teammate-1',
+            isLead: false,
           ),
-        );
-        await tester.pumpAndSettle();
+        ],
+      );
 
-        await tester.tap(find.text('Seleziona squadra'));
-        await tester.pumpAndSettle();
-        // Dismiss the picker without confirming anyone — tapping the modal barrier, since the
-        // sheet's own close button is an icon-only HeaderIconBtn (no visible "Chiudi" text; its
-        // label is a Semantics-only a11y label).
-        await tester.tapAt(const Offset(20, 20));
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          apiClient: api,
+          cantiereId: 'cant-1',
+          currentUser: _testUser,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        expect(
-          find.text('Scegli almeno una persona per avviare la timbratura.'),
-          findsOneWidget,
-        );
-        final button = tester.widget<AppButton>(
-          find.widgetWithText(AppButton, 'Inizia timbratura'),
-        );
-        expect(button.onPressed, isNull);
+      await tester.tap(find.text('Seleziona squadra'));
+      await tester.pumpAndSettle();
+      // Dismiss the picker without confirming anyone — tapping the modal barrier, since the
+      // sheet's own close button is an icon-only HeaderIconBtn (no visible "Chiudi" text; its
+      // label is a Semantics-only a11y label).
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
 
-        await _teardown(tester);
-      },
-    );
+      expect(
+        find.text('Scegli almeno una persona per avviare la timbratura.'),
+        findsOneWidget,
+      );
+      final button = tester.widget<AppButton>(
+        find.widgetWithText(AppButton, 'Inizia timbratura'),
+      );
+      expect(button.onPressed, isNull);
+
+      await _teardown(tester);
+    });
 
     testWidgets(
       'shows a success toast counting how many people were actually started',
@@ -1153,12 +1334,15 @@ void main() {
           businessTime: BusinessTime(zone),
         );
 
-    test('returns the full elapsed time when startTime is after the midnight', () {
-      expect(
-        clamp('2026-07-10T06:00:00Z', '2026-07-10T07:18:00Z'),
-        const Duration(hours: 1, minutes: 18),
-      );
-    });
+    test(
+      'returns the full elapsed time when startTime is after the midnight',
+      () {
+        expect(
+          clamp('2026-07-10T06:00:00Z', '2026-07-10T07:18:00Z'),
+          const Duration(hours: 1, minutes: 18),
+        );
+      },
+    );
 
     test('clamps to the Rome midnight when startTime was the day before', () {
       // Rome midnight is 2026-07-09T22:00Z: 10 h, not 12.
@@ -1182,13 +1366,20 @@ void main() {
       );
     });
 
-    test('business zone differing from the device zone uses its own midnight', () {
-      // LA midnight of 2026-07-10 is 07:00Z.
-      expect(
-        clamp('2026-07-10T02:00:00Z', '2026-07-10T10:00:00Z', 'America/Los_Angeles'),
-        const Duration(hours: 3),
-      );
-    });
+    test(
+      'business zone differing from the device zone uses its own midnight',
+      () {
+        // LA midnight of 2026-07-10 is 07:00Z.
+        expect(
+          clamp(
+            '2026-07-10T02:00:00Z',
+            '2026-07-10T10:00:00Z',
+            'America/Los_Angeles',
+          ),
+          const Duration(hours: 3),
+        );
+      },
+    );
   });
 
   group('_CantiereElapsedTicker / _CantiereTodayTotal — injected clock', () {
@@ -1267,7 +1458,12 @@ void main() {
       final api = _FakeApiClient();
 
       await tester.pumpWidget(
-        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+        _buildScreen(
+          db: db,
+          apiClient: api,
+          cantiereId: 'cant-1',
+          currentUser: _testUser,
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -1646,6 +1842,39 @@ void main() {
     );
 
     testWidgets(
+      'shows the sync error text for a punch the server permanently refused',
+      (tester) async {
+        // P0-3: a permanent 4xx marks the row with a human-readable syncError and the automatic
+        // sweep stops retrying it — this is the only place the technician can see why.
+        final eventTime = _businessTodayAt(8);
+        await db
+            .into(db.cantierePunches)
+            .insert(
+              CantierePunchesCompanion.insert(
+                id: 'e1',
+                eventTime: eventTime,
+                eventType: 'ingresso',
+                cantiereId: const Value('cant-1'),
+                syncError: const Value(
+                  'Il cantiere non accetta più timbrature.',
+                ),
+              ),
+            );
+        final api = _FakeApiClient();
+        await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(
+          find.text('Il cantiere non accetta più timbrature.'),
+          findsOneWidget,
+        );
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets(
       'still shows Timbra uscita cantiere for a session with no closed hours yet',
       (tester) async {
         // Coverage for the button's mere presence alongside the OGGI/live-elapsed assertions
@@ -1664,6 +1893,7 @@ void main() {
 
   group('cantiereTodayHoursProvider', () {
     ProviderContainer buildContainer(AppDatabase db) => ProviderContainer(
+      retry: (_, _) => null,
       overrides: [appDatabaseProvider.overrideWithValue(db)],
     );
 
@@ -1887,39 +2117,91 @@ void main() {
       });
     }
 
-    test('cantiereActiveSessionProvider exposes the instant for a server-only log', () async {
-      final container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          activeCantiereLogProvider.overrideWith(
-            () => _FakeActiveNotifier(
-              CantiereWorkLogDto(
-                id: 'log-1',
-                cantiereId: 'cant-1',
-                customerId: 'cust-1',
-                workDate: DateTime.utc(2026, 7, 10),
-                startTime: '08:00:00',
+    test(
+      'cantiereActiveSessionProvider exposes the instant for a server-only log',
+      () async {
+        final container = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            activeCantiereLogProvider.overrideWith(
+              () => _FakeActiveNotifier(
+                CantiereWorkLogDto(
+                  id: 'log-1',
+                  cantiereId: 'cant-1',
+                  customerId: 'cust-1',
+                  workDate: DateTime.utc(2026, 7, 10),
+                  startTime: '08:00:00',
+                ),
               ),
             ),
-          ),
-          businessTimeProvider.overrideWithValue(
-            BusinessTime(
-              'America/New_York',
-              clock: () => DateTime.utc(2026, 7, 10, 12),
+            businessTimeProvider.overrideWithValue(
+              BusinessTime(
+                'America/New_York',
+                clock: () => DateTime.utc(2026, 7, 10, 12),
+              ),
             ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      container.listen(cantiereActiveSessionProvider, (_, _) {});
-      container.listen(activeCantiereLogProvider, (_, _) {});
-      await container.read(activeCantiereLogProvider.future);
-      await container.read(todayCantiereEventsProvider.future);
+          ],
+        );
+        addTearDown(container.dispose);
+        container.listen(cantiereActiveSessionProvider, (_, _) {});
+        container.listen(activeCantiereLogProvider, (_, _) {});
+        await container.read(activeCantiereLogProvider.future);
+        container.listen(todayCantiereEventsProvider, (_, _) {});
+        await container.read(todayCantiereEventsProvider.future);
 
-      expect(
-        container.read(cantiereActiveSessionProvider)?.startTime,
-        DateTime.utc(2026, 7, 10, 6),
-      );
-    });
+        expect(
+          container.read(cantiereActiveSessionProvider)?.startTime,
+          DateTime.utc(2026, 7, 10, 6),
+        );
+      },
+    );
+
+    test(
+      'a check-in left open overnight is still the active session',
+      () async {
+        // Recorded yesterday evening, never closed. The screen must not offer "Ingresso" again: a
+        // second opener would orphan this interval, and the technician could not close it at all.
+        // Drift stores a `dateTime()` column as whole seconds, so the mirrored instant is what a
+        // second-precision clock would have written — compare at that precision, not to the
+        // microsecond this test's own `now` happened to carry.
+        final start = DateTime.now()
+            .toUtc()
+            .subtract(const Duration(hours: 14))
+            .copyWith(millisecond: 0, microsecond: 0);
+        await CantiereSessionRepository(db).addEvent(
+          id: 'overnight-in',
+          eventTime: start,
+          eventType: 'ingresso',
+          cantiereId: 'cant-9',
+          customerId: 'cust-9',
+        );
+
+        final container = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            activeCantiereLogProvider.overrideWith(
+              () => _FakeActiveNotifier(null),
+            ),
+            // Nothing local is "today", which is exactly the case a day-scoped derivation got wrong.
+            todayCantiereEventsProvider.overrideWith(
+              (ref) => Stream.value(const <CantierePunche>[]),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        container.listen(cantiereActiveSessionProvider, (_, _) {});
+        container.listen(activeCantiereLogProvider, (_, _) {});
+        await container.read(activeCantiereLogProvider.future);
+        container.listen(cantiereLatestPunchProvider, (_, _) {});
+        await container.read(cantiereLatestPunchProvider.future);
+
+        final session = container.read(cantiereActiveSessionProvider);
+        expect(session?.cantiereId, 'cant-9');
+        expect(session?.pendingSync, isTrue);
+        expect(session?.startTime.toUtc(), start);
+      },
+    );
   });
 }

@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 //
 // Thin Dio wrapper for the notification endpoints:
 //   GET    /api/notifications          — paginated list (InApp delivery only)
+//   GET    /api/notifications/{id}     — one notification, by id (detail page)
 //   PUT    /api/notifications/{id}/read — mark one as read
 //   PUT    /api/notifications/read-all  — mark all as read
 //
@@ -41,6 +42,15 @@ class NotificationApiClient {
     final response = await _dio.get('/api/notifications', queryParameters: queryParams);
 
     return NotificationPageResponse.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  /// Fetch one notification by id.
+  ///
+  /// The detail page takes only an id, so it must not depend on the list having
+  /// been loaded — this is the same payload the list uses, parsed the same way.
+  Future<NotificationDto> getNotification(String id) async {
+    final response = await _dio.get('/api/notifications/$id');
+    return NotificationDto.fromJson(response.data as Map<String, dynamic>);
   }
 
   /// Mark a single notification as read.

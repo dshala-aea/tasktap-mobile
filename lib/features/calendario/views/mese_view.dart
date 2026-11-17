@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
@@ -40,7 +41,7 @@ class MeseView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final grouped = groupSchedulesByDay(schedules);
     final teamScheduleIds =
-        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
+        ref.watch(teamAssignedScheduleIdsProvider).value ?? const {};
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
     final selectedKey = DateTime(
@@ -106,7 +107,12 @@ class MeseView extends ConsumerWidget {
           // Lista siblings — it's a fixed flex grid, so it must instead give up navClearance's
           // worth of its own height so the last week row doesn't render under the floating nav.
           child: Padding(
-            padding: EdgeInsets.fromLTRB(AppSpacing.sm, 0, AppSpacing.sm, context.navClearance),
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.sm,
+              0,
+              AppSpacing.sm,
+              context.navClearance,
+            ),
             child: Column(
               children: List.generate(weekCount, (row) {
                 return Expanded(

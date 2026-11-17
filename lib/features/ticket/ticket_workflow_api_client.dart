@@ -78,20 +78,73 @@ class TicketWorkflowApiClient {
   /// this ticket. Its own message ("You already have an active ticket work log. Stop it first.")
   /// is mapped in [_italianFor] to say which recovery is meant, because "stop it first" is not
   /// actionable if the technician is looking at a ticket whose timer is not the one running.
-  Future<void> startTimer(String ticketId) async {
-    await _run(
-      () => _dio.post<dynamic>('/api/tickets/$ticketId/worklogs/start'),
+  /// [clientId] is this device's idempotency key for the session it is starting. A phone that
+  /// never saw the reply to its own start sends the same value again and is answered with the row
+  /// it already owns, instead of a 400 or — worse — a second timer with the same hours booked
+  /// twice. Optional so a server that does not know it yet still serves the request.
+  ///
+  /// [deviceUtc] is this device's own clock reading at the moment of the tap. The server uses it
+  /// as the session's start instant and records the gap from its own receipt time as the clock
+  /// disagreement — the flag the office reviews, never a silent correction.
+  ///
+  /// Returns the row the server holds. [TicketTimerStart.isActive] is false when that row is
+  /// already closed, which happens when the reply was lost long enough for the office to end the
+  /// session: the caller must not paint a running clock over it.
+  Future<TicketTimerStart> startTimer(
+    String ticketId, {
+    String? clientId,
+    DateTime? deviceUtc,
+  }) async {
+    final response = await _run(
+      () => _dio.post<dynamic>(
+        '/api/tickets/$ticketId/worklogs/start',
+        queryParameters: {'clientId': ?clientId, ...?_deviceQuery(deviceUtc)},
+      ),
       fallback: 'Impossibile avviare il timer.',
     );
+    final body = response.data;
+    if (body is! Map<String, dynamic>) {
+      throw const TicketWorkflowFailure('Impossibile avviare il timer.');
+    }
+    return TicketTimerStart.fromJson(body);
   }
 
-  /// POST /api/tickets/{ticketId}/worklogs/stop
-  Future<void> stopTimer(String ticketId) async {
-    await _run(
-      () => _dio.post<dynamic>('/api/tickets/$ticketId/worklogs/stop'),
+  /// POST /api/tickets/{ticketId}/worklogs/stop — same [deviceUtc] contract as [startTimer].
+  ///
+  /// [clientId] names the session being closed, when the mirror still knows it. A reply lost on the
+  /// way back leaves the server with the timer already stopped, so a blind retry used to be answered
+  /// "no active timer found" — a 404 this client cannot tell apart from a close that never landed,
+  /// which told the technician the clock could not be stopped while the hours were already booked.
+  /// The same key turns that retry into the answer the first attempt would have given.
+  ///
+  /// Returns the row's clock disagreement when the server flagged one, or null: ordinary drift, no
+  /// device clock and an older backend all answer the same way. The response carries the *merged*
+  /// value — a phone corrected between the two taps still hears about the skew it started with —
+  /// and the phone only relays it; it never compares the clocks itself.
+  Future<int?> stopTimer(
+    String ticketId, {
+    String? clientId,
+    DateTime? deviceUtc,
+  }) async {
+    final response = await _run(
+      () => _dio.post<dynamic>(
+        '/api/tickets/$ticketId/worklogs/stop',
+        queryParameters: {'clientId': ?clientId, ...?_deviceQuery(deviceUtc)},
+      ),
       fallback: 'Impossibile fermare il timer.',
     );
+    final body = response.data;
+    return body is Map<String, dynamic>
+        ? (body['clockDisagreementSeconds'] as num?)?.toInt()
+        : null;
   }
+
+  /// The endpoints bind `deviceUtc` from the query string, not a body: a null value must send no
+  /// key at all, so the server stamps its own clock exactly as it did before this field existed.
+  static Map<String, dynamic>? _deviceQuery(DateTime? deviceUtc) =>
+      deviceUtc == null
+      ? null
+      : {'deviceUtc': deviceUtc.toUtc().toIso8601String()};
 
   /// POST /api/tickets/{ticketId}/worklogs/manual
   ///
@@ -146,12 +199,12 @@ class TicketWorkflowApiClient {
 
   // ── Plumbing ───────────────────────────────────────────────────────────────
 
-  Future<void> _run(
+  Future<Response<dynamic>> _run(
     Future<Response<dynamic>> Function() call, {
     required String fallback,
   }) async {
     try {
-      await call();
+      return await call();
     } on DioException catch (e) {
       throw TicketWorkflowFailure(_italianFor(e, fallback), cause: e);
     }
@@ -246,6 +299,43 @@ class TicketWorkflowFailure implements Exception {
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
+
+/// The row the server holds after a ticket timer start.
+class TicketTimerStart {
+  const TicketTimerStart({
+    required this.id,
+    required this.isActive,
+    this.clockDisagreementSeconds,
+  });
+
+  /// The server's id for the session — what the mirror row is keyed on so "Ferma" works without a
+  /// round trip.
+  final String id;
+
+  /// Whether that row is still running. False means the office ended it between a lost reply and
+  /// this retry.
+  final bool isActive;
+
+  /// How far this phone's clock was from the server's, in seconds, signed — **only when the server
+  /// already judged it a disagreement** (over its own ten-minute threshold). Null for ordinary drift,
+  /// for a start that sent no device clock, and for a backend that predates the field.
+  ///
+  /// The number is rendered, never re-judged: the threshold is defined once, server-side, and a
+  /// client that compared it against its own copy would drift from the office's Correzioni list.
+  /// It is advice — the recorded start is this device's instant regardless.
+  final int? clockDisagreementSeconds;
+
+  /// A server that does not know the `clientId` key yet answers with a bare `{id}`, and a row that
+  /// call just created is running — so the absent flag defaults to true rather than to a stopped
+  /// timer that never started.
+  factory TicketTimerStart.fromJson(Map<String, dynamic> json) =>
+      TicketTimerStart(
+        id: json['id'] as String,
+        isActive: json['isActive'] as bool? ?? true,
+        clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)
+            ?.toInt(),
+      );
+}
 
 /// One entry booked against a ticket.
 class TicketWorkLogDto {

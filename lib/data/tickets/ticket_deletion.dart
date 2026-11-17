@@ -88,9 +88,7 @@ class TicketDeletionService {
         _db.pendingTicketAttachments,
       )..where((a) => a.ticketId.equals(ticketId))).go();
       await (_db.delete(_db.ticketMateriali)..where((m) => m.ticketId.equals(ticketId))).go();
-      await (_db.delete(
-        _db.cachedTicketControls,
-      )..where((c) => c.ticketId.equals(ticketId))).go();
+      await (_db.delete(_db.cachedTicketControls)..where((c) => c.ticketId.equals(ticketId))).go();
       await (_db.delete(_db.ticketControls)..where((c) => c.ticketId.equals(ticketId))).go();
       await (_db.delete(_db.ticketAssets)..where((a) => a.ticketId.equals(ticketId))).go();
       await (_db.delete(

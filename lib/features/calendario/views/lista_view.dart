@@ -7,8 +7,10 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/theme/status_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -17,7 +19,16 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// as ListRows (title, time range, StatusPill, location), soonest first.
 /// Shows an EmptyState when there are no schedules.
 class ListaView extends ConsumerWidget {
-  const ListaView({super.key, required this.schedules, this.onTapTicket});
+  const ListaView({
+    super.key,
+    required this.schedules,
+    this.onTapTicket,
+    this.reverseDays = false,
+    this.emptyTitle = 'Nessun intervento',
+    this.emptyBody =
+        'Non ci sono interventi pianificati nel periodo selezionato.',
+    this.bottomPadding,
+  });
 
   /// All schedules to display — already sorted by date/time.
   final List<Schedule> schedules;
@@ -25,23 +36,50 @@ class ListaView extends ConsumerWidget {
   /// Called when the user taps a row that has a ticketId.
   final void Function(String ticketId)? onTapTicket;
 
+  /// Newest day first instead of oldest first — used by Storico.
+  final bool reverseDays;
+
+  /// Copy used when [schedules] is empty, so a history screen does not say "periodo selezionato".
+  final String emptyTitle;
+  final String emptyBody;
+
+  /// Bottom padding override; defaults to the shell nav clearance.
+  final double? bottomPadding;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (schedules.isEmpty) {
-      return const EmptyState(
+      // The list is read from the mirror, so an empty one only means "nothing is planned" once a
+      // sync has actually landed on this phone. Before that it means "the phone has nothing
+      // downloaded", and saying "non ci sono interventi" turns a missing sync into news about the
+      // technician's week. `== false`, never `!= true`: an unanswered check must not be read as
+      // "never synced".
+      if (ref.watch(hasSyncedAtLeastOnceProvider).value == false) {
+        return const EmptyState(
+          icon: LucideIcons.cloudOff,
+          title: 'Calendario non ancora scaricato',
+          body:
+              'Questo telefono non ha ancora completato una sincronizzazione: gli interventi '
+              'compariranno qui appena i dati saranno scaricati.',
+        );
+      }
+      return EmptyState(
         icon: LucideIcons.calendarX,
-        title: 'Nessun intervento',
-        body: 'Non ci sono interventi pianificati nel periodo selezionato.',
+        title: emptyTitle,
+        body: emptyBody,
       );
     }
 
     final grouped = groupSchedulesByDay(schedules);
+    final entries = reverseDays
+        ? grouped.entries.toList().reversed
+        : grouped.entries;
     final dayFmt = DateFormat('EEEE d MMMM', 'it');
     final teamScheduleIds =
-        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
+        ref.watch(teamAssignedScheduleIdsProvider).value ?? const {};
 
     final children = <Widget>[];
-    for (final entry in grouped.entries) {
+    for (final entry in entries) {
       // Section header
       children.add(_DateHeader(date: entry.key, formatter: dayFmt));
       for (final s in entry.value) {
@@ -56,7 +94,7 @@ class ListaView extends ConsumerWidget {
     }
 
     return ListView(
-      padding: EdgeInsets.only(bottom: context.navClearance),
+      padding: EdgeInsets.only(bottom: bottomPadding ?? context.navClearance),
       children: children,
     );
   }
@@ -95,7 +133,7 @@ class _DateHeader extends StatelessWidget {
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
 
-class _ScheduleListRow extends StatelessWidget {
+class _ScheduleListRow extends ConsumerWidget {
   const _ScheduleListRow({
     required this.schedule,
     this.onTapTicket,
@@ -111,9 +149,18 @@ class _ScheduleListRow extends StatelessWidget {
   final bool isTeam;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final where = ref
+        .watch(
+          scheduleWhereProvider((
+            ticketId: schedule.ticketId,
+            locationId: schedule.locationId,
+          )),
+        )
+        .value;
     // An all-day schedule has no meaningful time-of-day to show as a subtitle — see the same
-    // gate in `_ScheduleInfoSheet` (calendario_screen.dart) and `_EventBlock` (giorno_view.dart).
+    // gate in `ScheduleInfoSheet` (calendario/widgets/schedule_info_sheet.dart) and `_EventBlock`
+    // (giorno_view.dart).
     final timeRange = schedule.allDay
         ? null
         : '${formatMinutes(schedule.timeStartMinutes)} – ${formatMinutes(schedule.timeEndMinutes)}';
@@ -131,7 +178,10 @@ class _ScheduleListRow extends StatelessWidget {
         child: Icon(LucideIcons.clock, size: 18, color: statusPair.foreground),
       ),
       title: schedule.title,
-      subtitle: timeRange,
+      // Time and customer on one line, the site address under it: what a technician needs to know
+      // before opening the job.
+      subtitle: [?timeRange, ?where?.customerName].join(' · ').nullIfEmpty,
+      detail: where?.address,
       meta: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -154,4 +204,8 @@ class _ScheduleListRow extends StatelessWidget {
           : null,
     );
   }
+}
+
+extension on String {
+  String? get nullIfEmpty => isEmpty ? null : this;
 }

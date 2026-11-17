@@ -33,10 +33,20 @@ abstract interface class CrashReporter {
   // ── API ───────────────────────────────────────────────────────────────────
 
   /// Capture an exception with an optional stack trace and context.
-  Future<void> captureException(Object exception, {StackTrace? stackTrace, String? hint});
+  ///
+  /// [tags] are indexed by the backend, so they are what makes an event *findable* — a
+  /// `push.stage:device-registration` query is the whole incident, whereas the same words inside
+  /// [hint] are only searchable as free text. Keep them low-cardinality (a stage name, a platform,
+  /// an HTTP status), never a credential or a free-form message.
+  Future<void> captureException(
+    Object exception, {
+    StackTrace? stackTrace,
+    String? hint,
+    Map<String, String>? tags,
+  });
 
-  /// Capture a non-fatal message.
-  Future<void> captureMessage(String message);
+  /// Capture a non-fatal message. [tags] as above.
+  Future<void> captureMessage(String message, {Map<String, String>? tags});
 
   /// Add breadcrumb for better crash context.
   void addBreadcrumb(String message, {String? category});
@@ -49,10 +59,15 @@ final class _NoOpCrashReporter implements CrashReporter {
   const _NoOpCrashReporter();
 
   @override
-  Future<void> captureException(Object exception, {StackTrace? stackTrace, String? hint}) async {}
+  Future<void> captureException(
+    Object exception, {
+    StackTrace? stackTrace,
+    String? hint,
+    Map<String, String>? tags,
+  }) async {}
 
   @override
-  Future<void> captureMessage(String message) async {}
+  Future<void> captureMessage(String message, {Map<String, String>? tags}) async {}
 
   @override
   void addBreadcrumb(String message, {String? category}) {}

@@ -84,23 +84,22 @@ class NotificationSettingsDto {
   /// older servers that do not send the field yet.
   final bool ticketOverdueNotifications;
 
-  factory NotificationSettingsDto.fromJson(
-    Map<String, dynamic> json,
-  ) => NotificationSettingsDto(
-    // Defaulting to true matches the server's own get-or-create defaults. A field the server
-    // stops sending must not read as "the user switched this off".
-    enableInApp: json['enableInApp'] as bool? ?? true,
-    enablePush: json['enablePush'] as bool? ?? true,
-    enableEmail: json['enableEmail'] as bool? ?? true,
-    ticketNotifications: json['ticketNotifications'] as bool? ?? true,
-    scheduleNotifications: json['scheduleNotifications'] as bool? ?? true,
-    licenseNotifications: json['licenseNotifications'] as bool? ?? true,
-    workLogNotifications: json['workLogNotifications'] as bool? ?? true,
-    documentNotifications: json['documentNotifications'] as bool? ?? true,
-    mentionNotifications: json['mentionNotifications'] as bool? ?? true,
-    ticketOverdueNotifications:
-        json['ticketOverdueNotifications'] as bool? ?? true,
-  );
+  factory NotificationSettingsDto.fromJson(Map<String, dynamic> json) =>
+      NotificationSettingsDto(
+        // Defaulting to true matches the server's own get-or-create defaults. A field the server
+        // stops sending must not read as "the user switched this off".
+        enableInApp: json['enableInApp'] as bool? ?? true,
+        enablePush: json['enablePush'] as bool? ?? true,
+        enableEmail: json['enableEmail'] as bool? ?? true,
+        ticketNotifications: json['ticketNotifications'] as bool? ?? true,
+        scheduleNotifications: json['scheduleNotifications'] as bool? ?? true,
+        licenseNotifications: json['licenseNotifications'] as bool? ?? true,
+        workLogNotifications: json['workLogNotifications'] as bool? ?? true,
+        documentNotifications: json['documentNotifications'] as bool? ?? true,
+        mentionNotifications: json['mentionNotifications'] as bool? ?? true,
+        ticketOverdueNotifications:
+            json['ticketOverdueNotifications'] as bool? ?? true,
+      );
 }
 
 class NotificationSettingsApiClient {

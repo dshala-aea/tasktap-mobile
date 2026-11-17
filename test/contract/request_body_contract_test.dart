@@ -6,11 +6,17 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
+import 'package:tasktap_mobile/data/badge/badge_models.dart';
+import 'package:tasktap_mobile/data/badge/badge_api_client.dart';
 import 'package:tasktap_mobile/data/clienti/customer_contact_api_client.dart';
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
+import 'package:tasktap_mobile/data/settings/notification_preferences_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
+import 'package:tasktap_mobile/data/smart_working/smart_working_request_api_client.dart';
+import 'package:tasktap_mobile/data/trasferta/trasferta_request_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
+import 'package:tasktap_mobile/data/timbratura/ticket_timer_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/data/magazzino/magazzino_api_client.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
@@ -374,6 +380,17 @@ void main() {
             endTime: DateTime.utc(2026, 8, 16, 16),
             latitude: 45.4642,
             longitude: 9.19,
+            // The clock-out screen's own fields. Each must be a key the server declares, or an
+            // offline clock-out drops what was typed on leaving site.
+            departureLatitude: 45.4660,
+            departureLongitude: 9.1880,
+            safetyNotes: 'nessuna anomalia',
+            // The clock-in screen's own fields. Same rule: a key the server does not declare
+            // would be rejected, and an offline clock-in would silently lose them.
+            workOrderNumber: 'OL-2026-118',
+            equipmentUsed: 'piattaforma aerea',
+            teamSize: 3,
+            weatherConditions: 'pioggia leggera',
           ),
         ]),
       );
@@ -402,6 +419,101 @@ void main() {
       final client = AbsenceRequestApiClient(dio);
       return capture(() => client.cancel(_id(19)));
     });
+
+    contractTest('approving an absence request matches the server', () {
+      final client = AbsenceRequestApiClient(dio);
+      return capture(() => client.approve(_id(30)));
+    });
+
+    contractTest('rejecting an absence request matches the server', () {
+      final client = AbsenceRequestApiClient(dio);
+      return capture(() => client.reject(_id(31), reason: 'Copertura insufficiente'));
+    });
+  });
+
+  group('trasferta', () {
+    contractTest('a trasferta request matches the server', () {
+      final client = TrasfertaRequestApiClient(dio);
+      return capture(
+        () => client.create(
+          date: DateTime(2026, 11, 3),
+          startHour: 7,
+          startMinute: 30,
+          hours: 1.5,
+          reason: 'cantiere',
+        ),
+      );
+    });
+
+    contractTest('the list carries the caller’s own id as a declared query parameter', () {
+      final client = TrasfertaRequestApiClient(dio);
+      return capture(() => client.fetchMine(userId: _id(20)));
+    });
+
+    contractTest('cancelling a trasferta matches the server', () {
+      final client = TrasfertaRequestApiClient(dio);
+      return capture(() => client.cancel(_id(20)));
+    });
+  });
+
+  group('smart working', () {
+    contractTest('a smart-working request matches the server', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(
+        () => client.create(
+          startDate: DateTime.utc(2026, 9, 14),
+          endDate: DateTime.utc(2026, 9, 18),
+          reason: 'lavoro da casa',
+        ),
+      );
+    });
+
+    /// `userId` omitted means "self" only for a non-Approve caller — for an approve-holder it
+    /// means the whole tenant. The screen titled "le mie richieste" sends its own id, and that
+    /// only works if the route still declares the parameter under that name.
+    contractTest('the list carries the caller’s own id as a declared query parameter', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(() => client.fetchMine(userId: _id(20)));
+    });
+
+    contractTest('cancelling a smart-working request matches the server', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(() => client.cancel(_id(20)));
+    });
+
+    contractTest('approving a smart-working request matches the server', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(() => client.approve(_id(32)));
+    });
+
+    contractTest('rejecting a smart-working request matches the server', () {
+      final client = SmartWorkingRequestApiClient(dio);
+      return capture(() => client.reject(_id(33), reason: 'Servizio scoperto'));
+    });
+
+    /// The subset check above can only flag keys the schema does not declare, so a key the client
+    /// stopped sending is invisible to it. Stated here because `requestedByUserId` is the one key
+    /// of this schema the client must *never* send: null means "myself", and the server
+    /// deliberately does not trust a client-supplied self-id.
+    test('the create body is exactly the window and an optional reason, never a self-id', () async {
+      final client = SmartWorkingRequestApiClient(dio);
+      final sent = await capture(
+        () => client.create(
+          startDate: DateTime.utc(2026, 9, 14),
+          endDate: DateTime.utc(2026, 9, 18),
+          reason: 'lavoro da casa',
+        ),
+      );
+
+      final schema = schemas['CreateSmartWorkingRequestBody'] as Map<String, dynamic>;
+      final declared = (schema['properties'] as Map<String, dynamic>).keys.toSet();
+
+      expect(sent.body!.keys.toSet(), {'startDate', 'endDate', 'reason'});
+      expect(sent.body!.keys.toSet().difference(declared), isEmpty);
+      expect(sent.body!.containsKey('requestedByUserId'), isFalse);
+      expect(sent.body!['startDate'], '2026-09-14');
+      expect(sent.body!['endDate'], '2026-09-18');
+    });
   });
 
   group('ticket', () {
@@ -424,8 +536,12 @@ void main() {
     contractTest('replacing the ticket materiali (fabbisogno) matches the server', () {
       final client = TicketDetailApiClient(dio);
       return capture(
-        () => client.setMateriali(_id(62), const [
-          TicketMaterialeWriteRow(materialeId: null, freeTextName: 'Guarnizione', quantity: 1),
+        () => client.setMateriali(_id(62), [
+          TicketMaterialeWriteRow(
+            materialeId: _id(63),
+            quantity: 1,
+            magazzinoId: _id(64),
+          ),
         ]),
       );
     });
@@ -448,6 +564,21 @@ void main() {
     contractTest('stopping the ticket timer matches the server', () {
       final client = TicketWorkflowApiClient(dio);
       return capture(() => client.stopTimer(_id(12)));
+    });
+
+    contractTest('the offline ticket timer session upsert matches the server', () {
+      final client = TicketTimerApiClient(dio);
+      return capture(
+        () => client.upsertSessions([
+          TicketMobileSessionDto(
+            clientId: _id(70),
+            ticketId: _id(71),
+            startTime: DateTime.utc(2026, 8, 16, 7),
+            endTime: DateTime.utc(2026, 8, 16, 16),
+            description: 'sostituzione pompa',
+          ),
+        ]),
+      );
     });
 
     contractTest('a manually entered worklog matches the server', () {
@@ -474,6 +605,14 @@ void main() {
           documentNotifications: false,
         ),
       );
+    });
+
+    // Fails until the snapshot is re-synced from a backend that carries
+    // `PUT /api/notifications/preferences` (tasktap-api#102, not merged at the time of writing).
+    // That is the gate doing its job — see the PR description — not a reason to exempt the route.
+    contractTest('the per-type notification preferences update matches the server', () {
+      final client = NotificationPreferencesApiClient(dio);
+      return capture(() => client.update({25: false}));
     });
 
     contractTest('marking one notification read matches the server', () {
@@ -983,6 +1122,62 @@ void main() {
     });
   });
 
+  group('badge', () {
+    contractTest('a badge scan matches the server', () {
+      final client = BadgeApiClient(dio);
+      return capture(
+        () => client.scan(cantiereId: _id(60), token: 'tok-abc', clientScanId: _id(61)),
+        expect: (body) {
+          // The server's own required keys, sent exactly.
+          final requiredKeys = ((schemas['BadgeScanRequest'] as Map<String, dynamic>)['required']
+                  as List)
+              .cast<String>()
+              .toSet();
+          expect(body.keys.toSet(), requiredKeys);
+        },
+      );
+    });
+
+    test('the badge response DTOs read the keys the server declares', () {
+      Set<String> props(String schema) =>
+          ((schemas[schema] as Map<String, dynamic>)['properties'] as Map<String, dynamic>)
+              .keys
+              .toSet();
+
+      // Feed each DTO a body built from the SERVER's own property names, so a renamed key on
+      // either side fails here rather than reading as null at runtime.
+      final card = BadgeCard.fromJson({
+        for (final k in props('BadgeCard')) k: k == 'expiresInSeconds' ? 60 : 'v-$k',
+      });
+      expect(card.badgeId, 'v-badgeId');
+      expect(card.token, 'v-token');
+      expect(card.expiresInSeconds, 60);
+      expect(card.displayName, 'v-displayName');
+      expect(card.photoUrl, 'v-photoUrl');
+      expect(card.employerName, 'v-employerName');
+      expect(card.status, 'v-status');
+
+      final outcome = BadgeScanOutcome.fromJson({
+        'result': 'Replayed',
+        'action': 'Closed',
+        'workLogId': 'w',
+        'worker': {for (final k in props('BadgeWorker')) k: 'v-$k'},
+      });
+      expect(props('BadgeScanOutcome'), {'result', 'action', 'workLogId', 'worker'});
+      expect(outcome.worker!.displayName, 'v-displayName');
+      expect(outcome.worker!.employerName, 'v-employerName');
+      expect(outcome.worker!.photoUrl, 'v-photoUrl');
+
+      // Every server-declared enum name maps to a real member, never `unknown`.
+      for (final n in ((schemas['BadgeScanResult'] as Map<String, dynamic>)['enum'] as List)) {
+        expect(BadgeScanResult.fromWire(n as String), isNot(BadgeScanResult.unknown), reason: n);
+      }
+      for (final n in ((schemas['BadgeScanAction'] as Map<String, dynamic>)['enum'] as List)) {
+        expect(BadgeScanAction.fromWire(n as String), isNot(BadgeScanAction.unknown), reason: n);
+      }
+    });
+  });
+
   // ── The part that keeps this file honest ────────────────────────────────────
 
   group('coverage', () {
@@ -993,10 +1188,14 @@ void main() {
     const unguarded = <String, String>{
       'POST /api/worklog/end':
           'optional body, app sends none',
+      // Optional `occurredAtUtc`, sent only when a queued tap is replayed; a live tap sends no
+      // body at all. Promote both to a real case once the snapshot here is refreshed from a
+      // merged backend — it predates BreakPunchRequest, so there is nothing to compare against
+      // yet (copying a branch snapshot would delete schemas this gate asserts).
       'POST /api/worklog/break/start':
-          'no body',
+          'optional body, sent only on offline replay',
       'POST /api/worklog/break/end':
-          'no body',
+          'optional body, sent only on offline replay',
       'POST /api/reports/submit':
           'covered by openapi_contract_test.dart, which also checks the three nested DTOs',
       'POST /api/reports/{}/attachments':
@@ -1032,6 +1231,12 @@ void main() {
           'AiApiClient.confirmConversation sends no JSON body at all — the request carries only '
           'an Idempotency-Key header (AiConversationsController.Confirm reads nothing else off '
           'the request) — there is no schema to compare a body against.',
+      'POST /api/ai/voice-captures':
+          'AiApiClient.uploadVoiceCapture sends multipart/form-data (one `audio` file part plus '
+          'an Idempotency-Key header), not a JSON body, so there are no body keys to compare with '
+          'the snapshot schema. The part name and header are pinned by audio_recorder_service_test '
+          '(uploadVoiceCapture_sends_the_idempotency_key_header_and_audio_part). The client never '
+          'calls POST /api/ai/transcribe: a recording reaches the model as audio (ADR-0023).',
       'DELETE /api/ai/conversations/{}':
           'AiApiClient.abandonConversation is a bodyless DELETE — nothing to check against a '
           'request-body schema.',

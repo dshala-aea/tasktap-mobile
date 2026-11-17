@@ -66,14 +66,20 @@ abstract final class AppRack {
 
 /// Room to leave at the bottom of a screen that sits under the floating nav.
 ///
-/// `MediaQuery.viewPadding.bottom` rather than `padding.bottom`: the latter is zeroed out while a
-/// keyboard is open, which would collapse the clearance at exactly the moment a form is being
-/// filled in.
+/// Inside the shell, `Scaffold(extendBody: true)` reports the bottom nav's **rendered height** as
+/// `MediaQuery.padding.bottom` (system inset included). Using it when it is larger than
+/// `viewPadding` is what fixes content sitting half under the pill on devices where the shell
+/// body's `viewPadding.bottom` is zero — the old `viewPadding + 74` formula then missed the whole
+/// system inset. Outside the shell (or while a keyboard zeroes `padding`), the formula falls back
+/// to the raw `viewPadding` + the nav's own height.
 extension NavClearance on BuildContext {
-  double get navClearance =>
-      MediaQuery.viewPaddingOf(this).bottom +
-      AppRack.navBarHeight +
-      AppRack.navGap;
+  double get navClearance {
+    final media = MediaQuery.of(this);
+    final navHeight = media.padding.bottom > media.viewPadding.bottom
+        ? media.padding.bottom
+        : media.viewPadding.bottom + AppRack.navBarHeight;
+    return navHeight + AppRack.navGap;
+  }
 }
 
 /// Bottom clearance for a FAB on a route the shell's floating nav never reaches — every

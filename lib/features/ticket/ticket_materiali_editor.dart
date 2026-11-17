@@ -1,13 +1,28 @@
 // dart format width=100
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+// `&`, `|` and `like` are extension members (BooleanExpressionOperators /
+// StringExpressionOperators), not methods on the generated columns, so a `show` list that omits
+// them compiles to "undefined_operator"/"undefined_method".
+import 'package:drift/drift.dart'
+    show BooleanExpressionOperators, OrderingTerm, StringExpressionOperators;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/icons/app_lucide_icons.dart';
+import '../../core/scanner/barcode_scan_sheet.dart';
 import '../../core/theme/app_palette.dart';
+import '../../core/utils/error_message.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/local/app_database.dart';
+import '../../data/materiali/materiale_barcode_lookup.dart'
+    show MaterialeMatch, lookupMaterialeByBarcode;
+import '../../data/sync/connectivity_provider.dart';
+import '../../data/sync/sync_service.dart' show appDatabaseProvider;
+import '../materiali/materiale_picker_dialog.dart';
+import '../materiali/materiale_qty_field.dart';
 import 'ticket_detail_api_client.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -17,6 +32,12 @@ import 'ticket_detail_api_client.dart';
 // search) OR a free-text name — never both, mirroring web's TicketMaterialiEditor.tsx: choosing
 // an article clears the free text and vice versa, so a row can never claim to be both and leave
 // the server to decide which it meant. Quantity is required; unit and notes are optional.
+//
+// A "Scansiona codice" button adds a row from a barcode: the code is resolved against the local
+// materiali mirror first (offline-safe, then the live lookup when online) via the same
+// lookupMaterialeByBarcode the rapportino Materiali step and the magazzino screen use. A code
+// already on the list bumps that row's quantity instead of adding a duplicate; a code the catalogue
+// does not know becomes a free-text row named after the raw code, as in the rapportino step.
 //
 // Save PUTs the full replacement list (TicketDetailApiClient.setMateriali — the endpoint has no
 // per-row server id to reconcile against, so there is nothing to diff).
@@ -32,6 +53,9 @@ class MaterialeEditRow {
     this.quantity = 1,
     this.unitOfMeasure,
     this.notes,
+    this.magazzinoId,
+    this.magazzinoNome,
+    this.sourceResolved = false,
     this.initialArticleName,
     this.initialArticleCode,
   });
@@ -41,6 +65,16 @@ class MaterialeEditRow {
   double quantity;
   String? unitOfMeasure;
   String? notes;
+
+  /// Optional source warehouse for this planned line. Planning provenance only: saving
+  /// fabbisogno never creates a stock movement. Null means no source.
+  String? magazzinoId;
+  String? magazzinoNome;
+
+  /// True when [magazzinoId] came from a read model or the picker (including a legitimate null
+  /// "no source"), so the editor must not re-resolve and guess again on open. A scanned row has
+  /// no source yet and resolves on mount.
+  bool sourceResolved;
 
   /// Display-only — the resolved article's name/code when this row started as a catalogue
   /// reference, so [AppLookupField] has something to show before any search runs. Never sent to
@@ -57,6 +91,12 @@ class MaterialeEditRow {
     quantity: dto.quantita,
     unitOfMeasure: dto.unitaMisura,
     notes: dto.note,
+    magazzinoId: dto.magazzinoId,
+    magazzinoNome: dto.magazzinoNome,
+    // A saved source is authoritative and must survive editing untouched. A catalogue row with no
+    // source is resolved on mount, so a single giacenza still auto-selects after the office's
+    // planned line lands on the phone.
+    sourceResolved: dto.magazzinoId != null,
     initialArticleName: dto.materialeId != null ? dto.nome : null,
     initialArticleCode: dto.materialeId != null ? dto.codice : null,
   );
@@ -67,26 +107,34 @@ class MaterialeEditRow {
     quantity: quantity,
     unitOfMeasure: unitOfMeasure,
     notes: notes,
+    magazzinoId: magazzinoId,
   );
 }
 
-class TicketMaterialiEditor extends StatefulWidget {
+Future<String?> _openCameraScanner(BuildContext context) =>
+    openBarcodeScanSheet(context, title: 'Scansiona materiale');
+
+class TicketMaterialiEditor extends ConsumerStatefulWidget {
   const TicketMaterialiEditor({
     super.key,
     required this.initialRows,
     required this.onSave,
     required this.onCancel,
+    this.scanner,
   });
+
+  /// Defaults to the shared camera sheet. Only tests pass one.
+  final BarcodeScanner? scanner;
 
   final List<TicketMaterialeDto> initialRows;
   final Future<void> Function(List<TicketMaterialeWriteRow> rows) onSave;
   final VoidCallback onCancel;
 
   @override
-  State<TicketMaterialiEditor> createState() => TicketMaterialiEditorState();
+  ConsumerState<TicketMaterialiEditor> createState() => TicketMaterialiEditorState();
 }
 
-class TicketMaterialiEditorState extends State<TicketMaterialiEditor> {
+class TicketMaterialiEditorState extends ConsumerState<TicketMaterialiEditor> {
   late List<MaterialeEditRow> _rows;
   bool _isSaving = false;
 
@@ -96,7 +144,77 @@ class TicketMaterialiEditorState extends State<TicketMaterialiEditor> {
     _rows = widget.initialRows.map(MaterialeEditRow.fromDto).toList();
   }
 
-  void _addRow() => setState(() => _rows.add(MaterialeEditRow()));
+  Future<void> _addMateriale() async {
+    final result = await showMaterialePickerDialog(
+      context,
+      showSource: true,
+      showFabbisognoSuggestions: false,
+      scanner: widget.scanner,
+    );
+    if (result == null || !mounted) return;
+    setState(
+      () => _rows.add(
+        MaterialeEditRow(
+          materialeId: result.materialeId,
+          freeTextName: result.materialeId == null ? result.freeTextName : null,
+          quantity: result.quantity,
+          unitOfMeasure: result.unitOfMeasure,
+          magazzinoId: result.magazzinoId,
+          magazzinoNome: result.magazzinoNome,
+          sourceResolved: true,
+          initialArticleName: result.materialeNome,
+          initialArticleCode: result.materialeCodice,
+        ),
+      ),
+    );
+  }
+
+  Future<MaterialeMatch?> _resolveCode(String code) async {
+    try {
+      return await lookupMaterialeByBarcode(ref, code);
+    } on DioException {
+      // The live lookup failed (not a 404) — the scan is still kept, as free text.
+      return null;
+    }
+  }
+
+  Future<void> _onScanPressed() async {
+    final code = await (widget.scanner ?? _openCameraScanner)(context);
+    if (code == null || !mounted) return;
+
+    final match = await _resolveCode(code);
+    if (!mounted) return;
+
+    final existing = _rows.where(
+      (r) => match != null
+          ? r.materialeId == match.id
+          : r.materialeId == null && r.freeTextName == code,
+    );
+    final incremented = existing.isNotEmpty;
+    setState(() {
+      if (incremented) {
+        existing.first.quantity += 1;
+      } else if (match != null) {
+        _rows.add(
+          MaterialeEditRow(
+            materialeId: match.id,
+            unitOfMeasure: match.unitOfMeasure,
+            initialArticleName: match.name,
+            initialArticleCode: match.code,
+          ),
+        );
+      } else {
+        _rows.add(MaterialeEditRow(freeTextName: code));
+      }
+    });
+    showAppToast(
+      context,
+      message: match != null
+          ? (incremented ? '${match.name}: quantità aumentata' : '${match.name} aggiunto')
+          : 'Codice $code non in catalogo: aggiunto come testo libero',
+      tone: match != null ? ToastTone.success : ToastTone.warning,
+    );
+  }
 
   void _removeRow(int index) => setState(() => _rows.removeAt(index));
 
@@ -113,6 +231,18 @@ class TicketMaterialiEditorState extends State<TicketMaterialiEditor> {
     setState(() => _isSaving = true);
     try {
       await widget.onSave(_rows.map((r) => r.toWriteRow()).toList());
+    } catch (e) {
+      // This save is a server replace with no offline queue behind it, so a failure has to say so:
+      // without this catch the exception escaped into the framework and the tap simply did nothing
+      // — the editor stayed open on rows the technician had already typed, with no sentence
+      // anywhere. The rows are still in the editor, so nothing typed is lost.
+      if (mounted) {
+        showAppToast(
+          context,
+          message: humanErrorMessage(e, azione: 'salvare il fabbisogno'),
+          tone: ToastTone.error,
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -133,9 +263,15 @@ class TicketMaterialiEditorState extends State<TicketMaterialiEditor> {
           const SizedBox(height: AppSpacing.md),
         ],
         AppButton.secondary(
+          label: 'Scansiona codice',
+          icon: const Icon(LucideIcons.scanLine, size: 18),
+          onPressed: _isSaving ? null : _onScanPressed,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        AppButton.secondary(
           label: 'Aggiungi materiale',
           icon: const Icon(LucideIcons.plus, size: 18),
-          onPressed: _addRow,
+          onPressed: _isSaving ? null : _addMateriale,
         ),
         const SizedBox(height: AppSpacing.lg),
         Row(
@@ -180,6 +316,7 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
   late final TextEditingController _quantityCtrl;
   late final TextEditingController _unitCtrl;
   late final TextEditingController _notesCtrl;
+  late final MaterialeSourceResolver _source;
 
   Timer? _debounce;
   late List<LookupItem> _articleOptions;
@@ -188,6 +325,7 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
   @override
   void initState() {
     super.initState();
+    _source = MaterialeSourceResolver(ref)..addListener(_onSourceChanged);
     _quantityCtrl = TextEditingController(text: _formatQuantity(widget.row.quantity));
     _unitCtrl = TextEditingController(text: widget.row.unitOfMeasure ?? '');
     _notesCtrl = TextEditingController(text: widget.row.notes ?? '');
@@ -203,15 +341,53 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
             ),
           ]
         : const [];
+    // A scanned catalogue row reaches the editor with no source yet: resolve it here so it gets
+    // the same single/multiple/none behaviour as an article chosen in the picker. Rows from the
+    // server or the picker already carry an authoritative source (even null) and are left alone.
+    if (widget.row.materialeId != null && !widget.row.sourceResolved) {
+      _source.resolve(
+        id: widget.row.materialeId!,
+        name: widget.row.initialArticleName ?? '',
+        code: widget.row.initialArticleCode ?? '',
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(_MaterialeRowEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A scan of an article already on the list bumps row.quantity from outside this field; typing
+    // always writes the parsed value back to the row first, so equal means nothing to refresh.
+    final typed = double.tryParse(_quantityCtrl.text.replaceAll(',', '.')) ?? 0;
+    if (typed != widget.row.quantity) {
+      _quantityCtrl.text = _formatQuantity(widget.row.quantity);
+    }
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _source
+      ..removeListener(_onSourceChanged)
+      ..dispose();
     _quantityCtrl.dispose();
     _unitCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
+  }
+
+  /// The shared resolver owns the giacenza/mirror state; this row owns the persisted choice.
+  /// Existing rows keep their source untouched until the article itself changes; a new article
+  /// clears it and re-resolves (single auto-select, multiple picker, none null).
+  void _onSourceChanged() {
+    if (!mounted) return;
+    final id = _source.magazzinoId;
+    final nome = _source.magazzinoNome;
+    final changed = widget.row.magazzinoId != id || widget.row.magazzinoNome != nome;
+    widget.row.magazzinoId = id;
+    widget.row.magazzinoNome = nome;
+    setState(() {});
+    if (changed) widget.onChanged();
   }
 
   static String _formatQuantity(double q) =>
@@ -219,14 +395,13 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
 
   void _onArticleQueryChanged(String query) {
     _debounce?.cancel();
-    if (query.trim().isEmpty) {
+    final q = query.trim();
+    if (q.isEmpty) {
       setState(() => _articleOptions = const []);
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 300), () async {
-      final results = await ref
-          .read(ticketDetailApiClientProvider)
-          .searchMateriali(query.trim());
+      final results = await _searchCatalogue(q);
       if (!mounted) return;
       for (final r in results) {
         _resultCache[r.id] = r;
@@ -239,22 +414,86 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
     });
   }
 
+  /// The catalogue search behind the article field: the server while online, the mirrored
+  /// catalogue otherwise.
+  ///
+  /// The field used to be a bare `GET /Materiali`, so on site the call threw out of the timer
+  /// callback — nothing caught it, `_articleOptions` was never updated, and the technician saw a
+  /// silent "no suggestions" with no way to tell "not found" from "no signal". The sync already
+  /// mirrors the catalogue (`materiali`), so the same question is answerable offline; and when the
+  /// radio says online and the call still fails, the mirror beats a field that silently stops
+  /// working.
+  Future<List<MaterialeSearchResult>> _searchCatalogue(String query) async {
+    if (!ref.read(isOnlineProvider)) return _searchMirror(query);
+    try {
+      return await ref.read(ticketDetailApiClientProvider).searchMateriali(query);
+    } on DioException {
+      return _searchMirror(query);
+    }
+  }
+
+  /// [_searchCatalogue]'s offline half: name or code contains the query, active articles only.
+  ///
+  /// Same 20-row cap and alphabetical order as the server's page, so the dropdown behaves the
+  /// same either way. `LIKE` rather than a Dart-side pass so a large catalogue never has to be
+  /// read off the device to answer one keystroke.
+  Future<List<MaterialeSearchResult>> _searchMirror(String query) async {
+    final AppDatabase db = ref.read(appDatabaseProvider);
+    final rows =
+        await (db.select(db.materiali)
+              ..where(
+                (m) =>
+                    m.isActive.equals(true) & (m.name.like('%$query%') | m.code.like('%$query%')),
+              )
+              ..orderBy([(m) => OrderingTerm.asc(m.name)])
+              ..limit(20))
+            .get();
+    return rows
+        .map(
+          (m) => MaterialeSearchResult(
+            id: m.id,
+            name: m.name,
+            code: m.code,
+            unitOfMeasure: m.unitOfMeasure,
+          ),
+        )
+        .toList();
+  }
+
   void _onArticleSelected(String id) {
+    final picked = _resultCache[id];
+    final sameArticle = widget.row.materialeId == id;
     widget.row.materialeId = id;
     widget.row.freeTextName = null;
     // Convenience auto-fill, same as web's TicketMaterialiEditor: a starting value only, still
     // fully editable afterward — never overwrites a unit the technician already typed.
-    final picked = _resultCache[id];
     if (picked?.unitOfMeasure != null && _unitCtrl.text.trim().isEmpty) {
       _unitCtrl.text = picked!.unitOfMeasure!;
       widget.row.unitOfMeasure = picked.unitOfMeasure;
     }
+
+    if (sameArticle && widget.row.magazzinoId != null) {
+      // Re-picking the row's own article must not drop the source the office already chose.
+      widget.onChanged();
+      return;
+    }
+
+    widget.row.magazzinoId = null;
+    widget.row.magazzinoNome = null;
     widget.onChanged();
+    _source.resolve(
+      id: id,
+      name: picked?.name ?? widget.row.initialArticleName ?? '',
+      code: picked?.code ?? widget.row.initialArticleCode ?? '',
+    );
   }
 
   void _onArticleFreeText(String text) {
     widget.row.freeTextName = text.isEmpty ? null : text;
     widget.row.materialeId = null;
+    widget.row.magazzinoId = null;
+    widget.row.magazzinoNome = null;
+    _source.clear();
     widget.onChanged();
   }
 
@@ -318,6 +557,31 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
               ),
             ],
           ),
+          if (widget.row.materialeId != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            if (_source.loading ||
+                _source.error != null ||
+                _source.giacenze != null ||
+                _source.offlineMagazzini != null)
+              MaterialeSourceSection(
+                loading: _source.loading,
+                error: _source.error,
+                giacenze: _source.giacenze,
+                offlineMagazzini: _source.offlineMagazzini,
+                selectedMagazzinoId: widget.row.magazzinoId,
+                onChanged: (id, nome) {
+                  widget.row.magazzinoId = id;
+                  widget.row.magazzinoNome = nome;
+                  setState(() {});
+                  widget.onChanged();
+                },
+              )
+            else if (widget.row.magazzinoId != null)
+              Text(
+                'Da: ${widget.row.magazzinoNome ?? widget.row.magazzinoId}',
+                style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+              ),
+          ],
           const SizedBox(height: AppSpacing.sm),
           AppTextField(
             label: 'Note',

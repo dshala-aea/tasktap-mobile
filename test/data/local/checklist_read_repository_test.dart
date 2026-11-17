@@ -7,7 +7,7 @@ import 'package:tasktap_mobile/data/sync/checklist_reconciler.dart';
 import 'package:tasktap_mobile/data/sync/checklist_sync_dto.dart';
 import 'package:tasktap_mobile/domain/checklist/control_type.dart';
 
-SyncTicketControlDto row(String id, String asset, String group, int sort, {String lineage = 'l', bool required = false, ControlType type = ControlType.checkbox}) =>
+SyncTicketControlDto row(String id, String? asset, String group, int sort, {String lineage = 'l', bool required = false, ControlType type = ControlType.checkbox}) =>
     SyncTicketControlDto(
       id: id, ticketId: 't1', prodottoAssistenzaId: asset, templateControlId: 'tc-$id',
       controlLineageId: lineage, groupId: group, label: 'Label $id', type: type,
@@ -119,14 +119,60 @@ void main() {
     expect(tree.hasAnything, isTrue);
   });
 
-  test('ticket-level rows are not part of the asset tree', () async {
+  test('a ticket-level row is not an asset, but still means the ticket has a checklist', () async {
     await db.into(db.ticketControls).insert(
           TicketControlsCompanion.insert(
             id: 'tl', ticketId: 't1', templateControlId: 'x', controlLineageId: 'l', groupId: 'g',
             label: 'Livello ticket', type: 'Text',
           ),
         );
-    expect((await repo.watchTicketChecklist('t1').first).hasAnything, isFalse);
+    final tree = await repo.watchTicketChecklist('t1').first;
+
+    expect(tree.distinctAssets, isEmpty, reason: 'a ticket-level row hangs off no asset');
+    expect(tree.librettos, isEmpty);
+    expect(tree.standalone, isEmpty);
+    expect(tree.ticketLevel.single.id, 'tl');
+    expect(tree.ticketLevel.single.assetId, isNull);
+    expect(tree.hasAnything, isTrue, reason: 'zero assets, but not "nothing planned"');
+    expect(tree.hasAssetChecklists, isFalse, reason: 'the asset card must stay hidden');
+  });
+
+  test('asset-only trees are unchanged and carry no ticket-level rows', () async {
+    await apply(
+      groups: [g('g', 'G', 0)],
+      controls: [row('c1', 'a', 'g', 0)],
+      coverage: const [SyncTicketAssetDto(ticketId: 't1', prodottoAssistenzaId: 'a', maintenanceTemplateVersionId: 'v1')],
+      assets: const [SyncAssetDto(id: 'a', name: 'A')],
+    );
+
+    final tree = await repo.watchTicketChecklist('t1').first;
+
+    expect(tree.standalone.single.controls.single.id, 'c1');
+    expect(tree.ticketLevel, isEmpty);
+    expect(tree.hasAnything, isTrue);
+    expect(tree.hasAssetChecklists, isTrue);
+  });
+
+  test('the raw readers expose every row of the ticket plus the shared group table', () async {
+    await apply(
+      groups: [g('g', 'G', 0)],
+      controls: [row('c1', 'a', 'g', 0), row('tl', null, 'g', 1), row('other', null, 'g', 2)],
+      coverage: const [SyncTicketAssetDto(ticketId: 't1', prodottoAssistenzaId: 'a', maintenanceTemplateVersionId: 'v1')],
+      assets: const [SyncAssetDto(id: 'a', name: 'A')],
+    );
+    // A row of another ticket must not leak into this ticket's read.
+    await db.into(db.ticketControls).insert(
+          TicketControlsCompanion.insert(
+            id: 'foreign', ticketId: 't2', templateControlId: 'x', controlLineageId: 'l',
+            groupId: 'g', label: 'Altro ticket', type: 'Text',
+          ),
+        );
+
+    final rows = await repo.watchTicketControlRows('t1').first;
+    final groups = await repo.watchControlGroups().first;
+
+    expect(rows.map((r) => r.id).toSet(), {'c1', 'tl', 'other'});
+    expect(groups.map((r) => r.id).toList(), ['g']);
   });
 
   test('stream re-emits when a row changes (server value arrives with a sync)', () async {

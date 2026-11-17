@@ -18,6 +18,7 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/data/auth/zitadel_auth_repository.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 
@@ -62,6 +63,10 @@ void main() {
 
   setUp(() {
     store = {};
+    // The cold-start ending records the retained-data owner through SharedPreferences before it
+    // drops the credentials (see `retained_owner.dart`). Mocked here so that write settles like a
+    // real device's rather than depending on a platform channel this test binding does not answer.
+    SharedPreferences.setMockInitialValues({});
     appAuth = MockAppAuth();
     storage = MockSecureStorage();
 

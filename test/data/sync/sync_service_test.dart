@@ -14,10 +14,12 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_dto.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
-import 'package:tasktap_mobile/features/timbra/cantiere_timbra_screen.dart' show cantieriProvider;
+import 'package:tasktap_mobile/features/timbra/cantiere_timbra_screen.dart'
+    show cantieriProvider;
 import 'package:tasktap_mobile/presentation/providers/schedule_providers.dart';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
@@ -64,7 +66,14 @@ Map<String, dynamic> _syncPayload({
   };
 }
 
-Map<String, dynamic> _customerJson({String id = 'cust-1', String companyName = 'ACME Srl'}) => {
+Map<String, dynamic> _customerJson({
+  String id = 'cust-1',
+  String companyName = 'ACME Srl',
+  // Omitted from the payload when null AND `withAgentKey` is false — an older backend sends no
+  // `agentId` key at all, which must read the same as an explicit null.
+  String? agentId,
+  bool withAgentKey = false,
+}) => {
   'id': id,
   'tenantId': 'tenant-1',
   'createdAt': '2026-01-01T00:00:00Z',
@@ -80,6 +89,7 @@ Map<String, dynamic> _customerJson({String id = 'cust-1', String companyName = '
   'contactPerson': null,
   'notes': null,
   'isActive': true,
+  if (agentId != null || withAgentKey) 'agentId': agentId,
 };
 
 Map<String, dynamic> _locationJson({
@@ -109,6 +119,9 @@ Map<String, dynamic> _scheduleJson({
   String title = 'Manutenzione',
   String? updatedAt,
   String activityDate = '2026-06-21T00:00:00Z',
+  bool isAssenza = false,
+  bool isBlockOccupied = false,
+  String? absenceRequestId,
   List<Map<String, dynamic>>? assignees,
 }) => {
   'id': id,
@@ -124,6 +137,11 @@ Map<String, dynamic> _scheduleJson({
   'locationId': 'loc-1',
   'allDay': false,
   'title': title,
+  // Present on every row the server sends; only absence-owned ones are true.
+  'isAssenza': isAssenza,
+  // Same order the server serializes them in.
+  'isBlockOccupied': isBlockOccupied,
+  'absenceRequestId': absenceRequestId,
   'description': 'Descrizione intervento',
   'assignees':
       assignees ??
@@ -139,7 +157,10 @@ Map<String, dynamic> _scheduleJson({
       ],
 };
 
-Map<String, dynamic> _ticketJson({String id = 'ticket-1'}) => {
+Map<String, dynamic> _ticketJson({
+  String id = 'ticket-1',
+  String? priorita = 'Media',
+}) => {
   'id': id,
   'tenantId': 'tenant-1',
   'createdAt': '2026-01-01T00:00:00Z',
@@ -156,29 +177,32 @@ Map<String, dynamic> _ticketJson({String id = 'ticket-1'}) => {
   'technicianNotes': null,
   'internalNotes': null,
   'contractId': null,
-  'prodottoAssistenzaId': null,
   'commessaId': null,
+  // The server's own spelling — `Ticket.Priorita` carries `[JsonPropertyName("priorita")]`.
+  // There is no `priority` key on the wire, and a fixture that invents one hides the bug where
+  // the client read that name and stored null for every ticket.
+  'priorita': priorita,
 };
 
-Map<String, dynamic> _ticketStatusJson({int id = 1, String name = 'Aperto'}) => {
-  'id': id,
-  'tenantId': 'tenant-1',
-  'name': name,
-  'isDefault': true,
-  'isClosed': false,
-};
+Map<String, dynamic> _ticketStatusJson({int id = 1, String name = 'Aperto'}) =>
+    {
+      'id': id,
+      'tenantId': 'tenant-1',
+      'name': name,
+      'isDefault': true,
+      'isClosed': false,
+    };
 
-Map<String, dynamic> _ticketTypeJson({int id = 1, String name = 'Assistenza'}) => {
-  'id': id,
-  'tenantId': 'tenant-1',
-  'name': name,
-  'description': null,
-};
+Map<String, dynamic> _ticketTypeJson({
+  int id = 1,
+  String name = 'Assistenza',
+}) => {'id': id, 'tenantId': 'tenant-1', 'name': name, 'description': null};
 
 Map<String, dynamic> _draftReportJson({
   String id = 'report-1',
   String stato = 'Bozza',
   String? updatedAt,
+  bool isAiAssisted = false,
 }) => {
   'id': id,
   'tenantId': 'tenant-1',
@@ -193,7 +217,6 @@ Map<String, dynamic> _draftReportJson({
   'locationId': 'loc-1',
   'startedAt': null,
   'endedAt': null,
-  'documentTemplateId': null,
   'customerSignatureAllegatoId': null,
   'technicianSignatureAllegatoId': null,
   'technicianNotes': null,
@@ -206,10 +229,15 @@ Map<String, dynamic> _draftReportJson({
   'materialiNotRequired': false,
   'customerSignoffText': null,
   'customerSignoffAt': null,
+  'isAiAssisted': isAiAssisted,
 };
 
 /// Stub a Dio GET response with the given JSON body.
-void _stubDioGet(MockDio mockDio, Map<String, dynamic> body, {Map<String, dynamic>? queryParams}) {
+void _stubDioGet(
+  MockDio mockDio,
+  Map<String, dynamic> body, {
+  Map<String, dynamic>? queryParams,
+}) {
   when(
     () => mockDio.get<Map<String, dynamic>>(
       any(),
@@ -286,14 +314,92 @@ void main() {
     test('stores a ticket\'s tags as JSON text', () async {
       _stubDioGet(
         mockDio,
-        _syncPayload(tickets: [_ticketJson()..['tags'] = ['urgente', 'garanzia']]),
+        _syncPayload(
+          tickets: [
+            _ticketJson()..['tags'] = ['urgente', 'garanzia'],
+          ],
+        ),
       );
 
       await svc.sync();
 
-      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      final row = await (db.select(
+        db.tickets,
+      )..where((t) => t.id.equals('ticket-1'))).getSingle();
       expect(row.tagsJson, '["urgente","garanzia"]');
     });
+
+    // The priority column existed since schema 20 and was filled from `priority` — a key the
+    // server never sends. Every mirrored ticket held a null, and the list's priority stripe and
+    // TalkBack label were blank on every device. The value rides on `priorita`.
+    test('stores a ticket\'s priority from the priorita key', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(tickets: [_ticketJson(priorita: 'Urgente')]),
+      );
+
+      await svc.sync();
+
+      final row = await (db.select(
+        db.tickets,
+      )..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.priority, 'Urgente');
+    });
+
+    test(
+      'a ticket payload with no priorita stores a null priority, not a guess',
+      () async {
+        _stubDioGet(
+          mockDio,
+          _syncPayload(tickets: [_ticketJson(priorita: null)]),
+        );
+
+        await svc.sync();
+
+        final row = await (db.select(
+          db.tickets,
+        )..where((t) => t.id.equals('ticket-1'))).getSingle();
+        expect(row.priority, isNull);
+      },
+    );
+
+    // Field-parity gap: `TicketDto.prodottoAssistenzaIds` rode the wire since the join table existed
+    // and mobile stored nothing — the ticket screen's "prodotti" section rebuilt the list from the
+    // checklist's `ticket_assets` mirror instead, which is capped per sync and empty for a job with
+    // no controls. Stored as JSON text, same as `tagsJson`.
+    test('stores the prodotti assistenza a ticket covers', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          tickets: [
+            _ticketJson()..['prodottoAssistenzaIds'] = ['pa-1', 'pa-2'],
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final row = await (db.select(
+        db.tickets,
+      )..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.prodottoAssistenzaIdsJson, '["pa-1","pa-2"]');
+    });
+
+    test(
+      'a ticket with no prodotti assistenza stores an empty list, not null',
+      () async {
+        // The server always fills the key (it is a list, defaulting to empty), and the reader
+        // distinguishes "no coverage" from "never synced". Encoding `[]` keeps both paths one shape.
+        _stubDioGet(mockDio, _syncPayload(tickets: [_ticketJson()]));
+
+        await svc.sync();
+
+        final row = await (db.select(
+          db.tickets,
+        )..where((t) => t.id.equals('ticket-1'))).getSingle();
+        expect(row.prodottoAssistenzaIdsJson, '[]');
+      },
+    );
 
     test('inserts a new schedule with parsed time minutes', () async {
       _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson()]));
@@ -309,6 +415,100 @@ void main() {
       expect(s.timeStartMinutes, 480);
       expect(s.timeEndMinutes, 1020);
     });
+
+    // An approved absence is materialised server-side as an ordinary schedule, so this flag is the
+    // only thing on the row that says "not work". It has to survive the mirror write, or every
+    // reader downstream (queue, counters, admin screens) keeps treating the day off as a job.
+    test("mirrors the server's absence flag onto the row", () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          schedules: [
+            _scheduleJson(id: 'sched-ferie', title: 'ferie', isAssenza: true),
+            _scheduleJson(id: 'sched-job'),
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.schedules).get();
+      expect(rows.firstWhere((s) => s.id == 'sched-ferie').isAssenza, isTrue);
+      expect(rows.firstWhere((s) => s.id == 'sched-job').isAssenza, isFalse);
+    });
+
+    // The two leaves schema 62 added. Nothing else in the app writes them, so without these the
+    // upsert could drop either one and every device would read the column default forever while
+    // the whole suite stayed green.
+    test(
+      'mirrors the block flag and the owning absence request onto the row',
+      () async {
+        _stubDioGet(
+          mockDio,
+          _syncPayload(
+            schedules: [
+              _scheduleJson(id: 'sched-block', isBlockOccupied: true),
+              _scheduleJson(
+                id: 'sched-ferie',
+                isAssenza: true,
+                absenceRequestId: 'req-1',
+              ),
+              _scheduleJson(id: 'sched-job'),
+            ],
+          ),
+        );
+
+        await svc.sync();
+
+        final rows = await db.select(db.schedules).get();
+        final block = rows.firstWhere((s) => s.id == 'sched-block');
+        expect(block.isBlockOccupied, isTrue);
+        expect(
+          block.absenceRequestId,
+          isNull,
+          reason: 'a block is not an absence',
+        );
+
+        final ferie = rows.firstWhere((s) => s.id == 'sched-ferie');
+        expect(ferie.absenceRequestId, 'req-1');
+        expect(ferie.isBlockOccupied, isFalse);
+
+        final job = rows.firstWhere((s) => s.id == 'sched-job');
+        expect(job.isBlockOccupied, isFalse);
+        expect(job.absenceRequestId, isNull);
+      },
+    );
+
+    // The mirror is upsert-only, so a re-sync is the only thing that can clear a flag the server
+    // dropped — deleting the block must unlock the day on a device that already saw it locked.
+    test(
+      'a re-sync clears the block flag when the server stops sending it',
+      () async {
+        _stubDioGet(
+          mockDio,
+          _syncPayload(
+            schedules: [_scheduleJson(id: 'sched-1', isBlockOccupied: true)],
+          ),
+        );
+        await svc.sync();
+        expect(
+          (await db.select(db.schedules).getSingle()).isBlockOccupied,
+          isTrue,
+          reason: 'precondition: the first sync locks the day',
+        );
+
+        _stubDioGet(
+          mockDio,
+          _syncPayload(schedules: [_scheduleJson(id: 'sched-1')]),
+        );
+        await svc.sync();
+
+        expect(
+          (await db.select(db.schedules).getSingle()).isBlockOccupied,
+          isFalse,
+        );
+      },
+    );
 
     test('stores who is on a schedule', () async {
       _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson()]));
@@ -369,7 +569,12 @@ void main() {
       _stubDioGet(
         mockDio,
         _syncPayload(
-          schedules: [_scheduleJson(updatedAt: '2026-06-22T00:00:00Z', assignees: const [])],
+          schedules: [
+            _scheduleJson(
+              updatedAt: '2026-06-22T00:00:00Z',
+              assignees: const [],
+            ),
+          ],
         ),
       );
       await svc.sync();
@@ -388,36 +593,103 @@ void main() {
       expect(rows.first.stato, 'Bozza');
     });
 
-    test('a synced-down draft carries no version — the bulk sync DTO has none', () async {
-      // The stale-submit guard's boundary, pinned rather than assumed. The mobile-sync
-      // `draftReports` payload (ReportDto) has no version field, so this path cannot set
-      // expectedVersion even in principle — it is a backend DTO change, out of scope here. A row
-      // that only ever arrived via sync therefore submits with no version until the technician
-      // opens it, at which point the list's import (importServerReport) fetches the full report and
-      // stamps the version. This test states that boundary: sync alone does not arm the guard.
-      _stubDioGet(mockDio, _syncPayload(draftReports: [_draftReportJson()]));
+    // Authorship is a compliance claim (ADR-0016 §2), so it has to survive the server round trip.
+    // The column has existed since the draft editor started setting it locally; what was missing is
+    // this side of the write — the flag was never parsed, and an unlisted column in the companion is
+    // written as its DEFAULT on insert, so every server-arrived draft came back as hand-written.
+    test('a server-arrived draft keeps its AI-authorship flag', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(draftReports: [_draftReportJson(isAiAssisted: true)]),
+      );
 
       await svc.sync();
 
       final row = (await db.select(db.draftReports).get()).single;
-      expect(
-        row.expectedVersion,
-        isNull,
-        reason: 'sync-down cannot learn a version; only a full report import can',
-      );
+      expect(row.isAiAssisted, isTrue);
     });
 
-    test('carries diagnosi, soluzione and cantiereId from the synced report', () async {
+    test('a re-sync clears the flag when the server says the report is not AI-assisted', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(draftReports: [_draftReportJson(isAiAssisted: true)]),
+      );
+      await svc.sync();
+
       _stubDioGet(
         mockDio,
         _syncPayload(
           draftReports: [
-            {
-              ..._draftReportJson(),
-              'diagnosi': 'Pompa bloccata',
-              'soluzione': 'Sostituita',
-              'cantiereId': 'cantiere-9',
-            },
+            _draftReportJson(
+              updatedAt: '2026-06-22T09:00:00Z',
+              isAiAssisted: false,
+            ),
+          ],
+        ),
+      );
+      await svc.sync();
+
+      final row = (await db.select(db.draftReports).get()).single;
+      expect(row.isAiAssisted, isFalse);
+    });
+
+    test(
+      'a synced-down draft carries no version — the bulk sync DTO has none',
+      () async {
+        // The stale-submit guard's boundary, pinned rather than assumed. The mobile-sync
+        // `draftReports` payload (ReportDto) has no version field, so this path cannot set
+        // expectedVersion even in principle — it is a backend DTO change, out of scope here. A row
+        // that only ever arrived via sync therefore submits with no version until the technician
+        // opens it, at which point the list's import (importServerReport) fetches the full report and
+        // stamps the version. This test states that boundary: sync alone does not arm the guard.
+        _stubDioGet(mockDio, _syncPayload(draftReports: [_draftReportJson()]));
+
+        await svc.sync();
+
+        final row = (await db.select(db.draftReports).get()).single;
+        expect(
+          row.expectedVersion,
+          isNull,
+          reason:
+              'sync-down cannot learn a version; only a full report import can',
+        );
+      },
+    );
+
+    test(
+      'carries diagnosi, soluzione and cantiereId from the synced report',
+      () async {
+        _stubDioGet(
+          mockDio,
+          _syncPayload(
+            draftReports: [
+              {
+                ..._draftReportJson(),
+                'diagnosi': 'Pompa bloccata',
+                'soluzione': 'Sostituita',
+                'cantiereId': 'cantiere-9',
+              },
+            ],
+          ),
+        );
+
+        await svc.sync();
+
+        final row = (await db.select(db.draftReports).get()).single;
+        expect(row.diagnosi, 'Pompa bloccata');
+        expect(row.soluzione, 'Sostituita');
+        expect(row.cantiereId, 'cantiere-9');
+      },
+    );
+
+    // Field-parity gap: the rapportino's human number was on the wire and never stored, so the
+    // rapportini list had nothing to identify a row by beyond its title.
+    test('carries the report numero from the synced report', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          draftReports: [
+            {..._draftReportJson(), 'numero': 'RAP-2026-0042'},
           ],
         ),
       );
@@ -425,9 +697,18 @@ void main() {
       await svc.sync();
 
       final row = (await db.select(db.draftReports).get()).single;
-      expect(row.diagnosi, 'Pompa bloccata');
-      expect(row.soluzione, 'Sostituita');
-      expect(row.cantiereId, 'cantiere-9');
+      expect(row.numero, 'RAP-2026-0042');
+    });
+
+    test('a report the server has not numbered yet stores a null numero, not an empty string', () async {
+      // A draft created on the device and never submitted has no number. Null keeps that distinct
+      // from a number the server sent as blank, which would render as a bare `#`.
+      _stubDioGet(mockDio, _syncPayload(draftReports: [_draftReportJson()]));
+
+      await svc.sync();
+
+      final row = (await db.select(db.draftReports).get()).single;
+      expect(row.numero, isNull);
     });
 
     test('inserts multiple entities in one sync', () async {
@@ -459,12 +740,17 @@ void main() {
       // First sync — insert
       _stubDioGet(
         mockDio,
-        _syncPayload(customers: [_customerJson(companyName: 'Vecchio Nome Srl')]),
+        _syncPayload(
+          customers: [_customerJson(companyName: 'Vecchio Nome Srl')],
+        ),
       );
       await svc.sync();
 
       // Second sync — update same id with new company name
-      _stubDioGet(mockDio, _syncPayload(customers: [_customerJson(companyName: 'Nuovo Nome Spa')]));
+      _stubDioGet(
+        mockDio,
+        _syncPayload(customers: [_customerJson(companyName: 'Nuovo Nome Spa')]),
+      );
       await svc.sync();
 
       final rows = await db.select(db.customers).get();
@@ -472,11 +758,44 @@ void main() {
       expect(rows.first.companyName, 'Nuovo Nome Spa');
     });
 
-    test('updates existing schedule on re-sync', () async {
-      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson(title: 'Primo')]));
+    test(
+      'stores the customer\'s agentId, and a re-sync that drops it clears it',
+      () async {
+        _stubDioGet(
+          mockDio,
+          _syncPayload(customers: [_customerJson(agentId: 'ag-1')]),
+        );
+        await svc.sync();
+        expect((await db.select(db.customers).getSingle()).agentId, 'ag-1');
+
+        // The server removed the agent: its value is authoritative, so the local one must go too.
+        _stubDioGet(
+          mockDio,
+          _syncPayload(customers: [_customerJson(withAgentKey: true)]),
+        );
+        await svc.sync();
+        expect((await db.select(db.customers).getSingle()).agentId, isNull);
+      },
+    );
+
+    test('a customer from an older backend (no agentId key) syncs with a null agent', () async {
+      _stubDioGet(mockDio, _syncPayload(customers: [_customerJson()]));
       await svc.sync();
 
-      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson(title: 'Aggiornato')]));
+      expect((await db.select(db.customers).getSingle()).agentId, isNull);
+    });
+
+    test('updates existing schedule on re-sync', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(schedules: [_scheduleJson(title: 'Primo')]),
+      );
+      await svc.sync();
+
+      _stubDioGet(
+        mockDio,
+        _syncPayload(schedules: [_scheduleJson(title: 'Aggiornato')]),
+      );
       await svc.sync();
 
       final rows = await db.select(db.schedules).get();
@@ -484,17 +803,20 @@ void main() {
       expect(rows.first.title, 'Aggiornato');
     });
 
-    test('idempotent: calling sync twice with same payload yields one row', () async {
-      final payload = _syncPayload(customers: [_customerJson()]);
-      _stubDioGet(mockDio, payload);
-      await svc.sync();
+    test(
+      'idempotent: calling sync twice with same payload yields one row',
+      () async {
+        final payload = _syncPayload(customers: [_customerJson()]);
+        _stubDioGet(mockDio, payload);
+        await svc.sync();
 
-      _stubDioGet(mockDio, payload);
-      await svc.sync();
+        _stubDioGet(mockDio, payload);
+        await svc.sync();
 
-      final rows = await db.select(db.customers).get();
-      expect(rows.length, 1);
-    });
+        final rows = await db.select(db.customers).get();
+        expect(rows.length, 1);
+      },
+    );
   });
 
   // ── Report lifecycle read-back (mobile audit item #1) ──────────────────────
@@ -506,45 +828,66 @@ void main() {
   // draft_reports table, converges on repeated syncs, and a Respinto change is picked up.
 
   group('sync — submittedReports (server-side lifecycle read-back)', () {
-    test('upserts a submitted report even though it was never a local draft', () async {
-      _stubDioGet(
-        mockDio,
-        _syncPayload(submittedReports: [_draftReportJson(id: 'report-1', stato: 'Inviato')]),
-      );
+    test(
+      'upserts a submitted report even though it was never a local draft',
+      () async {
+        _stubDioGet(
+          mockDio,
+          _syncPayload(
+            submittedReports: [
+              _draftReportJson(id: 'report-1', stato: 'Inviato'),
+            ],
+          ),
+        );
 
-      await svc.sync();
+        await svc.sync();
 
-      final rows = await db.select(db.draftReports).get();
-      expect(rows.length, 1);
-      expect(rows.first.id, 'report-1');
-      expect(rows.first.stato, 'Inviato');
-      expect(rows.first.isLocalOnly, isFalse);
-    });
+        final rows = await db.select(db.draftReports).get();
+        expect(rows.length, 1);
+        expect(rows.first.id, 'report-1');
+        expect(rows.first.stato, 'Inviato');
+        expect(rows.first.isLocalOnly, isFalse);
+      },
+    );
 
-    test('a Respinto status change from the office is picked up on the next sync', () async {
-      // First sync: submitted, awaiting review.
-      _stubDioGet(
-        mockDio,
-        _syncPayload(submittedReports: [_draftReportJson(id: 'report-1', stato: 'Inviato')]),
-      );
-      await svc.sync();
-      expect((await db.select(db.draftReports).get()).single.stato, 'Inviato');
+    test(
+      'a Respinto status change from the office is picked up on the next sync',
+      () async {
+        // First sync: submitted, awaiting review.
+        _stubDioGet(
+          mockDio,
+          _syncPayload(
+            submittedReports: [
+              _draftReportJson(id: 'report-1', stato: 'Inviato'),
+            ],
+          ),
+        );
+        await svc.sync();
+        expect(
+          (await db.select(db.draftReports).get()).single.stato,
+          'Inviato',
+        );
 
-      // Office rejects it (POST /api/reports/{id}/respingi) — the next sync reflects that.
-      _stubDioGet(
-        mockDio,
-        _syncPayload(
-          submittedReports: [
-            _draftReportJson(id: 'report-1', stato: 'Respinto', updatedAt: '2026-06-22T09:00:00Z'),
-          ],
-        ),
-      );
-      await svc.sync();
+        // Office rejects it (POST /api/reports/{id}/respingi) — the next sync reflects that.
+        _stubDioGet(
+          mockDio,
+          _syncPayload(
+            submittedReports: [
+              _draftReportJson(
+                id: 'report-1',
+                stato: 'Respinto',
+                updatedAt: '2026-06-22T09:00:00Z',
+              ),
+            ],
+          ),
+        );
+        await svc.sync();
 
-      final rows = await db.select(db.draftReports).get();
-      expect(rows.length, 1, reason: 'must update in place, not duplicate');
-      expect(rows.first.stato, 'Respinto');
-    });
+        final rows = await db.select(db.draftReports).get();
+        expect(rows.length, 1, reason: 'must update in place, not duplicate');
+        expect(rows.first.stato, 'Respinto');
+      },
+    );
 
     test('an already-synced status is a no-op on a repeated sync with the same payload', () async {
       final payload = _syncPayload(
@@ -582,7 +925,11 @@ void main() {
 
       _stubDioGet(
         mockDio,
-        _syncPayload(submittedReports: [_draftReportJson(id: 'report-1', stato: 'Respinto')]),
+        _syncPayload(
+          submittedReports: [
+            _draftReportJson(id: 'report-1', stato: 'Respinto'),
+          ],
+        ),
       );
       await svc.sync();
 
@@ -630,15 +977,24 @@ void main() {
       await svc.sync();
 
       final rows = await db.select(db.draftReports).get();
-      expect(rows, hasLength(1), reason: 'must not duplicate — same id, upsert semantics');
+      expect(
+        rows,
+        hasLength(1),
+        reason: 'must not duplicate — same id, upsert semantics',
+      );
       final row = rows.single;
       expect(
         row.title,
         'Rapportino — Cantiere Via Roma',
-        reason: 'the technician\'s own title must survive a background sync tick',
+        reason:
+            'the technician\'s own title must survive a background sync tick',
       );
       expect(row.details, 'Note scritte sul posto');
-      expect(row.isLocalOnly, isTrue, reason: 'still a local draft in progress, not synced-down');
+      expect(
+        row.isLocalOnly,
+        isTrue,
+        reason: 'still a local draft in progress, not synced-down',
+      );
     });
   });
 
@@ -670,10 +1026,16 @@ void main() {
     });
 
     test('upserts ticketStatus on re-sync', () async {
-      _stubDioGet(mockDio, _syncPayload(ticketStatuses: [_ticketStatusJson(name: 'Vecchio')]));
+      _stubDioGet(
+        mockDio,
+        _syncPayload(ticketStatuses: [_ticketStatusJson(name: 'Vecchio')]),
+      );
       await svc.sync();
 
-      _stubDioGet(mockDio, _syncPayload(ticketStatuses: [_ticketStatusJson(name: 'Aggiornato')]));
+      _stubDioGet(
+        mockDio,
+        _syncPayload(ticketStatuses: [_ticketStatusJson(name: 'Aggiornato')]),
+      );
       await svc.sync();
 
       final rows = await db.select(db.ticketStatuses).get();
@@ -710,7 +1072,8 @@ void main() {
         ),
       ).thenAnswer((invocation) async {
         capturedParams.add(
-          invocation.namedArguments[const Symbol('queryParameters')] as Map<String, dynamic>?,
+          invocation.namedArguments[const Symbol('queryParameters')]
+              as Map<String, dynamic>?,
         );
         return Response<Map<String, dynamic>>(
           requestOptions: RequestOptions(path: '/api/sync/mobile'),
@@ -737,7 +1100,8 @@ void main() {
         ),
       ).thenAnswer((invocation) async {
         capturedParams.add(
-          invocation.namedArguments[const Symbol('queryParameters')] as Map<String, dynamic>?,
+          invocation.namedArguments[const Symbol('queryParameters')]
+              as Map<String, dynamic>?,
         );
         return Response<Map<String, dynamic>>(
           requestOptions: RequestOptions(path: '/api/sync/mobile'),
@@ -791,41 +1155,46 @@ void main() {
   // ── Provider emits cached data offline ────────────────────────────────────
 
   group('Riverpod providers — offline cache', () {
-    test('todaySchedulesProvider emits schedules from Drift without network', () async {
-      // Pre-seed DB directly (no network)
-      final today = DateTime.now().toUtc();
-      final todayDate = DateTime.utc(today.year, today.month, today.day);
+    test(
+      'todaySchedulesProvider emits schedules from Drift without network',
+      () async {
+        // Pre-seed DB directly (no network)
+        final todayDate = BusinessTime.fallback().businessToday();
 
-      await db
-          .into(db.schedules)
-          .insert(
-            SchedulesCompanion.insert(
-              id: 'offline-sched',
-              tenantId: 'tenant-1',
-              createdAt: DateTime.utc(2026, 1, 1),
-              activityDate: todayDate,
-              timeStartMinutes: 480,
-              timeEndMinutes: 1020,
-              userId: 'user-1',
-              statusId: 1,
-              locationId: 'loc-1',
-              title: 'Offline intervento',
-              description: '',
-            ),
-          );
+        await db
+            .into(db.schedules)
+            .insert(
+              SchedulesCompanion.insert(
+                id: 'offline-sched',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                activityDate: todayDate,
+                timeStartMinutes: 480,
+                timeEndMinutes: 1020,
+                userId: 'user-1',
+                statusId: 1,
+                locationId: 'loc-1',
+                title: 'Offline intervento',
+                description: '',
+              ),
+            );
 
-      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
-      addTearDown(container.dispose);
+        final container = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+        );
+        addTearDown(container.dispose);
 
-      final schedules = await container.read(todaySchedulesProvider.future);
-      expect(schedules.length, 1);
-      expect(schedules.first.id, 'offline-sched');
-      expect(schedules.first.title, 'Offline intervento');
-    });
+        container.listen(todaySchedulesProvider, (_, _) {});
+        final schedules = await container.read(todaySchedulesProvider.future);
+        expect(schedules.length, 1);
+        expect(schedules.first.id, 'offline-sched');
+        expect(schedules.first.title, 'Offline intervento');
+      },
+    );
 
     test('weekSchedulesProvider emits schedules for next 7 days', () async {
-      final now = DateTime.now().toUtc();
-      final day0 = DateTime.utc(now.year, now.month, now.day); // today
+      final day0 = BusinessTime.fallback().businessToday(); // today
       final day3 = day0.add(const Duration(days: 3)); // in window
       final day9 = day0.add(const Duration(days: 9)); // outside window
 
@@ -853,9 +1222,13 @@ void main() {
       await insertSched('day3', day3);
       await insertSched('day9', day9);
 
-      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+      final container = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+      );
       addTearDown(container.dispose);
 
+      container.listen(weekSchedulesProvider, (_, _) {});
       final schedules = await container.read(weekSchedulesProvider.future);
       final ids = schedules.map((s) => s.id).toList();
       expect(ids, containsAll(['today', 'day3']));
@@ -890,9 +1263,13 @@ void main() {
             ),
           );
 
-      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+      final container = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+      );
       addTearDown(container.dispose);
 
+      container.listen(draftReportsProvider, (_, _) {});
       final reports = await container.read(draftReportsProvider.future);
       expect(reports.length, 1);
       expect(reports.first.id, 'r-bozza');
@@ -929,13 +1306,21 @@ void main() {
     });
 
     test('schedule timeStart 08:00:00 parsed to 480 minutes', () {
-      final dto = SyncResultDto.fromJson(_syncPayload(schedules: [_scheduleJson()]));
-      expect(ScheduleDto.parseTimeToMinutes(dto.schedules.first.timeStart), 480);
+      final dto = SyncResultDto.fromJson(
+        _syncPayload(schedules: [_scheduleJson()]),
+      );
+      expect(
+        ScheduleDto.parseTimeToMinutes(dto.schedules.first.timeStart),
+        480,
+      );
     });
 
     test('parses ticketStatuses and ticketTypes', () {
       final dto = SyncResultDto.fromJson(
-        _syncPayload(ticketStatuses: [_ticketStatusJson()], ticketTypes: [_ticketTypeJson()]),
+        _syncPayload(
+          ticketStatuses: [_ticketStatusJson()],
+          ticketTypes: [_ticketTypeJson()],
+        ),
       );
       expect(dto.ticketStatuses.length, 1);
       expect(dto.ticketStatuses.first.name, 'Aperto');
@@ -948,8 +1333,7 @@ void main() {
 
   group('Oggi — today schedules from cache', () {
     test('shows only today schedules, not future ones', () async {
-      final today = DateTime.now().toUtc();
-      final todayDate = DateTime.utc(today.year, today.month, today.day);
+      final todayDate = BusinessTime.fallback().businessToday();
       final tomorrow = todayDate.add(const Duration(days: 1));
 
       await db
@@ -988,17 +1372,20 @@ void main() {
             ),
           );
 
-      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+      final container = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+      );
       addTearDown(container.dispose);
 
+      container.listen(todaySchedulesProvider, (_, _) {});
       final schedules = await container.read(todaySchedulesProvider.future);
       expect(schedules.length, 1);
       expect(schedules.first.id, 'oggi-sched');
     });
 
     test('today schedules are ordered by timeStartMinutes ASC', () async {
-      final today = DateTime.now().toUtc();
-      final todayDate = DateTime.utc(today.year, today.month, today.day);
+      final todayDate = BusinessTime.fallback().businessToday();
 
       await db
           .into(db.schedules)
@@ -1036,9 +1423,13 @@ void main() {
             ),
           );
 
-      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+      final container = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+      );
       addTearDown(container.dispose);
 
+      container.listen(todaySchedulesProvider, (_, _) {});
       final schedules = await container.read(todaySchedulesProvider.future);
       expect(schedules.length, 2);
       expect(schedules.first.id, 'early');
@@ -1116,28 +1507,37 @@ void main() {
       expect(rows.first.isPrimary, isTrue);
     });
 
-    test('a re-synced materiale barcode updates in place rather than duplicating', () async {
-      Map<String, dynamic> barcode(String value) => {
-        'id': 'bc-1',
-        'tenantId': 'ten-1',
-        'createdAt': '2026-06-01T00:00:00Z',
-        'updatedAt': null,
-        'materialeId': 'mat-1',
-        'barcode': value,
-        'barcodeType': 'EAN13',
-        'isPrimary': true,
-      };
+    test(
+      'a re-synced materiale barcode updates in place rather than duplicating',
+      () async {
+        Map<String, dynamic> barcode(String value) => {
+          'id': 'bc-1',
+          'tenantId': 'ten-1',
+          'createdAt': '2026-06-01T00:00:00Z',
+          'updatedAt': null,
+          'materialeId': 'mat-1',
+          'barcode': value,
+          'barcodeType': 'EAN13',
+          'isPrimary': true,
+        };
 
-      _stubDioGet(mockDio, _syncPayload(materialiBarcodes: [barcode('8001111111111')]));
-      await svc.sync();
+        _stubDioGet(
+          mockDio,
+          _syncPayload(materialiBarcodes: [barcode('8001111111111')]),
+        );
+        await svc.sync();
 
-      _stubDioGet(mockDio, _syncPayload(materialiBarcodes: [barcode('8002222222222')]));
-      await svc.sync();
+        _stubDioGet(
+          mockDio,
+          _syncPayload(materialiBarcodes: [barcode('8002222222222')]),
+        );
+        await svc.sync();
 
-      final rows = await db.select(db.materialeBarcodes).get();
-      expect(rows, hasLength(1));
-      expect(rows.first.barcode, '8002222222222');
-    });
+        final rows = await db.select(db.materialeBarcodes).get();
+        expect(rows, hasLength(1));
+        expect(rows.first.barcode, '8002222222222');
+      },
+    );
 
     test('cantieri arrive in the local catalogue', () async {
       _stubDioGet(
@@ -1201,47 +1601,61 @@ void main() {
         ),
       );
 
-      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+      final container = ProviderContainer(
+        retry: (_, _) => null,
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+      );
       addTearDown(container.dispose);
 
       // Before a sync has ever run, a fresh device's picker is genuinely empty.
+      container.listen(cantieriProvider, (_, _) {});
       expect(await container.read(cantieriProvider.future), isEmpty);
 
       await svc.sync();
 
+      container.listen(cantieriProvider, (_, _) {});
       final cantieri = await container.read(cantieriProvider.future);
       expect(cantieri, hasLength(1));
       expect(cantieri.first.name, 'Cantiere Via Roma');
     });
 
     /// A re-sync must not duplicate the catalogue — it runs on every reconnect.
-    test('re-syncing the same materiale updates rather than duplicates', () async {
-      Map<String, dynamic> materiale(String name) => {
-        'id': 'mat-1',
-        'tenantId': 'ten-1',
-        'createdAt': '2026-06-01T00:00:00Z',
-        'updatedAt': null,
-        'code': 'ART-001',
-        'name': name,
-        'description': null,
-        'unitOfMeasure': null,
-        'category': null,
-        'marca': null,
-        'purchasePrice': null,
-        'salePrice': null,
-        'isActive': true,
-      };
+    test(
+      're-syncing the same materiale updates rather than duplicates',
+      () async {
+        Map<String, dynamic> materiale(String name) => {
+          'id': 'mat-1',
+          'tenantId': 'ten-1',
+          'createdAt': '2026-06-01T00:00:00Z',
+          'updatedAt': null,
+          'code': 'ART-001',
+          'name': name,
+          'description': null,
+          'unitOfMeasure': null,
+          'category': null,
+          'marca': null,
+          'purchasePrice': null,
+          'salePrice': null,
+          'isActive': true,
+        };
 
-      _stubDioGet(mockDio, _syncPayload(materiali: [materiale('Vecchio nome')]));
-      await svc.sync();
+        _stubDioGet(
+          mockDio,
+          _syncPayload(materiali: [materiale('Vecchio nome')]),
+        );
+        await svc.sync();
 
-      _stubDioGet(mockDio, _syncPayload(materiali: [materiale('Nuovo nome')]));
-      await svc.sync();
+        _stubDioGet(
+          mockDio,
+          _syncPayload(materiali: [materiale('Nuovo nome')]),
+        );
+        await svc.sync();
 
-      final rows = await db.select(db.materiali).get();
-      expect(rows, hasLength(1));
-      expect(rows.first.name, 'Nuovo nome');
-    });
+        final rows = await db.select(db.materiali).get();
+        expect(rows, hasLength(1));
+        expect(rows.first.name, 'Nuovo nome');
+      },
+    );
   });
 }
 
@@ -1253,10 +1667,10 @@ void main() {
 // left blank, so hours reached payroll attributed to a person who does not exist.
 // ══════════════════════════════════════════════════════════════════════════════
 
-Map<String, dynamic> _colleagueJson({String id = 'user-1', String displayName = 'Mario Rossi'}) => {
-  'id': id,
-  'displayName': displayName,
-};
+Map<String, dynamic> _colleagueJson({
+  String id = 'user-1',
+  String displayName = 'Mario Rossi',
+}) => {'id': id, 'displayName': displayName};
 
 void _colleagueTests() {
   group('SyncService — colleagues', () {
@@ -1274,7 +1688,10 @@ void _colleagueTests() {
 
     void stubSync(List<Map<String, dynamic>> colleagues) {
       when(
-        () => dio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')),
+        () => dio.get<Map<String, dynamic>>(
+          any(),
+          queryParameters: any(named: 'queryParameters'),
+        ),
       ).thenAnswer(
         (_) async => Response(
           requestOptions: RequestOptions(path: '/api/sync/mobile'),
@@ -1293,7 +1710,10 @@ void _colleagueTests() {
       await service.sync();
 
       final rows = await db.select(db.colleagues).get();
-      expect(rows.map((c) => c.displayName), containsAll(['Mario Rossi', 'Anna Bianchi']));
+      expect(
+        rows.map((c) => c.displayName),
+        containsAll(['Mario Rossi', 'Anna Bianchi']),
+      );
     });
 
     /// The reason this is a wholesale replace rather than an upsert: someone who leaves the

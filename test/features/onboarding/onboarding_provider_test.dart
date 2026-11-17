@@ -4,34 +4,54 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/features/onboarding/onboarding_provider.dart';
 
 void main() {
-  test('defaults to not completed for a user who has never finished onboarding', () async {
-    SharedPreferences.setMockInitialValues({});
-    final container = ProviderContainer();
-    addTearDown(container.dispose);
+  test(
+    'defaults to not completed for a user who has never finished onboarding',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer(retry: (_, _) => null);
+      addTearDown(container.dispose);
 
-    final result = await container.read(onboardingCompletedProvider('user-1').future);
+      container.listen(onboardingCompletedProvider('user-1'), (_, _) {});
+      final result = await container.read(
+        onboardingCompletedProvider('user-1').future,
+      );
 
-    expect(result, isFalse);
-  });
+      expect(result, isFalse);
+    },
+  );
 
   test('markCompleted persists per user id', () async {
     SharedPreferences.setMockInitialValues({});
-    final container = ProviderContainer();
+    final container = ProviderContainer(retry: (_, _) => null);
     addTearDown(container.dispose);
 
+    container.listen(onboardingCompletedProvider('user-1'), (_, _) {});
     await container.read(onboardingCompletedProvider('user-1').future);
-    await container.read(onboardingCompletedProvider('user-1').notifier).markCompleted();
+    await container
+        .read(onboardingCompletedProvider('user-1').notifier)
+        .markCompleted();
 
-    expect(await container.read(onboardingCompletedProvider('user-1').future), isTrue);
+    expect(
+      await container.read(onboardingCompletedProvider('user-1').future),
+      isTrue,
+    );
     // A different user on the same device has not completed it.
-    expect(await container.read(onboardingCompletedProvider('user-2').future), isFalse);
+    expect(
+      await container.read(onboardingCompletedProvider('user-2').future),
+      isFalse,
+    );
   });
 
   test('reflects a flag already set by a previous app run', () async {
-    SharedPreferences.setMockInitialValues({'onboarding.completed.user-3': true});
-    final container = ProviderContainer();
+    SharedPreferences.setMockInitialValues({
+      'onboarding.completed.user-3': true,
+    });
+    final container = ProviderContainer(retry: (_, _) => null);
     addTearDown(container.dispose);
 
-    expect(await container.read(onboardingCompletedProvider('user-3').future), isTrue);
+    expect(
+      await container.read(onboardingCompletedProvider('user-3').future),
+      isTrue,
+    );
   });
 }

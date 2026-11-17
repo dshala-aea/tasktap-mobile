@@ -98,6 +98,73 @@ void main() {
     });
   }
 
+  // The upload queue is NOT day-scoped (P0-2): everything still pending, from any day, in
+  // chronological order. "Today" stays a display-only notion.
+  group('pending queue is day-agnostic', () {
+    final clock = DateTime.parse('2026-07-10T20:00:00Z'); // Rome, 2026-07-10
+    const yesterday = '2026-07-09T08:00:00Z';
+    const today = '2026-07-10T08:00:00Z';
+    const tomorrow = '2026-07-11T08:00:00Z';
+
+    test('WorkSessionRepository returns pending rows from every day, in order', () async {
+      final repo = WorkSessionRepository(db, businessTime: BusinessTime('Europe/Rome', clock: () => clock));
+      await repo.addEvent(id: 'today', eventTime: DateTime.parse(today), eventType: 'ingresso');
+      await repo.addEvent(id: 'yesterday', eventTime: DateTime.parse(yesterday), eventType: 'ingresso');
+      await repo.addEvent(id: 'tomorrow', eventTime: DateTime.parse(tomorrow), eventType: 'ingresso');
+
+      expect((await repo.getPendingSessions()).map((s) => s.id), ['yesterday', 'today', 'tomorrow']);
+      expect(await repo.getPendingCount(), 3);
+
+      // Synced rows leave the queue; the count follows the same rule.
+      await repo.markSynced(['today']);
+      expect((await repo.getPendingSessions()).map((s) => s.id), ['yesterday', 'tomorrow']);
+      expect(await repo.getPendingCount(), 2);
+
+      // The reconciler's own correction is pending by construction but is never sent: it must not
+      // be counted as unsent work.
+      await repo.markReconciledOrphan('yesterday');
+      expect(await repo.getPendingCount(), 1);
+      expect((await repo.getPendingSessions()).map((s) => s.id), contains('yesterday'));
+    });
+
+    test('CantiereSessionRepository returns pending rows from every day, in order', () async {
+      final repo = CantiereSessionRepository(
+        db,
+        businessTime: BusinessTime('Europe/Rome', clock: () => clock),
+      );
+      await repo.addEvent(id: 'today', eventTime: DateTime.parse(today), eventType: 'ingresso');
+      await repo.addEvent(id: 'yesterday', eventTime: DateTime.parse(yesterday), eventType: 'ingresso');
+      await repo.addEvent(id: 'tomorrow', eventTime: DateTime.parse(tomorrow), eventType: 'ingresso');
+
+      expect((await repo.getPendingEvents()).map((s) => s.id), ['yesterday', 'today', 'tomorrow']);
+      expect(await repo.getPendingCount(), 3);
+
+      await repo.markSynced(['today']);
+      expect((await repo.getPendingEvents()).map((s) => s.id), ['yesterday', 'tomorrow']);
+      expect(await repo.getPendingCount(), 2);
+
+      await repo.markReconciledOrphan('yesterday');
+      expect(await repo.getPendingCount(), 1);
+    });
+
+    test('a sync error keeps a cantiere row pending and counted', () async {
+      final repo = CantiereSessionRepository(
+        db,
+        businessTime: BusinessTime('Europe/Rome', clock: () => clock),
+      );
+      await repo.addEvent(id: 'r', eventTime: DateTime.parse(yesterday), eventType: 'ingresso');
+
+      await repo.markSyncError('r', 'Refused by the server');
+
+      // Still unsent work: visible, counted, and still the technician's record. Only the automatic
+      // retry is held, which the service releases with a null message on a manual sync.
+      expect((await repo.getPendingEvents()).single.syncError, 'Refused by the server');
+      expect(await repo.getPendingCount(), 1);
+      await repo.markSyncError('r', null);
+      expect((await repo.getPendingEvents()).single.syncError, isNull);
+    });
+  });
+
   test('default constructor uses the Rome fallback zone', () async {
     final repo = WorkSessionRepository(db);
     // Today in Rome contains "now" by construction.

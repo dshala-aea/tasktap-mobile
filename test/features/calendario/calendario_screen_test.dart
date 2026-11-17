@@ -36,7 +36,7 @@ Widget _buildScreen({
   CalendarioView? initialView,
   DateTime? initialDate,
 }) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
@@ -371,6 +371,119 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('shows the customer and the site address inside the block', (tester) async {
+      // The box used to name the job and its hours only: the technician had to open the ticket to
+      // find out whose site it was and where it is, which is the one thing they need before
+      // getting in the van. Both come from the mirror, so this holds with no signal at all.
+      await seedSchedules(db);
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-1',
+              tenantId: 'tenant-1',
+              createdAt: now,
+              companyName: 'Condominio Aurora',
+            ),
+          );
+      // The schedule's ticket is not mirrored here, so the customer resolves through the location
+      // (Schedule.ticketId → no ticket → Location.customerId), the same fallback the Lista row uses.
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-1',
+              tenantId: 'tenant-1',
+              createdAt: now,
+              customerId: 'cust-1',
+              name: 'Sede centrale',
+              address: const Value('Via Roma 12'),
+              postalCode: const Value('20100'),
+              city: const Value('Milano'),
+            ),
+          );
+
+      final today = DateTime.now();
+      await pump(
+        tester,
+        view: CalendarioView.giorno,
+        date: DateTime(today.year, today.month, today.day),
+      );
+
+      expect(find.text('Intervento mattina'), findsOneWidget);
+      expect(find.text('Condominio Aurora'), findsOneWidget);
+      expect(find.text('Via Roma 12, 20100 Milano'), findsOneWidget);
+      expect(tester.takeException(), null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a block too short for them drops customer and site instead of overflowing', (
+      tester,
+    ) async {
+      // A quarter-hour job is floored to 44dp, which fits a title, an hour range and nothing else.
+      // The block is absolutely positioned, so a line that does not fit does not get clipped — it
+      // paints the overflow stripes. Better to show neither line here: the info sheet and the
+      // Lista row both still carry them.
+      final today = DateTime.now();
+      final todayUtc = DateTime(today.year, today.month, today.day).toUtc();
+      final now = DateTime.now().toUtc();
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-short',
+              tenantId: 'tenant-1',
+              createdAt: todayUtc,
+              activityDate: todayUtc,
+              timeStartMinutes: 780, // 13:00
+              timeEndMinutes: 795, // 13:15
+              userId: 'u1',
+              statusId: 2,
+              locationId: 'loc-short',
+              title: 'Sopralluogo breve',
+              description: '',
+            ),
+          );
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-short',
+              tenantId: 'tenant-1',
+              createdAt: now,
+              companyName: 'Studio Bianchi',
+            ),
+          );
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-short',
+              tenantId: 'tenant-1',
+              createdAt: now,
+              customerId: 'cust-short',
+              name: 'Sede sud',
+              address: const Value('Via Verdi 3'),
+              city: const Value('Torino'),
+            ),
+          );
+
+      await pump(
+        tester,
+        view: CalendarioView.giorno,
+        date: DateTime(today.year, today.month, today.day),
+      );
+
+      expect(find.text('Sopralluogo breve'), findsOneWidget);
+      expect(find.text('Studio Bianchi'), findsNothing);
+      expect(find.text('Via Verdi 3, Torino'), findsNothing);
+      expect(tester.takeException(), null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('shows empty grid with no events', (tester) async {
       await pump(tester, view: CalendarioView.giorno);
       // GiornoView renders even with no events (just the hour labels)
@@ -471,9 +584,26 @@ void main() {
 
   group('ListaView', () {
     testWidgets('shows EmptyState when no schedules', (tester) async {
+      // A device that has synced already: the mirror is empty, so "nothing planned" is its own
+      // answer. Without this the list would be reporting its own missing download instead — see
+      // the never-synced test below.
+      await db.setLastSync(DateTime.utc(2026, 10, 1));
       await pump(tester, view: CalendarioView.lista);
       expect(find.byType(EmptyState), findsOneWidget);
       expect(find.text('Nessun intervento'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an empty list on a device that never synced is not "nothing planned"', (
+      tester,
+    ) async {
+      // Fresh install, offline since setup: every table is empty because nothing was ever
+      // downloaded, and the technician's week is not the thing being described.
+      await pump(tester, view: CalendarioView.lista);
+      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.text('Nessun intervento'), findsNothing);
+      expect(find.text('Calendario non ancora scaricato'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -527,6 +657,39 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('shows the customer beside the time and the site address under it', (tester) async {
+      await seedSchedules(db);
+      final now = DateTime.now().toUtc();
+      await db.into(db.customers).insert(
+        CustomersCompanion.insert(
+          id: 'cust-1',
+          tenantId: 'tenant-1',
+          createdAt: now,
+          companyName: 'Condominio Aurora',
+        ),
+      );
+      // The schedule's ticket is not mirrored here, so the customer resolves through the location.
+      await db.into(db.locations).insert(
+        LocationsCompanion.insert(
+          id: 'loc-1',
+          tenantId: 'tenant-1',
+          createdAt: now,
+          customerId: 'cust-1',
+          name: 'Sede centrale',
+          address: const Value('Via Roma 12'),
+          postalCode: const Value('20100'),
+          city: const Value('Milano'),
+        ),
+      );
+
+      await pump(tester, view: CalendarioView.lista);
+
+      expect(find.text('08:00 – 10:00 · Condominio Aurora'), findsOneWidget);
+      expect(find.text('Via Roma 12, 20100 Milano'), findsWidgets);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('all-day schedule row shows no time-range subtitle', (tester) async {
       await seedAllDaySchedule(db);
       await pump(tester, view: CalendarioView.lista);
@@ -541,6 +704,26 @@ void main() {
   // ── Providers helpers ──────────────────────────────────────────────────────
 
   group('calendario_providers helpers', () {
+    test('formatLocationAddress prefers the street line, falls back to the name', () {
+      Location loc({String? address, String? cap, String? city}) => Location(
+        id: 'l',
+        tenantId: 't',
+        createdAt: DateTime.utc(2026),
+        customerId: 'c',
+        name: 'Sede nord',
+        address: address,
+        postalCode: cap,
+        city: city,
+        isActive: true,
+      );
+
+      expect(formatLocationAddress(loc(address: 'Via Roma 12', cap: '20100', city: 'Milano')),
+          'Via Roma 12, 20100 Milano');
+      expect(formatLocationAddress(loc(address: 'Via Roma 12')), 'Via Roma 12');
+      expect(formatLocationAddress(loc(cap: '20100', city: 'Milano')), '20100 Milano');
+      expect(formatLocationAddress(loc()), 'Sede nord');
+    });
+
     test('scheduleStatusName maps known IDs', () {
       expect(scheduleStatusName(2), 'In corso');
       expect(scheduleStatusName(5), 'Completato');

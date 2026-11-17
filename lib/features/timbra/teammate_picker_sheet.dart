@@ -124,8 +124,7 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
                       // Same fallback contract as everywhere else colleagueNameProvider is read:
                       // fall back to the raw id rather than show nothing when the local mirror
                       // doesn't (yet) know this colleague.
-                      final name =
-                          ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId;
+                      final name = ref.watch(colleagueNameProvider(a.userId)).value ?? a.userId;
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: AppSpacing.sm),

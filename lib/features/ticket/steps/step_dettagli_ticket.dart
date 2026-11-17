@@ -16,6 +16,7 @@ import '../reference_providers.dart';
 import '../ticket_providers.dart';
 import 'blamed_field_notice.dart';
 import 'read_only_caption.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -38,7 +39,7 @@ const String _kNoneSentinel = '';
 /// this chip is also the only way to remove a selection, so it cannot be dropped. It gets a name
 /// that reads as a state, in the "… non disponibile" shape the rest of the app uses for one, and
 /// never as a product.
-const String _kUnresolvedProdottoLabel = 'Prodotto non disponibile';
+const String _kUnresolvedProdottoLabel = 'Asset non disponibile';
 
 class StepDettagliTicket extends ConsumerStatefulWidget {
   const StepDettagliTicket({
@@ -183,7 +184,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     final customerId = widget.state.customerId;
     final prodotti = customerId == null
         ? const <ReferenceOption>[]
-        : ref.watch(localProdottiProvider(customerId)).valueOrNull ?? const <ReferenceOption>[];
+        : ref.watch(localProdottiProvider(customerId)).value ?? const <ReferenceOption>[];
     final byId = {for (final p in prodotti) p.id: p};
     final ids = widget.state.prodottoAssistenzaIds;
 
@@ -197,7 +198,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         BlamedFieldNotice(
           field: 'prodottoAssistenzaIds',
           blamedField: widget.blamedField,
-          detail: 'La copertura è stata azzerata: i prodotti vanno scelti di nuovo.',
+          detail: 'La copertura è stata azzerata: gli asset vanno scelti di nuovo.',
         ),
         if (ids.isNotEmpty) ...[
           Wrap(
@@ -229,17 +230,17 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
             // Re-keyed after every pick (see _prodottoPickerEpoch) so the field empties itself and
             // the next product can be typed for immediately.
             key: ValueKey('prodotto-adder-$_prodottoPickerEpoch'),
-            label: 'Prodotti assistenza',
+            label: 'Asset',
             localItems: prodotti,
             search: (q) async => customerId == null
                 ? const <ReferenceOption>[]
                 : ref
                       .read(referenceSearchClientProvider)
                       .searchProdottiAssistenza(customerId: customerId, query: q),
-            hint: 'Cerca prodotto…',
+            hint: 'Cerca asset…',
             emptyCacheHint: customerId == null
                 ? 'Seleziona prima un cliente.'
-                : 'Nessun prodotto in cache. Cerca per nome.',
+                : 'Nessun asset in cache. Cerca per nome.',
             enabled: customerId != null,
             onSelected: (option) {
               // A pick released by editing the text (null) is not a product to add.
@@ -258,10 +259,73 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     );
   }
 
+  /// "Modello checklist" — the maintenance template this ticket should snapshot as its checklist.
+  ///
+  /// Absent when [StepDettagliTicket.ticketId] is set, which is what the edit route passes: editing an
+  /// existing ticket does not re-pick its checklist here, exactly as the web form
+  /// (`TicketCreatePanel.tsx`) hides the select outside create mode. That is *not* the same as "create
+  /// only" — the create wizard passes no `ticketId` (`new_ticket_form_screen.dart`) and that screen is
+  /// also the repair route, so the field does render while correcting a ticket the server refused. The
+  /// choice is part of what was refused, so it belongs in the correction.
+  ///
+  /// Returns the field preceded by its spacer, or an empty list so nothing at all renders when there
+  /// is nothing to offer — a still-empty catalogue (no sync yet) or a catalogue whose every template
+  /// is retired or unpublished. A select whose only option is "Nessuna" is worse than no select:
+  /// it reads as a broken picker rather than as a field this ticket does not have.
+  ///
+  /// No contract hint. The web form shows "Questo contratto risolverebbe a: …" from
+  /// `ContractDto.maintenanceTemplateId`, but the mobile contract mirror (`SyncContractDto`) does not
+  /// carry that field, so the name cannot be resolved offline. Showing nothing is honest; a hint
+  /// built from data the device does not have would be a guess.
+  List<Widget> _maintenanceTemplateSection() {
+    if (widget.ticketId != null) return const [];
+    final rows = ref.watch(maintenanceTemplatesProvider).value ?? const [];
+    final offerable = assignableMaintenanceTemplates(rows);
+    if (offerable.isEmpty) return const [];
+
+    final offeredIds = {for (final t in offerable) t.id};
+    // A queued/repair row can carry an id the catalogue no longer offers (a template retired since
+    // the choice was made). `DropdownButtonFormField` asserts its value is one of its items, so fall
+    // back to the "Nessuna" option for display rather than crash. The state keeps the stale id on
+    // purpose — see offerableMaintenanceTemplateId, which is what keeps it off the wire: both sends
+    // clamp an unofferable choice to null, and `repair` writes the clamped values back onto the row,
+    // so the correction is also what heals it. The sync clears such a row earlier, when the template
+    // left the catalogue altogether; this covers the one it still lists but no longer offers.
+    final selected = offeredIds.contains(widget.state.maintenanceTemplateId)
+        ? widget.state.maintenanceTemplateId
+        : null;
+
+    return [
+      const SizedBox(height: 24),
+      AppFieldShell(
+        label: 'Modello checklist',
+        child: DropdownButtonFormField<String?>(
+          // Keyed by value so a wizard back-navigation resyncs it, the same rule the Tipo field above
+          // states for `initialValue`.
+          key: ValueKey('modello-checklist-${widget.state.maintenanceTemplateId}'),
+          initialValue: selected,
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('— Nessuna (auto da tipo/contratto) —'),
+            ),
+            for (final t in offerable) DropdownMenuItem<String?>(value: t.id, child: Text(t.name)),
+          ],
+          onChanged: (id) => widget.onChanged(
+            id == null
+                ? widget.state.copyWith(clearMaintenanceTemplateId: true)
+                : widget.state.copyWith(maintenanceTemplateId: id),
+          ),
+        ),
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final typesAsync = ref.watch(ticketTypeMapProvider);
-    final types = typesAsync.valueOrNull ?? {};
+    final types = typesAsync.value ?? {};
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -320,6 +384,11 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         // selection; the picker below them only adds to it.
         _buildProdotti(),
 
+        // ── Modello checklist ──────────────────────────────────────────────
+        // Create mode only, and only when the catalogue offers something — see
+        // [_maintenanceTemplateSection] for both rules.
+        ..._maintenanceTemplateSection(),
+
         const SizedBox(height: 24),
 
         // ── Priority ───────────────────────────────────────────────────────
@@ -374,7 +443,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         Consumer(
           builder: (context, ref, _) {
             final agentsAsync = ref.watch(localAgentsProvider(''));
-            final agents = agentsAsync.valueOrNull ?? const <ReferenceOption>[];
+            final agents = agentsAsync.value ?? const <ReferenceOption>[];
             final selected = agents
                 .where((a) => a.id == widget.state.agentId)
                 .map((a) => a.label)
@@ -517,8 +586,8 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
   String? get _emptyHint {
     if (_merged.isNotEmpty) return null;
     return _queryCtrl.text.trim().isEmpty
-        ? 'Nessun agente in cache. Cerca per nome.'
-        : 'Nessun agente trovato.';
+        ? 'Nessun riferimento in cache. Cerca per nome.'
+        : 'Nessun riferimento trovato.';
   }
 
   @override
@@ -540,7 +609,7 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
               child: AppTextField(
                 key: const ValueKey('agent-search-field'),
                 controller: _queryCtrl,
-                label: 'Cerca agente',
+                label: 'Cerca riferimento',
                 hint: 'Nome, telefono o email…',
                 onChanged: _onQueryChanged,
               ),
@@ -572,10 +641,7 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
                   AppSpacing.base,
                   AppSpacing.base,
                 ),
-                child: Text(
-                  hint,
-                  style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
-                ),
+                child: Text(hint, style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
               ),
           ],
         ),

@@ -60,6 +60,7 @@ AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 ProviderContainer _buildContainer(AppDatabase db) {
   return ProviderContainer(
+    retry: (_, _) => null,
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       userSignatureApiClientProvider.overrideWithValue(const _StubUserSignatureApiClient()),
@@ -80,7 +81,9 @@ ProviderContainer _buildContainer(AppDatabase db) {
 Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(home: Scaffold(body: StepRiepilogo(reportId: _reportId))),
+    child: const MaterialApp(
+      home: Scaffold(body: StepRiepilogo(reportId: _reportId)),
+    ),
   );
 }
 
@@ -111,19 +114,14 @@ void main() {
 
     testWidgets('visible, off by default, when a ticket is linked', (tester) async {
       container = _buildContainer(db);
-      await container
-          .read(reportEditorProvider(_reportId).notifier)
-          .setTicketFromCache('ticket-1');
+      await container.read(reportEditorProvider(_reportId).notifier).setTicketFromCache('ticket-1');
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
       expect(find.text('Serve un secondo intervento'), findsOneWidget);
       final toggle = tester.widget<AppToggle>(find.byType(AppToggle));
       expect(toggle.value, isFalse, reason: 'off by default — never assumed');
-      expect(
-        container.read(reportEditorProvider(_reportId)).richiedeSecondoIntervento,
-        isFalse,
-      );
+      expect(container.read(reportEditorProvider(_reportId)).richiedeSecondoIntervento, isFalse);
 
       // The warning panel watches the Drift-backed checklist stream here: dispose the container
       // inside the test body so Drift's zero-duration close timer fires under the fake clock
@@ -140,9 +138,7 @@ void main() {
       tester,
     ) async {
       container = _buildContainer(db);
-      await container
-          .read(reportEditorProvider(_reportId).notifier)
-          .setTicketFromCache('ticket-1');
+      await container.read(reportEditorProvider(_reportId).notifier).setTicketFromCache('ticket-1');
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
@@ -156,10 +152,7 @@ void main() {
       await tester.tap(find.byType(AppToggle));
       await tester.pumpAndSettle();
 
-      expect(
-        container.read(reportEditorProvider(_reportId)).richiedeSecondoIntervento,
-        isTrue,
-      );
+      expect(container.read(reportEditorProvider(_reportId)).richiedeSecondoIntervento, isTrue);
       final repo = DraftReportRepository(db);
       final draft = await repo.getDraft(_reportId);
       expect(draft?.richiedeSecondoIntervento, isTrue, reason: 'autosaved to Drift');

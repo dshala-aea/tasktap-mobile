@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/error_message.dart';
+import '../../domain/reports/customer_signature_absence_reason.dart';
+import '../../domain/reports/strumenti_selection.dart';
 import '../local/app_database.dart';
 import '../reports/draft_report_repository.dart';
 import '../reports/report_submit_api_client.dart';
@@ -34,6 +36,9 @@ export 'draft_submission_state.dart';
 //     (signature-customer | signature-technician): that endpoint works before the
 //     report row exists. The server allegato ids are then referenced by /submit.
 //   - Nothing is sent while offline: the row stays readyToSubmit (visible as pending).
+//   - A no-response failure while the device cannot reach the network leaves the row
+//     readyToSubmit and consumes NO retry attempt — being offline is never a failed send.
+//     Only a server-answered transient (5xx/408/429/401) spends the [maxAutoRetries] budget.
 //   - Rows stuck in uploadingMedia/submitting after an app kill are reset to
 //     readyToSubmit on startup (recoverInterrupted) — safe because uploads are tracked
 //     per allegato and submit is idempotent by key.
@@ -57,8 +62,9 @@ export 'draft_submission_state.dart';
 /// merge / re-import ("take the office's version" vs "keep mine") is a product decision, not
 /// something to guess at here — guessing would discard someone's work in one direction or the other.
 const String kStaleSubmitConflictMessage =
-    'Questo rapportino è stato modificato in ufficio dopo che ne è stata scaricata una copia su '
-    'questo telefono. Non riprovare a inviarlo: contatta l\'ufficio per farlo aggiornare. '
+    'Questo rapporto di intervento è stato modificato in ufficio dopo che ne è stata scaricata '
+    'una copia su questo telefono. Non riprovare a inviarlo: contatta l\'ufficio per farlo '
+    'aggiornare. '
     'Quello che hai compilato è ancora salvato sul telefono.';
 
 /// Whether [error] — a draft's persisted `submissionError` — is the stale-submit conflict text
@@ -79,11 +85,13 @@ class SubmissionQueue {
     required ReportSubmitApiClient apiClient,
     bool Function()? isOnline,
     Future<bool> Function()? recheckOnline,
+    Future<List<String>> Function(String cantiereId)? claimedCantiereWorkLogClientIds,
     this.maxAutoRetries = 5,
   }) : _repo = repo,
        _apiClient = apiClient,
        _isOnline = isOnline ?? (() => true),
-       _recheckOnline = recheckOnline;
+       _recheckOnline = recheckOnline,
+       _claimedCantiereWorkLogClientIds = claimedCantiereWorkLogClientIds;
 
   final DraftReportRepository _repo;
   final ReportSubmitApiClient _apiClient;
@@ -93,6 +101,11 @@ class SubmissionQueue {
   /// false until the first check resolves and is never re-polled) says offline, so a stale
   /// value cannot hold rows forever. Null = no probe: the cached value stands.
   final Future<bool> Function()? _recheckOnline;
+
+  /// The device's own closed cantiere punches for a cantiere, as client ids (P2-6). Null = no
+  /// source wired (tests, and any build without local punch storage): the submit then carries no
+  /// claims, exactly the pre-P2-6 wire shape.
+  final Future<List<String>> Function(String cantiereId)? _claimedCantiereWorkLogClientIds;
 
   /// Consecutive transient failures after which a `failed` row stops being retried unattended.
   final int maxAutoRetries;
@@ -142,8 +155,9 @@ class SubmissionQueue {
   ///
   /// [force] is for a manual "Invia"/"Riprova": skip the connectivity gate and just attempt the
   /// network, so a real failure surfaces as a transient `failed` row with its Italian message
-  /// instead of a silent no-op. Automatic flushes keep the gate, but confirm "offline" with a
-  /// real probe before skipping.
+  /// instead of a silent no-op. A no-response failure with no reachable network is still not a
+  /// failure — the row goes back to `readyToSubmit` (see [_processDraft]). Automatic flushes keep
+  /// the gate, but confirm "offline" with a real probe before skipping.
   Future<void> processAll({bool force = false}) async {
     if (_running) return; // prevent re-entrant calls
     if (!force && !await _confirmedOnline()) return;
@@ -166,6 +180,23 @@ class SubmissionQueue {
     if (_isOnline()) return true;
     final probe = _recheckOnline;
     if (probe == null) return false;
+    try {
+      return await probe();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether the device can actually reach the network, asked authoritatively of the probe.
+  ///
+  /// Deliberately does NOT trust [_isOnline] first the way [_confirmedOnline] does: that value is
+  /// "the interface is up", which is true on a captive portal, a dead Wi-Fi and a radio with no
+  /// data. This is the question that decides whether a no-response failure was the device being
+  /// offline or the server genuinely not answering, so the cached value is only the fallback when
+  /// no probe is wired at all.
+  Future<bool> _networkReachable() async {
+    final probe = _recheckOnline;
+    if (probe == null) return _isOnline();
     try {
       return await probe();
     } catch (_) {
@@ -274,6 +305,29 @@ class SubmissionQueue {
       // Clear the isLocalOnly flag so the list no longer treats this as a local draft.
       await _repo.markSubmitted(draft.id);
     } catch (e) {
+      // ── Offline is not a failed send ──────────────────────────────────────
+      //
+      // A no-response failure (radio down, DNS, timeout — nothing answered at all) while the
+      // device has no reachable network is the ordinary state of a technician in a basement, not
+      // a rejection. The rapportino is intact and simply has not left the phone yet, so the row
+      // goes straight back to `readyToSubmit`: it keeps its place in the queue, keeps its whole
+      // retry budget, and shows the calm "In attesa di connessione" state instead of "Invio
+      // fallito". Before this, a manual Invia tapped five times in airplane mode burned all five
+      // auto-retries and stranded a signed rapportino behind a manual "Riprova".
+      //
+      // Only a failure the server actually ANSWERED with a retryable status (5xx/408/429/401) is
+      // allowed to consume the budget — see [_isServerAnsweredTransient].
+      if (_hasNoResponse(e) && !await _networkReachable()) {
+        await _repo.updateSubmissionState(
+          reportId: draft.id,
+          state: DraftSubmissionState.readyToSubmit,
+          error: null,
+          errorTransient: false,
+          attempts: draft.submissionAttempts,
+        );
+        return;
+      }
+
       final transient = _isTransient(e);
       // NEVER delete the draft on failure — keep it for retry.
       //
@@ -290,18 +344,21 @@ class SubmissionQueue {
       // guaranteed to 409 again. See kStaleSubmitConflictMessage.
       final message = e is FileSystemException
           ? 'File non trovato sul dispositivo: una foto o una firma non è più disponibile. '
-                'Rimuovila dal rapportino e riprova.'
+                'Rimuovila dal rapporto di intervento e riprova.'
           : _isStaleSubmitConflict(e)
           ? kStaleSubmitConflictMessage
-          : humanErrorMessage(e, azione: 'inviare il rapportino');
+          : humanErrorMessage(e, azione: 'inviare il rapporto di intervento');
       await _repo.updateSubmissionState(
         reportId: draft.id,
         state: DraftSubmissionState.failed,
         error: message,
         errorTransient: transient,
-        // Only transient failures consume the auto-retry budget; permanent ones are never
-        // auto-retried, so their counter is irrelevant.
-        attempts: transient ? draft.submissionAttempts + 1 : draft.submissionAttempts,
+        // Only a server-answered transient consumes the auto-retry budget; a permanent failure is
+        // never auto-retried, and a no-response one the server never answered must not be able to
+        // spend a technician's retries either (see [_isServerAnsweredTransient]).
+        attempts: _isServerAnsweredTransient(e)
+            ? draft.submissionAttempts + 1
+            : draft.submissionAttempts,
       );
     }
   }
@@ -315,6 +372,22 @@ class SubmissionQueue {
     if (e is! DioException) return false;
     final status = e.response?.statusCode;
     if (status == null) return e.type != DioExceptionType.badResponse;
+    return status >= 500 || status == 401 || status == 408 || status == 429;
+  }
+
+  /// A failure with no HTTP response at all: the request never reached a server that answered.
+  /// That covers connectionError, connection/send/receive timeouts and a cancelled request — the
+  /// shapes a device with no usable network produces.
+  static bool _hasNoResponse(Object e) => e is DioException && e.response?.statusCode == null;
+
+  /// A transient the SERVER answered: a fault (5xx), back-pressure (408/429), or a 401 whose
+  /// silent refresh may not have taken. This is the only class that spends the retry budget —
+  /// the server is reachable, so "five attempts" is a real signal, not a measure of how often the
+  /// radio flapped.
+  static bool _isServerAnsweredTransient(Object e) {
+    if (e is! DioException) return false;
+    final status = e.response?.statusCode;
+    if (status == null) return false;
     return status >= 500 || status == 401 || status == 408 || status == 429;
   }
 
@@ -334,9 +407,38 @@ class SubmissionQueue {
 
   Future<SubmitReportRequest> _buildRequest(DraftReport draft) async {
     final staff = await _repo.getStaff(draft.id);
+    // The intervals the timer recorded on this phone, already ordered `start_utc, id`. The server
+    // replaces the report's whole stored interval set on submit and derives `HoursWorked` from
+    // what arrives, so a row that holds intervals must send them: sending none is not neutral, it
+    // deletes the server's copy and downgrades the row to `Legacy`.
+    final segments = await _repo.getSegments(draft.id);
+    final segmentsByUser = <String, List<ReportStaffSegment>>{};
+    for (final g in segments) {
+      (segmentsByUser[g.userId] ??= []).add(g);
+    }
     final materiali = await _repo.getMateriali(draft.id);
     final controlli = await _repo.getControlli(draft.id);
     final allegati = await _repo.getAllegati(draft.id);
+
+    // Instruments: only the selection authored on this device. A draft whose Strumenti step was
+    // never opened has none, and an empty list tells the server to keep the rows it holds. The
+    // calibration expiry is the catalogue's (fresher than the snapshot saved on the row); it is
+    // used ONLY to decide expiredAcknowledged, `expiredAtUse` is never sent.
+    final localStrumenti = await _repo.getLocalStrumenti(draft.id);
+    final catalogue = {for (final s in await _repo.getStrumentiCatalogue()) s.id: s};
+    final strumenti = buildStrumentiBody([
+      for (final r in localStrumenti)
+        if (r.strumentoId != null)
+          StrumentoSelectionInput(
+            strumentoId: r.strumentoId!,
+            calibrationExpiry: catalogue.containsKey(r.strumentoId)
+                ? catalogue[r.strumentoId]!.calibrationExpiry
+                : r.calibrationExpiry,
+            expiredAcknowledged: r.expiredAcknowledged,
+            usageDescription: r.usageDescription,
+            outcome: r.outcome,
+          ),
+    ], workDateLabel(draft.startedAt, draft.createdAt));
 
     // Photo allegati (non-signature, non-pending)
     final signatureIds = {
@@ -349,8 +451,24 @@ class SubmissionQueue {
         .map((a) => a.id)
         .toList();
 
+    // P2-6: a rapportino drafted from a cantiere carries that cantiere, and claims the phone's own
+    // closed punches for it so the server can mark those hours consumed instead of letting the next
+    // cantiere-originated rapportino count them a second time. Best-effort: a local read failure
+    // must never block a submit — the server treats an empty claim list as "nothing to claim".
+    var claimedCantierePunchIds = const <String>[];
+    final claimSource = _claimedCantiereWorkLogClientIds;
+    if (draft.cantiereId != null && claimSource != null) {
+      try {
+        claimedCantierePunchIds = await claimSource(draft.cantiereId!);
+      } catch (_) {
+        // Fall through with no claims; the submit itself is what matters.
+      }
+    }
+
     return SubmitReportRequest(
       id: draft.id,
+      cantiereId: draft.cantiereId,
+      consumedCantiereWorkLogClientIds: claimedCantierePunchIds,
       // The version captured when this device last SAW the server's copy (import / cantiere-create),
       // read straight off the persisted draft. Read here, never fetched: a version fetched at submit
       // time would always match the row being compared and the guard would be inert. Null for a
@@ -367,27 +485,48 @@ class SubmissionQueue {
       startedAt: draft.startedAt,
       endedAt: draft.endedAt,
       customerSignatureAllegatoId: draft.customerSignatureAllegatoId,
+      // "Il cliente non può firmare": the raw column is the wire int; the request carries the
+      // mirrored enum and `toJson` puts the int back on the wire.
+      customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.fromWire(
+        draft.customerSignatureAbsenceReason,
+      ),
+      customerSignatureAbsenceNote: draft.customerSignatureAbsenceNote,
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
       customerSignoffText: draft.customerSignoffText,
       materialiNotRequired: draft.materialiNotRequired,
       aiAssisted: draft.isAiAssisted,
       richiedeSecondoIntervento: draft.richiedeSecondoIntervento,
       photoAllegatoIds: photoIds,
-      staff: staff
-          .map(
-            (s) => SubmitReportStaffDto(
-              userId: s.userId,
-              hoursWorked: s.hoursWorked,
-              kmTraveled: s.kmTraveled,
-              vehicle: s.vehicle,
-              costPerKm: s.costPerKm,
-              notes: s.notes,
-              startTime: s.startTime,
-              endTime: s.endTime,
-              pauseMinutes: s.pauseMinutes,
-            ),
-          )
-          .toList(),
+      strumenti: strumenti,
+      staff: staff.map((s) {
+        final segmentsForRow = segmentsByUser[s.userId] ?? const <ReportStaffSegment>[];
+        return SubmitReportStaffDto(
+          userId: s.userId,
+          hoursWorked: s.hoursWorked,
+          kmTraveled: s.kmTraveled,
+          vehicle: s.vehicle,
+          costPerKm: s.costPerKm,
+          notes: s.notes,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          // The intervals are authoritative: the server ignores `pauseMinutes` beside them and
+          // logs a warning when it sees both, so send a pause only when there is no interval
+          // for it to contradict. The phone has no pause editor, so a pause on a timer row can
+          // only have come down from the server — never something the technician chose.
+          pauseMinutes: segmentsForRow.isEmpty ? s.pauseMinutes : 0,
+          // The intervals this technician's hours came from. `clientId` is the phone's own id
+          // for each tap, passed verbatim: it is what lets a replayed submit collapse onto
+          // the rows it already wrote instead of counting the hours twice.
+          segments: [
+            for (final g in segmentsForRow)
+              SubmitReportSegmentDto(
+                startTime: g.startUtc,
+                endTime: g.endUtc,
+                clientId: g.clientId,
+              ),
+          ],
+        );
+      }).toList(),
       materiali: materiali
           .map(
             (m) => SubmitReportMaterialeDto(

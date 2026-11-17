@@ -98,8 +98,9 @@ Note this is also, accidentally, the only thing currently enforcing decision 1.
 ## Closed since (2026-08-16/17)
 
 - **8. GPS/notification permission strategy** — done. `askPermissionPurpose`
-  (`lib/core/widgets/permission_purpose_sheet.dart`) states the purpose *and what still works
-  without it* before the OS dialog. The notification request moved out of `runTaskTapApp()` — it
+  (`lib/core/widgets/permission_purpose_sheet.dart`) stated the purpose *and what still works
+  without it* before the OS dialog. **Superseded 2026-11-11: the sheet was removed by owner
+  decision; the system dialogs (Info.plist/manifest purpose strings) are the only ask.** The notification request moved out of `runTaskTapApp()` — it
   was the first thing on screen at first launch — and now fires when the technician turns the
   setting on. `pushAbilitate` defaults to true, so it is also reconciled against the real OS
   answer at load, or a fresh install would show the switch on with permission never asked.

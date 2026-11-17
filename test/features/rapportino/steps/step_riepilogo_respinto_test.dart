@@ -87,6 +87,7 @@ void main() {
           );
 
       container = ProviderContainer(
+        retry: (_, _) => null,
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           userSignatureApiClientProvider.overrideWithValue(const _StubUserSignatureApiClient()),
@@ -106,7 +107,9 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: Scaffold(body: StepRiepilogo(reportId: _reportId))),
+          child: const MaterialApp(
+            home: Scaffold(body: StepRiepilogo(reportId: _reportId)),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -115,9 +118,9 @@ void main() {
       // _handleDraftUpdateForNavigation's toast-and-pop the instant it saw the persisted
       // submissionState == submitted, closing the sheet before the technician could read it.
       expect(find.byType(StepRiepilogo), findsOneWidget);
-      expect(find.text("L'ufficio ha respinto questo rapportino."), findsOneWidget);
-      expect(find.text('Rapportino inviato con successo.'), findsNothing);
-      expect(find.text('Invia rapportino'), findsNothing);
+      expect(find.text("L'ufficio ha respinto questo rapporto di intervento."), findsOneWidget);
+      expect(find.text('Rapporto di intervento inviato con successo.'), findsNothing);
+      expect(find.text('Invia rapporto di intervento'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

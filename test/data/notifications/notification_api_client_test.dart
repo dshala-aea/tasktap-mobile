@@ -10,8 +10,12 @@
 // `frontend/src/lib/api/enums.ts`'s `notificationTypeFromWire` for the same bug already found
 // and fixed on the web client for this exact field.
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
+
+class MockDio extends Mock implements Dio {}
 
 Map<String, dynamic> _baseJson({dynamic type, dynamic deliveryType}) => {
   'id': 'n1',
@@ -95,6 +99,63 @@ void main() {
     test('a WorkLogCorrected name string (FCM data.type shape) passes through unchanged', () {
       final dto = NotificationDto.fromJson(_baseJson(type: 'WorkLogCorrected', deliveryType: 0));
       expect(dto.type, 'WorkLogCorrected');
+    });
+  });
+
+  group('getNotification', () {
+    late MockDio dio;
+    late NotificationApiClient client;
+
+    setUp(() {
+      dio = MockDio();
+      client = NotificationApiClient(dio);
+      registerFallbackValue(Options());
+    });
+
+    test('parses the by-id entity payload and ignores the fields the DTO does not model', () async {
+      when(() => dio.get<dynamic>('/api/notifications/n1')).thenAnswer(
+        (_) async => Response<dynamic>(
+          requestOptions: RequestOptions(path: '/api/notifications/n1'),
+          statusCode: 200,
+          data: {
+            ..._baseJson(type: 11, deliveryType: 0),
+            'readAt': null,
+            'relatedEntityId': null,
+            'relatedEntityType': null,
+            'scheduledFor': null,
+            'sentAt': null,
+            // The by-id endpoint returns the entity, which also carries these.
+            'deliveryError': 'smtp timeout',
+            'retryCount': 2,
+          },
+        ),
+      );
+
+      final dto = await client.getNotification('n1');
+
+      expect(dto.id, 'n1');
+      expect(dto.title, 'Titolo');
+      expect(dto.message, 'Messaggio');
+      expect(dto.type, 'SystemAnnouncement');
+      expect(dto.isRead, isFalse);
+    });
+
+    test('surfaces a 404 as a DioException the caller can classify', () async {
+      final options = RequestOptions(path: '/api/notifications/missing');
+      when(() => dio.get<dynamic>('/api/notifications/missing')).thenThrow(
+        DioException(
+          requestOptions: options,
+          response: Response<dynamic>(requestOptions: options, statusCode: 404),
+          type: DioExceptionType.badResponse,
+        ),
+      );
+
+      await expectLater(
+        client.getNotification('missing'),
+        throwsA(
+          isA<DioException>().having((e) => e.response?.statusCode, 'statusCode', 404),
+        ),
+      );
     });
   });
 }

@@ -26,6 +26,7 @@ class MobileSessionDto {
     this.latitude,
     this.longitude,
     this.gpsAccuracyMeters,
+    this.deviceUtc,
   });
 
   final String clientId;
@@ -33,6 +34,13 @@ class MobileSessionDto {
   final DateTime? endTime; // UTC, null if active
   final double? latitude; // null for simple timbra
   final double? longitude; // null for simple timbra
+
+  /// This device's own clock reading at the moment the batch is sent — deliberately not the
+  /// punch instant. A queued punch is hours old by the time it goes out, and the phone may have
+  /// corrected its clock in between, so only the send-time reading can be compared with the
+  /// server's receipt instant. The server stores the gap (and flags it when it is large); it
+  /// never uses this value as the worklog instant. Null means "nothing measured", not "agreed".
+  final DateTime? deviceUtc;
 
   /// Device-reported GPS accuracy radius, in meters, at the moment [latitude]/[longitude] were
   /// captured. Capture-only, mirrors `WorkLog.GpsAccuracyMeters` server-side.
@@ -45,6 +53,7 @@ class MobileSessionDto {
     'latitude': latitude,
     'longitude': longitude,
     'gpsAccuracyMeters': gpsAccuracyMeters,
+    if (deviceUtc != null) 'deviceUtc': deviceUtc!.toUtc().toIso8601String(),
   };
 }
 
@@ -58,22 +67,36 @@ class UpsertSessionResponse {
     this.endTime,
     this.tipoOra,
     required this.isActive,
+    this.clockDisagreementSeconds,
   });
 
   final String clientId;
   final String workLogId;
-  final DateTime startTime;
-  final DateTime? endTime;
+
+  /// Time of day of the stored row (Rome wall clock) — a .NET `TimeSpan` on the wire ("09:11:00"),
+  /// NOT an instant. Parsing it with `DateTime.parse` threw after the server had committed and left
+  /// every batch pending for ever (field bug 2026-11-06). Nothing reads these two fields today.
+  final Duration startTime;
+  final Duration? endTime;
   final String? tipoOra;
   final bool isActive;
+
+  /// Present only when this phone's clock and the server's disagreed by more than the server's own
+  /// threshold: the device reading minus the server receipt, signed. Null for ordinary drift, for a
+  /// client that sent no clock, and from a backend that predates the field — which is exactly why
+  /// the phone renders "show advice if present" instead of computing its own comparison.
+  final int? clockDisagreementSeconds;
 
   factory UpsertSessionResponse.fromJson(Map<String, dynamic> json) => UpsertSessionResponse(
     clientId: json['clientId'] as String,
     workLogId: json['workLogId'] as String,
-    startTime: DateTime.parse(json['startTime'] as String),
-    endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
+    // Tolerant on purpose: the response only confirms what the server stored. A time this phone
+    // cannot read must never turn an accepted batch into a failed one.
+    startTime: parseTimeSpan(json['startTime']) ?? Duration.zero,
+    endTime: parseTimeSpan(json['endTime']),
     tipoOra: json['tipoOra'] as String?,
     isActive: json['isActive'] as bool? ?? false,
+    clockDisagreementSeconds: (json['clockDisagreementSeconds'] as num?)?.toInt(),
   );
 }
 
@@ -169,6 +192,132 @@ class TodayWorkLogDto {
   }
 }
 
+// ── One day's attendance rows (GET /api/WorkLog) ──────────────────────────────
+
+/// What one attendance row of a day actually was.
+///
+/// `WorkLogTypeEnum` on the wire is a number, not a name (only `WorkLogApprovalStatusEnum`
+/// carries a `JsonStringEnumConverter`), and an older server sends nothing at all — hence
+/// [unknown] rather than a silent default to work. A break rendered as work is the exact
+/// misreading this type exists to prevent: it inflates the day and hides the pause.
+enum DayWorkLogKind { ordinary, breakTime, shortBreak, longBreak, unknown }
+
+/// One attendance row of a single day, as `GET /api/WorkLog` returns it.
+///
+/// Why this endpoint and not `GET /worklog/mobile/today`: the mobile endpoint returns whole
+/// sessions (id, clientId, start, end, open) and deliberately omits the row's type, so a break
+/// arrived looking exactly like a stretch of work. `/api/WorkLog` returns the rows themselves,
+/// which carry `workLogType` and `sorgente` — the two facts the day's rail needs and the reason
+/// this DTO exists instead of [TodayWorkLogDto].
+///
+/// Times: `startUtc`/`endUtc` are the true instants and are preferred whenever present. Legacy
+/// rows predate them, so the fallback combines `workDate` with the `TimeSpan` `startTime` in the
+/// business (Rome) frame — an approximation good enough for a single day's rail, and the only
+/// thing those rows ever recorded.
+class DayWorkLogEntry {
+  const DayWorkLogEntry({
+    required this.id,
+    required this.clientId,
+    required this.start,
+    required this.end,
+    required this.kind,
+    required this.sorgente,
+  });
+
+  final String id;
+
+  /// The phone-generated id of the session that created this row, when it came from an app.
+  /// Null for rows written by the kiosk, the office, or an older client — it is the join key
+  /// that lets the rail skip a server row the phone already shows from its own events.
+  final String? clientId;
+
+  final DateTime start;
+  final DateTime? end;
+
+  final DayWorkLogKind kind;
+
+  /// `manuale` | `totem` | `qr` | `app` | `trasferta` | `smartworking`, or null when the server did
+  /// not say (or said something this build does not know).
+  final String? sorgente;
+
+  static DayWorkLogKind _kindOf(Object? raw) => switch (raw) {
+    0 => DayWorkLogKind.ordinary,
+    1 => DayWorkLogKind.breakTime,
+    2 => DayWorkLogKind.shortBreak,
+    3 => DayWorkLogKind.longBreak,
+    _ => DayWorkLogKind.unknown,
+  };
+
+  /// `WorkLogSorgenteEnum` on the wire is a bare int (Manuale 0, Totem 1, QrCode 2, App 3,
+  /// Trasferta 4, SmartWorking 5). A string spelling is tolerated too. Anything else — a member a
+  /// newer server added — is null, which the rail renders as the neutral "server": never a throw.
+  static String? _sorgenteOf(Object? raw) {
+    if (raw is String) {
+      return switch (raw.trim().toLowerCase()) {
+        'manuale' => 'manuale',
+        'totem' => 'totem',
+        'qrcode' || 'qr' => 'qr',
+        'app' => 'app',
+        'trasferta' => 'trasferta',
+        'smartworking' => 'smartworking',
+        _ => null,
+      };
+    }
+    return switch (raw) {
+      0 => 'manuale',
+      1 => 'totem',
+      2 => 'qr',
+      3 => 'app',
+      4 => 'trasferta',
+      5 => 'smartworking',
+      _ => null,
+    };
+  }
+
+  /// Test seam for the mapping above.
+  static String? sorgenteOfForTest(Object? raw) => _sorgenteOf(raw);
+
+  factory DayWorkLogEntry.fromJson(
+    Map<String, dynamic> json, {
+    required BusinessTime businessTime,
+  }) {
+    final workDate = parseDateOnlyOrThrow(json['workDate']);
+
+    DateTime instant(Object? utcRaw, Object? spanRaw) {
+      if (utcRaw is String && utcRaw.isNotEmpty) {
+        final parsed = DateTime.tryParse(utcRaw);
+        if (parsed != null) return parsed.toUtc();
+      }
+      final span = parseTimeSpan(spanRaw);
+      if (span == null) {
+        // No usable clock reading at all: anchor at the row's date so the row still exists on
+        // the rail rather than making the whole day unreadable.
+        return businessTime.instantOfLegacyLabel(workDate, Duration.zero);
+      }
+      return businessTime.instantOfLegacyLabel(workDate, span);
+    }
+
+    final start = instant(json['startUtc'], json['startTime']);
+    var end = json['endTime'] == null && json['endUtc'] == null
+        ? null
+        : instant(json['endUtc'], json['endTime']);
+    // A row that ran past midnight keeps its opener's work date but may carry a smaller
+    // time-of-day for its end. Only the legacy pair can produce that; an endUtc never does.
+    if (end != null && end.isBefore(start)) {
+      end = end.add(const Duration(days: 1));
+    }
+
+    return DayWorkLogEntry(
+      id: json['id'] as String,
+      clientId: json['clientId'] as String?,
+      start: start,
+      end: end,
+      kind: _kindOf(json['workLogType']),
+      sorgente: _sorgenteOf(json['sorgente']),
+    );
+  }
+}
+
 // ── Kiosk scan (POST /api/worklog/kiosk/scan) ─────────────────────────────────
 
 /// Why a `kioskScan` call failed, mirroring the 5-check authorization formula
@@ -190,6 +339,12 @@ enum KioskScanFailureReason {
   /// mismatched UserId.
   forbidden,
 
+  /// The day moved between the prompt and the tap: the named action is no longer possible from
+  /// the state the server now sees (already on a break, not clocked in, payroll period closed).
+  /// The server's own reason code travels on [KioskScanException.code]; re-reading the day is
+  /// what makes the prompt right again, so retrying is worthwhile.
+  conflict,
+
   /// No usable response reached us (offline, DNS, timeout).
   network,
 
@@ -198,10 +353,15 @@ enum KioskScanFailureReason {
 }
 
 class KioskScanException implements Exception {
-  const KioskScanException(this.reason, [this.message]);
+  const KioskScanException(this.reason, [this.message, this.code]);
 
   final KioskScanFailureReason reason;
   final String? message;
+
+  /// Server reason code, present on [KioskScanFailureReason.conflict] — the same strings
+  /// `GET /worklog/today` projects in `availableActions` (`already_clocked_in`, `on_break`, …),
+  /// so the two surfaces never grow separate vocabularies.
+  final String? code;
 
   @override
   String toString() => 'KioskScanException($reason${message != null ? ': $message' : ''})';
@@ -212,10 +372,25 @@ class KioskScanException implements Exception {
 class KioskScanResult {
   const KioskScanResult({required this.action, required this.workLogId, this.endTime});
 
-  /// "in" or "out".
+  /// `in` | `out` | `breakStart` | `breakEnd`.
   final String action;
   final String workLogId;
-  final DateTime? endTime;
+
+  /// The closed entry's end **as a time of day**, not as an instant: the server's
+  /// `ClockResult.EndTime` is a `TimeSpan`, so its value is a distance from midnight on the
+  /// worklog's own business date. Present only on `out` — `ClockResultToActionResult` omits the
+  /// key entirely for every other action.
+  ///
+  /// Parsed with [parseTimeSpan], never `DateTime.parse`: a `TimeSpan` reaches the wire as
+  /// `"17:00:00"`, and treating it as a date threw `FormatException` on every clock-out — a
+  /// failure the confirm screen could not catch, because it models [KioskScanException] and a
+  /// FormatException is not one. That is what left the technician on a spinner over a punch that
+  /// had already landed.
+  ///
+  /// Null when the server sent nothing, or something this build cannot read: the punch has
+  /// already happened by the time the body is parsed, so a malformed echo must never turn a
+  /// successful clock-out into a failure.
+  final Duration? endTime;
 }
 
 // ── Giornata (GET /api/WorkLog/today) ─────────────────────────────────────────
@@ -295,10 +470,26 @@ class WorklogApiClient {
   /// Idempotent upsert: the server matches on (tenant, user, clientId) and
   /// updates the row (e.g. fills endTime) without creating duplicates.
   /// Throws [DioException] on network / server error.
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
+  ///
+  /// [breaks] is additive and optional. Each entry is a `pausa → ripresa` interval (client id =
+  /// the pausa event id); the server writes it as a break row and classifies it as a short or long
+  /// break when it closes. It is sent in its OWN array, never mixed into [sessions], so a server
+  /// that predates this field simply ignores it: the ordinary intervals are unchanged and the
+  /// break stays the gap it is today. Once the server supports it, the same payload fills that gap
+  /// with a real break row, with no client-side feature flag to flip.
+  ///
+  /// The key is omitted entirely when there is no break, which keeps every existing caller's body
+  /// byte-identical.
+  Future<List<UpsertSessionResponse>> upsertSessions(
+    List<MobileSessionDto> sessions, {
+    List<MobileSessionDto> breaks = const [],
+  }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/worklog/mobile/sessions',
-      data: {'sessions': sessions.map((s) => s.toJson()).toList()},
+      data: {
+        'sessions': sessions.map((s) => s.toJson()).toList(),
+        if (breaks.isNotEmpty) 'breaks': breaks.map((s) => s.toJson()).toList(),
+      },
     );
 
     final data = response.data;
@@ -320,21 +511,52 @@ class WorklogApiClient {
   }
 
   /// POST /api/worklog/end — clock out. The server ends whatever open row the caller has (during
-  /// a break that is the break row, which closes the day) using ITS clock; 404 when nothing is
-  /// open. Used for a shift that was started on another device — see TimbraSyncService.
-  Future<void> endWork() async {
-    await _dio.post<dynamic>('/api/worklog/end');
+  /// a break that is the break row, which closes the day); 404 when nothing is open. Used for a
+  /// shift that was started on another device — see TimbraSyncService.
+  ///
+  /// [deviceUtc] is this device's clock reading at the moment of sending, not the tap instant: it
+  /// becomes the row's end instant and the gap from the server's receipt time is recorded as the
+  /// clock disagreement. Omitted by callers with no clock to offer, which leaves the server
+  /// stamping its own clock exactly as before.
+  ///
+  /// Returns the server's already-filtered disagreement for the closed row, or null: ordinary
+  /// drift, no device clock and an older backend all answer the same way. The phone relays it; it
+  /// never compares anything itself.
+  Future<int?> endWork({DateTime? deviceUtc}) async {
+    final response = await _dio.post<dynamic>(
+      '/api/worklog/end',
+      data: deviceUtc == null ? null : {'deviceUtc': deviceUtc.toUtc().toIso8601String()},
+    );
+    final data = response.data;
+    return data is Map<String, dynamic>
+        ? (data['clockDisagreementSeconds'] as num?)?.toInt()
+        : null;
   }
 
   /// POST /api/worklog/break/start — 400 unless an ordinary (non-break) row is open.
-  Future<void> startBreak() async {
-    await _dio.post<dynamic>('/api/worklog/break/start');
+  ///
+  /// [occurredAtUtc] is set only when a queued tap is being replayed: the server then opens the
+  /// break at the instant the technician actually paused, instead of at the instant the queue
+  /// reached it. A live tap sends no body at all — the body is optional on the server for exactly
+  /// that reason — and an older backend that ignores an unexpected body keeps working unchanged.
+  ///
+  /// Deliberately not `deviceUtc`: that is this phone's clock at SEND time, which for a replayed
+  /// tap is the replay. This is the tap's own time, so there is no second reading to compare it
+  /// with and no clock disagreement to report.
+  Future<void> startBreak({DateTime? occurredAtUtc}) async {
+    await _dio.post<dynamic>('/api/worklog/break/start', data: _breakPunchBody(occurredAtUtc));
   }
 
-  /// POST /api/worklog/break/end — 404 unless a break is open.
-  Future<void> endBreak() async {
-    await _dio.post<dynamic>('/api/worklog/break/end');
+  /// POST /api/worklog/break/end — 404 unless a break is open. See [startBreak] for
+  /// [occurredAtUtc]; on this half it is what makes the break's duration — and so its short/long
+  /// classification — the real one rather than the gap between two replays.
+  Future<void> endBreak({DateTime? occurredAtUtc}) async {
+    await _dio.post<dynamic>('/api/worklog/break/end', data: _breakPunchBody(occurredAtUtc));
   }
+
+  /// Null, not `{}`, when there is nothing to say: a live tap stays identical on the wire.
+  static Map<String, dynamic>? _breakPunchBody(DateTime? occurredAtUtc) =>
+      occurredAtUtc == null ? null : {'occurredAtUtc': occurredAtUtc.toUtc().toIso8601String()};
 
   /// GET /api/WorkLog?userId=&dateFrom=&dateTo=
   ///
@@ -366,6 +588,47 @@ class WorklogApiClient {
 
     final raw = data['items'] as List<dynamic>? ?? [];
     return raw.cast<Map<String, dynamic>>().map(UserWorkLogDto.fromJson).toList();
+  }
+
+  /// The caller's own attendance rows for one business day, typed.
+  ///
+  /// Backs the Timbra screen's day rail: the rows a phone cannot know about — a kiosk punch, a
+  /// punch from another device, an office correction — arrive here with their `workLogType`, so
+  /// a break reads as a break and the rail's arithmetic matches the payroll one.
+  ///
+  /// Sends the caller's own id, which `ScopedUserIdAsync` permits for a technician and which
+  /// [fetchForUser] already relies on. The window is a single day in the legacy (Rome) frame
+  /// because `dateFrom`/`dateTo` bound `WorkDate`, and `WorkDate` labels live in that frame.
+  ///
+  /// Throws [DioException] on network/server error — offline is a normal condition of this phone
+  /// and the caller decides what it means, exactly as with [getGiornata].
+  Future<List<DayWorkLogEntry>> fetchDayEntries({
+    required String userId,
+    required DateTime day,
+    BusinessTime? businessTime,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/WorkLog',
+      queryParameters: {
+        'userId': userId,
+        'dateFrom': _dateOnly(day),
+        'dateTo': _dateOnly(day),
+        // A day of ordinary/break pairs is a handful of rows; the default 20 would silently clip
+        // a day that accumulated corrections.
+        'pageSize': 100,
+        'page': 1,
+      },
+    );
+
+    final data = response.data;
+    if (data == null) return [];
+
+    final bt = businessTime ?? BusinessTime.fallback();
+    final raw = data['items'] as List<dynamic>? ?? [];
+    return raw
+        .cast<Map<String, dynamic>>()
+        .map((json) => DayWorkLogEntry.fromJson(json, businessTime: bt))
+        .toList();
   }
 
   static String _dateOnly(DateTime d) =>
@@ -407,17 +670,28 @@ class WorklogApiClient {
   /// [userId] must be the caller's own internal db id (`internalUserIdProvider`) —
   /// `WorkLogController.KioskScan`'s Check 5 rejects anything else, by design (no
   /// buddy-punching).
-  Future<KioskScanResult> kioskScan({required String token, required String userId}) async {
+  ///
+  /// [action] names the transition (`ClockIn` | `ClockOut` | `StartBreak` | `EndBreak`) — the
+  /// same vocabulary [GiornataActionDto.action] carries. Omitting it keeps the legacy blind
+  /// toggle, which is what a scan must fall back to when the day could not be read: an offline
+  /// phone still gets its punch, and the server decides. With it, scanning a totem while
+  /// something is already open performs exactly the chosen transition instead of toggling —
+  /// which is the difference between "pausa" and clocking out by accident.
+  Future<KioskScanResult> kioskScan({
+    required String token,
+    required String userId,
+    String? action,
+  }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/worklog/kiosk/scan',
-        data: {'token': token, 'userId': userId},
+        data: {'token': token, 'userId': userId, 'action': ?action},
       );
       final data = response.data ?? const <String, dynamic>{};
       return KioskScanResult(
         action: data['action'] as String? ?? 'in',
         workLogId: data['workLogId'] as String? ?? '',
-        endTime: data['endTime'] != null ? DateTime.parse(data['endTime'] as String) : null,
+        endTime: parseTimeSpan(data['endTime']),
       );
     } on DioException catch (e) {
       throw _mapKioskScanError(e);
@@ -428,6 +702,15 @@ class WorklogApiClient {
     final status = e.response?.statusCode;
     if (status == 402) return const KioskScanException(KioskScanFailureReason.notEntitled);
     if (status == 403) return const KioskScanException(KioskScanFailureReason.forbidden);
+    // 409 is the named-action refusal: the server validated the requested transition against the
+    // day as it stands now and said no. Its body is a ProblemDetails carrying BOTH the Italian
+    // `detail` to show and the stable `code` — the read model's own reason vocabulary.
+    if (status == 409) {
+      final body = e.response?.data;
+      final message = body is Map ? body['detail'] as String? ?? body['title'] as String? : null;
+      final code = body is Map ? body['code'] as String? : null;
+      return KioskScanException(KioskScanFailureReason.conflict, message, code);
+    }
     if (status == 400) {
       // WorkLogController's kiosk/scan 400s are plain `BadRequest("...")` results, not
       // ProblemDetails — [ApiController]'s automatic problem-details filter only rewrites

@@ -7,6 +7,8 @@
 // C# PascalCase properties via the default System.Text.Json policy).
 // ══════════════════════════════════════════════════════════════════════════════
 
+import '../../domain/reports/customer_signature_absence_reason.dart';
+
 /// Full rapportino payload sent to POST /api/reports/submit.
 /// Mirror of backend SubmitReportRequest.cs — field names are identical.
 class SubmitReportRequest {
@@ -15,6 +17,8 @@ class SubmitReportRequest {
     this.expectedVersion,
     this.scheduleId,
     this.ticketId,
+    this.cantiereId,
+    this.consumedCantiereWorkLogClientIds = const [],
     required this.locationId,
     required this.title,
     this.details,
@@ -24,6 +28,8 @@ class SubmitReportRequest {
     this.startedAt,
     this.endedAt,
     this.customerSignatureAllegatoId,
+    this.customerSignatureAbsenceReason,
+    this.customerSignatureAbsenceNote,
     this.technicianSignatureAllegatoId,
     this.customerSignoffText,
     this.materialiNotRequired = false,
@@ -59,6 +65,23 @@ class SubmitReportRequest {
   /// Optional ticket the report belongs to.
   final String? ticketId;
 
+  /// Optional cantiere (worksite) this rapportino belongs to — P2-6.
+  ///
+  /// The server has no other way to learn it on this path: `Report.CantiereId` used to be settable
+  /// only by `POST /api/reports/from-cantiere-worklogs`, so a rapportino drafted from a cantiere
+  /// while offline arrived with no cantiere at all. Omitted when null, which the server reads as
+  /// "this client does not own the field" and leaves whatever it has in place (an older build
+  /// submitting a server-created draft therefore cannot detach it).
+  final String? cantiereId;
+
+  /// The device's own cantiere punch ids (`CantiereWorkLog.ClientId` server-side) whose hours this
+  /// rapportino already carries — P2-6.
+  ///
+  /// The server stamps exactly these rows as consumed (`CantiereWorkLog.ReportStaffId`) so a later
+  /// cantiere-originated rapportino cannot count the same hours again. Ids the server cannot
+  /// resolve yet (punch still queued) are ignored, never an error; always sent, empty included.
+  final List<String> consumedCantiereWorkLogClientIds;
+
   /// Location of the intervention (required).
   final String locationId;
 
@@ -83,8 +106,20 @@ class SubmitReportRequest {
   /// When the work actually ended (UTC ISO-8601).
   final DateTime? endedAt;
 
-  /// Allegato id of the customer's signature (required to submit).
+  /// Allegato id of the customer's signature. Required only when no
+  /// [customerSignatureAbsenceReason] is recorded: a report the customer could not sign states why
+  /// instead.
   final String? customerSignatureAllegatoId;
+
+  /// Why the customer did not sign ("Il cliente non può firmare"). Mirrors the backend
+  /// `CustomerSignatureAbsenceReason`, serialized as an INTEGER (`Assente = 0`, `Rifiuta = 1`,
+  /// `Altro = 2`). Never sent alongside [customerSignatureAllegatoId] — a report carries one or the
+  /// other, never both.
+  final CustomerSignatureAbsenceReason? customerSignatureAbsenceReason;
+
+  /// Free text explaining [customerSignatureAbsenceReason]. Sent only when non-empty and only
+  /// alongside a reason.
+  final String? customerSignatureAbsenceNote;
 
   /// Allegato id of the technician's signature (required to submit).
   final String? technicianSignatureAllegatoId;
@@ -129,6 +164,8 @@ class SubmitReportRequest {
     if (expectedVersion != null) 'expectedVersion': expectedVersion,
     if (scheduleId != null) 'scheduleId': scheduleId,
     if (ticketId != null) 'ticketId': ticketId,
+    if (cantiereId != null) 'cantiereId': cantiereId,
+    'consumedCantiereWorkLogClientIds': consumedCantiereWorkLogClientIds,
     'locationId': locationId,
     'title': title,
     if (details != null) 'details': details,
@@ -139,6 +176,15 @@ class SubmitReportRequest {
     if (endedAt != null) 'endedAt': endedAt!.toUtc().toIso8601String(),
     if (customerSignatureAllegatoId != null)
       'customerSignatureAllegatoId': customerSignatureAllegatoId,
+    // Never both: a signed report emits no absence reason at all, even if the state somehow still
+    // held one. The enum goes out as its wire int, never a string. The note rides along only with
+    // a reason, and only when it has content — a blank note is not an answer.
+    if (customerSignatureAllegatoId == null && customerSignatureAbsenceReason != null)
+      'customerSignatureAbsenceReason': customerSignatureAbsenceReason!.wireValue,
+    if (customerSignatureAllegatoId == null &&
+        customerSignatureAbsenceReason != null &&
+        (customerSignatureAbsenceNote?.trim().isNotEmpty ?? false))
+      'customerSignatureAbsenceNote': customerSignatureAbsenceNote!.trim(),
     if (technicianSignatureAllegatoId != null)
       'technicianSignatureAllegatoId': technicianSignatureAllegatoId,
     if (customerSignoffText != null) 'customerSignoffText': customerSignoffText,
@@ -150,6 +196,23 @@ class SubmitReportRequest {
     'materiali': materiali.map((m) => m.toJson()).toList(),
     'controlli': controlli.map((c) => c.toJson()).toList(),
     'strumenti': strumenti.map((s) => s.toJson()).toList(),
+  };
+}
+
+/// One recorded work interval. Mirror of backend `SubmitReportSegmentDto`: the two instants and
+/// the phone's own id for the tap. The id is what makes a retried submit a no-op instead of a
+/// double-billed second set of hours.
+class SubmitReportSegmentDto {
+  const SubmitReportSegmentDto({required this.startTime, required this.endTime, this.clientId});
+
+  final DateTime startTime;
+  final DateTime endTime;
+  final String? clientId;
+
+  Map<String, dynamic> toJson() => {
+    'startTime': startTime.toUtc().toIso8601String(),
+    'endTime': endTime.toUtc().toIso8601String(),
+    if (clientId != null) 'clientId': clientId,
   };
 }
 
@@ -165,6 +228,7 @@ class SubmitReportStaffDto {
     this.startTime,
     this.endTime,
     this.pauseMinutes = 0,
+    this.segments = const [],
   });
 
   final String userId;
@@ -177,6 +241,11 @@ class SubmitReportStaffDto {
   final DateTime? endTime;
   final int pauseMinutes;
 
+  /// The intervals this row's hours were measured from, oldest first. Omitted when empty: the
+  /// server reads absent-or-empty as "not timer-recorded", which is exactly the pre-segments
+  /// wire shape, and replacing the stored set with nothing would downgrade the row to `Legacy`.
+  final List<SubmitReportSegmentDto> segments;
+
   Map<String, dynamic> toJson() => {
     'userId': userId,
     if (hoursWorked != null) 'hoursWorked': hoursWorked,
@@ -187,6 +256,7 @@ class SubmitReportStaffDto {
     if (startTime != null) 'startTime': startTime!.toUtc().toIso8601String(),
     if (endTime != null) 'endTime': endTime!.toUtc().toIso8601String(),
     'pauseMinutes': pauseMinutes,
+    if (segments.isNotEmpty) 'segments': segments.map((s) => s.toJson()).toList(),
   };
 }
 
@@ -260,16 +330,28 @@ class SubmitReportControlloDto {
 
 /// One instrument used on the rapportino. Mirror of `SubmitReportStrumentoDto`: `strumentoId` +
 /// `expiredAcknowledged` only. An expired instrument REQUIRES `expiredAcknowledged = true`; a valid
-/// one forbids it (422 `strumenti_invalid` otherwise).
+/// one forbids it (422 `strumenti_invalid` otherwise). Plus two optional free-text notes,
+/// [usageDescription] (how it was used) and [outcome] (esito), each max 2000 chars server-side.
+/// They are sent only when non-blank (the server trims and stores blank as null).
 class SubmitReportStrumentoDto {
-  const SubmitReportStrumentoDto({required this.strumentoId, this.expiredAcknowledged = false});
+  const SubmitReportStrumentoDto({
+    required this.strumentoId,
+    this.expiredAcknowledged = false,
+    this.usageDescription,
+    this.outcome,
+  });
 
   final String strumentoId;
   final bool expiredAcknowledged;
+  final String? usageDescription;
+  final String? outcome;
 
   Map<String, dynamic> toJson() => {
     'strumentoId': strumentoId,
     'expiredAcknowledged': expiredAcknowledged,
+    if (usageDescription != null && usageDescription!.trim().isNotEmpty)
+      'usageDescription': usageDescription!.trim(),
+    if (outcome != null && outcome!.trim().isNotEmpty) 'outcome': outcome!.trim(),
   };
 }
 

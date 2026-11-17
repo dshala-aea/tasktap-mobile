@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/reports/submit_report_request.dart';
+import 'package:tasktap_mobile/domain/reports/customer_signature_absence_reason.dart';
 
 /// Checks what the app actually puts on the wire against the API's own OpenAPI snapshot.
 ///
@@ -22,15 +23,15 @@ import 'package:tasktap_mobile/data/reports/submit_report_request.dart';
 /// reported rather than failed — but it is reported, because "the app silently never sends this"
 /// is how a field quietly stays unimplemented. Types are not checked; this catches names.
 ///
-/// **Refreshing:** the copy in the root repo's WORKING TREE is not the source of truth — on
-/// `feat/i2-confirm-resolves` it is a 298-schema generation that does not contain
-/// `AiConversationConfirmResponse` at all, and copying it would DELETE 40 schemas this file's gate
-/// asserts while ADDING 2 (`CatalogueFieldDto`, `FieldRefDto`). Copy from the pushed branch instead:
-///     cd ../ && git show origin/master:docs/api/openapi.snapshot.json > /tmp/openapi.master.json
-/// and MERGE it, never overwrite: this file is ahead of `origin/master` on the four `Sync*Dto`
-/// reference schemas (backend `1950b3d7`, on no origin ref yet) and on four `MobileUserSyncResult`
-/// properties. The inbound half below fails by name in either direction, which is the point:
-/// run `timeout 900 flutter test test/contract/` and let it tell you whether the merge held.
+/// **Refreshing:** the copy in the root repo's WORKING TREE is not the source of truth — it is an
+/// owner checkout that can be several merges behind. Copy the pushed branch:
+///     curl -sSL "$(gh api 'repos/dshala-aea/tasktap-api/contents/docs/api/openapi.snapshot.json?ref=master' --jq '.download_url')" \
+///       -o test/contract/openapi.snapshot.json
+/// A plain copy is right as long as `master` is a superset of what this file pins, and it is: every
+/// schema and property the gate names has landed there. When it is not — a local branch carrying a
+/// contract ahead of `master` — the copy would delete schemas this gate asserts, so merge instead
+/// and let the inbound half fail by name if the merge held badly. Either way, run
+/// `timeout 900 flutter test test/contract/` and read what it says.
 /// A diff here after an API change is the point — it means a rename reached the client.
 void main() {
   late Map<String, dynamic> schemas;
@@ -89,6 +90,10 @@ void main() {
   group('rapportino submission matches the API schema', () {
     /// Every optional field populated — an all-nulls payload would assert nothing, because
     /// `toJson` drops what it has no value for and the unknown-key check would see an empty map.
+    ///
+    /// `customerSignatureAbsenceReason` / `...Note` cannot live here: this request carries a
+    /// signature allegato, and a report has one or the other, never both, so `toJson` suppresses
+    /// them. `unsignedRequest` below is the branch that does have them.
     final fullRequest = SubmitReportRequest(
       id: '00000000-0000-0000-0000-000000000001',
       scheduleId: '00000000-0000-0000-0000-000000000002',
@@ -104,8 +109,17 @@ void main() {
       customerSignoffText: 'accettato',
       materialiNotRequired: false,
       photoAllegatoIds: const ['00000000-0000-0000-0000-000000000007'],
-      staff: const [
-        SubmitReportStaffDto(userId: '00000000-0000-0000-0000-000000000008'),
+      staff: [
+        SubmitReportStaffDto(
+          userId: '00000000-0000-0000-0000-000000000008',
+          segments: [
+            SubmitReportSegmentDto(
+              startTime: DateTime.utc(2026, 6, 15, 8),
+              endTime: DateTime.utc(2026, 6, 15, 10),
+              clientId: '00000000-0000-0000-0000-00000000000a',
+            ),
+          ],
+        ),
       ],
       materiali: const [SubmitReportMaterialeDto(quantity: 2)],
       controlli: const [
@@ -119,14 +133,43 @@ void main() {
         SubmitReportStrumentoDto(
           strumentoId: '00000000-0000-0000-0000-000000000009',
           expiredAcknowledged: true,
+          usageDescription: 'Misura di isolamento sul quadro B',
+          outcome: 'Valori conformi',
         ),
       ],
+    );
+
+    /// The unsigned branch: a customer who could not sign, so the reason and note go on the wire
+    /// and the signature allegato does not.
+    final unsignedRequest = SubmitReportRequest(
+      id: '00000000-0000-0000-0000-000000000011',
+      locationId: '00000000-0000-0000-0000-000000000004',
+      title: 'Manutenzione',
+      customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.altro,
+      customerSignatureAbsenceNote: 'Il cliente era assente',
     );
 
     test('SubmitReportRequest sends no field the server does not have', () {
       final json = fullRequest.toJson();
       expectNoUnknownKeys('SubmitReportRequest', json);
       reportUnsentFields('SubmitReportRequest', json);
+    });
+
+    /// The absence keys were the last two the app sent that the snapshot could not vouch for.
+    /// They reach the wire only here, so this is the only place the gate can check them.
+    test('the unsigned report sends the absence reason as its integer, never the name', () {
+      final json = unsignedRequest.toJson();
+
+      expect(
+        json['customerSignatureAbsenceReason'],
+        CustomerSignatureAbsenceReason.altro.wireValue,
+        reason:
+            'the enum has no JsonStringEnumConverter server-side: the int is the contract, and '
+            'a name would bind to the default reason or be rejected',
+      );
+      expect(json['customerSignatureAbsenceNote'], 'Il cliente era assente');
+      expect(json.containsKey('customerSignatureAllegatoId'), isFalse);
+      expectNoUnknownKeys('SubmitReportRequest', json);
     });
 
     test(
@@ -153,6 +196,8 @@ void main() {
       final json =
           (fullRequest.toJson()['staff'] as List).first as Map<String, dynamic>;
       expectNoUnknownKeys('SubmitReportStaffDto', json);
+      final segment = (json['segments'] as List).first as Map<String, dynamic>;
+      expectNoUnknownKeys('SubmitReportSegmentDto', segment);
     });
 
     /// The regression itself, stated against the server's schema rather than against our own class.
@@ -177,17 +222,58 @@ void main() {
       },
     );
 
+    test('the instrument notes are properties the server declares, as optional text', () {
+      final props = propertiesOf('SubmitReportStrumentoDto');
+      expect(props, containsAll(['usageDescription', 'outcome']));
+      final json =
+          (fullRequest.toJson()['strumenti'] as List).first
+              as Map<String, dynamic>;
+      expect(json['usageDescription'], 'Misura di isolamento sul quadro B');
+      expect(json['outcome'], 'Valori conformi');
+    });
+
+    test('blank instrument notes are omitted from the wire, not sent as empty strings', () {
+      final json = const SubmitReportStrumentoDto(
+        strumentoId: '00000000-0000-0000-0000-000000000009',
+        usageDescription: '   ',
+        outcome: '',
+      ).toJson();
+      expect(json.keys.toSet(), {'strumentoId', 'expiredAcknowledged'});
+      expectNoUnknownKeys('SubmitReportStrumentoDto', json);
+    });
+
     /// The server recomputes expiry from the report's work date and rejects anything else; a
     /// client-supplied `expiredAtUse` would be ignored at best and is never part of the contract.
     test('the instrument selection never carries expiredAtUse', () {
       final json =
           (fullRequest.toJson()['strumenti'] as List).first
               as Map<String, dynamic>;
-      expect(json.keys.toSet(), {'strumentoId', 'expiredAcknowledged'});
+      expect(json.keys.toSet(), {
+        'strumentoId',
+        'expiredAcknowledged',
+        'usageDescription',
+        'outcome',
+      });
       expect(
         propertiesOf('SubmitReportStrumentoDto'),
         isNot(contains('expiredAtUse')),
       );
+    });
+  });
+
+  /// The smart-working client hand-writes its DTO — the list and GET-by-id answers declare no
+  /// response schema at all (the controller returns the raw entity, so the snapshot says
+  /// `content?: never`). These three names are therefore the whole contract surface it has: the
+  /// create body it sends, the decide body it deliberately does not (approve/reject belong to the
+  /// office), and the enum its `status` ordinals are read against.
+  group('smart-working', () {
+    test('the schemas the client writes against are all in the snapshot', () {
+      expect(
+        propertiesOf('CreateSmartWorkingRequestBody'),
+        containsAll(['startDate', 'endDate', 'reason']),
+      );
+      expect(propertiesOf('DecideSmartWorkingRequestBody'), contains('reason'));
+      expect(schemas, contains('AbsenceRequestStatusEnum'));
     });
   });
 }

@@ -5,9 +5,12 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/ai/ai_api_client.dart';
 import '../../data/local/app_database.dart';
-import '../../data/reports/import_server_report.dart' show controlRowId;
+import '../../data/reports/import_server_report.dart' show controlRowId, controlSnapshotsForTicket;
+import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider;
+import 'ai_draft_feed.dart' show AiFeedReportLockedException, aiDraftFeedProvider;
+import 'ai_strumenti_write.dart' show AiStrumentoLine, writeAiStrumenti;
 import 'create_draft.dart';
 
 const _uuid = Uuid();
@@ -27,10 +30,16 @@ const _uuid = Uuid();
 /// Returns the new local report id, or null when the device cannot attribute a draft to anybody
 /// (no signed-in internal user id) — the same refusal `createLocalDraft` makes, for the same reason.
 ///
-/// What the response does NOT carry and this function therefore does not write: any signature, and
-/// any location fallback. A null `locationId` is written as an empty string, which reads as
-/// "unknown" and is what the editor's own validation rejects at submit time
-/// (`DraftValidationIssue.missingLocation`).
+/// What the response does NOT carry and this function therefore does not write: any signature. The
+/// header's customer and location are resolved from the LINKED TICKET's mirrored row when the
+/// response does not name them (`TicketDraftSeeder` seeds workers, hours, materials and controls —
+/// never customer or location), which is the same prefill the manual "Crea rapportino" path applies.
+/// Without it the Dettagli step drew a linked ticket above two empty Cliente/Sede pickers and the
+/// report failed `DraftValidationIssue.missingLocation` at submit.
+///
+/// A still-unresolved `locationId` is written as an empty string, which reads as "unknown" — the
+/// behaviour this function had before, now only for a ticketless report whose cantiere names no
+/// location.
 ///
 /// The one thing the response does not carry that this function DOES write is provenance —
 /// `isAiAssisted`, in the final `saveDraft` below, in the same companion as the data. It must not be
@@ -39,18 +48,50 @@ const _uuid = Uuid();
 /// `_hydrate()` resolves, so calling it here would overwrite everything this function just wrote.
 /// ADR-0016 §2 makes the flag coarse provenance, set where generated text enters the draft — which
 /// is here, so the value is `true` and not a caller's choice.
+///
+/// When [sessionId] already feeds a local report (the live draft was opened in the editor, Task
+/// 12), the response is applied into THAT report instead, through the same identity-matched,
+/// hand-edit-preserving path as the incremental apply (`AiDraftFeed.applyConfirmResponse`): no
+/// second report, no duplicated line. Its id is returned.
 Future<String?> applyConfirmedDraft(
   WidgetRef ref, {
   required AiConversationConfirmResponse response,
   String? ticketId,
   String? cantiereId,
+  String? sessionId,
 }) async {
+  if (sessionId != null) {
+    try {
+      final feed = ref.read(aiDraftFeedProvider);
+      final linked = (await feed.store.load(sessionId))?.reportId;
+      if (linked != null &&
+          await ref.read(draftReportRepositoryProvider).getDraft(linked) != null &&
+          await feed.applyConfirmResponse(sessionId, response)) {
+        return linked;
+      }
+    } on AiFeedReportLockedException {
+      rethrow; // a signed/queued/sent report is never re-seeded into a new one
+    } catch (_) {
+      // No readable feed state: fall through to the ordinary new-report path.
+    }
+  }
+
+  final resolvedTicketId = response.ticketId ?? ticketId;
+  final ticketRow = await _ticketRow(ref, resolvedTicketId);
+
   final id = await createLocalDraft(
     ref,
     title: response.title,
-    locationId: response.locationId ?? '',
-    ticketId: response.ticketId ?? ticketId,
+    // The server only returns a location it actually resolved. When the report is tied to a
+    // ticket, the ticket's own location and customer are already mirrored on the device and are
+    // exactly what the manual "Crea rapportino" path pre-fills (`_createManualDraft`) — writing
+    // them here is what makes the Dettagli step show Cliente/Sede instead of two empty pickers
+    // under a linked ticket, and what lets the report pass `missingLocation` at submit.
+    locationId: response.locationId ?? ticketRow?.locationId ?? '',
+    ticketId: resolvedTicketId,
     cantiereId: response.cantiereId ?? cantiereId,
+    customerId: ticketRow?.customerId,
+    tenantId: ticketRow?.tenantId,
   );
   if (id == null) return null;
 
@@ -96,6 +137,15 @@ Future<String?> applyConfirmedDraft(
   }
 
   if (response.controlli.isNotEmpty) {
+    // The server sends the TicketControl id only. The ticket's checklist is already mirrored on a
+    // device that synced it, so each answer gets the same label/asset snapshot the editor writes
+    // when the technician answers by hand (schema 52) — a report built from a voice draft must name
+    // its own rows just as a typed one does. Best-effort: no mirror, no snapshot, and the read-only
+    // view falls back to the checklist exactly as before.
+    final snapshots = await controlSnapshotsForTicket(
+      ref.read(appDatabaseProvider),
+      draft.ticketId,
+    );
     await repo.upsertControlli([
       for (final c in response.controlli)
         ReportControlliCompanion.insert(
@@ -111,9 +161,20 @@ Future<String?> applyConfirmedDraft(
           dateValue: Value(c.dateValue),
           numberValue: Value(c.numberValue),
           note: Value(c.note),
+          controlLabel: Value(snapshots[c.ticketControlId]?.controlLabel),
+          assetId: Value(snapshots[c.ticketControlId]?.assetId),
         ),
     ]);
   }
+
+  // Instruments: the server resolved each id against the tenant and computed the calibration
+  // verdict for the job's date; the rows themselves are ours to write. Written with the editor's
+  // own row ids, so the Strumenti step shows them as selected and can ask about an expired one.
+  await writeAiStrumenti(
+    repo,
+    reportId: id,
+    lines: response.strumenti.map(AiStrumentoLine.fromResolved),
+  );
 
   // materialiNotRequired and customerSignoffText are header fields the confirm response corrects
   // for us; carry them or the editor shows a report that contradicts what the server resolved.
@@ -137,13 +198,34 @@ Future<String?> applyConfirmedDraft(
       title: Value(draft.title),
       insertedUserId: Value(draft.insertedUserId),
       locationId: Value(draft.locationId),
-      materialiNotRequired: Value(response.materialiNotRequired),
+      // "Nessun materiale" and a material row are mutually exclusive: the flag says the operator
+      // answered "none", so a response that carries rows has the flag off whatever the model
+      // wrote. The incremental path applies the same rule, so the two cannot disagree.
+      materialiNotRequired: Value(response.materialiNotRequired && response.materials.isEmpty),
       customerSignoffText: Value(response.customerSignoffText),
       details: Value(response.details),
+      // Structured cause/fix, AI-fillable since 2026-11-16 (ruling D6 reversed for these two).
+      diagnosi: Value(response.diagnosi),
+      soluzione: Value(response.soluzione),
       isAiAssisted: const Value(true),
       updatedAt: Value(now),
     ),
   );
 
   return id;
+}
+
+/// The mirrored ticket row a confirmed draft belongs to, or `null` — a ticketless report, or a
+/// mirror this device cannot read.
+///
+/// Best-effort on purpose, like `_loadTicketNumber` on the copilot screen: a missing row costs the
+/// Cliente/Sede prefill below, never the report itself.
+Future<Ticket?> _ticketRow(WidgetRef ref, String? ticketId) async {
+  if (ticketId == null) return null;
+  try {
+    final db = ref.read(appDatabaseProvider);
+    return await (db.select(db.tickets)..where((t) => t.id.equals(ticketId))).getSingleOrNull();
+  } catch (_) {
+    return null;
+  }
 }

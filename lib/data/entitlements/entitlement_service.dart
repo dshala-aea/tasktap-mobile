@@ -76,6 +76,7 @@ class EntitlementService {
     final capabilities = _stringList(body['capabilities']);
     final seatType = body['seatType'];
     final clockInMethod = body['clockInMethod'] as String?;
+    final smartWorkingToday = _boolOrNull(body['smartWorkingToday']);
     final subscription = body['subscription'];
     final subscriptionStatus = subscription is Map ? subscription['status'] as String? : null;
 
@@ -96,6 +97,14 @@ class EntitlementService {
       subscriptionStatus: subscriptionStatus,
       clockInMethod: clockInMethod,
     );
+
+    // Kept in memory, never persisted (see `EntitlementRepository.smartWorkingTodayFor`). Re-checked
+    // immediately before applying rather than trusting the guard above it: an await has happened
+    // since, and an answer for a session that ended in flight must not leave its flag behind either
+    // (refresh() would then return false, so nobody would even be told it moved). Null when the
+    // server omitted the key or sent something that is not a bool — unknown, never a guess.
+    if (!_stillCurrent(sessionAtRequest)) return false;
+    _repository.setSmartWorkingToday(smartWorkingToday, ownerId: sessionAtRequest);
 
     // The response's `user.id` is the backend's internal Users.Id (a Guid) — distinct from the
     // OIDC sub that AuthUser.id carries. Persisted separately (not through EntitlementRepository,
@@ -143,4 +152,8 @@ class EntitlementService {
     if (value is! List) return null;
     return value.whereType<String>().toList();
   }
+
+  /// Null for anything that is not a JSON bool, including a missing key: "unknown" must not be
+  /// conflated with "no", because a wrong `false` is as costly as a wrong `true` here.
+  bool? _boolOrNull(Object? value) => value is bool ? value : null;
 }

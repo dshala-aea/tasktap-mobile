@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -55,30 +56,39 @@ AppNotifica _fakeNotifica({
 /// entirely: whichever write "wins", the loaded data matches.
 Future<Widget> _buildScreen({
   List<AppNotifica> notifiche = const [],
+  List<AppNotifica> altreNotifiche = const [],
   bool hasError = false,
 }) async {
   final db = AppDatabase(NativeDatabase.memory());
-  for (final n in notifiche) {
-    await db
-        .into(db.appNotifications)
-        .insertOnConflictUpdate(
-          AppNotificationsCompanion.insert(
-            id: n.id,
-            tenantId: 'test-tenant',
-            createdAt: n.timestamp,
-            userId: 'test-user',
-            title: n.titolo,
-            message: n.corpo,
-            type: n.tipo ?? 'TicketAssigned',
-            deliveryType: 'InApp',
-            isRead: Value(n.letta),
-            relatedEntityType: Value(n.relatedEntityType),
-            relatedEntityId: Value(n.relatedEntityId),
-          ),
-        );
+
+  Future<void> seed(Iterable<AppNotifica> items, String userId) async {
+    for (final n in items) {
+      await db
+          .into(db.appNotifications)
+          .insertOnConflictUpdate(
+            AppNotificationsCompanion.insert(
+              id: n.id,
+              tenantId: 'test-tenant',
+              createdAt: n.timestamp,
+              userId: userId,
+              title: n.titolo,
+              message: n.corpo,
+              type: n.tipo ?? 'TicketAssigned',
+              deliveryType: 'InApp',
+              isRead: Value(n.letta),
+              relatedEntityType: Value(n.relatedEntityType),
+              relatedEntityId: Value(n.relatedEntityId),
+            ),
+          );
+    }
   }
 
-  return ProviderScope(
+  // Only the signed-in user's rows may appear (G2a). `altreNotifiche` stand in for the previous
+  // technician's retained cache on a shared device.
+  await seed(notifiche, 'test-user');
+  await seed(altreNotifiche, 'altra-persona');
+
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       notificheProvider.overrideWith((ref) => NotificheNotifier(db, Dio(), ref)),
       if (hasError) notificheHasErrorProvider.overrideWith((ref) => true),
@@ -105,6 +115,10 @@ Future<Widget> _buildScreen({
             builder: (_, _) => const Text('STUB ferie'),
           ),
           GoRoute(path: '/calendario', builder: (_, _) => const Text('STUB calendario')),
+          GoRoute(
+            path: '/altro/notifiche/:id',
+            builder: (_, s) => Text('STUB notifica ${s.pathParameters['id']}'),
+          ),
         ],
       ),
     ),
@@ -114,6 +128,13 @@ Future<Widget> _buildScreen({
 void main() {
   setUpAll(() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+  });
+
+  setUp(() {
+    // The notifier scopes every cache read/write to the internal user id persisted by
+    // `EntitlementService.refresh` (`internalUserIdPrefsKey`). Without it, G2a shows an empty
+    // list by design — see notifiche_provider.dart.
+    SharedPreferences.setMockInitialValues({'internal_user_id': 'test-user'});
   });
 
   Future<void> drain(WidgetTester tester) async {
@@ -149,6 +170,21 @@ void main() {
 
     // Both notifications have the same title in our fake data.
     expect(find.text('Nuovo intervento'), findsNWidgets(2));
+    await drain(tester);
+  });
+
+  // G2a: `SessionEnder.endForced` keeps the local cache, so a shared van tablet can hold the
+  // previous technician's rows. Only the signed-in user's may reach the screen.
+  testWidgets('never shows another user\'s cached notifications', (tester) async {
+    await tester.pumpWidget(
+      await _buildScreen(
+        notifiche: [_fakeNotifica(id: 'mine')],
+        altreNotifiche: [_fakeNotifica(id: 'theirs')],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nuovo intervento'), findsOneWidget);
     await drain(tester);
   });
 
@@ -191,6 +227,23 @@ void main() {
 
     // Only 1 unread notification shown.
     expect(find.text('Nuovo intervento'), findsOneWidget);
+    await drain(tester);
+  });
+
+  // ── 6b. Non lette, everything read: the filter did its job ────────────────
+  // The single "Nessuna notifica" message told a technician who had just read everything that
+  // they had received nothing at all.
+  testWidgets('Non lette with everything read says no unread, not an empty inbox', (tester) async {
+    final notifiche = [_fakeNotifica(id: 'n1', letta: true)];
+
+    await tester.pumpWidget(await _buildScreen(notifiche: notifiche));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Non lette'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nessuna notifica non letta'), findsOneWidget);
+    expect(find.text('Nessuna notifica'), findsNothing);
     await drain(tester);
   });
 
@@ -244,9 +297,9 @@ void main() {
     });
   }
 
-  // ── 9. Unroutable tap: read + explanatory SnackBar, no navigation ─────────
+  // ── 9. No route of any kind: the notification's own page ──────────────────
   for (final type in const ['WorkLog', 'Magazzino', 'User', 'Tenant']) {
-    testWidgets('tap on unroutable $type notification shows SnackBar', (tester) async {
+    testWidgets('tap on unroutable $type notification opens its page', (tester) async {
       await tester.pumpWidget(
         await _buildScreen(
           notifiche: [_fakeNotifica(tipo: 'SeatLimitAlert', relatedEntityType: type, relatedEntityId: 'x1')],
@@ -257,13 +310,26 @@ void main() {
       await tester.tap(find.text('Nuovo intervento'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nessuna pagina collegata a questa notifica'), findsOneWidget);
-      expect(find.text('Segna tutte'), findsNothing);
+      expect(find.text('STUB notifica n1'), findsOneWidget);
+      expect(find.text('Nessuna pagina collegata a questa notifica'), findsNothing);
       await drain(tester);
     });
   }
 
-  testWidgets('WorkLogCorrected row: pencil icon, tap marks read, no SnackBar, no navigation', (
+  testWidgets('tap on an entity-less announcement opens its page', (tester) async {
+    await tester.pumpWidget(
+      await _buildScreen(notifiche: [_fakeNotifica(tipo: 'SystemAnnouncement')]),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Nuovo intervento'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('STUB notifica n1'), findsOneWidget);
+    await drain(tester);
+  });
+
+  testWidgets('WorkLogCorrected row: pencil icon, tap opens its page', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -284,9 +350,8 @@ void main() {
     await tester.tap(find.text('Nuovo intervento'));
     await tester.pumpAndSettle();
 
+    expect(find.text('STUB notifica n1'), findsOneWidget);
     expect(find.text('Nessuna pagina collegata a questa notifica'), findsNothing);
-    expect(find.text('Nuovo intervento'), findsOneWidget); // still on the list
-    expect(find.text('Segna tutte'), findsNothing); // marked read
     await drain(tester);
   });
 
@@ -311,14 +376,14 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('tap on notification without related entity shows SnackBar', (tester) async {
+  testWidgets('tap on notification without related entity opens its page', (tester) async {
     await tester.pumpWidget(await _buildScreen(notifiche: [_fakeNotifica()]));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Nuovo intervento'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Nessuna pagina collegata a questa notifica'), findsOneWidget);
+    expect(find.text('STUB notifica n1'), findsOneWidget);
     await drain(tester);
   });
 }

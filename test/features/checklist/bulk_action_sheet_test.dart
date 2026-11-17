@@ -13,7 +13,7 @@ import 'package:tasktap_mobile/presentation/providers/report_editor_providers.da
 
 import '../../support/checklist_fixtures.dart';
 
-Widget host(AppDatabase db) => ProviderScope(
+Widget host(AppDatabase db) => ProviderScope(retry: (_, _) => null, 
   overrides: [
     appDatabaseProvider.overrideWithValue(db),
     isOnlineProvider.overrideWithValue(true),
@@ -54,7 +54,7 @@ void main() {
   testWidgets('read-only ticket view has no bulk action', (tester) async {
     await seedBigTicket(db, assets: 2);
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [appDatabaseProvider.overrideWithValue(db), isOnlineProvider.overrideWithValue(true)],
         child: const MaterialApp(home: AssetChecklistScreen(ticketId: 't1')),
       ),

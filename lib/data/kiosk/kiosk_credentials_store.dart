@@ -5,7 +5,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Everything persisted on a device once it has been activated as a kiosk (attendance totem).
 class KioskCredentials {
-  const KioskCredentials({required this.rawKey, required this.deviceLabel});
+  const KioskCredentials({
+    required this.rawKey,
+    required this.deviceLabel,
+    this.deviceId,
+    this.signingKey,
+    this.serverTimeOffsetSeconds = 0,
+    this.expiresInSeconds = 300,
+  });
 
   /// The `sp_...` ServicePrincipal API key issued once by the web admin's "Registra dispositivo"
   /// flow (`RegisterKioskDeviceSheet.tsx` / `KioskDevicesController.Register`). Sent as
@@ -16,6 +23,32 @@ class KioskCredentials {
   /// the backend already knows the device by the name the admin gave it at registration; this is
   /// just what the activation screen shows back on this specific handset.
   final String deviceLabel;
+
+  /// Server-issued per-device identity and QR signing key. Null on an old installation that has
+  /// not provisioned the offline generator yet; [KioskModeNotifier.refreshQr] provisions on the
+  /// next online attempt and persists both here.
+  final String? deviceId;
+  final String? signingKey;
+
+  /// `serverTimeUtc - deviceTimeUtc` captured at provisioning, so a freshly generated token uses
+  /// the server's clock even when the tablet's clock has drifted.
+  final int serverTimeOffsetSeconds;
+  final int expiresInSeconds;
+
+  KioskCredentials copyWith({
+    String? deviceId,
+    String? signingKey,
+    int? serverTimeOffsetSeconds,
+    int? expiresInSeconds,
+  }) => KioskCredentials(
+    rawKey: rawKey,
+    deviceLabel: deviceLabel,
+    deviceId: deviceId ?? this.deviceId,
+    signingKey: signingKey ?? this.signingKey,
+    serverTimeOffsetSeconds:
+        serverTimeOffsetSeconds ?? this.serverTimeOffsetSeconds,
+    expiresInSeconds: expiresInSeconds ?? this.expiresInSeconds,
+  );
 }
 
 /// Secure, on-device storage for kiosk mode's activation state.
@@ -38,6 +71,10 @@ class KioskCredentialsStore {
   static const _rawKeyKey = 'tt.kiosk.raw_key';
   static const _deviceLabelKey = 'tt.kiosk.device_label';
   static const _exitPinHashKey = 'tt.kiosk.exit_pin_hash';
+  static const _deviceIdKey = 'tt.kiosk.device_id';
+  static const _signingKeyKey = 'tt.kiosk.signing_key';
+  static const _serverOffsetKey = 'tt.kiosk.server_offset_seconds';
+  static const _expiresInKey = 'tt.kiosk.expires_in_seconds';
 
   final FlutterSecureStorage _storage;
 
@@ -47,17 +84,55 @@ class KioskCredentialsStore {
     final rawKey = await _storage.read(key: _rawKeyKey);
     if (rawKey == null || rawKey.isEmpty) return null;
     final label = await _storage.read(key: _deviceLabelKey) ?? '';
-    return KioskCredentials(rawKey: rawKey, deviceLabel: label);
+    return KioskCredentials(
+      rawKey: rawKey,
+      deviceLabel: label,
+      deviceId: await _storage.read(key: _deviceIdKey),
+      signingKey: await _storage.read(key: _signingKeyKey),
+      serverTimeOffsetSeconds:
+          int.tryParse(await _storage.read(key: _serverOffsetKey) ?? '') ?? 0,
+      expiresInSeconds:
+          int.tryParse(await _storage.read(key: _expiresInKey) ?? '') ?? 300,
+    );
   }
 
   Future<void> save({
     required String rawKey,
     required String deviceLabel,
     required String exitPin,
+    String? deviceId,
+    String? signingKey,
+    int serverTimeOffsetSeconds = 0,
+    int expiresInSeconds = 300,
   }) async {
     await _storage.write(key: _rawKeyKey, value: rawKey);
     await _storage.write(key: _deviceLabelKey, value: deviceLabel);
     await _storage.write(key: _exitPinHashKey, value: _hashPin(exitPin));
+    if (deviceId != null && signingKey != null) {
+      await saveProvisioning(
+        deviceId: deviceId,
+        signingKey: signingKey,
+        serverTimeOffsetSeconds: serverTimeOffsetSeconds,
+        expiresInSeconds: expiresInSeconds,
+      );
+    }
+  }
+
+  /// Persists the offline QR provisioning without touching the PIN or label. Used by an already
+  /// activated installation upgrading from the server-issued QR token.
+  Future<void> saveProvisioning({
+    required String deviceId,
+    required String signingKey,
+    required int serverTimeOffsetSeconds,
+    required int expiresInSeconds,
+  }) async {
+    await _storage.write(key: _deviceIdKey, value: deviceId);
+    await _storage.write(key: _signingKeyKey, value: signingKey);
+    await _storage.write(
+      key: _serverOffsetKey,
+      value: '$serverTimeOffsetSeconds',
+    );
+    await _storage.write(key: _expiresInKey, value: '$expiresInSeconds');
   }
 
   /// Compares [pin] against the stored hash. False (never throws) when no PIN was ever set —
@@ -76,6 +151,10 @@ class KioskCredentialsStore {
     await _storage.delete(key: _rawKeyKey);
     await _storage.delete(key: _deviceLabelKey);
     await _storage.delete(key: _exitPinHashKey);
+    await _storage.delete(key: _deviceIdKey);
+    await _storage.delete(key: _signingKeyKey);
+    await _storage.delete(key: _serverOffsetKey);
+    await _storage.delete(key: _expiresInKey);
   }
 
   static String _hashPin(String pin) =>

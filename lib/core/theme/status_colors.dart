@@ -33,6 +33,11 @@ StatusFamily statusFamilyOf(String stato) {
     'aperta' => StatusFamily.info,
     'in corso' => StatusFamily.warn,
     'in pausa' => StatusFamily.neutral,
+    // The Timbra screen's live state, read by [StatusStamp] on the day's hero. On shift is the one
+    // state where the technician is earning — same family as 'attivo'/'completato', the app's own
+    // "this is going right" green. 'Fuori turno' is deliberately absent: it falls through to the
+    // ghost neutral, because the clock being stopped is a state, not a success.
+    'in turno' => StatusFamily.good,
     'in attesa' => StatusFamily.info,
     'completato' => StatusFamily.good,
     'chiuso' => StatusFamily.neutral,

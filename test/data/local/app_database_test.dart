@@ -166,7 +166,44 @@ void main() {
     late Map<String, String> realTableDdl;
 
     setUpAll(() async {
-      realTableDdl = await _currentTableDdl(['tickets', 'pending_tickets']);
+      realTableDdl = await _currentTableDdl([
+        'tickets',
+        'pending_tickets',
+        'customers',
+        // `cantieri` too: schema 46 adds `extension_values` to it, and every v33 device has carried
+        // that table since long before 33. A fixture without it fails the step with
+        // `no such table: cantieri` — a fixture gap, not a device failure; the PRAGMA guard checks
+        // the column, and the current DDL already declares it, so the add is skipped here, while
+        // migration_v46_test.dart covers the add path itself.
+        'cantieri',
+        // `report_allegati` too: schema 44 adds `kind`/`content_hash` to it, and a real device has
+        // carried that table since its first release. Same fixture gap as `customers` above — the
+        // current DDL already declares both columns, so the step's `PRAGMA table_info` guard skips
+        // the add here, and migration_v44_test.dart covers the add path itself.
+        'report_allegati',
+        // `cantiere_punches` too: schema 50 adds the clock-out screen's own three columns to it.
+        // It has existed since schema 7, so every v33 device carries it; without it here the step
+        // fails with `no such table` — a fixture gap, not a device failure. Today's DDL already
+        // declares all three columns, so the guard skips the adds.
+        'cantiere_punches',
+        // `ticket_statuses` too: schema 56 adds `is_in_progress` to it. Every v33 device has
+        // carried that reference table since its first release, and `_columnExists` is a
+        // `PRAGMA table_info` — which answers "no column" for a missing table, so a fixture
+        // without it does not skip the step, it crashes it with `no such table`. Today's DDL
+        // already declares the column, so the guard skips the add here; migration_v56_test.dart
+        // covers the add path itself.
+        'ticket_statuses',
+        // `schedules` too: schema 58 adds `is_assenza` to it, and every v33 device has carried its
+        // agenda since the first release. Same fixture gap as `ticket_statuses` above — without the
+        // table the step does not skip, it crashes with `no such table: schedules`, which is what
+        // this fixture did when the column landed. Today's DDL declares the column, so the guard
+        // skips the add; migration_v58_test.dart covers the add path itself.
+        'schedules',
+        // `ticket_materiali` too: schema 63 adds its `magazzino_id`, and every v33 device has
+        // carried that table since schema 24. Without it here the step crashes with
+        // `no such table`; today's DDL already declares the column, so the guard skips the add.
+        'ticket_materiali',
+      ]);
     });
 
     test('upgrading from 33 adds both columns with defaults and keeps existing rows', () async {
@@ -186,6 +223,12 @@ void main() {
             // step, and schema 38's `alterTable` copies every current column out of both (see
             // [_currentTableDdl]). `pending_tickets` is then rewound to what v33 held — schema 37 is
             // what adds those five columns, and it runs before 38 does.
+            //
+            // `customers` too: schema 42 adds `customers.agent_id` and a real device has had that
+            // table since its first release, so a fixture without it fails the step with `no such
+            // table: customers` — a fixture gap, not a device failure. The current DDL already
+            // declares `agent_id`, so the step's `PRAGMA table_info` guard skips the add here; the
+            // add path itself is covered by migration_v42_test.dart.
             for (final sql in realTableDdl.values) {
               raw.execute(sql);
             }

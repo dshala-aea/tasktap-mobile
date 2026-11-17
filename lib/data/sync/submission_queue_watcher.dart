@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
 import '../reports/report_submit_api_client.dart';
+import '../timbratura/cantiere_timbra_sync_service.dart' show cantiereSessionRepositoryProvider;
 import 'connectivity_provider.dart';
 import 'submission_queue.dart';
 import '../../presentation/providers/report_editor_providers.dart'
@@ -35,6 +36,12 @@ final realSubmissionQueueProvider = Provider<SubmissionQueue>((ref) {
       final r = await Connectivity().checkConnectivity();
       return r.any((c) => c != ConnectivityResult.none);
     },
+    // P2-6: what a cantiere-drafted rapportino claims as already counted. Read from the local
+    // punch log through the same repository the timbratura sync writes to, so the ids are the
+    // device's own punch ids (`CantiereWorkLog.ClientId` server-side) whether the punch is still
+    // queued or already uploaded.
+    claimedCantiereWorkLogClientIds: (cantiereId) =>
+        ref.read(cantiereSessionRepositoryProvider).getClosedIntervalClientIds(cantiereId),
   );
 });
 

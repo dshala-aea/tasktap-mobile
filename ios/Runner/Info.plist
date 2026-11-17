@@ -26,6 +26,17 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
+		<!-- App Store Connect asks every upload whether the app uses non-exempt encryption. With
+		     this key absent the build sits at "Missing Compliance" in App Store Connect and cannot
+		     go to testers or be submitted until somebody answers the questionnaire by hand, for
+		     every build. Declaring the answer here makes it a property of the build instead.
+
+		     "true" is the accurate answer: SQLCipher encrypts the offline Drift database at rest.
+		     That is non-exempt encryption, so the App Store export-compliance questionnaire and the
+		     annual self-classification obligation apply. test/platform/permission_declarations_test.dart
+		     pins this answer to the encryption actually present in the app. -->
+		<key>ITSAppUsesNonExemptEncryption</key>
+		<true/>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
@@ -67,13 +78,13 @@
 			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>TaskTap utilizza la posizione per registrare l'ubicazione dei cantieri durante timbrate e interventi.</string>
+		<string>TaskTap registra la tua posizione solo mentre l'app e' aperta: un punto quando entri ed esci da un cantiere e uno quando acquisisci la posizione su un rapporto di intervento, come prova di dove hai lavorato. Non ti seguiamo in background e puoi usare l'app anche senza.</string>
 		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-		<string>TaskTap utilizza la posizione per registrare l'ubicazione dei cantieri durante timbrate e interventi.</string>
+		<string>TaskTap registra la tua posizione solo mentre l'app e' aperta: un punto quando entri ed esci da un cantiere e uno quando acquisisci la posizione su un rapporto di intervento, come prova di dove hai lavorato. Non ti seguiamo in background e puoi usare l'app anche senza.</string>
 		<key>NSFaceIDUsageDescription</key>
 		<string>TaskTap usa Face ID per proteggere l'accesso ai dati di clienti e interventi su questo dispositivo.</string>
 		<key>NSMicrophoneUsageDescription</key>
-		<string>TaskTap usa il microfono per permetterti di dettare la descrizione dell'intervento invece di scriverla. L'audio resta sul dispositivo e non viene inviato a nessun server.</string>
+		<string>TaskTap usa il microfono per permetterti di dettare la descrizione dell'intervento invece di scriverla. Se registri un aggiornamento vocale per il rapportino, l'audio viene inviato al server di TaskTap per essere trascritto; la dettatura diretta nei campi resta sul dispositivo.</string>
 		<key>NSSpeechRecognitionUsageDescription</key>
 		<string>TaskTap converte la tua voce in testo sul dispositivo per compilare i campi del rapportino. Il riconoscimento avviene in locale, senza inviare audio a server esterni.</string>
 		<key>NSCameraUsageDescription</key>

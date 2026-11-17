@@ -49,10 +49,20 @@ void main() {
                          'prodotto_assistenza_ids_json', 'repairable_field']) {
           raw.execute('ALTER TABLE pending_tickets DROP COLUMN $c');
         }
-        // The upgrade now continues 37 -> 38 -> 39, so the column that last step adds must be
-        // absent too. (38 adds none: it re-creates tickets/pending_tickets in place, and the
-        // reopen below runs it against tables that already carry every current column.)
+        // The upgrade now continues 37 -> 38 -> 39 -> 40. `expected_version` (39) must be absent or
+        // its `addColumn` dies on `duplicate column name`. `maintenance_template_id` (40) is dropped
+        // only to reproduce the shape a real v36 database has: the reopen below runs step 38, whose
+        // in-place re-creation of `pending_tickets` puts the column back from the current definition
+        // with a NULL value (it is declared in that step's `newColumns`; without that the copy would
+        // read the absent column back as the literal string), and step 40 adds it only when SQLite
+        // still reports it missing. (38 adds no column of its own, and it runs against tables that
+        // already carry every current column.)
         raw.execute('ALTER TABLE draft_reports DROP COLUMN expected_version');
+        raw.execute('ALTER TABLE pending_tickets DROP COLUMN maintenance_template_id');
+        // The upgrade also continues through 41: the per-instrument notes columns must be absent
+        // (`report_strumenti` exists at v36), exactly as a real v36 database has it.
+        raw.execute('ALTER TABLE report_strumenti DROP COLUMN usage_description');
+        raw.execute('ALTER TABLE report_strumenti DROP COLUMN outcome');
         raw.execute('PRAGMA user_version = 36');
       }),
     );
@@ -97,12 +107,40 @@ void main() {
     final row = (await reopened.select(reopened.pendingTickets).get()).single;
     expect(row.id, 'queued-1', reason: 'spec 11.3: a schema bump must not touch queued work');
     expect(row.contractId, isNull);
+    // The same value check on the column step 38's re-creation puts back rather than adds: a device
+    // coming from 36 has never chosen a maintenance template, and the copy must not supply the
+    // column's own name in place of a value. `columnsOf` above is blind to that.
+    expect(row.maintenanceTemplateId, isNull);
   });
 
-  /// The release deliberately does not reset every device's delta cursor - the reference queries
-  /// carry no delta, so there is nothing a reset would fetch. This test is the guard on that
-  /// decision, not a formality.
-  test('the sync cursor generation is deliberately not bumped', () {
-    expect(AppDatabase.syncCursorGeneration, 'v9');
+  /// The schema-37 release deliberately did not reset every device's delta cursor - the reference
+  /// queries carry no delta, so there was nothing a reset would fetch. Schema 42 (customers.agentId,
+  /// already on the wire for unedited customers) was the first reason to move it since: v10. The
+  /// sync-v2 authoritative scope is the second: its cursor overlap and its prune both require a
+  /// complete payload, not a stale delta. Schema 46 is the third: `extensionValues` travels inside
+  /// each entity, and a delta never re-sends an unedited ticket, so without a full sync every
+  /// device would keep a null custom-field set on every ticket nobody happened to touch. Schema 48
+  /// (the customer's `fiscalCode`/`sdiCode`/`pec`/`province`/`cellulare`) is the fourth, for the same
+  /// reason as the third: the office branch of `MobileUserSyncService` delta-filters customers, so a
+  /// delta would never re-send a customer nobody had edited and every device would hold five null
+  /// columns for most of its book. Schema 49 (`customer_contacts`) is the fifth: the member is only
+  /// sent on a full-scope payload, and even there a customer whose contact list changed is pulled
+  /// back in only when its contacts moved after the cutoff — a device on a delta cursor would keep
+  /// the old numbers, and a deleted contact has no tombstone to correct them. The sixth is v15: no
+  /// schema change at all, just the `priorita` key — the column was filled from `priority`, which
+  /// the server never sends, so every mirrored ticket held a null and only a full sync can refill
+  /// the ones nobody edits. The seventh is v16 (schema 59): the ticket's covered-product ids and the
+  /// rapportino's `numero`. Both are filled for every row only by a full sync, and a rapportino is
+  /// delta-filtered on `UpdatedAt` exactly like a ticket, so a draft nobody edits would otherwise
+  /// keep a null number forever. The eighth is v17 (schema 60): `report_staff_segments`, which
+  /// travels inside the report aggregate — a device whose cursor is already past a report would
+  /// never receive that report's intervals, and every rapportino on the phone would open with an
+  /// empty list. The ninth is v18 (schema 62): `schedules.isBlockOccupied` and
+  /// `schedules.absenceRequestId` — the office/admin `fullScope` branch delta-filters schedules,
+  /// so an unedited day of a multi-day block would keep both defaults forever and the admin screen
+  /// would keep offering writes the server refuses. This test is the record that no release moved
+  /// the generation silently.
+  test('the sync cursor generation is the one the current release set', () {
+    expect(AppDatabase.syncCursorGeneration, 'v18');
   });
 }

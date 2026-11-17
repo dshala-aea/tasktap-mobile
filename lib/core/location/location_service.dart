@@ -49,14 +49,16 @@ abstract class ILocationService {
 
   /// Whether calling [getCurrentPosition] would put an OS permission dialog on screen.
   ///
-  /// Exists so the UI can state the purpose *before* the system asks. The prompt used to appear
-  /// inside an "Acquisisci" button with nothing saying what the coordinate was for or what happened
-  /// if they refused — and on iOS the dialog cannot be shown again, so the first ask is the only
-  /// one there is.
+  /// Lets a caller raise the prompt at a moment of its choosing (before a spinner) via
+  /// [requestPermission], instead of having it appear underneath [getCurrentPosition].
   ///
   /// Concrete rather than abstract so the test fakes and [DisabledLocationService] inherit the
   /// honest answer (they never prompt) instead of each having to restate it.
   Future<bool> willPromptForPermission() async => false;
+
+  /// Raises the OS permission dialog now (only `denied` produces one), without reading a position.
+  /// Concrete no-op so fakes and [DisabledLocationService] need not restate it. Never throws.
+  Future<void> requestPermission() async {}
 
   /// See [GpsPermissionStatus]. Concrete so every fake and [DisabledLocationService] gets the
   /// honest "never asked" answer without restating it.
@@ -82,14 +84,25 @@ class LocationService extends ILocationService {
   }
 
   @override
+  Future<void> requestPermission() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      if (await Geolocator.checkPermission() == LocationPermission.denied) {
+        await Geolocator.requestPermission();
+      }
+    } catch (_) {
+      // The follow-up getCurrentPosition() reports the outcome as null.
+    }
+  }
+
+  @override
   Future<GpsPermissionStatus> permissionStatus() async {
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
         return GpsPermissionStatus.serviceDisabled;
       }
       return switch (await Geolocator.checkPermission()) {
-        LocationPermission.always ||
-        LocationPermission.whileInUse => GpsPermissionStatus.granted,
+        LocationPermission.always || LocationPermission.whileInUse => GpsPermissionStatus.granted,
         LocationPermission.deniedForever => GpsPermissionStatus.deniedForever,
         LocationPermission.denied ||
         LocationPermission.unableToDetermine => GpsPermissionStatus.notDetermined,
@@ -156,6 +169,13 @@ class DisabledLocationService extends ILocationService {
 /// before the setting was honoured.
 final gpsPreferenceProvider = Provider<bool>((ref) => true);
 
+/// The tenant-level switch. Defaults to true until the server setting is wired in from the
+/// authenticated config; when it is false the device-local toggle cannot re-enable capture.
+///
+/// This is the mobile half of the employee-monitoring control: the tenant decides whether the
+/// company records position at all, the technician decides whether this device contributes.
+final tenantGpsEnabledProvider = Provider<bool>((ref) => true);
+
 /// Provides the [ILocationService]. Override in tests with a fake.
 ///
 /// The gate lives here rather than at the call sites. "Geolocalizzazione — Posizione GPS per i
@@ -164,7 +184,6 @@ final gpsPreferenceProvider = Provider<bool>((ref) => true);
 /// that reports a choice it does not enforce is worse than no toggle, and under a consent audit it
 /// is worse still.
 final locationServiceProvider = Provider<ILocationService>((ref) {
-  return ref.watch(gpsPreferenceProvider)
-      ? const LocationService()
-      : const DisabledLocationService();
+  final allowed = ref.watch(tenantGpsEnabledProvider) && ref.watch(gpsPreferenceProvider);
+  return allowed ? const LocationService() : const DisabledLocationService();
 });

@@ -6,8 +6,13 @@ import '../widgets/widgets.dart';
 import '../../features/altro/altro_hub_screen.dart';
 import '../../features/altro/i_miei_dati_screen.dart';
 import '../../features/altro/impostazioni_screen.dart';
+import '../../features/altro/notifica_detail_screen.dart';
 import '../../features/altro/notifiche_screen.dart';
+import '../../features/altro/notification_preferences_screen.dart';
+import '../../features/badge/badge_scan_screen.dart';
+import '../../features/badge/my_badge_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
+import '../../features/dashboard/storico_screen.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
 import '../../features/ticket/new_ticket_form_screen.dart';
@@ -55,21 +60,33 @@ import '../../features/admin/squadre/admin_squadra_detail_screen.dart';
 import '../../features/admin/squadre/admin_squadra_form_screen.dart';
 import '../../features/admin/reports/admin_report_list_screen.dart';
 import '../../features/admin/reports/admin_report_detail_screen.dart';
+import '../../features/approvazioni/approvazioni_screen.dart';
 import '../../features/ferie/ferie_permessi_form_screen.dart';
 import '../../features/ferie/ferie_permessi_list_screen.dart';
+import '../../features/smart_working/smart_working_form_screen.dart';
+import '../../features/smart_working/smart_working_list_screen.dart';
+import '../../features/trasferta/trasferta_form_screen.dart';
+import '../../features/trasferta/trasferta_list_screen.dart';
 import '../../features/clienti/clienti_list_screen.dart';
 import '../../features/rapportino/ai_copilot_screen.dart';
+import '../../features/rapportino/ai_report/ai_sign_screen.dart';
 import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../features/rapportino/rapportini_list_screen.dart';
 import '../../features/rapportino/rapportino_view_screen.dart';
 import '../../features/timbra/cantiere_timbra_screen.dart';
 import '../../features/cantiere/cantieri_list_screen.dart';
 import '../../features/cantiere/cantiere_detail_screen.dart';
+import '../../features/cantiere/cantiere_map_screen.dart';
 import '../../features/altro/forbidden_screen.dart';
+import '../../features/altro/session_recovery_screen.dart';
+import '../../features/altro/sync_queue_screen.dart';
+import '../../data/auth/session_recovery.dart';
+import '../../data/auth/session_recovery_providers.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../features/onboarding/onboarding_provider.dart';
 import '../../features/onboarding/onboarding_screen.dart';
 import 'route_requirement.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Route path constants.
@@ -86,6 +103,12 @@ abstract final class AppRoutes {
   /// is not held. Must never itself appear as a `_routeRequirements` prefix — that would
   /// self-redirect-loop.
   static const String forbidden = '/forbidden';
+
+  /// Where a forced sign-out's leftovers are resolved when a DIFFERENT account signs in on the
+  /// same device: the local database still holds the previous account's rows (and possibly
+  /// unsent work), and they are only discarded once the technician confirms. Never linked from
+  /// the UI — reached only through the redirect gate (see `SessionRecoveryController`).
+  static const String sessionRecovery = '/session-recovery';
 
   /// Where a device that has never been activated as a kiosk goes to redeem the credential the
   /// web admin issued (see `KioskActivationScreen`). Reached only via the hidden long-press on
@@ -105,7 +128,8 @@ abstract final class AppRoutes {
   static String ticketDetailPath(String id) => '/ticket/$id';
 
   /// The per-asset checklist of a ticket (full screen; read-only entry from the ticket detail).
-  static String ticketAssetChecklistPath(String ticketId) => '/ticket/$ticketId/assets';
+  static String ticketAssetChecklistPath(String ticketId) =>
+      '/ticket/$ticketId/assets';
 
   /// The editable per-asset checklist of a rapportino. [focusAssetId] expands that asset and
   /// [filter] opens the list on a filter (Riepilogo uses `requiredMissing`).
@@ -116,7 +140,8 @@ abstract final class AppRoutes {
   }) {
     final base = '/altro/rapportini/editor/$reportId/assets';
     final q = [
-      if (focusAssetId != null) 'focus=${Uri.encodeQueryComponent(focusAssetId)}',
+      if (focusAssetId != null)
+        'focus=${Uri.encodeQueryComponent(focusAssetId)}',
       if (filter != null) 'filter=${filter.name}',
     ];
     return q.isEmpty ? base : '$base?${q.join('&')}';
@@ -140,13 +165,29 @@ abstract final class AppRoutes {
       ticketId == null ? '/cantieri/$id' : '/cantieri/$id?ticketId=$ticketId';
 
   static const String calendario = '/calendario';
+
+  /// Full-screen past-schedules history reached from the Dashboard. Deliberately ungated,
+  /// like [calendario]: both expose the same local schedule mirror.
+  static const String storico = '/storico';
   static const String altro = '/altro';
   static const String altroRapportini = '/altro/rapportini';
   static const String altroImpostazioni = '/altro/impostazioni';
   static const String altroNotifiche = '/altro/notifiche';
 
+  /// One notification's own page, for the taps that have no entity to open.
+  static String notificaDettaglioPath(String id) => '$altroNotifiche/$id';
+
+  /// Per-type notification switches (`/api/notifications/preferences`), reached from Impostazioni.
+  static const String altroPreferenzeNotifiche = '/altro/preferenze-notifiche';
+
   /// The subject-access surface: what the company has on record about this person.
   static const String altroIMieiDati = '/altro/i-miei-dati';
+
+  /// The worker's rotating badge QR, scanned by a team leader at the cantiere.
+  static const String altroBadge = '/altro/badge';
+
+  /// The personal-timbra offline queue: review, delete, retry.
+  static const String altroCodaSync = '/altro/coda-sincronizzazione';
 
   /// Path for the shared "unavailable" placeholder; pass an
   /// `({String titolo, String motivo})` record as GoRouter extra so the
@@ -158,6 +199,10 @@ abstract final class AppRoutes {
   /// (rather than a required path segment) to avoid a route-shape change; the screen itself
   /// treats a missing id the same as a cantiere that failed to resolve.
   static const String cantiereTimbra = '/cantiere-timbra';
+
+  /// Map-led cantiere view, reachable from the detail's map card.
+  static String cantiereMapPath(String cantiereId) =>
+      '/cantieri/${Uri.encodeComponent(cantiereId)}/mappa';
 
   /// Build the cantiere timbra path with optional query params.
   static String cantiereTimbraPath({
@@ -173,6 +218,11 @@ abstract final class AppRoutes {
         ? cantiereTimbra
         : '$cantiereTimbra?${params.join('&')}';
   }
+
+  /// The team leader's continuous badge scanner for one cantiere. Lead-only entry on
+  /// CantiereTimbraScreen; the server enforces the lead check regardless.
+  static String cantiereBadgeScanPath(String cantiereId) =>
+      '/cantiere-badge-scan/${Uri.encodeComponent(cantiereId)}';
 
   /// Path for the full-screen cantiere picker — the dashboard's generic "Timbra cantiere" quick
   /// action (no cantiere context yet) now lands here instead of on CantiereTimbraScreen's
@@ -190,9 +240,25 @@ abstract final class AppRoutes {
   }
 
   /// Self-service ferie/permessi against `/api/absence-requests` — already complete and tested
-  /// server-side (docs/superpowers/specs/2026-08-30-ferie-permessi-design.md). No approval
-  /// queue on mobile; that lives only on web, gated behind PresenzeAbsenceApprove.
+  /// server-side (docs/superpowers/specs/2026-08-30-ferie-permessi-design.md).
   static const String altroFerie = '/altro/ferie';
+
+  /// Self-service smart working against `/api/smart-working-requests` — a marker, never hours.
+  ///
+  /// The same `presenze` module as [altroFerie].
+  static const String altroSmartWorking = '/altro/smart-working';
+
+  /// Self-service Trasferta against `/api/trasferta-requests` — travel time as worked time. Online-only.
+  static const String altroTrasferta = '/altro/trasferta';
+
+  /// The approver's worklist: every pending absence and smart-working request in the tenant.
+  ///
+  /// Gated on `presenze.absence.approve`; the tile is hidden from everyone else.
+  static const String altroApprovazioni = '/altro/approvazioni';
+
+  /// The approval screen on a specific tab (`assenze` | `smart-working`), for notification taps.
+  static String approvazioni({String? tab}) =>
+      tab == null ? altroApprovazioni : '$altroApprovazioni?tab=$tab';
 
   static const String altroClienti = '/altro/clienti';
   static const String altroClientiDetail = '/altro/clienti/:id';
@@ -230,6 +296,13 @@ abstract final class AppRoutes {
   /// Build the read-only view path for a submitted rapportino.
   static String rapportiniView(String reportId) =>
       '/altro/rapportini/view/$reportId';
+
+  /// Step 3 of the AI report flow: the customer's signature, on the draft Confirm created.
+  ///
+  /// A route of its own rather than a third step of the flow screen — by the time it opens the AI
+  /// conversation is over and an ordinary local report exists, so it navigates by report id like
+  /// every other signing surface.
+  static String aiSign(String reportId) => '/altro/rapportini/firma/$reportId';
 }
 
 /// Global navigator key — use for imperative navigation outside widget tree.
@@ -261,53 +334,137 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// `rapportini-admin`) is dispatcher-only — a narrower, genuinely different audience than "anyone
 /// who can use the module at all" — so each is gated on the resource's `.read` capability at
 /// minimum (its own write actions are gated further, at the button level, by `CapabilityGate`).
-/// `prodotti` is deliberately NOT gated here: the backend defines no `prodotti.*` capability yet
-/// (see `PermissionCatalogue.All`'s own comment — "a capability nothing requires governs
-/// nothing"), so there is nothing correct to check.
+/// `prodotti` has no `prodotti.*` capability yet (see `PermissionCatalogue.All`'s own comment —
+/// "a capability nothing requires governs nothing"), so it is gated on its module only, with the
+/// existing `contratti.contract.write` proxy closing its `nuovo`/`modifica` write leaves.
 ///
-/// The end-user/operational routes (`/ticket`, `/cantieri`, `/altro/rapportini`, `/altro/ferie`)
+/// The end-user/operational routes (`/ticket`, `/cantieri`, `/altro/rapportini`, `/altro/ferie`,
+/// `/altro/smart-working`)
 /// are a different, broader audience — anyone whose tenant has the module, not dispatcher-only —
 /// so those check module entitlement only, matching the web guard's equivalent split.
 ///
 /// A dynamic segment defeats plain prefix matching for a *write* leaf nested past it (e.g.
 /// `/altro/clienti/:id/modifica` — the `:id` varies, so no fixed prefix covers only `modifica`).
 /// Each entry's optional third element, `writeRequirement`, closes that: when the visited path's
-/// LAST segment is `nuovo` or `modifica` (see `_writeLeafSegments`), that stricter requirement is
-/// checked instead of the base one — still prefix-matched first, so it only applies within a
-/// section this table already governs. Left `null` for sections where read and write are gated
-/// identically at the section level already (nothing sharper to express); given only where a
-/// section mixes open read with gated write (`clienti`, `sedi`) — the base `.read` requirement
-/// alone would let a held-read/denied-write user past the button-level `CapabilityGate` that hides
-/// `nuovo`/`modifica` triggers in the UI, by deep-linking straight to the path.
-final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, RouteRequirement? writeRequirement)>[
-  ('/altro/pianificazioni', const RouteRequirement.capability('pianificazione.schedule.write'), null),
-  ('/altro/rapportini-admin', const RouteRequirement.capability('rapportini.report.read'), null),
-  ('/altro/rapportini', const RouteRequirement.module('rapportini'), null),
-  ('/altro/magazzino/magazzini', const RouteRequirement.capability('magazzino.warehouse.read'), null),
-  ('/altro/magazzino', const RouteRequirement.capability('magazzino.article.read'), null),
-  ('/altro/squadre', const RouteRequirement.capability('team.squadra.read'), null),
-  ('/altro/cantieri', const RouteRequirement.capability('cantieri.cantiere.read'), null),
-  ('/altro/contratti', const RouteRequirement.capability('contratti.contract.read'), null),
-  ('/altro/commesse', const RouteRequirement.capability('commesse.commessa.read'), null),
-  (
-    '/altro/sedi',
-    const RouteRequirement.capability('clienti.location.read'),
-    const RouteRequirement.capability('clienti.location.write'),
-  ),
-  (
-    '/altro/clienti',
-    const RouteRequirement.capability('clienti.customer.read'),
-    const RouteRequirement.capability('clienti.customer.write'),
-  ),
-  ('/altro/ferie', const RouteRequirement.module('presenze'), null),
-  ('/ticket', const RouteRequirement.module('interventi'), null),
-  ('/cantieri', const RouteRequirement.module('cantieri'), null),
-];
+/// LAST segment is `nuovo`, `nuova`, `modifica` or `new` (see `_writeLeafSegments`), that stricter
+/// requirement is checked instead of the base one — still prefix-matched first, so it only applies
+/// within a section this table already governs. Left `null` for sections where read and write are
+/// gated identically at the section level already (nothing sharper to express); given where a
+/// section mixes open read with gated write (`clienti`, `sedi`, `contratti`, `squadre`,
+/// `magazzino`/`magazzini`, `cantieri`, `pianificazioni`) — the base `.read` requirement alone
+/// would let a held-read/denied-write user past the button-level `CapabilityGate` that hides
+/// `nuovo`/`nuova`/`modifica` triggers in the UI, by deep-linking straight to the path.
+final _routeRequirements =
+    <
+      (
+        String pathPrefix,
+        RouteRequirement requirement,
+        RouteRequirement? writeRequirement,
+      )
+    >[
+      (
+        '/altro/preferenze-notifiche',
+        const RouteRequirement.capability('sistema.notification.read'),
+        null,
+      ),
+      (
+        '/altro/pianificazioni',
+        const RouteRequirement.capability('pianificazione.schedule.read'),
+        const RouteRequirement.capability('pianificazione.schedule.write'),
+      ),
+      (
+        '/altro/rapportini-admin',
+        const RouteRequirement.capability('rapportini.report.read'),
+        null,
+      ),
+      // Must precede the broader `/altro/rapportini` entry: the editor is the one write surface under
+      // it, while view/detail stay read-open on the module.
+      (
+        '/altro/rapportini/editor',
+        const RouteRequirement.capability('rapportini.report.write'),
+        null,
+      ),
+      // Also write surfaces, and likewise listed before the broader `/altro/rapportini` module entry:
+      // the AI Copilot drafts a report and the signing step completes one. The read-open
+      // `/altro/rapportini/view` route stays on the module alone.
+      (
+        '/altro/rapportini/copilot',
+        const RouteRequirement.capability('rapportini.report.write'),
+        null,
+      ),
+      (
+        '/altro/rapportini/firma',
+        const RouteRequirement.capability('rapportini.report.write'),
+        null,
+      ),
+      ('/altro/rapportini', const RouteRequirement.module('rapportini'), null),
+      (
+        '/altro/magazzino/magazzini',
+        const RouteRequirement.capability('magazzino.warehouse.read'),
+        const RouteRequirement.capability('magazzino.warehouse.write'),
+      ),
+      (
+        '/altro/magazzino',
+        const RouteRequirement.capability('magazzino.article.read'),
+        const RouteRequirement.capability('magazzino.article.write'),
+      ),
+      (
+        '/altro/squadre',
+        const RouteRequirement.capability('team.squadra.read'),
+        const RouteRequirement.capability('team.squadra.write'),
+      ),
+      (
+        '/altro/cantieri',
+        const RouteRequirement.capability('cantieri.cantiere.read'),
+        const RouteRequirement.capability('cantieri.cantiere.write'),
+      ),
+      (
+        '/altro/contratti',
+        const RouteRequirement.capability('contratti.contract.read'),
+        const RouteRequirement.capability('contratti.contract.write'),
+      ),
+      (
+        '/altro/prodotti',
+        const RouteRequirement.module('prodotti'),
+        const RouteRequirement.capability('contratti.contract.write'),
+      ),
+      (
+        '/altro/commesse',
+        const RouteRequirement.capability('commesse.commessa.read'),
+        null,
+      ),
+      (
+        '/altro/sedi',
+        const RouteRequirement.capability('clienti.location.read'),
+        const RouteRequirement.capability('clienti.location.write'),
+      ),
+      (
+        '/altro/clienti',
+        const RouteRequirement.capability('clienti.customer.read'),
+        const RouteRequirement.capability('clienti.customer.write'),
+      ),
+      (
+        '/altro/approvazioni',
+        const RouteRequirement.capability('presenze.absence.approve'),
+        null,
+      ),
+      ('/altro/ferie', const RouteRequirement.module('presenze'), null),
+      ('/altro/smart-working', const RouteRequirement.module('presenze'), null),
+      ('/altro/trasferta', const RouteRequirement.module('presenze'), null),
+      (
+        '/ticket',
+        const RouteRequirement.module('interventi'),
+        const RouteRequirement.capability('interventi.ticket.write'),
+      ),
+      ('/cantieri', const RouteRequirement.module('cantieri'), null),
+    ];
 
 /// Leaf path segments that mean "this specific visit is a write attempt" — checked against
 /// `state.matchedLocation`'s LAST segment only, so a record id that happens to be the literal
-/// string `nuovo` (impossible — ids are GUIDs) or `modifica` can never false-positive.
-const _writeLeafSegments = {'nuovo', 'modifica'};
+/// string `nuovo`/`nuova` (impossible — ids are GUIDs) or `modifica` can never false-positive.
+/// `nuova` is the feminine form `/altro/sedi/nuova` and `/altro/pianificazioni/nuova` use; `new`
+/// is the ticket form's own English leaf, `/ticket/new`.
+const _writeLeafSegments = {'nuovo', 'nuova', 'modifica', 'new'};
 
 /// Builds and returns the [GoRouter] for the TaskTap app.
 ///
@@ -331,7 +488,7 @@ GoRouter buildRouter(WidgetRef ref) {
     navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.dashboard,
     debugLogDiagnostics: false,
-    redirect: (context, state) {
+    redirect: (context, state) async {
       final kioskState = ref.read(kioskModeProvider);
       final isOnKioskActivate =
           state.matchedLocation == AppRoutes.kioskActivate;
@@ -353,66 +510,96 @@ GoRouter buildRouter(WidgetRef ref) {
       final authAsync = ref.read(authStateProvider);
       final isOnLogin = state.matchedLocation == AppRoutes.login;
       final isOnOnboarding = state.matchedLocation == AppRoutes.onboarding;
+      final isOnSessionRecovery =
+          state.matchedLocation == AppRoutes.sessionRecovery;
 
-      return authAsync.when(
-        // While Supabase is restoring the session, stay put.
+      // Async redirect: the session-recovery gate below reads SharedPreferences (and, only when
+      // there is something to report, the unsent-work count) before the first authenticated frame
+      // is allowed to render. Awaiting it here is what keeps the previous account's rows from
+      // being visible for a frame on a shared device.
+      if (authAsync.isLoading) return null;
+      // On error (e.g. offline with no cached session), go to login.
+      if (authAsync.hasError) return isOnLogin ? null : AppRoutes.login;
+
+      final user = authAsync.value;
+      if (user == null) return isOnLogin ? null : AppRoutes.login;
+      if (isOnLogin) return AppRoutes.dashboard;
+
+      // Forced-sign-out gate — a dead session no longer wipes the local database (audit F1), so
+      // the decision is made here, once, on the next sign-in:
+      //   same account  → keep the data (their work), flush the queues;
+      //   other account → the /session-recovery screen, which names what is at stake and only
+      //                   discards after an explicit confirmation.
+      // Runs before onboarding and the route requirements: showing the new account anything the
+      // previous one left behind is the leak this gate exists to close.
+      final recovery = await ref
+          .read(sessionRecoveryProvider.notifier)
+          .resolveFor(user.id);
+      final needsDiscard = recovery is SessionRecoveryNeedsDiscard;
+      // Pinned: while the discard is pending, nothing else (onboarding, requirements) may steer
+      // the app away from the one screen that resolves it — coming back later would be an extra
+      // detour through screens that assume the local data is this account's.
+      if (needsDiscard) {
+        return isOnSessionRecovery ? null : AppRoutes.sessionRecovery;
+      }
+      if (isOnSessionRecovery) return AppRoutes.dashboard;
+
+      // Onboarding gate — evaluated only once we know who's signed in, and before the
+      // route-requirement guard below: an account that hasn't finished onboarding gets sent
+      // there regardless of what module/capability the destination route would otherwise
+      // require, rather than being bounced to /forbidden first.
+      // An account with no id (a session whose claims could not be read) has no per-account state
+      // to key the "completed" flag on, so it would always read as "never onboarded". Skip the
+      // gate rather than show the flow again on every cold start.
+      final onboardingAsync = user.id.isEmpty
+          ? const AsyncData<bool>(true)
+          : ref.read(onboardingCompletedProvider(user.id));
+      final onboardingRedirect = onboardingAsync.when(
         loading: () => null,
-        // On error (e.g. offline with no cached session), go to login.
-        error: (err, stack) => isOnLogin ? null : AppRoutes.login,
-        data: (user) {
-          final isAuthenticated = user != null;
-          if (!isAuthenticated && !isOnLogin) return AppRoutes.login;
-          if (isAuthenticated && isOnLogin) return AppRoutes.dashboard;
-          if (!isAuthenticated) return null; // unauthenticated and already on /login
-
-          // Onboarding gate — evaluated only once we know who's signed in, and before the
-          // route-requirement guard below: an account that hasn't finished onboarding gets sent
-          // there regardless of what module/capability the destination route would otherwise
-          // require, rather than being bounced to /forbidden first.
-          final onboardingAsync = ref.read(onboardingCompletedProvider(user.id));
-          final onboardingRedirect = onboardingAsync.when(
-            loading: () => null,
-            error: (err, stack) => null,
-            data: (completed) {
-              if (!completed && !isOnOnboarding) return AppRoutes.onboarding;
-              if (completed && isOnOnboarding) return AppRoutes.dashboard;
-              return null;
-            },
-          );
-          if (onboardingRedirect != null) return onboardingRedirect;
-
-          // Route-requirement guard — runs only once auth is confirmed and isn't itself
-          // redirecting. Never applies to AppRoutes.forbidden itself (see _routeRequirements'
-          // own doc comment on why that would self-redirect-loop).
-          if (state.matchedLocation != AppRoutes.forbidden) {
-            for (final (prefix, requirement, writeRequirement) in _routeRequirements) {
-              if (state.matchedLocation.startsWith(prefix)) {
-                final segments = state.matchedLocation.split('/');
-                final isWriteLeaf = segments.isNotEmpty && _writeLeafSegments.contains(segments.last);
-                final effective = isWriteLeaf && writeRequirement != null
-                    ? writeRequirement
-                    : requirement;
-                final satisfied = effective.isSatisfied(ref);
-                // satisfied == null: entitlement cache still loading — stay put, don't redirect
-                // yet (same "don't know yet" treatment as kioskState.loading/authAsync.loading
-                // above).
-                if (satisfied == false) return AppRoutes.forbidden;
-                break;
-              }
-            }
-          }
-
+        error: (err, stack) => null,
+        data: (completed) {
+          if (!completed && !isOnOnboarding) return AppRoutes.onboarding;
+          if (completed && isOnOnboarding) return AppRoutes.dashboard;
           return null;
         },
       );
+      if (onboardingRedirect != null) return onboardingRedirect;
+
+      // Route-requirement guard — runs only once auth is confirmed and isn't itself
+      // redirecting. Never applies to AppRoutes.forbidden itself (see _routeRequirements'
+      // own doc comment on why that would self-redirect-loop).
+      if (state.matchedLocation != AppRoutes.forbidden) {
+        for (final (prefix, requirement, writeRequirement)
+            in _routeRequirements) {
+          if (state.matchedLocation.startsWith(prefix)) {
+            final segments = state.matchedLocation.split('/');
+            final isWriteLeaf =
+                segments.isNotEmpty &&
+                _writeLeafSegments.contains(segments.last);
+            final effective = isWriteLeaf && writeRequirement != null
+                ? writeRequirement
+                : requirement;
+            final satisfied = effective.isSatisfied(ref);
+            // satisfied == null: entitlement cache still loading — stay put, don't redirect
+            // yet (same "don't know yet" treatment as kioskState.loading/authAsync.loading
+            // above).
+            if (satisfied == false) return AppRoutes.forbidden;
+            break;
+          }
+        }
+      }
+
+      return null;
     },
-    // Rebuild router on auth state, kiosk mode, onboarding-completion, OR entitlement cache
-    // changes so redirects are applied to all four.
+    // Rebuild router on auth state, kiosk mode, onboarding-completion, entitlement cache OR the
+    // session-recovery decision (discarding the previous account's data must let the redirect
+    // through to /dashboard) so redirects are applied to all five.
     refreshListenable: Listenable.merge([
       _AuthStateListenable(ref),
       _KioskStateListenable(ref),
       _OnboardingStateListenable(ref),
       _EntitlementStateListenable(ref),
+      _SessionRecoveryListenable(ref),
     ]),
     routes: [
       // ── Kiosk ───────────────────────────────────────────────────────────
@@ -430,10 +617,15 @@ GoRouter buildRouter(WidgetRef ref) {
         path: AppRoutes.login,
         builder: (context, state) => const LoginScreen(),
       ),
+      // Never linked from the UI: only the redirect's forced-sign-out gate sends anyone here.
+      GoRoute(
+        path: AppRoutes.sessionRecovery,
+        builder: (context, state) => const SessionRecoveryScreen(),
+      ),
       GoRoute(
         path: AppRoutes.onboarding,
         builder: (context, state) {
-          final userId = ref.read(authStateProvider).valueOrNull?.id;
+          final userId = ref.read(authStateProvider).value?.id;
           // The redirect gate never lands here without an authenticated user (see the
           // onboarding gate above), so this is unreachable in practice — the empty-string
           // fallback just satisfies the type system rather than crashing if it somehow were.
@@ -454,6 +646,13 @@ GoRouter buildRouter(WidgetRef ref) {
             cantiereId: cantiereId,
           );
         },
+      ),
+
+      // ── Leader badge scan (pushed from CantiereTimbraScreen, lead-only) ──
+      GoRoute(
+        path: '/cantiere-badge-scan/:cantiereId',
+        builder: (context, state) =>
+            BadgeScanScreen(cantiereId: state.pathParameters['cantiereId']!),
       ),
 
       // ── Seleziona cantiere (pushed from the dashboard's generic "Timbra cantiere" action) ──
@@ -489,6 +688,34 @@ GoRouter buildRouter(WidgetRef ref) {
         builder: (context, state) => const NewTicketFormScreen(),
       ),
 
+      // ── Ticket list (root-level, pushed from Altro › Interventi) ───────────
+      GoRoute(
+        path: AppRoutes.ticket,
+        builder: (context, state) => const TicketListScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (context, state) =>
+                TicketDetailScreen(ticketId: state.pathParameters['id']!),
+            routes: [
+              GoRoute(
+                path: 'assets',
+                parentNavigatorKey: rootNavigatorKey,
+                builder: (context, state) =>
+                    AssetChecklistScreen(ticketId: state.pathParameters['id']!),
+              ),
+            ],
+          ),
+        ],
+      ),
+
+      // ── Past schedules (pushed from the Dashboard's "Storico" action) ──────
+      GoRoute(
+        path: AppRoutes.storico,
+        builder: (context, state) => const StoricoScreen(),
+      ),
+
       // ── Forbidden (route-requirement guard's redirect target) ────────────
       GoRoute(
         path: AppRoutes.forbidden,
@@ -511,31 +738,59 @@ GoRouter buildRouter(WidgetRef ref) {
               ),
             ],
           ),
-          // 1 — Ticket
+          // 1 — Rapportini
           StatefulShellBranch(
-            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'ticket'),
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'rapportini'),
             routes: [
               GoRoute(
-                path: AppRoutes.ticket,
-                builder: (context, state) => const TicketListScreen(),
+                path: AppRoutes.altroRapportini,
+                builder: (context, state) => const RapportiniListScreen(),
                 routes: [
                   GoRoute(
-                    path: ':id',
-                    // Full-screen, no persistent bottom nav: a dense multi-tab detail screen
-                    // needs the vertical space the shell's floating pill nav would otherwise
-                    // eat permanently. See parentNavigatorKey on every form/detail route below.
+                    path: 'editor/:reportId',
                     parentNavigatorKey: rootNavigatorKey,
-                    builder: (context, state) => TicketDetailScreen(
-                      ticketId: state.pathParameters['id']!,
+                    builder: (context, state) => RapportinoFormScreen(
+                      reportId: state.pathParameters['reportId']!,
                     ),
                     routes: [
                       GoRoute(
                         path: 'assets',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            AssetChecklistScreen(ticketId: state.pathParameters['id']!),
+                        builder: (context, state) => AssetChecklistScreen(
+                          reportId: state.pathParameters['reportId']!,
+                          focusAssetId: state.uri.queryParameters['focus'],
+                          initialFilter: ChecklistFilter.values.firstWhere(
+                            (f) =>
+                                f.name == state.uri.queryParameters['filter'],
+                            orElse: () => ChecklistFilter.all,
+                          ),
+                        ),
                       ),
                     ],
+                  ),
+                  GoRoute(
+                    path: 'copilot',
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (context, state) => AiCopilotScreen(
+                      ticketId: state.uri.queryParameters['ticketId'],
+                      cantiereId: state.uri.queryParameters['cantiereId'],
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'view/:reportId',
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (context, state) => RapportinoViewScreen(
+                      reportId: state.pathParameters['reportId']!,
+                    ),
+                  ),
+                  // Step 3 of the AI report flow. Keyed by the local report id Confirm created,
+                  // so it is an ordinary signing surface — nothing AI-specific survives into it.
+                  GoRoute(
+                    path: 'firma/:reportId',
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (context, state) => AiSignScreen(
+                      reportId: state.pathParameters['reportId']!,
+                    ),
                   ),
                 ],
               ),
@@ -558,6 +813,15 @@ GoRouter buildRouter(WidgetRef ref) {
                       cantiereId: state.pathParameters['id']!,
                       ticketId: state.uri.queryParameters['ticketId'],
                     ),
+                    routes: [
+                      GoRoute(
+                        path: 'mappa',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) => CantiereMapScreen(
+                          cantiereId: state.pathParameters['id']!,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -573,7 +837,7 @@ GoRouter buildRouter(WidgetRef ref) {
               ),
             ],
           ),
-          // 4 — Altro (hub + Rapportini + Profilo + Impostazioni + Notifiche)
+          // 4 — Altro (hub + Profilo + Impostazioni + Notifiche)
           StatefulShellBranch(
             navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'altro'),
             routes: [
@@ -581,48 +845,6 @@ GoRouter buildRouter(WidgetRef ref) {
                 path: AppRoutes.altro,
                 builder: (context, state) => const AltroHubScreen(),
                 routes: [
-                  GoRoute(
-                    path: 'rapportini',
-                    builder: (context, state) => const RapportiniListScreen(),
-                    routes: [
-                      GoRoute(
-                        path: 'editor/:reportId',
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => RapportinoFormScreen(
-                          reportId: state.pathParameters['reportId']!,
-                        ),
-                        routes: [
-                          GoRoute(
-                            path: 'assets',
-                            parentNavigatorKey: rootNavigatorKey,
-                            builder: (context, state) => AssetChecklistScreen(
-                              reportId: state.pathParameters['reportId']!,
-                              focusAssetId: state.uri.queryParameters['focus'],
-                              initialFilter: ChecklistFilter.values.firstWhere(
-                                (f) => f.name == state.uri.queryParameters['filter'],
-                                orElse: () => ChecklistFilter.all,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      GoRoute(
-                        path: 'copilot',
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => AiCopilotScreen(
-                          ticketId: state.uri.queryParameters['ticketId'],
-                          cantiereId: state.uri.queryParameters['cantiereId'],
-                        ),
-                      ),
-                      GoRoute(
-                        path: 'view/:reportId',
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => RapportinoViewScreen(
-                          reportId: state.pathParameters['reportId']!,
-                        ),
-                      ),
-                    ],
-                  ),
                   GoRoute(
                     path: 'profilo',
                     builder: (context, state) => const ProfiloScreen(),
@@ -634,10 +856,33 @@ GoRouter buildRouter(WidgetRef ref) {
                   GoRoute(
                     path: 'notifiche',
                     builder: (context, state) => const NotificheScreen(),
+                    routes: [
+                      // The taps with no entity to open land here; the page loads
+                      // by id, so a push tap works without the list.
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) => NotificaDetailScreen(
+                          id: state.pathParameters['id']!,
+                        ),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'coda-sincronizzazione',
+                    builder: (context, state) => const SyncQueueScreen(),
+                  ),
+                  GoRoute(
+                    path: 'preferenze-notifiche',
+                    builder: (context, state) =>
+                        const NotificationPreferencesScreen(),
                   ),
                   GoRoute(
                     path: 'i-miei-dati',
                     builder: (context, state) => const IMieiDatiScreen(),
+                  ),
+                  GoRoute(
+                    path: 'badge',
+                    builder: (context, state) => const MyBadgeScreen(),
                   ),
                   GoRoute(
                     path: 'ferie',
@@ -651,6 +896,41 @@ GoRouter buildRouter(WidgetRef ref) {
                             const FeriePermessiFormScreen(),
                       ),
                     ],
+                  ),
+                  GoRoute(
+                    path: 'smart-working',
+                    builder: (context, state) => const SmartWorkingListScreen(),
+                    routes: [
+                      // Same shape as the sibling `ferie` subtree above: the form is a full-screen
+                      // push on the ROOT navigator, deliberately outside the shell, so it is not
+                      // nested above the bottom nav. The list's own FAB pushes this exact path
+                      // (`smart_working_list_screen.dart`), and without this route that push
+                      // throws.
+                      GoRoute(
+                        path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) =>
+                            const SmartWorkingFormScreen(),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'trasferta',
+                    builder: (context, state) => const TrasfertaListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) =>
+                            const TrasfertaFormScreen(),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'approvazioni',
+                    builder: (context, state) => ApprovazioniScreen(
+                      initialTab: state.uri.queryParameters['tab'],
+                    ),
                   ),
                   GoRoute(
                     path: 'clienti',
@@ -994,9 +1274,7 @@ GoRouter buildRouter(WidgetRef ref) {
                               Expanded(
                                 child: UnavailableState(
                                   titolo: titolo,
-                                  motivo:
-                                      args?.motivo ??
-                                      'Questa funzione non è ancora stata implementata nel client mobile.',
+                                  motivo: args?.motivo ?? 'Questa funzione non è ancora stata implementata nel client mobile.',
                                 ),
                               ),
                             ],
@@ -1044,7 +1322,7 @@ class _KioskStateListenable extends ChangeNotifier {
 class _OnboardingStateListenable extends ChangeNotifier {
   _OnboardingStateListenable(WidgetRef ref) {
     ref.listenManual(authStateProvider, (previous, next) {
-      final userId = next.valueOrNull?.id;
+      final userId = next.value?.id;
       _subscription?.close();
       _subscription = userId == null
           ? null
@@ -1077,6 +1355,22 @@ class _OnboardingStateListenable extends ChangeNotifier {
 /// async-loading signals `redirect` already depends on.
 class _EntitlementStateListenable extends ChangeNotifier {
   _EntitlementStateListenable(WidgetRef ref) {
-    ref.listenManual(cachedEntitlementProvider, (prev, next) => notifyListeners());
+    ref.listenManual(
+      cachedEntitlementProvider,
+      (prev, next) => notifyListeners(),
+    );
+  }
+}
+
+/// [Listenable] that notifies go_router when the forced-sign-out decision changes — i.e. when the
+/// recovery screen's confirmed discard turns [SessionRecoveryNeedsDiscard] into
+/// [SessionRecoveryIdle]. Without it the redirect would never re-run after the wipe and the
+/// technician would sit on the recovery screen with nothing left to confirm.
+class _SessionRecoveryListenable extends ChangeNotifier {
+  _SessionRecoveryListenable(WidgetRef ref) {
+    ref.listenManual(
+      sessionRecoveryProvider,
+      (prev, next) => notifyListeners(),
+    );
   }
 }

@@ -2,8 +2,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -13,6 +15,7 @@ import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -191,7 +194,7 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
   @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(allCustomersProvider);
-    final customers = customersAsync.valueOrNull ?? [];
+    final customers = customersAsync.value ?? [];
 
     return Scaffold(
       backgroundColor: context.colors.bg2,

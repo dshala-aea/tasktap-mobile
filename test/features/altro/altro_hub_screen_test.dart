@@ -1,0 +1,207 @@
+// dart format width=100
+// test/features/altro/altro_hub_screen_test.dart
+//
+// The Altro hub's entry into self-service smart working.
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:tasktap_mobile/core/router/app_router.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/domain/auth/auth_user.dart';
+import 'package:tasktap_mobile/features/altro/altro_hub_screen.dart';
+import 'package:tasktap_mobile/features/smart_working/smart_working_list_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
+
+Widget _app({Entitlement? cached}) {
+  final router = GoRouter(
+    routes: [
+      GoRoute(path: '/', builder: (_, _) => const AltroHubScreen()),
+      GoRoute(
+        path: AppRoutes.altroSmartWorking,
+        builder: (_, _) => const SmartWorkingListScreen(),
+      ),
+    ],
+  );
+  return ProviderScope(retry: (_, _) => null, 
+    overrides: [
+      authStateProvider.overrideWith((ref) => Stream<AuthUser?>.value(null)),
+      // Null = the field-seat baseline, which is exactly what a technician on a fresh install
+      // sees. `presenze` is part of it, so the self-service tiles must be drawn.
+      cachedEntitlementProvider.overrideWith((ref) => cached),
+    ],
+    child: MaterialApp.router(routerConfig: router),
+  );
+}
+
+void main() {
+  testWidgets('tile_opensTheSmartWorkingScreen', (tester) async {
+    // No persisted caller id: the list resolves to its empty state without touching the network.
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(
+      find.text('Smart working'),
+      find.byType(CustomScrollView),
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Smart working'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SmartWorkingListScreen), findsOneWidget);
+    // The list screen's own header — the hub tile is offstage by now.
+    expect(find.text('Smart working'), findsOneWidget);
+    expect(find.text('Nessuna richiesta'), findsOneWidget);
+  });
+
+  testWidgets('the approval tile is hidden without presenze.absence.approve', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approvazioni'), findsNothing);
+  });
+
+  testWidgets('the approval tile is drawn for an approver', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final cached = Entitlement(
+      features: const {'presenze'},
+      capabilities: const {'presenze.absence.approve'},
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 3),
+    );
+
+    await tester.pumpWidget(_app(cached: cached));
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(
+      find.text('Approvazioni'),
+      find.byType(CustomScrollView),
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Approvazioni'), findsOneWidget);
+  });
+
+  // The office-admin tiles require the same `.read` capability their route requires. The tenant
+  // holds every module here, so only the capability filter can be removing them.
+  testWidgets('the admin Gestione tiles are hidden without their read capability', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final cached = Entitlement(
+      features: const {
+        'clienti',
+        'contratti',
+        'magazzino',
+        'team',
+        'pianificazione',
+        'interventi',
+        'rapportini',
+        'cantieri',
+        'prodotti',
+        'presenze',
+      },
+      capabilities: const {},
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(_app(cached: cached));
+    await tester.pumpAndSettle();
+
+    for (final label in const [
+      'Clienti',
+      'Sedi',
+      'Contratti',
+      'Magazzino',
+      'Squadre',
+      'Pianificazioni',
+    ]) {
+      expect(find.text(label), findsNothing, reason: label);
+    }
+
+    // Module-only tiles still render — the filter is capability-specific, not a blank screen.
+    expect(find.text('Interventi'), findsOneWidget);
+    expect(find.text('Asset'), findsOneWidget);
+    expect(find.text('Ferie e Permessi'), findsOneWidget);
+  });
+
+  testWidgets('the admin Gestione tiles are drawn when their read capability is held', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final cached = Entitlement(
+      features: const {
+        'clienti',
+        'contratti',
+        'magazzino',
+        'team',
+        'pianificazione',
+        'interventi',
+        'rapportini',
+        'cantieri',
+        'prodotti',
+        'presenze',
+      },
+      capabilities: const {
+        'clienti.customer.read',
+        'clienti.location.read',
+        'contratti.contract.read',
+        'magazzino.article.read',
+        'team.squadra.read',
+        'pianificazione.schedule.read',
+      },
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    await tester.pumpWidget(_app(cached: cached));
+    await tester.pumpAndSettle();
+
+    for (final label in const [
+      'Clienti',
+      'Sedi',
+      'Contratti',
+      'Magazzino',
+      'Squadre',
+      'Pianificazioni',
+    ]) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
+  });
+}

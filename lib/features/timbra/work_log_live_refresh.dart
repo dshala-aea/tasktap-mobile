@@ -9,9 +9,9 @@
 // is the safety net for when that channel is down or has not been re-established yet:
 //  - refresh as soon as the screen appears (every time — including a tab being shown again),
 //  - refresh the moment the app returns to the foreground,
-//  - poll every 15s, ONLY while this screen is visible AND the app is foregrounded AND the
-//    "Sincronizza dati in background" preference (backgroundSyncPreferenceProvider) is on — the
-//    same switch that already governs the 60s HomeShell poll.
+//  - poll every 15s, ONLY while this screen is visible AND the app is foregrounded. The
+//    "Modalità offline" setting deliberately does NOT gate it (owner decision D7): freshness is
+//    the app's promise, not a background convenience the technician can switch off.
 //
 // Not covered here: a BACKGROUNDED app. That needs an FCM data-only push from the backend on
 // WorkLogChanged (backend follow-up); until then it converges on the next resume.
@@ -22,8 +22,8 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/sync/sync_service.dart' show backgroundSyncPreferenceProvider;
 import '../../data/timbratura/work_log_refresh_coordinator.dart';
+import 'timbra_providers.dart' show giornataProvider, serverDayProvider;
 
 class WorkLogLiveRefresh extends ConsumerStatefulWidget {
   const WorkLogLiveRefresh({super.key, required this.child});
@@ -80,13 +80,23 @@ class _WorkLogLiveRefreshState extends ConsumerState<WorkLogLiveRefresh>
   /// Deferred to a microtask: this can be reached from didChangeDependencies, i.e. mid-build, and a
   /// provider (activeTrackersProvider) must not be invalidated while the tree is building.
   void _refresh() => Future.microtask(() {
-    if (mounted) unawaited(ref.read(workLogRefreshCoordinatorProvider).refreshNow());
+    if (!mounted) return;
+    unawaited(ref.read(workLogRefreshCoordinatorProvider).refreshNow());
+    // The Timbra screen's own day is a second read: the coordinator converges this phone's own
+    // punches, but a totem punch, a punch from another device and an office correction only ever
+    // arrive through `GET /api/WorkLog`. Without this the rail keeps showing the day as it stood
+    // when the screen opened. Cheap where it does not apply: the provider is autoDispose, so from
+    // the dashboard (no listener) this invalidates nothing.
+    ref.invalidate(serverDayProvider);
+    // The punch guard's `/api/worklog/today` is a third read with the same staleness problem:
+    // without invalidating it, a shift opened here (or on another device) leaves the guard on the
+    // pre-shift answer, which disables the finish button with a false "Non risulti in servizio".
+    ref.invalidate(giornataProvider);
   });
 
   void _syncPoll() {
     _stopPoll();
     if (!_visible || !_foreground) return;
-    if (!ref.read(backgroundSyncPreferenceProvider)) return;
     _poll = Timer.periodic(WorkLogLiveRefresh.pollInterval, (_) => _refresh());
   }
 

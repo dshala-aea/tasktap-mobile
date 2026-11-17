@@ -79,15 +79,13 @@ void main() {
   Map<String, dynamic> instance(String name) =>
       sample({r'$ref': '#/components/schemas/$name'}) as Map<String, dynamic>;
 
-  // The four reference `Sync*Dto` schemas below (`SyncContractDto`, `SyncCommessaDto`,
-  // `SyncProdottoAssistenzaDto`, `SyncAgentDto`) are ahead of `origin/master` in the snapshot.
-  // They were produced by backend commit `1950b3d7` on branch `feat/offline-reference-sync`,
-  // which is on no origin ref — `origin/master`'s `MobileUserSyncResult` does not declare the
-  // `agents`/`commesse`/`contracts`/`prodottiAssistenza` properties these back. When that branch
-  // lands, this file's copy becomes a plain fast-forward and the merge procedure in
-  // `openapi_contract_test.dart`'s header can go back to a copy. Until then, a refresh must merge
-  // (that gate fails by name on either a dropped or a stale side), and this comment is the only
-  // record that the contract in the snapshot exists on one unpushed branch.
+  // Every schema this file pins is on `origin/master` now: the four reference `Sync*Dto`s and the
+  // `agents`/`commesse`/`contracts`/`prodottiAssistenza` properties they back landed with the
+  // offline-reference-sync work, and `CustomerContact` — the customer screen's *Contatti* mirror —
+  // with the 2026-10-22 re-sync. `SyncMaintenanceTemplateDto` and `MaintenanceTemplateOrigin` got
+  // there the same way a week earlier. A schema listed here that the snapshot does not declare
+  // fails by name, so this map is the record of what the app reads, not a second copy of the
+  // contract.
   final readKeys = <String, Set<String>>{
     'SyncControlGroupDto': SyncControlGroupDto.wireKeys,
     'SyncTicketControlDto': SyncTicketControlDto.wireKeys,
@@ -99,12 +97,47 @@ void main() {
     'SyncCommessaDto': CommessaSyncDto.wireKeys,
     'SyncProdottoAssistenzaDto': ProdottoAssistenzaSyncDto.wireKeys,
     'SyncAgentDto': AgentSyncDto.wireKeys,
+    'CustomerContact': CustomerContactDto.wireKeys,
+    'SyncMaintenanceTemplateDto': SyncMaintenanceTemplateDto.wireKeys,
+    // The sync-v2 additions: the authoritative scope object and the barcode collection the
+    // offline scan resolves through.
+    'SyncScopeDto': SyncScopeDto.wireKeys,
+    'SyncMaterialeBarcodeDto': MaterialeBarcodeDto.wireKeys,
+    // The report aggregate (O-8a): the children, files and versions of every report in scope.
+    'SyncReportStaffDto': SyncReportStaffDto.wireKeys,
+    'SyncReportMaterialeDto': SyncReportMaterialeDto.wireKeys,
+    'SyncReportControlloDto': SyncReportControlloDto.wireKeys,
+    'SyncReportAllegatoDto': SyncReportAllegatoDto.wireKeys,
+    'SyncReportVersionDto': SyncReportVersionDto.wireKeys,
+    // The technician's real work intervals, mirrored so a report resumed on another device — or
+    // re-opened after a reinstall — still knows what the timer recorded. Child of the staff row,
+    // carried inside the report aggregate.
+    'SyncReportSegmentDto': SyncReportSegmentDto.wireKeys,
+    // O-9: the caller's own ticket timer sessions. `SyncScopeDto.ticketWorkLogs` is the prune
+    // manifest for the same rows, so both sides of the loop are pinned here.
+    'SyncTicketWorkLogDto': SyncTicketWorkLogDto.wireKeys,
+    // The Storico timeline: raw, invariant field changes per ticket. It has no manifest of its
+    // own — it is pruned through the ticket manifest — so only the row shape is pinned here.
+    'SyncTicketHistoryDto': SyncTicketHistoryDto.wireKeys,
+    // The caller's own cantiere site hours: the mirror the detail screen reads offline. It has a
+    // manifest of its own (`SyncScopeDto.cantiereWorkLogs`), pinned with the scope above.
+    'SyncCantiereWorkLogDto': SyncCantiereWorkLogDto.wireKeys,
+    // The caller's own ferie/permessi: the list's offline mirror. It has NO manifest — the payload
+    // re-sends the whole set and the applier replaces from it — so only the row shape is pinned.
+    'SyncAbsenceRequestDto': SyncAbsenceRequestDto.wireKeys,
+    'SyncCantiereCrewAssignmentDto': SyncCantiereCrewAssignmentDto.wireKeys,
+    // P2-7: the tenant's custom-field definitions ("campi aggiuntivi"), mirrored so the section
+    // renders offline instead of silently disappearing.
+    'SyncExtensionFieldDefinitionDto': SyncExtensionFieldDefinitionDto.wireKeys,
     // The I2 confirm response. The draft and resolved shapes are different DTOs, so these are
     // pinned here rather than inferred from the draft summary's classes.
     'AiConversationConfirmResponse': AiConversationConfirmResponse.wireKeys,
     'AiResolvedStaff': AiResolvedStaff.wireKeys,
     'AiResolvedMaterial': AiResolvedMaterial.wireKeys,
     'AiResolvedControl': AiResolvedControl.wireKeys,
+    // The instruments slice: Confirm resolves each id and computes the calibration verdict, so the
+    // app reads the resolved line (and writes the report's own instrument rows from it).
+    'AiResolvedStrumento': AiResolvedStrumento.wireKeys,
   };
 
   for (final entry in readKeys.entries) {
@@ -127,12 +160,55 @@ void main() {
     );
   }
 
+  // `TicketDto`/`ReportDto` describe entity graphs, so their `fromJson` deliberately reads a
+  // SUBSET of the server's schema — the two-directional loop above cannot hold for them. The one
+  // direction that still can is the one that matters: every key they read must exist on the
+  // server. A missing JSON key is just `null`, which is how `priority` (the server spells it
+  // `priorita`) and `documentTemplateId` (no such property) survived here for months.
+  final entityReadKeys = <String, Set<String>>{
+    'Ticket': TicketDto.readKeys,
+    'Report': ReportDto.readKeys,
+  };
+
+  for (final entry in entityReadKeys.entries) {
+    test('${entry.key}: every key the app reads exists on the server', () {
+      expect(
+        entry.value.difference(props(entry.key)),
+        isEmpty,
+        reason: 'the app reads keys the server does not declare',
+      );
+    });
+  }
+
+  test('TicketDto reads the priority off the key the server actually sends', () {
+    final sample = instance('Ticket');
+    final dto = TicketDto.fromJson(sample);
+    expect(
+      dto.priority,
+      sample['priorita'],
+      reason: 'the wire key is priorita (Ticket.Priorita), never priority',
+    );
+  });
+
+  test('ReportDto carries the server-recorded AI-authorship flag', () {
+    // `stato` is normalized by hand: the snapshot declares `ReportStatoEnum` as a bare integer,
+    // because the enum type itself carries no converter — the one on `Report.Stato` is scoped to
+    // the property, which the schema generator does not see. The wire really does send the name
+    // ("Bozza"), which is what `ReportDto.fromJson` casts to String, so the generated sample's `1`
+    // is a snapshot artefact, not what a device receives.
+    final sample = instance('Report')..['stato'] = 'Bozza';
+    final dto = ReportDto.fromJson(sample);
+    expect(dto.isAiAssisted, isTrue);
+  });
+
   test(
     'MobileUserSyncResult declares every checklist member the app reads',
     () {
       final declared = props('MobileUserSyncResult');
       expect(SyncResultDto.checklistWireKeys.difference(declared), isEmpty);
       expect(SyncResultDto.referenceWireKeys.difference(declared), isEmpty);
+      expect(SyncResultDto.scopeWireKeys.difference(declared), isEmpty);
+      expect(SyncResultDto.reportAggregateWireKeys.difference(declared), isEmpty);
     },
   );
 
@@ -156,6 +232,7 @@ void main() {
     expect(r.staff, hasLength(1));
     expect(r.materials, hasLength(1));
     expect(r.controlli, hasLength(1));
+    expect(r.strumenti, hasLength(1));
     expect(r.warnings, hasLength(1));
 
     // The resolved shapes are the ones the editor's apply path reads, and the free-text material
@@ -164,6 +241,15 @@ void main() {
     expect(m.freeTextName, isNotEmpty);
     final c = AiResolvedControl.fromJson(instance('AiResolvedControl'));
     expect(c.ticketControlId, isNotEmpty);
+    // The instruments write keys off the resolved line alone: an id that parsed to null would land
+    // an instrument on the wrong report row, and a false expiry verdict would silently let an
+    // expired instrument through without the technician's confirmation.
+    final s = AiResolvedStrumento.fromJson(instance('AiResolvedStrumento'));
+    expect(s.strumentoId, isNotEmpty);
+    expect(s.calibrationExpiry, DateTime.utc(2026, 10, 7));
+    expect(s.expiredAtUse, isTrue);
+    expect(s.expiredAcknowledged, isTrue);
+    expect(s.usageDescription, isA<String>());
   });
 
   test('every DTO parses an instance generated from the snapshot schema', () {
@@ -188,6 +274,17 @@ void main() {
       instance('SyncReportStrumentoDto'),
     );
     expect(rs.calibrationExpiry, DateTime.utc(2026, 10, 7));
+    // The two per-instrument notes are read off the snapshot sample, not just listed in wireKeys.
+    expect(rs.usageDescription, isA<String>());
+    expect(rs.outcome, isA<String>());
+
+    // The staff row carries the reason for its hours and the intervals behind it, and both are
+    // read off the snapshot sample rather than only listed in `wireKeys`: `hoursSource` is an enum
+    // on the wire, so a server-side `JsonStringEnumConverter` would send "Timer", `_intOrNull`
+    // would return null and every row would read Legacy with no gate failing.
+    final st = SyncReportStaffDto.fromJson(instance('SyncReportStaffDto'));
+    expect(st.hoursSource, 1);
+    expect(st.segments, hasLength(1));
 
     SyncTicketAssetDto.fromJson(instance('SyncTicketAssetDto'));
 
@@ -204,6 +301,73 @@ void main() {
 
     final ag = AgentSyncDto.fromJson(instance('SyncAgentDto'));
     expect(ag.nome, isNotEmpty);
+
+    final mt = SyncMaintenanceTemplateDto.fromJson(
+      instance('SyncMaintenanceTemplateDto'),
+    );
+    expect(mt.id, isNotEmpty);
+    expect(mt.origin, 'System', reason: 'first enum value of MaintenanceTemplateOrigin');
+    expect(mt.latestPublishedVersion, 1);
+
+    final xf = SyncExtensionFieldDefinitionDto.fromJson(
+      instance('SyncExtensionFieldDefinitionDto'),
+    );
+    expect(xf.key, isNotEmpty);
+    expect(xf.label, isNotEmpty);
+    expect(xf.entityType, isNotEmpty);
+    expect(xf.sortOrder, 1);
+
+    final mb = MaterialeBarcodeDto.fromJson(
+      instance('SyncMaterialeBarcodeDto'),
+    );
+    expect(mb.barcode, isNotEmpty);
+    expect(mb.materialeId, isNotEmpty);
+    expect(mb.isPrimary, isTrue);
+
+    // Every member of the scope is generated as a one-element array: this is what proves the
+    // parser keeps null and empty distinguishable rather than collapsing them.
+    final sx = SyncScopeDto.fromJson(instance('SyncScopeDto'));
+    expect(sx.tickets, hasLength(1));
+    expect(sx.strumenti, hasLength(1));
+
+    final th = SyncTicketHistoryDto.fromJson(instance('SyncTicketHistoryDto'));
+    expect(th.ticketId, isNotEmpty);
+    expect(
+      th.fieldName,
+      isNotEmpty,
+      reason: 'the timeline switches on it; an empty name would render a blank row',
+    );
+    expect(th.changedByUserId, isNotEmpty);
+    expect(th.changedAt, DateTime.utc(2026, 10, 7, 8));
+    expect(th.oldValue, isA<String>());
+    expect(th.newValue, isA<String>());
+
+    final cw = SyncCantiereWorkLogDto.fromJson(
+      instance('SyncCantiereWorkLogDto'),
+    );
+    expect(cw.id, isNotEmpty);
+    expect(cw.cantiereId, isNotEmpty);
+    expect(cw.userId, isNotEmpty);
+    expect(
+      cw.workDate,
+      DateTime.utc(2026, 10, 7),
+      reason: 'a calendar label: the time part of the wire value is ignored, never shifted',
+    );
+    expect(cw.startTime, isA<Duration>());
+    expect(cw.workLogType, 1, reason: 'Travel — the enum travels as its ordinal');
+    expect(cw.createdAt, DateTime.utc(2026, 10, 7, 8));
+
+    final ab = SyncAbsenceRequestDto.fromJson(instance('SyncAbsenceRequestDto'));
+    expect(ab.id, isNotEmpty);
+    expect(ab.requestedByUserId, isNotEmpty);
+    expect(
+      ab.startDate,
+      DateTime.utc(2026, 10, 7),
+      reason: 'a civil day from a DateOnly wire value — never shifted by a zone',
+    );
+    expect(ab.endDate, isA<DateTime>());
+    expect(ab.status, 1, reason: 'Approved — the enum travels as its ordinal');
+    expect(ab.createdAt, DateTime.utc(2026, 10, 7, 8));
   });
 
   test(
@@ -226,6 +390,13 @@ void main() {
         'commesse': [instance('SyncCommessaDto')],
         'prodottiAssistenza': [instance('SyncProdottoAssistenzaDto')],
         'agents': [instance('SyncAgentDto')],
+        'maintenanceTemplates': [instance('SyncMaintenanceTemplateDto')],
+        'extensionFieldDefinitions': [instance('SyncExtensionFieldDefinitionDto')],
+        'scope': instance('SyncScopeDto'),
+        'materialiBarcodes': [instance('SyncMaterialeBarcodeDto')],
+        // Present-but-empty is enough for the flag: what the applier does with the rows is
+        // covered in test/data/sync/sync_ticket_materiali_test.dart.
+        'ticketMateriali': <Object>[],
       });
       expect(full.carriesChecklist, isTrue);
       expect(full.carriesStrumenti, isTrue);
@@ -233,16 +404,34 @@ void main() {
       expect(full.carriesCommesse, isTrue);
       expect(full.carriesProdottiAssistenza, isTrue);
       expect(full.carriesAgents, isTrue);
+      expect(full.carriesMaintenanceTemplates, isTrue);
+      expect(full.carriesExtensionFieldDefinitions, isTrue);
+      expect(full.extensionFieldDefinitions.single.key, isNotEmpty);
+      expect(full.carriesTicketMateriali, isTrue);
       expect(full.ticketControls, hasLength(1));
       expect(full.checklistTruncated, isTrue);
       expect(full.checklistOmittedTicketIds, [
         '00000000-0000-0000-0000-000000000001',
       ]);
+      expect(
+        full.scope,
+        isNotNull,
+        reason: 'a payload that carries the authoritative scope can prune',
+      );
+      expect(full.scope!.tickets, hasLength(1));
+      expect(full.scope!.strumenti, hasLength(1));
+      expect(full.materialiBarcodes, hasLength(1));
+      expect(full.materialiBarcodes.single.materialeId, isNotEmpty);
 
       final older = SyncResultDto.fromJson({
         'syncedAt': '2026-10-07T08:00:00Z',
         'since': null,
       });
+      expect(
+        older.scope,
+        isNull,
+        reason: 'an older backend must NOT look like "everything left scope"',
+      );
       expect(
         older.carriesChecklist,
         isFalse,
@@ -260,6 +449,24 @@ void main() {
       expect(older.carriesCommesse, isFalse);
       expect(older.carriesProdottiAssistenza, isFalse);
       expect(older.carriesAgents, isFalse);
+      expect(
+        older.carriesMaintenanceTemplates,
+        isFalse,
+        reason:
+            'an older backend must NOT look like "every maintenance template was deleted"',
+      );
+      expect(
+        older.carriesTicketMateriali,
+        isFalse,
+        reason:
+            'an older backend must NOT look like "every fabbisogno was cleared"',
+      );
+      expect(
+        older.carriesExtensionFieldDefinitions,
+        isFalse,
+        reason:
+            'an older backend must NOT look like "the tenant deactivated every custom field"',
+      );
     },
   );
 

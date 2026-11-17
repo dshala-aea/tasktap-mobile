@@ -60,7 +60,7 @@ void main() {
 
   tearDown(() => authController.close());
 
-  Widget app() => ProviderScope(
+  Widget app() => ProviderScope(retry: (_, _) => null, 
     overrides: [
       kioskModeProvider.overrideWith((ref) {
         kioskBuilds++;

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_rack.dart';
 import '../theme/status_colors.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
@@ -28,12 +29,21 @@ class StatusStamp extends StatelessWidget {
     required this.stato,
     this.size = StampSize.medium,
     this.animate = false,
+    this.family,
   });
 
   /// Italian status string — same vocabulary [statusFamilyOf] already maps.
   final String stato;
 
   final StampSize size;
+
+  /// Overrides the family [statusFamilyOf] would pick from [stato].
+  ///
+  /// List shells need this: their data carries a semantic tone (`Pianificato`, `In scadenza`,
+  /// `Principale`, … are not all in the status vocabulary), while the stamp text must stay the
+  /// exact label the list shows. Null keeps the string-based behaviour every existing call site
+  /// relies on.
+  final StatusFamily? family;
 
   /// Plays the "stamping" in-flight entrance once on mount: scale 1.18 → 0.95 → 1 over 220ms with
   /// a 1° rotation settle, no bounce after (frontend DESIGN.md's States section). Off by default —
@@ -43,8 +53,12 @@ class StatusStamp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final family = statusFamilyOf(stato);
-    final style = _StampStyle.forFamily(family, context.colors, context.vetro);
+    final resolvedFamily = family ?? statusFamilyOf(stato);
+    final style = _StampStyle.forFamily(
+      resolvedFamily,
+      context.colors,
+      context.vetro,
+    );
     final label = stato.trim().toUpperCase();
 
     final metrics = switch (size) {
@@ -76,7 +90,9 @@ class StatusStamp extends StatelessWidget {
     final ringInset = style.doubleRing ? metrics.ringGap + 1.5 : 0.0;
 
     Widget stamp = Transform.rotate(
-      angle: _stampAngleFor(stato),
+      // Fixed −3°, the prototype's own tilt (`.stamp { transform: rotate(-3deg); }`) — every
+      // stamp leans the same way, like one physical rubber stamp shared by the whole app.
+      angle: -3 * math.pi / 180,
       child: CustomPaint(
         painter: _StampRingPainter(
           color: style.ring,
@@ -104,16 +120,32 @@ class StatusStamp extends StatelessWidget {
                     ),
                   ),
                 ),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Archivo Narrow',
-                  fontSize: metrics.fontSize,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: style.ink,
-                  height: 1.1,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // The prototype's 3px leading dot (`.stamp .dot`), in the stamp's own ink.
+                  Container(
+                    key: const Key('status-stamp-dot'),
+                    width: 3,
+                    height: 3,
+                    decoration: BoxDecoration(
+                      color: style.ink,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: 'Archivo Narrow',
+                      fontSize: metrics.fontSize,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: style.ink,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -210,16 +242,6 @@ class _StampStyle {
       ),
     };
   }
-}
-
-/// A small, stable rotation per label (±1.4°) — enough to read as an ink impression, not enough
-/// to cost a technician a second re-reading a status at a glance (see PRODUCT.md Product
-/// Principle 5). Deterministic from the label so the same status always tilts the same way,
-/// rather than jittering on every rebuild.
-double _stampAngleFor(String label) {
-  final normalized =
-      (label.hashCode.abs() % 1000) / 1000; // 0..1, stable per label
-  return (normalized - 0.5) * (2 * 1.4) * (math.pi / 180);
 }
 
 /// Double- or single-ring border, drawn outside the widget's own [BoxDecoration] fill so the two

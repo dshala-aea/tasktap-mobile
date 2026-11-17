@@ -1,21 +1,63 @@
 // dart format width=100
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/time/business_time.dart' show parseDateOnlyOrThrow;
+import '../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../api/dio_client.dart';
+import '../entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
+import '../sync/connectivity_provider.dart';
+import '../sync/sync_service.dart' show appDatabaseProvider;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AbsenceRequestApiClient — self-service ferie/permessi against
 // AbsenceRequestsController (/api/absence-requests), already complete and tested server-side.
-// Online-only: this is data typed by the same person who reads it back, not a field-capture
-// write that must survive a dead signal.
 //
-// AbsenceTypeEnum (Ferie=0/Permesso=1/Malattia=2) and AbsenceRequestStatusEnum
-// (Pending=0/Approved=1/Rejected=2/Cancelled=3) are bare ints on the wire — no
-// [JsonStringEnumConverter] server-side.
+// Filing and cancelling are online-only: they are writes the server must validate and decide, and
+// a queued "request sent" that the server never saw would be a lie the technician then waits on.
+// Reading is not: the sync mirrors the caller's own requests into `absence_requests`, so the list
+// answers with no signal (see myAbsenceRequestsProvider).
+//
+// AbsenceTypeEnum (Ferie=0/Permesso=1/Malattia=2, then Rol=3, ExFestivita=4, PermessoRetribuito=5,
+// PermessoNonRetribuito=6, Legge104=7, CongedoParentale=8, AltriCongediPermessi=9) and
+// AbsenceRequestStatusEnum (Pending=0/Approved=1/Rejected=2/Cancelled=3) are bare ints on the wire
+// — no [JsonStringEnumConverter] server-side.
 // ══════════════════════════════════════════════════════════════════════════════
 
-const List<String> kAbsenceTypeLabels = ['Ferie', 'Permesso', 'Malattia'];
+/// `AbsenceTypeEnum` display names, indexed by the wire ordinal — all ten, including the legacy
+/// [Permesso] (1) that rows filed before 2026-09 still carry.
+///
+/// The list used to stop at Malattia and clamp: a ROL request then rendered as "Malattia", which is
+/// the one wrong label this screen cannot afford. Never index it by hand — go through
+/// [absenceTypeLabel].
+const List<String> kAbsenceTypeLabels = [
+  'Ferie', // 0
+  'Permesso', // 1 — legacy, kept for old rows
+  'Malattia', // 2
+  'ROL', // 3
+  'Ex festività', // 4
+  'Permesso retribuito', // 5
+  'Permesso non retribuito', // 6
+  'Legge 104', // 7
+  'Congedo parentale', // 8
+  'Altri congedi/permessi', // 9
+];
+
+/// The types a NEW request may carry: the nine the client asked for. Index 1 ([kAbsenceTypeLabels]
+/// `Permesso`) is a legacy value kept so old rows render — offering it would let someone file a
+/// request the office form can no longer express.
+const List<int> kSelectableAbsenceTypes = [0, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/// The "permesso" variants that may carry a same-day time window — mirrors the server's own
+/// `IsPermessoType`, so the form never offers a pairing `CreateAsync` would reject.
+const Set<int> kPermessoAbsenceTypes = {1, 5, 6};
+
+/// `AbsenceTypeEnum.AltriCongediPermessi` — a catch-all whose Reason the server requires, because
+/// it is the only place such a request says what it actually is.
+const int kAltriCongediPermessiType = 9;
+
 const List<String> kAbsenceStatusLabels = ['In attesa', 'Approvata', 'Rifiutata', 'Annullata'];
 
 String absenceTypeLabel(int type) =>
@@ -98,6 +140,14 @@ class AbsenceRequestValidationError implements Exception {
   String toString() => detail;
 }
 
+/// A 403 on an approval decision: the capability was revoked, or the seat/tenant refuses it.
+/// Terminal — retrying the same call cannot succeed.
+class AbsenceRequestPermissionError implements Exception {
+  const AbsenceRequestPermissionError();
+  @override
+  String toString() => 'Non hai i permessi per approvare le richieste.';
+}
+
 class AbsenceRequestApiClient {
   AbsenceRequestApiClient(this._dio);
 
@@ -111,16 +161,53 @@ class AbsenceRequestApiClient {
       if (e.response?.statusCode == 400 && data is Map && data['detail'] is String) {
         throw AbsenceRequestValidationError(data['detail'] as String);
       }
+      if (e.response?.statusCode == 403) throw const AbsenceRequestPermissionError();
       rethrow;
     }
   }
 
-  /// GET /api/absence-requests — no userId means "my own" for a non-Approve caller
-  /// (server-enforced; this client never sends userId).
-  Future<List<AbsenceRequestDto>> fetchMine() => _guarded(() async {
-    final res = await _dio.get<List<dynamic>>('/api/absence-requests');
+  /// GET /api/absence-requests.
+  ///
+  /// [userId] is sent only when supplied. Omitting it means "my own" for a non-Approve caller —
+  /// but **everyone's** for a caller holding `PresenzeAbsenceApprove` (AbsenceRequestsController
+  /// List: `canSeeEveryone && !userId.HasValue` selects the whole tenant). This screen is the
+  /// technician's own history, so [myAbsenceRequestsProvider] always puts the caller's own id on
+  /// the wire. An office user who opened it used to be shown every request in the tenant, with no
+  /// column saying whose each row was.
+  Future<List<AbsenceRequestDto>> fetchMine({String? userId}) => _guarded(() async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/absence-requests',
+      queryParameters: {if (userId != null && userId.isNotEmpty) 'userId': userId},
+    );
     final list = res.data ?? [];
     return list.cast<Map<String, dynamic>>().map(AbsenceRequestDto.fromJson).toList();
+  });
+
+  /// GET /api/absence-requests?status=0 with no `userId`: the tenant-wide pending queue for an
+  /// Approve holder (the server resolves the scope itself). Online-only; no local mirror exists
+  /// for other people's requests.
+  Future<List<AbsenceRequestDto>> fetchPendingForApproval() => _guarded(() async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/absence-requests',
+      queryParameters: const {'status': 0},
+    );
+    final list = res.data;
+    // A 200 with no body is a contract violation, not "nothing to approve": the queue must not
+    // report an empty worklist when the server never answered.
+    if (list == null) {
+      throw const FormatException('GET /api/absence-requests answered 200 with no body');
+    }
+    return list.cast<Map<String, dynamic>>().map(AbsenceRequestDto.fromJson).toList();
+  });
+
+  /// POST /api/absence-requests/{id}/approve. The server tolerates an omitted body; send `{}`.
+  Future<void> approve(String id) => _guarded(() async {
+    await _dio.post<dynamic>('/api/absence-requests/$id/approve', data: const <String, dynamic>{});
+  });
+
+  /// POST /api/absence-requests/{id}/reject. The reason is required by the server and max 1000.
+  Future<void> reject(String id, {required String reason}) => _guarded(() async {
+    await _dio.post<dynamic>('/api/absence-requests/$id/reject', data: {'reason': reason.trim()});
   });
 
   /// POST /api/absence-requests. Returns the new request's id.
@@ -157,6 +244,95 @@ final absenceRequestApiClientProvider = Provider<AbsenceRequestApiClient>((ref) 
 });
 
 /// The current user's own requests, most relevant first (server sorts newest-created-first).
-final myAbsenceRequestsProvider = FutureProvider.autoDispose<List<AbsenceRequestDto>>((ref) {
-  return ref.watch(absenceRequestApiClientProvider).fetchMine();
+///
+/// Online this is the server's answer. With no signal — or when the request never arrived, or the
+/// server faulted — it answers from the device's own mirror of the caller's requests
+/// (`absence_requests`, filled by the sync), because "was my request approved" is a question whose
+/// answer was decided days ago and does not need a radio. Filing and cancelling stay online: both
+/// need the server's validation and its decision to mean anything.
+///
+/// A 4xx still throws. That is the server saying something about THIS request (a permission, a
+/// malformed query), not a statement about the technician's history, and swallowing it would show
+/// them a stale list as if it were current.
+/// The answer plus where it came from.
+///
+/// A bare list cannot tell "the server says you have filed nothing" from "this device has never
+/// downloaded your history", and the list screen must say different things in those two cases: an
+/// empty mirror is a missing download, never a fact about the technician. So the source travels
+/// with the rows instead of being guessed from the connectivity flag afterwards — a request that
+/// was attempted online and then fell back to the mirror is exactly the case a guess gets wrong.
+typedef MyAbsenceRequests = ({List<AbsenceRequestDto> items, bool fromDevice});
+
+final myAbsenceRequestsProvider = FutureProvider.autoDispose<MyAbsenceRequests>((ref) async {
+  Future<MyAbsenceRequests> fromDevice() async => (items: await _readMirror(ref), fromDevice: true);
+
+  if (!ref.watch(isOnlineProvider)) return fromDevice();
+
+  // The caller's own id goes on the wire every time, and it is not decoration: with `userId`
+  // omitted the server answers an approve-holder with the WHOLE TENANT's requests — every ferie,
+  // permesso and malattia filed by anyone, on a screen that lists no requester per row. Same trap
+  // `mySmartWorkingRequestsProvider` documents and closes the same way.
+  //
+  // Read from the persisted key on every read rather than from the cached
+  // `internalUserIdProvider`: that FutureProvider is not autoDispose and nothing invalidates it, so
+  // a value resolved before the first `/api/Auth/me` would pin this screen to "empty" for the
+  // process's lifetime, and after a forced sign-out (which keeps prefs) it would name the PREVIOUS
+  // user. The key stays the single source of truth; this just reads it again.
+  final userId = await _currentUserId();
+
+  // Unknown caller: an omitted `userId` is "everything" for an approve-holder, so "we do not know
+  // who you are" must resolve to the device's own mirror — never to an unscoped request whose
+  // answer would be the tenant.
+  if (userId == null || userId.isEmpty) return fromDevice();
+
+  try {
+    return (
+      items: await ref.watch(absenceRequestApiClientProvider).fetchMine(userId: userId),
+      fromDevice: false,
+    );
+  } catch (e) {
+    if (!isTransportOrServerFault(e)) rethrow;
+    return fromDevice();
+  }
 });
+
+/// The signed-in user's INTERNAL database id (`Users.Id`), read from the same SharedPreferences key
+/// `internalUserIdProvider` reads ([internalUserIdPrefsKey], persisted by `EntitlementService.refresh`
+/// from `/api/Auth/me`). Null before the first successful `/me`, or after a consented sign-out
+/// wiped prefs. See `myAbsenceRequestsProvider` for why the cached provider is not used here.
+Future<String?> _currentUserId() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString(internalUserIdPrefsKey);
+}
+
+/// The device's own copy of the caller's requests, shaped exactly like the wire rows so the list
+/// cannot tell a mirrored request from a fetched one.
+///
+/// [startDate]/[endDate] are parsed back to `DateTime.utc(y, m, d)` — a civil day. Never run them
+/// through a zone conversion: west of UTC that shows the previous day, and a ferie request that
+/// starts a day early is exactly the mistake this screen cannot afford.
+Future<List<AbsenceRequestDto>> _readMirror(Ref ref) async {
+  final db = ref.watch(appDatabaseProvider);
+  final rows = await (db.select(
+    db.absenceRequests,
+  )..orderBy([(r) => OrderingTerm.desc(r.createdAt), (r) => OrderingTerm.asc(r.id)])).get();
+
+  return [
+    for (final r in rows)
+      AbsenceRequestDto(
+        id: r.id,
+        requestedByUserId: r.requestedByUserId,
+        createdByUserId: r.createdByUserId,
+        type: r.type,
+        startDate: parseDateOnlyOrThrow(r.startDate),
+        endDate: parseDateOnlyOrThrow(r.endDate),
+        startTime: r.startTime,
+        endTime: r.endTime,
+        reason: r.reason,
+        status: r.status,
+        decidedByUserId: r.decidedByUserId,
+        decidedAt: r.decidedAt,
+        decisionReason: r.decisionReason,
+      ),
+  ];
+}

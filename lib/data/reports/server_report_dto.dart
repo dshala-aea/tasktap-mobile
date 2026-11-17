@@ -20,6 +20,8 @@
 //       decimals arrive as JSON numbers.
 // ══════════════════════════════════════════════════════════════════════════════
 
+import '../../domain/reports/customer_signature_absence_reason.dart';
+
 /// `ReportStatoEnum.Bozza` on the wire.
 const int kReportStatoBozzaWire = 0;
 
@@ -105,14 +107,13 @@ class ServerReportObservationDto {
   final DateTime? dateValue;
   final double? numberValue;
 
-  factory ServerReportObservationDto.fromJson(Map<String, dynamic> j) =>
-      ServerReportObservationDto(
-        ticketControlId: j['ticketControlId'] as String,
-        stringValue: j['stringValue'] as String?,
-        boolValue: j['boolValue'] as bool?,
-        dateValue: _dt(j['dateValue']),
-        numberValue: _num(j['numberValue']),
-      );
+  factory ServerReportObservationDto.fromJson(Map<String, dynamic> j) => ServerReportObservationDto(
+    ticketControlId: j['ticketControlId'] as String,
+    stringValue: j['stringValue'] as String?,
+    boolValue: j['boolValue'] as bool?,
+    dateValue: _dt(j['dateValue']),
+    numberValue: _num(j['numberValue']),
+  );
 }
 
 class ServerReportDto {
@@ -130,6 +131,8 @@ class ServerReportDto {
     this.startedAt,
     this.endedAt,
     this.customerSignatureAllegatoId,
+    this.customerSignatureAbsenceReason,
+    this.customerSignatureAbsenceNote,
     this.technicianSignatureAllegatoId,
     this.technicianNotes,
     required this.stato,
@@ -168,6 +171,13 @@ class ServerReportDto {
   final DateTime? startedAt;
   final DateTime? endedAt;
   final String? customerSignatureAllegatoId;
+
+  /// Why the customer did not sign, if the report records it. The server serializes the enum as an
+  /// INTEGER (`Assente = 0`, `Rifiuta = 1`, `Altro = 2`); an unknown value reads as null rather
+  /// than failing the import.
+  final CustomerSignatureAbsenceReason? customerSignatureAbsenceReason;
+  final String? customerSignatureAbsenceNote;
+
   final String? technicianSignatureAllegatoId;
   final String? technicianNotes;
 
@@ -199,6 +209,10 @@ class ServerReportDto {
     startedAt: _dt(j['startedAt']),
     endedAt: _dt(j['endedAt']),
     customerSignatureAllegatoId: j['customerSignatureAllegatoId'] as String?,
+    customerSignatureAbsenceReason: CustomerSignatureAbsenceReason.fromWire(
+      j['customerSignatureAbsenceReason'],
+    ),
+    customerSignatureAbsenceNote: j['customerSignatureAbsenceNote'] as String?,
     technicianSignatureAllegatoId: j['technicianSignatureAllegatoId'] as String?,
     technicianNotes: j['technicianNotes'] as String?,
     stato: j['stato'],

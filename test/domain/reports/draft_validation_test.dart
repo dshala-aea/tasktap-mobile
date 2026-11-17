@@ -6,7 +6,7 @@
 //   - No staff → flagged
 //   - No materiali AND materialiNotRequired=false → flagged
 //   - No materiali but materialiNotRequired=true → OK
-//   - Missing customer firma → flagged
+//   - Missing customer firma → flagged unless an absence reason is recorded
 //   - Missing technician firma → flagged
 //   - All rules pass → isValid=true, isReadyToSubmit=true
 //   - Italian messages for each issue
@@ -31,6 +31,9 @@ Future<DraftReport> _insertDraft(
   // is always present. Only the "no ticketId" group below overrides this to null.
   String? ticketId = 'ticket-1',
   String? customerSignatureAllegatoId = 'sig-cust-1',
+  // Raw wire value of `CustomerSignatureAbsenceReason` (0 = assente, 1 = rifiuta, 2 = altro),
+  // exactly as the Drift column stores it. Null means "nothing recorded".
+  int? customerSignatureAbsenceReason,
   String? technicianSignatureAllegatoId = 'sig-tech-1',
   // Defaults to a real location, so every existing fixture keeps passing: only a test that opts
   // into `locationId: ''` exercises the missing-location check (mirrors what applyConfirmedDraft
@@ -51,6 +54,7 @@ Future<DraftReport> _insertDraft(
           customerId: Value(customerId),
           ticketId: Value(ticketId),
           customerSignatureAllegatoId: Value(customerSignatureAllegatoId),
+          customerSignatureAbsenceReason: Value(customerSignatureAbsenceReason),
           technicianSignatureAllegatoId: Value(technicianSignatureAllegatoId),
           materialiNotRequired: Value(materialiNotRequired),
           isLocalOnly: const Value(true),
@@ -176,12 +180,24 @@ void main() {
       expect(result.issues, isNot(contains(DraftValidationIssue.noMateriali)));
     });
 
-    test('flags missingCustomerSignature when customerSignatureAllegatoId null', () async {
-      final draft = await _insertDraft(db, customerSignatureAllegatoId: null);
+    test('flags a missing customer signature when no reason is recorded', () async {
+      final draft = await _insertDraft(
+        db,
+        customerSignatureAllegatoId: null,
+        technicianSignatureAllegatoId: 'sig-tech-1',
+      );
 
       final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
       expect(result.issues, contains(DraftValidationIssue.missingCustomerSignature));
+      expect(result.issues, isNot(contains(DraftValidationIssue.missingTechnicianSignature)));
+      expect(
+        result.isReadyToSubmit,
+        isFalse,
+        reason:
+            'an unsigned report is only submittable once "Il cliente non può firmare" records why; '
+            'otherwise it is filed with no explanation at all',
+      );
     });
 
     test('flags missingTechnicianSignature when technicianSignatureAllegatoId null', () async {
@@ -193,14 +209,87 @@ void main() {
     });
   });
 
-  // ── ticketId gates the signature requirement (cantiere-only rapportini) ──────
+  // ── ticketId gates the technician-signature requirement (cantiere-only rapportini) ──
   //
   // Mirrors the backend's identical TicketId.HasValue gate: a cantiere worklog-derived report has
-  // no customer-facing sign-off step, so signatures nobody is ever asked to capture must not
+  // no customer-facing sign-off step, so a signature nobody is ever asked to capture must not
   // strand it in "not ready to submit" forever.
 
   group('validateDraft — ticketId gates the signature requirement', () {
-    test('does not flag missing signatures when the draft has no ticketId', () async {
+    test('does not flag a missing technician signature when the draft has no ticketId', () async {
+      final draft = await _insertDraft(
+        db,
+        ticketId: null,
+        customerSignatureAllegatoId: null,
+        technicianSignatureAllegatoId: null,
+      );
+
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
+
+      expect(result.issues, isNot(contains(DraftValidationIssue.missingTechnicianSignature)));
+    });
+
+    test('flags a missing technician signature when the draft has a ticketId', () async {
+      final draft = await _insertDraft(
+        db,
+        ticketId: 'ticket-1',
+        customerSignatureAllegatoId: null,
+        technicianSignatureAllegatoId: null,
+      );
+
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
+
+      expect(result.issues, contains(DraftValidationIssue.missingTechnicianSignature));
+    });
+  });
+
+  // ── Customer signature OR documented absence ("Il cliente non può firmare") ──
+  //
+  // A ticket-linked report may go out unsigned only when the technician recorded why. The reason
+  // is what replaces the signature; without either, the report has no customer sign-off evidence
+  // at all.
+
+  group('validateDraft — customer signature or documented absence', () {
+    test('an unsigned ticket-linked draft WITH a reason passes', () async {
+      final draft = await _insertDraft(
+        db,
+        customerSignatureAllegatoId: null,
+        customerSignatureAbsenceReason: 0, // Assente
+        technicianSignatureAllegatoId: 'sig-tech-1',
+      );
+
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
+
+      expect(result.issues, isNot(contains(DraftValidationIssue.missingCustomerSignature)));
+      expect(result.isReadyToSubmit, isTrue);
+    });
+
+    test('an unsigned ticket-linked draft WITHOUT a reason still fails', () async {
+      final draft = await _insertDraft(
+        db,
+        customerSignatureAllegatoId: null,
+        technicianSignatureAllegatoId: 'sig-tech-1',
+      );
+
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
+
+      expect(result.issues, contains(DraftValidationIssue.missingCustomerSignature));
+      expect(result.isReadyToSubmit, isFalse);
+    });
+
+    test('a customer signature needs no reason', () async {
+      final draft = await _insertDraft(
+        db,
+        customerSignatureAllegatoId: 'sig-cust-1',
+        technicianSignatureAllegatoId: 'sig-tech-1',
+      );
+
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
+
+      expect(result.issues, isNot(contains(DraftValidationIssue.missingCustomerSignature)));
+    });
+
+    test('a cantiere-only draft (no ticket) needs neither', () async {
       final draft = await _insertDraft(
         db,
         ticketId: null,
@@ -211,21 +300,6 @@ void main() {
       final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
       expect(result.issues, isNot(contains(DraftValidationIssue.missingCustomerSignature)));
-      expect(result.issues, isNot(contains(DraftValidationIssue.missingTechnicianSignature)));
-    });
-
-    test('still flags missing signatures when the draft has a ticketId', () async {
-      final draft = await _insertDraft(
-        db,
-        ticketId: 'ticket-1',
-        customerSignatureAllegatoId: null,
-        technicianSignatureAllegatoId: null,
-      );
-
-      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
-
-      expect(result.issues, contains(DraftValidationIssue.missingCustomerSignature));
-      expect(result.issues, contains(DraftValidationIssue.missingTechnicianSignature));
     });
   });
 
@@ -236,6 +310,9 @@ void main() {
       final draft = await _insertDraft(
         db,
         title: '',
+        // Overrides the fixture's real default location: "bare minimum" has to be genuinely bare
+        // for the missingLocation expectation below to hold.
+        locationId: '',
         customerId: null,
         customerSignatureAllegatoId: null,
         technicianSignatureAllegatoId: null,
@@ -254,12 +331,16 @@ void main() {
         result.issues,
         containsAll([
           DraftValidationIssue.missingTitle,
+          DraftValidationIssue.missingLocation,
           DraftValidationIssue.missingCustomer,
           DraftValidationIssue.noStaff,
           DraftValidationIssue.noMateriali,
           DraftValidationIssue.missingCustomerSignature,
           DraftValidationIssue.missingTechnicianSignature,
         ]),
+        reason:
+            'no signature and no recorded reason: the customer-signature rule reports its own '
+            'issue instead of being folded into the technician one',
       );
       expect(result.isValid, isFalse);
     });

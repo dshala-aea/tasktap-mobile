@@ -133,6 +133,64 @@ void main() {
     });
   });
 
+  group('WorklogApiClient.upsertSessions breaks', () {
+    late _RecordingAdapter adapter;
+    late WorklogApiClient client;
+
+    setUp(() {
+      adapter = _RecordingAdapter();
+      client = WorklogApiClient(Dio()..httpClientAdapter = adapter);
+    });
+
+    test(
+      'sends breaks in their own array, leaving sessions untouched',
+      () async {
+        await client.upsertSessions(
+          [
+            MobileSessionDto(
+              clientId: 'in',
+              startTime: DateTime.utc(2026, 7, 10, 6),
+              endTime: DateTime.utc(2026, 7, 10, 10),
+            ),
+          ],
+          breaks: [
+            MobileSessionDto(
+              clientId: 'p1',
+              startTime: DateTime.utc(2026, 7, 10, 10),
+              endTime: DateTime.utc(2026, 7, 10, 10, 15),
+            ),
+          ],
+        );
+
+        final body = adapter.requests.single.data as Map<String, dynamic>;
+        expect(body['sessions'], hasLength(1));
+        expect((body['sessions'] as List).single['clientId'], 'in');
+        expect(body['breaks'], hasLength(1));
+        expect((body['breaks'] as List).single['clientId'], 'p1');
+        expect(
+          (body['breaks'] as List).single['startTime'],
+          '2026-07-10T10:00:00.000Z',
+        );
+        expect(
+          (body['breaks'] as List).single['endTime'],
+          '2026-07-10T10:15:00.000Z',
+        );
+      },
+    );
+
+    test('omits the breaks key entirely when there is no break', () async {
+      await client.upsertSessions([
+        MobileSessionDto(
+          clientId: 'in',
+          startTime: DateTime.utc(2026, 7, 10, 6),
+        ),
+      ]);
+
+      final body = adapter.requests.single.data as Map<String, dynamic>;
+      expect(body.containsKey('breaks'), isFalse);
+    });
+  });
+
   group('TicketWorkLogDto.fromJson TimeSpan tolerance', () {
     Map<String, dynamic> json(Object? start, Object? end) => {
       'id': 'w1',

@@ -34,6 +34,7 @@ class TicketApiClient {
     String? contractId,
     String? commessaId,
     String? cantiereId,
+    String? maintenanceTemplateId,
     List<String>? prodottoAssistenzaIds,
     List<String>? tags,
   }) async {
@@ -56,6 +57,10 @@ class TicketApiClient {
         'contractId': ?contractId,
         'commessaId': ?commessaId,
         'cantiereId': ?cantiereId,
+        // Omitted entirely when null, never sent as `null`: the wizard's "Nessuna (auto da
+        // tipo/contratto)" option means "the server should resolve the checklist template itself",
+        // and an explicit null would read as "clear it" for a ticket that has none to clear.
+        'maintenanceTemplateId': ?maintenanceTemplateId,
         // `CreateTicketRequest.ProdottoAssistenzaIds` is a `List<Guid>?`. An empty list is sent as
         // an absent member, never `[]`: the server reads null as "no coverage" and a non-null list
         // (even empty) as "replace coverage with this set", so sending `[]` would assert something

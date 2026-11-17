@@ -101,11 +101,15 @@ class ChecklistRefetchService {
   Future<void> _countAttempt(Iterable<String> ids) async {
     final now = DateTime.now().toUtc();
     for (final id in ids) {
-      final row = await (db.select(db.checklistOmittedTickets)..where((o) => o.ticketId.equals(id)))
-          .getSingleOrNull();
+      final row = await (db.select(
+        db.checklistOmittedTickets,
+      )..where((o) => o.ticketId.equals(id))).getSingleOrNull();
       if (row == null) continue;
       await (db.update(db.checklistOmittedTickets)..where((o) => o.ticketId.equals(id))).write(
-        ChecklistOmittedTicketsCompanion(attempts: Value(row.attempts + 1), lastAttemptAt: Value(now)),
+        ChecklistOmittedTicketsCompanion(
+          attempts: Value(row.attempts + 1),
+          lastAttemptAt: Value(now),
+        ),
       );
     }
   }

@@ -43,6 +43,12 @@ abstract interface class IAuthRepository {
     String password,
   );
 
+  /// Native passkey sign-in (opt-in). Returns the signed-in [AuthUser] on success,
+  /// or an [AuthFailure] on any error (use browser fallback as last resort).
+  Future<({AuthUser? user, AuthFailure? failure})> signInWithPasskey(
+    String loginName,
+  );
+
   /// Silently refresh the session using the stored refresh token.
   ///
   /// Returns the refreshed [AuthUser] or an [AuthFailure].

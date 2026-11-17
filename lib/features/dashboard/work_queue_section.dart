@@ -9,8 +9,10 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_freshness_provider.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'dashboard_providers.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -19,9 +21,16 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// Chosen over a time-plotted agenda strip (the roll's own assigned structure) on direct
 /// feedback: a bucketed queue is explainable ("this is Da fare because nothing else is open yet
 /// today") where a rank is not, and it reads as the actual job — triage, then act — rather than a
-/// calendar the app already has a real one of (Calendario). Live and Da fare carry a visible next
-/// step; Programmato/In attesa/Fatto are compact rows, because the day's answer to "what matters
-/// now" only has one or two entries in it on an ordinary day.
+/// calendar the app already has a real one of (Calendario). Live and every one of today's open
+/// jobs carry a visible next step; In attesa and Fatto are compact rows, because the day's answer
+/// to "what matters now" only has one or two entries in it on an ordinary day.
+///
+/// Two blocks, not one: today's tiers under the screen's "Oggi" heading, and the next seven days
+/// under their own "PROSSIMI 7 GIORNI" heading. Programmato exists only in the second block —
+/// today's own jobs used to be demoted into it as well, which made the day's second job read as
+/// planned for later, and the tier *inside* the today block carried the same word PROGRAMMATO,
+/// so the office technicians who triage from this screen took this morning's jobs as future work.
+/// See [WorkQueueBuckets.restOfToday] for that history.
 class WorkQueueSection extends ConsumerWidget {
   const WorkQueueSection({super.key});
 
@@ -29,30 +38,28 @@ class WorkQueueSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final q = ref.watch(workQueueProvider);
 
-    final sections = <Widget>[];
-
-    for (final schedule in q.live) {
-      sections.add(_FocusCard(schedule: schedule, tier: _Tier.live));
-    }
-    if (q.daFare != null) {
-      sections.add(_FocusCard(schedule: q.daFare!, tier: _Tier.daFare));
-    }
-    if (q.inAttesa.isNotEmpty) {
-      sections.add(_CompactTier(title: 'IN ATTESA', schedules: q.inAttesa, tier: _Tier.inAttesa));
-    }
-    if (q.programmato.isNotEmpty) {
-      sections.add(
-        _CompactTier(title: 'PROGRAMMATO', schedules: q.programmato, tier: _Tier.programmato),
-      );
-    }
-    if (q.fatto.isNotEmpty) {
-      sections.add(_CompactTier(title: 'FATTO', schedules: q.fatto, tier: _Tier.fatto));
-    }
-
-    if (sections.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-        child: const EmptyState(
+    // Nothing anywhere: one empty state for the whole queue.
+    if (!q.hasTodayAnything && q.upcoming.isEmpty) {
+      // The queue is built from the mirror, so "nothing anywhere" is only the technician's day
+      // once a sync has landed on this phone. On a device that has never synced it is the phone
+      // that has nothing — wishing them a good day on the strength of a missing download is the
+      // wrong sentence, and a field technician cannot tell the two apart from the screen.
+      // `== false`, never `!= true`: an unanswered check must not be read as "never synced".
+      if (ref.watch(hasSyncedAtLeastOnceProvider).value == false) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          child: EmptyState(
+            icon: LucideIcons.cloudOff,
+            title: 'Lavori non ancora scaricati',
+            body:
+                'Questo telefono non ha ancora completato una sincronizzazione: i lavori '
+                'assegnati compariranno qui appena i dati saranno scaricati.',
+          ),
+        );
+      }
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        child: EmptyState(
           icon: LucideIcons.calendarOff,
           title: 'Nessun intervento oggi',
           body: 'Buona giornata. I lavori assegnati appariranno qui.',
@@ -60,14 +67,76 @@ class WorkQueueSection extends ConsumerWidget {
       );
     }
 
+    final todaySections = <Widget>[];
+
+    // A day off comes first: it is what the day holds, and it is the one row here that is not a
+    // job. It used to arrive as an ordinary schedule and land in Da fare, with a card inviting the
+    // technician to start work that does not exist.
+    if (q.absences.isNotEmpty) {
+      todaySections.add(_CompactTier(title: 'ASSENZA', schedules: q.absences, tier: _Tier.assenza));
+    }
+
+    for (final schedule in q.live) {
+      todaySections.add(_FocusCard(schedule: schedule, tier: _Tier.live));
+    }
+    // Every other job still ahead TODAY gets the same card as the next one, not a compact
+    // "PROGRAMMATO" list: today's second job is today's work, and the stat strip above the queue
+    // counts it as "Da fare". Demoting it to a tier named PROGRAMMATO made it read as planned for
+    // another day, so a day with two jobs looked like a day with one — the header said "2
+    // INTERVENTI OGGI · 2 DA FARE" over a single card. Order is time order; the first card is
+    // still the next thing to start.
+    for (final schedule in q.actionableToday) {
+      todaySections.add(_FocusCard(schedule: schedule, tier: _Tier.daFare));
+    }
+    if (q.inAttesa.isNotEmpty) {
+      todaySections.add(
+        _CompactTier(title: 'IN ATTESA', schedules: q.inAttesa, tier: _Tier.inAttesa),
+      );
+    }
+    if (q.fatto.isNotEmpty) {
+      todaySections.add(_CompactTier(title: 'FATTO', schedules: q.fatto, tier: _Tier.fatto));
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: sections),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Today's own answer, always stated. Without this the dashboard's "Oggi" heading sat
+          // directly above rows dated tomorrow and later whenever the day itself was empty, and
+          // a technician reading it could not tell "nothing today, but Thursday is booked" from
+          // "nothing today" — the two look identical and mean different things.
+          //
+          // `hasTodayAnything`, not `hasTodayWork`: a day that holds only an approved absence has
+          // no work in it, but it is not an empty day either — the absence tier built above is
+          // today's answer, and this branch used to drop it on the floor.
+          if (q.hasTodayAnything)
+            ...todaySections
+          else
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.lg),
+              child: CompactEmptyState(
+                icon: LucideIcons.calendarOff,
+                label: 'Nessun intervento oggi',
+                reason: 'Nessun lavoro assegnato per la giornata di oggi.',
+              ),
+            ),
+
+          // Work that is genuinely another day, under its own heading so it can never stand in
+          // for today's queue.
+          if (q.upcoming.isNotEmpty)
+            _CompactTier(
+              title: 'PROSSIMI 7 GIORNI',
+              schedules: q.upcoming,
+              tier: _Tier.programmato,
+            ),
+        ],
+      ),
     );
   }
 }
 
-enum _Tier { live, daFare, programmato, inAttesa, fatto }
+enum _Tier { live, daFare, programmato, inAttesa, fatto, assenza }
 
 extension on _Tier {
   /// Icon + text together, always — see the signage grammar's own rule: a status is never color
@@ -84,51 +153,57 @@ extension on _Tier {
     // second icon for the same idea.
     _Tier.inAttesa => (LucideIcons.coffee, 'IN ATTESA'),
     _Tier.fatto => (LucideIcons.check, 'FATTO'),
+    // A day off is not a job in any state, so it gets the one glyph that says "not a work day"
+    // rather than borrowing a job tier's.
+    _Tier.assenza => (LucideIcons.calendarX, 'ASSENZA'),
   };
 }
 
 // ── Row content (shared between the focus card and the compact row) ─────────────
 
 class _RowContent {
-  const _RowContent({required this.title, required this.subtitle, required this.timeLabel, required this.customerLabel});
+  const _RowContent({
+    required this.title,
+    required this.subtitle,
+    required this.timeLabel,
+    required this.customerLabel,
+  });
   final String title;
   final String subtitle;
   final String? customerLabel;
 
-  /// Null for an all-day schedule — there is no real start time to show (see
-  /// `_resolveRow`'s own doc comment), so the badge/meta row omits the time entirely rather
-  /// than formatting the placeholder minute values into a literal "00:00". Same gate
-  /// `giorno_view.dart`'s `_EventBlock`, `lista_view.dart`'s `_ScheduleListRow` and
-  /// `calendario_screen.dart`'s `_ScheduleInfoSheet` already use for the same reason.
-  final String? timeLabel;
+  /// The single line that says when this job is: `HH:MM` today, `Tutto il giorno` for an
+  /// all-day job today, and a day-qualified label for anything later (including each day of a
+  /// multi-day run, which is one schedule row per day). Never the placeholder `00:00`.
+  final String timeLabel;
 }
 
 final _weekdayFmt = DateFormat('EEE d', 'it');
 
-/// "14:30" for today; "Dom 21, 14:30" for anything else — Programmato can hold items up to 7
-/// days out, and a bare HH:MM told the technician nothing about which day it was for. No shared
-/// "today vs. other day" helper exists elsewhere yet (calendario's own views each inline their
-/// own `isToday` check against a full day view, not a compact single-line label), so this is a
-/// small local one rather than a half-fit reuse.
-String _dateQualifiedTimeLabel(DateTime activityDate, int timeStartMinutes) {
-  final h = timeStartMinutes ~/ 60;
-  final m = timeStartMinutes % 60;
-  final time = '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+/// "14:30" for a timed job today; "Tutto il giorno" for an all-day job today;
+/// "Dom 21, 14:30" / "Dom 21 · Tutto il giorno" for anything else — Programmato can hold items up
+/// to 7 days out, and a bare HH:MM told the technician nothing about which day it was for. An
+/// all-day row must never format its placeholder 0/0 bounds into "00:00", and a multi-day plan is
+/// one ordinary row per day, so naming each row's own day is what makes the run readable.
+String _twoDigits(int n) => n.toString().padLeft(2, '0');
+
+String _scheduleDayLabel(DateTime activityDate, int timeStartMinutes, {required bool allDay}) {
+  final time = '${_twoDigits(timeStartMinutes ~/ 60)}:${_twoDigits(timeStartMinutes % 60)}';
 
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(activityDate.year, activityDate.month, activityDate.day);
-  if (day == today) return time;
+  if (day == today) return allDay ? 'Tutto il giorno' : time;
 
   final label = _weekdayFmt.format(day);
   final capitalised = '${label[0].toUpperCase()}${label.substring(1)}';
-  return '$capitalised, $time';
+  return allDay ? '$capitalised · Tutto il giorno' : '$capitalised, $time';
 }
 
 _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
-  final location = ref.watch(locationByIdProvider(schedule.locationId)).valueOrNull;
+  final location = ref.watch(locationByIdProvider(schedule.locationId)).value;
   final customerName = location != null
-      ? ref.watch(customerByIdProvider(location.customerId)).valueOrNull?.companyName
+      ? ref.watch(customerByIdProvider(location.customerId)).value?.companyName
       : null;
   final subtitle = [
     location?.address,
@@ -136,19 +211,26 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
     location?.postalCode,
   ].where((s) => s != null && s.isNotEmpty).join(' · ');
   // An all-day schedule's timeStartMinutes/timeEndMinutes are placeholder bounds (always
-  // 0/0), not a real time of day — formatting them unconditionally produced a literal "00:00"
-  // that read as "starts at midnight" rather than "no time, all day". Gate on `allDay` the
-  // same way Calendario's own views already do.
-  final timeLabel = schedule.allDay
-      ? null
-      : _dateQualifiedTimeLabel(schedule.activityDate, schedule.timeStartMinutes);
+  // 0/0), so the label branches on `allDay` rather than formatting them into "00:00".
+  final timeLabel = _scheduleDayLabel(
+    schedule.activityDate,
+    schedule.timeStartMinutes,
+    allDay: schedule.allDay,
+  );
   return _RowContent(
-    title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
+    // The server titles an absence row with the plain type label ("ferie", "permesso" — the same
+    // lowercase words the presenze export prints). A job title is written by a person and keeps
+    // its own casing; an absence label is a category, so it gets a capital and reads as one.
+    title: schedule.title.isNotEmpty
+        ? (schedule.isAssenza ? _capitalised(schedule.title) : schedule.title)
+        : (schedule.isAssenza ? 'Assenza' : 'Intervento'),
     subtitle: subtitle,
     customerLabel: customerName,
     timeLabel: timeLabel,
   );
 }
+
+String _capitalised(String s) => '${s[0].toUpperCase()}${s.substring(1)}';
 
 void _open(BuildContext context, Schedule schedule) {
   final ticketId = schedule.ticketId;
@@ -227,17 +309,16 @@ class _FocusCard extends ConsumerWidget {
                     color: badgeColor,
                   ),
                 ),
-                if (row.timeLabel != null)
-                  Text(
-                    '  ·  ${row.timeLabel}',
-                    style: TextStyle(
-                      fontFamily: 'Archivo',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: c.inkMuted,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                Text(
+                  '  ·  ${row.timeLabel}',
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: c.inkMuted,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
+                ),
                 const Spacer(),
                 // Flat AppColors.Y for every tier, live included — was a per-tier gradient
                 // override (green for live); AppButton's 5 named variants don't carry a
@@ -318,18 +399,16 @@ class _CompactRow extends ConsumerWidget {
         leading: RowIconTile(icon: tier.badge.$1, size: 36, iconSize: 16),
         title: row.title,
         subtitle: row.subtitle,
-        meta: row.timeLabel == null
-            ? null
-            : Text(
-                row.timeLabel!,
-                style: TextStyle(
-                  fontFamily: 'Archivo',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.inkMuted,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
+        meta: Text(
+          row.timeLabel,
+          style: TextStyle(
+            fontFamily: 'Archivo',
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: context.colors.inkMuted,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
         onTap: schedule.ticketId != null ? () => _open(context, schedule) : null,
       ),
     );

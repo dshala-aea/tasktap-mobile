@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Button variant.
@@ -299,7 +300,10 @@ class AppButton extends StatelessWidget {
 
     // Minimum touch target — see _minTapSize's own doc comment on why `sm` gets a smaller floor.
     button = ConstrainedBox(
-      constraints: BoxConstraints(minHeight: _minTapSize, minWidth: _minTapSize),
+      constraints: BoxConstraints(
+        minHeight: _minTapSize,
+        minWidth: _minTapSize,
+      ),
       child: button,
     );
 

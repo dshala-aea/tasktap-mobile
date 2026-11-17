@@ -6,7 +6,7 @@ import '../local/app_database.dart';
 import '../sync/sync_dto.dart';
 import '../sync/sync_service.dart' show appDatabaseProvider;
 
-/// The four reference tables, read and written in one place.
+/// The reference tables, read and written in one place.
 ///
 /// The sync writes them from the payload; [ReferenceSearchClient] writes them again when a
 /// technician picks a row an online search found (spec 7.4). Both go through these same upserts, so
@@ -108,6 +108,45 @@ class ReferenceCacheRepository {
     }
   }
 
+  /// The people to phone at a customer site. Not part of the "reference pick" flow — the office owns
+  /// these rows and the device never writes one — but stored the same way so [contactsForCustomer]
+  /// answers offline.
+  Future<void> upsertContacts(Iterable<CustomerContactDto> rows) async {
+    for (final c in rows) {
+      await _db
+          .into(_db.customerContacts)
+          .insertOnConflictUpdate(
+            CustomerContactsCompanion(
+              id: Value(c.id),
+              customerId: Value(c.customerId),
+              name: Value(c.name),
+              role: Value(c.role),
+              phone: Value(c.phone),
+              email: Value(c.email),
+              notes: Value(c.notes),
+            ),
+          );
+    }
+  }
+
+  /// Deletes the contacts of the customers this payload carries that it no longer lists for them.
+  ///
+  /// This is the only thing that makes a removed contact disappear from the device: a contact has no
+  /// tombstone, and the member is never delta-filtered, so a carried customer's contact list is
+  /// complete and an absence is real evidence of a deletion. A customer the payload does not carry
+  /// is left alone for the same reason as the prunes below.
+  Future<void> pruneContacts({
+    required Set<String> presentCustomerIds,
+    required Set<String> keepContactIds,
+  }) async {
+    if (presentCustomerIds.isEmpty) return;
+    await (_db.delete(_db.customerContacts)..where((t) {
+          final inScope = t.customerId.isIn(presentCustomerIds);
+          return keepContactIds.isEmpty ? inScope : inScope & t.id.isNotIn(keepContactIds);
+        }))
+        .go();
+  }
+
   /// Deletes the rows of the customers this payload carries that the payload no longer lists for
   /// them — the only case where an absence is evidence of a deletion. A customer the payload does
   /// not carry is left alone: this sync has nothing to say about them, and the device accumulates
@@ -154,11 +193,31 @@ class ReferenceCacheRepository {
   // There is deliberately no pruneAgents: an agent absent from one payload may still be referenced
   // by a ticket already on this device, and deleting it would break that ticket.
 
-  Future<List<Contract>> contractsForCustomer(String customerId) =>
+  /// Contracts of [customerId].
+  ///
+  /// [activeOnly] defaults to true, which is what the pickers want (a ticket must not be opened
+  /// against an archived contract). The customer detail's Contratti section passes false: it
+  /// stands in for `GET /api/contracts?customerId=`, which returns inactive rows too, shown with
+  /// an "Inattivo" pill.
+  Future<List<Contract>> contractsForCustomer(String customerId, {bool activeOnly = true}) =>
       (_db.select(_db.contracts)
-            ..where((c) => c.customerId.equals(customerId) & c.isActive.equals(true))
+            ..where(
+              (c) => activeOnly
+                  ? c.customerId.equals(customerId) & c.isActive.equals(true)
+                  : c.customerId.equals(customerId),
+            )
             ..orderBy([(c) => OrderingTerm.asc(c.name)]))
           .get();
+
+  /// Every contract the sync put in scope — the Contratti list's own rows.
+  ///
+  /// No `isActive` filter, unlike [contractsForCustomer]: the list shows inactive contracts too
+  /// (as an "Inattivo" pill), and this stands in for `GET /api/contracts`, which filters none.
+  /// The sync payload is technician-scoped, so this is a *partial* view of the tenant's contracts
+  /// whenever the account cannot see them all — call sites say so rather than presenting it as
+  /// the whole book of business.
+  Future<List<Contract>> allContracts() =>
+      (_db.select(_db.contracts)..orderBy([(c) => OrderingTerm.asc(c.name)])).get();
 
   Future<List<CommesseData>> commesseForCustomer(String customerId) =>
       (_db.select(_db.commesse)
@@ -166,9 +225,25 @@ class ReferenceCacheRepository {
             ..orderBy([(c) => OrderingTerm.asc(c.codice)]))
           .get();
 
-  Future<List<ProdottiAssistenzaData>> prodottiForCustomer(String customerId) =>
+  /// Every asset the sync put in scope — the Asset list's own rows.
+  ///
+  /// No `isActive` filter, matching `GET /api/prodottoassistenza` (which returns inactive assets
+  /// too, marked with a pill). Technician-scoped like everything else the sync carries, so a
+  /// mirrored list is a partial one and its screen says so.
+  Future<List<ProdottiAssistenzaData>> allProdottiAssistenza() =>
+      (_db.select(_db.prodottiAssistenza)..orderBy([(p) => OrderingTerm.asc(p.name)])).get();
+
+  /// Assets of [customerId] — same [activeOnly] contract as [contractsForCustomer].
+  Future<List<ProdottiAssistenzaData>> prodottiForCustomer(
+    String customerId, {
+    bool activeOnly = true,
+  }) =>
       (_db.select(_db.prodottiAssistenza)
-            ..where((p) => p.customerId.equals(customerId) & p.isActive.equals(true))
+            ..where(
+              (p) => activeOnly
+                  ? p.customerId.equals(customerId) & p.isActive.equals(true)
+                  : p.customerId.equals(customerId),
+            )
             ..orderBy([(p) => OrderingTerm.asc(p.name)]))
           .get();
 
@@ -176,6 +251,43 @@ class ReferenceCacheRepository {
       (_db.select(_db.agents)
             ..where((a) => a.isActive.equals(true))
             ..orderBy([(a) => OrderingTerm.asc(a.nome)]))
+          .get();
+
+  /// Whoever the office recorded at this customer — the customer screen's *Contatti* section, which
+  /// used to be a live call that errored offline.
+  Stream<List<CustomerContactRow>> watchContactsForCustomer(String customerId) =>
+      (_db.select(_db.customerContacts)
+            ..where((c) => c.customerId.equals(customerId))
+            ..orderBy([(c) => OrderingTerm.asc(c.name)]))
+          .watch();
+
+  // ── By id ────────────────────────────────────────────────────────────────────
+  //
+  // The screens that show "which contract is this ticket tied to" only ever had an id: a ticket
+  // carries `contractId`/`commessaId` as bare synced columns, and the row behind them was fetched
+  // live. These three readers are what makes that row answerable offline.
+
+  Future<Contract?> contractById(String id) =>
+      (_db.select(_db.contracts)..where((c) => c.id.equals(id))).getSingleOrNull();
+
+  Future<CommesseData?> commessaById(String id) =>
+      (_db.select(_db.commesse)..where((c) => c.id.equals(id))).getSingleOrNull();
+
+  Future<ProdottiAssistenzaData?> prodottoAssistenzaById(String id) =>
+      (_db.select(_db.prodottiAssistenza)..where((p) => p.id.equals(id))).getSingleOrNull();
+
+  /// A ticket's mirrored change history, newest first — the Storico tab's offline source.
+  ///
+  /// Rows come back raw: `fieldName` and the two values are column names and stored forms, and the
+  /// screen is what turns them into Italian and resolves status/type ids through its own maps. A
+  /// repository that resolved them would be a second copy of that mapping.
+  ///
+  /// Empty means the device has never received this ticket's history — not that nothing happened
+  /// to it — so callers must say which of the two they are showing.
+  Future<List<TicketHistoryData>> ticketHistoryFor(String ticketId) =>
+      (_db.select(_db.ticketHistory)
+            ..where((h) => h.ticketId.equals(ticketId))
+            ..orderBy([(h) => OrderingTerm.desc(h.changedAt)]))
           .get();
 }
 

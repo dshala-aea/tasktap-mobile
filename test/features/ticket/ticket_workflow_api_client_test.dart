@@ -40,6 +40,42 @@ class _ThrowingAdapter implements HttpClientAdapter {
   }
 }
 
+/// Answers with a fixed body and keeps the [RequestOptions] it was handed, so a test can assert
+/// what actually went over the wire (a query parameter, say) rather than only what came back.
+class _StubAdapter implements HttpClientAdapter {
+  _StubAdapter(this.body, {this.status = 201});
+
+  final String body;
+  final int status;
+
+  RequestOptions? captured;
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    captured = options;
+    return ResponseBody.fromString(
+      body,
+      status,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+}
+
+TicketWorkflowApiClient _clientThatAnswers(_StubAdapter adapter) {
+  final dio = Dio();
+  dio.httpClientAdapter = adapter;
+  return TicketWorkflowApiClient(dio);
+}
+
 void main() {
   group('TimeSpan parsing', () {
     test('reads HH:MM:SS', () {
@@ -155,6 +191,45 @@ void main() {
     });
   });
 
+  // The start route creates a row per call, so a request whose reply was lost used to leave the
+  // device with no safe retry: it can neither re-send (a 400 says a timer is already running) nor
+  // learn which row it owns. The client-generated key closes that gap, and the reply's `isActive`
+  // is what stops a replay from painting a clock the office already stopped.
+  group('startTimer', () {
+    test('sends the device key so a lost reply can be replayed onto the same timer', () async {
+      final adapter = _StubAdapter('{"id":"s1","isActive":true}');
+
+      final started = await _clientThatAnswers(
+        adapter,
+      ).startTimer('t1', clientId: 'key-1');
+
+      expect(adapter.captured!.path, '/api/tickets/t1/worklogs/start');
+      expect(adapter.captured!.queryParameters['clientId'], 'key-1');
+      expect(started.id, 's1');
+      expect(started.isActive, isTrue);
+    });
+
+    test('a server that does not know the key yet answers a bare {id} and still parses', () async {
+      // A row this very call created is running, so an absent flag must default to true: the
+      // opposite default would report a stopped timer that had in fact just started.
+      final started = await _clientThatAnswers(
+        _StubAdapter('{"id":"s1"}'),
+      ).startTimer('t1', clientId: 'key-1');
+
+      expect(started.id, 's1');
+      expect(started.isActive, isTrue);
+    });
+
+    test('a replay onto a session the office already closed is reported as not active', () async {
+      final started = await _clientThatAnswers(
+        _StubAdapter('{"id":"s1","isActive":false}', status: 200),
+      ).startTimer('t1', clientId: 'key-1');
+
+      expect(started.id, 's1');
+      expect(started.isActive, isFalse);
+    });
+  });
+
   group('failures say something a technician can act on', () {
     test('a busy timer names the other intervento, not this one', () async {
       final client = _clientThatThrows(
@@ -184,6 +259,44 @@ void main() {
           isA<TicketWorkflowFailure>().having((f) => f.message, 'message', contains('chiuso')),
         ),
       );
+    });
+
+    test('a stopped timer relays the merged clock disagreement the server echoes', () async {
+      final adapter = _StubAdapter(
+        '{"message":"Timer stopped","clockDisagreementSeconds":-900}',
+        status: 200,
+      );
+
+      final seconds = await _clientThatAnswers(adapter).stopTimer('t1');
+
+      expect(seconds, -900);
+      expect(adapter.captured?.path, '/api/tickets/t1/worklogs/stop');
+    });
+
+    test('a stopped timer answers null when the server judged the clocks close enough', () async {
+      final adapter = _StubAdapter('{"message":"Timer stopped"}', status: 200);
+
+      expect(await _clientThatAnswers(adapter).stopTimer('t1'), isNull);
+    });
+
+    test('a stop carries the key of the session it closes', () async {
+      final adapter = _StubAdapter('{"message":"Timer stopped"}', status: 200);
+
+      await _clientThatAnswers(adapter).stopTimer('t1', clientId: 'tap-close');
+
+      // The server answers a repeated key with the closed row instead of "no active timer", which
+      // is what turns a lost reply into a retry that succeeds.
+      expect(adapter.captured?.queryParameters['clientId'], 'tap-close');
+    });
+
+    test('a stop with no key sends none, exactly as before the parameter existed', () async {
+      final adapter = _StubAdapter('{"message":"Timer stopped"}', status: 200);
+
+      await _clientThatAnswers(adapter).stopTimer('t1');
+
+      // An older backend and a session this device never named both depend on the absent key, not
+      // on an empty one: the bind is `string? clientId`, and "" is not the same request.
+      expect(adapter.captured?.queryParameters.containsKey('clientId'), isFalse);
     });
 
     test('no connection is reported as no connection, not as a server error', () async {

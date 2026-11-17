@@ -315,6 +315,27 @@ void main() {
     expect(await db.select(db.strumenti).get(), isEmpty);
   });
 
+  test('replaceStrumenti carries the holder down, and writes nulls when nobody holds it', () async {
+    await replaceStrumenti(db, [
+      const SyncStrumentoDto(
+        id: 's1',
+        name: 'Anemometro',
+        matricola: 'A-3',
+        holderUserId: 'u-anna',
+        holderName: 'Anna Neri',
+      ),
+      const SyncStrumentoDto(id: 's2', name: 'Pinza', matricola: 'P1'),
+    ]);
+
+    final rows = {for (final r in await db.select(db.strumenti).get()) r.id: r};
+    expect(rows['s1']!.holderUserId, 'u-anna');
+    expect(rows['s1']!.holderName, 'Anna Neri');
+    // On the shelf. Written as null rather than left alone: the catalogue is replaced whole, so a
+    // stale owner from a previous sync would otherwise survive forever.
+    expect(rows['s2']!.holderUserId, isNull);
+    expect(rows['s2']!.holderName, isNull);
+  });
+
   test('server report instruments replace for synced drafts and never touch a local-only draft', () async {
     Future<void> draft(String id, {required bool local}) => db.into(db.draftReports).insert(
           DraftReportsCompanion.insert(
@@ -351,5 +372,34 @@ void main() {
     }
     expect(byReport['synced'], ['srv-1'], reason: 'replaced wholesale');
     expect(byReport['mine'], ['local-1'], reason: 'a local-only draft is authoritative');
+  });
+
+  test('server report instruments carry their usage notes into the mirror', () async {
+    await db.into(db.draftReports).insert(
+          DraftReportsCompanion.insert(
+            id: 'synced', tenantId: 'x', createdAt: DateTime.utc(2026, 10, 7), title: 'T',
+            insertedUserId: 'u', locationId: 'l',
+          ),
+        );
+
+    await replaceServerReportStrumenti(
+      db,
+      reportIdsInPayload: ['synced'],
+      rows: [
+        SyncReportStrumentoDto.fromJson({
+          'id': 'srv-1', 'reportId': 'synced', 'strumentoId': 's1', 'name': 'N', 'matricola': '1',
+          'usageDescription': 'Misura sul quadro', 'outcome': 'Conforme',
+        }),
+        SyncReportStrumentoDto.fromJson({
+          'id': 'srv-2', 'reportId': 'synced', 'strumentoId': 's2', 'name': 'N', 'matricola': '2',
+        }),
+      ],
+    );
+
+    final rows = {for (final r in await db.select(db.reportStrumenti).get()) r.id: r};
+    expect(rows['srv-1']!.usageDescription, 'Misura sul quadro');
+    expect(rows['srv-1']!.outcome, 'Conforme');
+    expect(rows['srv-2']!.usageDescription, isNull);
+    expect(rows['srv-2']!.outcome, isNull);
   });
 }

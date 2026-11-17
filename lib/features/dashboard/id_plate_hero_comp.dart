@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_palette.dart';
+
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// The dashboard hero — flat Documento direction.
@@ -20,6 +21,7 @@ class IdPlateHeroComp extends StatelessWidget {
     required this.userName,
     required this.todayCount,
     required this.completedCount,
+    required this.upcomingCount,
     this.actions = const [],
     this.child,
   });
@@ -27,6 +29,7 @@ class IdPlateHeroComp extends StatelessWidget {
   final String userName;
   final int todayCount;
   final int completedCount;
+  final int upcomingCount;
   final List<Widget> actions;
   final Widget? child;
 
@@ -104,14 +107,24 @@ class IdPlateHeroComp extends StatelessWidget {
               // not just suspected). `remaining` accents when there's still work today, quiet
               // once the count hits zero — same "accent marks what needs attention" discipline
               // the rest of the app already holds to.
-              Row(
+              Wrap(
+                spacing: 28,
+                runSpacing: 8,
                 children: [
-                  _Readout(value: '$todayCount', label: 'INTERVENTI OGGI', accent: false),
-                  const SizedBox(width: 28),
+                  _Readout(
+                    value: '$todayCount',
+                    label: 'INTERVENTI OGGI',
+                    accent: false,
+                  ),
                   _Readout(
                     value: '$remaining',
                     label: 'DA FARE',
                     accent: remaining > 0,
+                  ),
+                  _Readout(
+                    value: '$upcomingCount',
+                    label: 'PROSSIMI 7 GIORNI',
+                    accent: false,
                   ),
                 ],
               ),

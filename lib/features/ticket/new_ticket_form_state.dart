@@ -30,9 +30,11 @@ class NewTicketFormState {
     this.dueDate,
     this.technicianNotes,
     this.agentId,
+    this.autoFilledAgentId,
     this.contractId,
     this.commessaId,
     this.cantiereId,
+    this.maintenanceTemplateId,
     this.prodottoAssistenzaIds = const [],
     this.tags = const [],
   });
@@ -64,6 +66,12 @@ class NewTicketFormState {
   /// ticket. Sourced from the agents mirror, never from the technicians list.
   final String? agentId;
 
+  /// The agent id [agentId] was last pre-filled with from the customer's own agent
+  /// (`Customer.agentId`), or null when it was never pre-filled. Not sent anywhere: it is only how a
+  /// later change of customer tells "the value I put there" (replace it) from "the value the
+  /// technician chose" (keep it) — see [withCustomerAgentPrefill].
+  final String? autoFilledAgentId;
+
   /// Contratto — a customer's contract (`/api/contracts`, scoped by `customerId`). Optional
   /// enrichment; validated as `EnsureExistsAsync<Contract>`.
   final String? contractId;
@@ -75,6 +83,12 @@ class NewTicketFormState {
   /// Cantiere — the worksite (`Core/Entities/Cantiere.cs`). Optional; validated as
   /// `EnsureExistsAsync<Cantiere>`.
   final String? cantiereId;
+
+  /// Modello checklist — the maintenance template this ticket should snapshot, sent as
+  /// `maintenanceTemplateId`. Null means "let the server resolve it from type/contract" (the
+  /// picker's default option); a null sends no key at all rather than an explicit null — see
+  /// [TicketApiClient.createTicket].
+  final String? maintenanceTemplateId;
 
   /// Prodotti assistenza — the customer's assets this ticket covers. A list, defaults to empty
   /// and is never null: "no products" and "never opened the picker" are the same thing here, and a
@@ -122,6 +136,10 @@ class NewTicketFormState {
       commessaId: blamed == 'commessaId' ? null : row.commessaId,
       // Never dropped: no wizard step holds a cantiere, so `TicketCreationQueue` never blames it.
       cantiereId: row.cantiereId,
+      // Never dropped either: the server never blames this field (a bad template id is a 400 with no
+      // field, so it is not a repairable reference — see TicketCreationQueue). A stale id is instead
+      // cleared on the row itself by the sync that drops the template (see SyncService).
+      maintenanceTemplateId: row.maintenanceTemplateId,
       prodottoAssistenzaIds: blamed == 'prodottoAssistenzaIds'
           ? const []
           : decodePendingStringList(row.prodottoAssistenzaIdsJson),
@@ -141,9 +159,11 @@ class NewTicketFormState {
     DateTime? dueDate,
     String? technicianNotes,
     String? agentId,
+    String? autoFilledAgentId,
     String? contractId,
     String? commessaId,
     String? cantiereId,
+    String? maintenanceTemplateId,
     List<String>? prodottoAssistenzaIds,
     List<String>? tags,
     bool clearCustomerId = false,
@@ -156,9 +176,11 @@ class NewTicketFormState {
     bool clearDueDate = false,
     bool clearTechnicianNotes = false,
     bool clearAgentId = false,
+    bool clearAutoFilledAgentId = false,
     bool clearContractId = false,
     bool clearCommessaId = false,
     bool clearCantiereId = false,
+    bool clearMaintenanceTemplateId = false,
     bool clearProdottoAssistenzaIds = false,
   }) {
     return NewTicketFormState(
@@ -173,14 +195,42 @@ class NewTicketFormState {
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
       technicianNotes: clearTechnicianNotes ? null : (technicianNotes ?? this.technicianNotes),
       agentId: clearAgentId ? null : (agentId ?? this.agentId),
+      autoFilledAgentId: clearAutoFilledAgentId
+          ? null
+          : (autoFilledAgentId ?? this.autoFilledAgentId),
       contractId: clearContractId ? null : (contractId ?? this.contractId),
       commessaId: clearCommessaId ? null : (commessaId ?? this.commessaId),
       cantiereId: clearCantiereId ? null : (cantiereId ?? this.cantiereId),
+      maintenanceTemplateId: clearMaintenanceTemplateId
+          ? null
+          : (maintenanceTemplateId ?? this.maintenanceTemplateId),
       prodottoAssistenzaIds: clearProdottoAssistenzaIds
           ? const []
           : (prodottoAssistenzaIds ?? this.prodottoAssistenzaIds),
       tags: tags ?? this.tags,
     );
+  }
+
+  /// Applies the customer's agent to Riferimento after the customer changed.
+  ///
+  /// [customerAgentId] is the agent to pre-fill with: the new customer's `agentId`, already
+  /// confirmed to be a row this device can label (an id with no local row would render as an empty
+  /// field over a real selection, so the caller passes null for it), or null for a customer with no
+  /// agent / no customer at all.
+  ///
+  /// The field is only ever written when it is empty or still holds what an earlier pre-fill put
+  /// there ([autoFilledAgentId]). A value the technician chose is never replaced — and, because a
+  /// technician's own pick is a different id from the recorded pre-fill (or the pre-fill is gone
+  /// once they clear the field), it stays theirs across any number of customer changes. When the
+  /// field does hold a stale pre-fill and the new customer has no agent, it is cleared: leaving the
+  /// previous customer's agent on another customer's ticket is the bug this exists to prevent.
+  NewTicketFormState withCustomerAgentPrefill(String? customerAgentId) {
+    final holdsPrefillOrNothing = agentId == null || agentId == autoFilledAgentId;
+    if (!holdsPrefillOrNothing) return this;
+    if (customerAgentId == null) {
+      return copyWith(clearAgentId: true, clearAutoFilledAgentId: true);
+    }
+    return copyWith(agentId: customerAgentId, autoFilledAgentId: customerAgentId);
   }
 
   bool get isValid =>

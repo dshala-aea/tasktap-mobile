@@ -7,6 +7,7 @@ import '../theme/app_palette.dart';
 import '../widgets/app_toast.dart';
 import '../widgets/widgets.dart';
 import 'dictation_capability.dart';
+import 'dictation_outcome.dart';
 import 'dictation_service.dart';
 
 /// Dictate into a text field, on devices that can do it without a network.
@@ -59,6 +60,11 @@ class _DictateButtonState extends ConsumerState<DictateButton> {
       return;
     }
 
+    // One recogniser, one field: starting here must end whichever other field's session is live,
+    // or the first button keeps reading "listening" while this one captures the words.
+    if (service.isListening) await service.stop();
+    if (!mounted) return;
+
     _base = widget.controller.text;
     setState(() => _listening = true);
 
@@ -76,16 +82,43 @@ class _DictateButtonState extends ConsumerState<DictateButton> {
       onDone: (outcome) {
         if (!mounted) return;
         setState(() => _listening = false);
-        final notice = outcome.notice;
+        // A session the service refused is reported with the *fresh* reason, not the generic one:
+        // the button is rebuilt from the same provider the service just re-checked, so the message
+        // under the tap is the one that explains it.
+        final notice = outcome == DictationOutcome.unavailable
+            ? _noticeFor(ref.read(dictationCapabilityProvider).asData?.value)
+            : outcome.notice;
         if (notice != null) showAppToast(context, message: notice.message, tone: notice.tone);
       },
     );
   }
 
-  void _explain(DictationCapability capability) {
-    final message = capability.unavailableMessage;
-    if (message == null) return;
-    showAppToast(context, message: message, tone: ToastTone.info);
+  /// The reason, as the capability currently reads — falling back to the outcome's own text when the
+  /// provider has not produced a value.
+  ({String message, ToastTone tone})? _noticeFor(DictationCapability? capability) {
+    final message = capability?.unavailableMessage;
+    if (message == null) return DictationOutcome.unavailable.notice;
+    return (message: message, tone: ToastTone.warning);
+  }
+
+  /// The crossed-out microphone was tapped: this is the one moment to re-ask the question.
+  ///
+  /// The capability is resolved once and cached for the app's lifetime (several fields ask for it on
+  /// every build), which means a technician who granted the microphone, or installed the Italian
+  /// pack, after the first answer kept a microphone that said "unavailable" until the process
+  /// restarted. Tapping it now re-probes; if the answer has changed, the same tap starts dictating
+  /// instead of asking for a second one.
+  Future<void> _explain() async {
+    ref.invalidate(dictationCapabilityProvider);
+    final fresh = await ref.read(dictationCapabilityProvider.future);
+    if (!mounted) return;
+    if (fresh.canDictate) {
+      await _toggle();
+      return;
+    }
+    final notice = _noticeFor(fresh);
+    if (notice == null) return;
+    showAppToast(context, message: notice.message, tone: ToastTone.info);
   }
 
   @override
@@ -103,7 +136,7 @@ class _DictateButtonState extends ConsumerState<DictateButton> {
           return IconButton(
             icon: Icon(LucideIcons.micOff, size: 18, color: context.colors.inkDisabled),
             tooltip: capability.unavailableMessage,
-            onPressed: () => _explain(capability),
+            onPressed: _explain,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           );
         }

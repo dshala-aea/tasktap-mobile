@@ -41,7 +41,10 @@ class EmptyState extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 40),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: 40,
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
           child: VetroStateCard(
@@ -105,7 +108,11 @@ class EmptyState extends StatelessWidget {
 /// badge and whatever content each of the three needs below it. The single owner of that shape so
 /// the family cannot drift apart the way three copies of the same padding/radius eventually would.
 class VetroStateCard extends StatelessWidget {
-  const VetroStateCard({super.key, required this.iconBadge, required this.child});
+  const VetroStateCard({
+    super.key,
+    required this.iconBadge,
+    required this.child,
+  });
 
   final Widget iconBadge;
   final Widget child;
@@ -119,7 +126,10 @@ class VetroStateCard extends StatelessWidget {
         border: Border.all(color: context.colors.borderLight),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: 28),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xl,
+          vertical: 28,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [iconBadge, const SizedBox(height: 14), child],
@@ -203,7 +213,10 @@ class CompactEmptyState extends StatelessWidget {
           border: Border.all(color: c.borderLight),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 18),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: 18,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: height),
             child: Column(
@@ -235,7 +248,11 @@ class CompactEmptyState extends StatelessWidget {
                   Text(
                     reason!,
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: c.inkFaint),
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 12,
+                      color: c.inkFaint,
+                    ),
                   ),
                 ],
                 if (action != null) ...[const SizedBox(height: 12), action!],

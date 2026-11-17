@@ -2,32 +2,77 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import '../../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/reference/reference_cache_repository.dart';
+import '../../../data/sync/connectivity_provider.dart';
+import '../../../data/sync/sync_freshness_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../ticket/ticket_detail_api_client.dart' show TicketDetailOfflineException;
 import '../admin_api_client.dart';
 import '../admin_widgets.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
-/// Commesse for the form's picker — live fetch, no local Drift mirror (same as Squadre/
-/// ProdottoAssistenza elsewhere in admin). Gap 5 of the feature audit: `Cantiere.CommessaId`
-/// existed on the entity, but `CreateCantiereRequest`/`UpdateCantiereRequest` didn't accept it
-/// until af9039c on the backend — this picker was left unbuilt until then.
+/// Commesse for the form's picker — server-first, then the synced `commesse` mirror.
+///
+/// Gap 5 of the feature audit: `Cantiere.CommessaId` existed on the entity, but
+/// `CreateCantiereRequest`/`UpdateCantiereRequest` didn't accept it until af9039c on the backend —
+/// this picker was left unbuilt until then.
 ///
 /// Keyed by the selected client id (item 2 of the admin-form audit): refetches, server-filtered
 /// via `fetchCommesse`'s own `customerId` param, whenever the client picker changes, instead of
 /// showing every commessa across every customer.
+///
+/// The mirror half is real: `SyncService` upserts commesse, and
+/// [ReferenceCacheRepository.commesseForCustomer] reads them scoped to the customer exactly as
+/// `fetchCommesse(customerId:)` does (both active-only), so a cantiere can still be opened against
+/// an existing commessa on site with no signal. Only active commesse are mirrored/offered here —
+/// linking new work to an archived one is not a field operation.
 final adminCommesseProvider = FutureProvider.autoDispose
-    .family<List<Map<String, dynamic>>, String?>((ref, customerId) {
-      return ref.watch(adminApiClientProvider).fetchCommesse(customerId: customerId);
+    .family<List<Map<String, dynamic>>, String?>((ref, customerId) async {
+      Future<List<Map<String, dynamic>>> fromMirror() async {
+        if (customerId == null) return const [];
+        final rows = await ref.watch(referenceCacheProvider).commesseForCustomer(customerId);
+        if (rows.isEmpty && await ref.watch(appDatabaseProvider).getLastSync() == null) {
+          // Never synced is not the same answer as "this client has no commesse" — the picker's
+          // empty hint says which of the two it is.
+          throw const TicketDetailOfflineException();
+        }
+        return [
+          for (final c in rows)
+            {
+              'id': c.id,
+              'codice': c.codice,
+              'descrizione': c.descrizione,
+              'customerId': c.customerId,
+              'stato': c.stato,
+              'isActive': c.isActive,
+              'externalId': c.externalId,
+            },
+        ];
+      }
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref.watch(adminApiClientProvider).fetchCommesse(customerId: customerId);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
     });
 
 /// Admin cantiere form — create or edit.
@@ -201,22 +246,33 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
       return Scaffold(
         backgroundColor: context.colors.bg2,
         appBar: ScreenHeaderBar(title: 'Modifica cantiere', showBack: true),
-        body: const UnavailableState(
-          titolo: 'Cantiere non disponibile',
-          motivo:
-              "L'elenco cantieri non è ancora sincronizzato sul "
-              'dispositivo, quindi non è possibile precompilare o '
-              'modificare questo cantiere da qui.',
-        ),
+        // The row can be missing because the mirror has not arrived yet OR because the cantiere
+        // was deleted meanwhile; the old single message asserted the first for both.
+        body: ref.watch(hasSyncedAtLeastOnceProvider).value == false
+            ? const UnavailableState(
+                icon: LucideIcons.cloudOff,
+                titolo: 'Cantiere non disponibile',
+                motivo:
+                    "L'elenco cantieri non è ancora sincronizzato sul "
+                    'dispositivo, quindi non è possibile precompilare o '
+                    'modificare questo cantiere da qui.',
+              )
+            : const UnavailableState(
+                icon: LucideIcons.hardHat,
+                titolo: 'Cantiere non trovato',
+                motivo:
+                    'Questo cantiere non è più disponibile: potrebbe essere stato eliminato. '
+                    'Torna all\'elenco e aggiorna.',
+              ),
       );
     }
 
     final customersAsync = ref.watch(allCustomersProvider);
-    final customers = customersAsync.valueOrNull ?? [];
+    final customers = customersAsync.value ?? [];
     // Server-filtered by the selected client (item 2 of the admin-form audit) — refetches
     // whenever _selectedCustomerId changes, since adminCommesseProvider is keyed by it.
     final commesseAsync = ref.watch(adminCommesseProvider(_selectedCustomerId));
-    final commesse = commesseAsync.valueOrNull ?? [];
+    final commesse = commesseAsync.value ?? [];
     // If the cached value isn't in the fetched (client-scoped) list — e.g. it belongs to a
     // different client than the one currently selected, or is inactive — keep it selectable
     // rather than silently blanking the field on open, which would let an unrelated save clear a
@@ -234,7 +290,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
     // linking it, and typing something new (or nothing matching) just sets the address text
     // directly, same "type and it stands on its own" behavior AppLookupField uses everywhere else.
     final allLocationsAsync = ref.watch(allLocationsProvider);
-    final allLocations = allLocationsAsync.valueOrNull ?? [];
+    final allLocations = allLocationsAsync.value ?? [];
     final clientLocations = _selectedCustomerId != null
         ? allLocations.where((l) => l.customerId == _selectedCustomerId).toList()
         : const <Location>[];
@@ -315,8 +371,14 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
                       LookupItem(id: _selectedCommessaId!, name: _selectedCommessaId!),
                   ],
                   selectedId: _selectedCommessaId,
+                  // Three distinct answers, not one: still loading, could not be read at all, and
+                  // a real "this client has none".
                   emptyCacheHint: commesseAsync.isLoading
                       ? 'Commesse in caricamento…'
+                      : commesseAsync.hasError
+                      ? (ref.watch(isOnlineProvider)
+                            ? 'Impossibile caricare le commesse.'
+                            : 'Commesse non ancora scaricate sul dispositivo.')
                       : 'Nessuna commessa trovata.',
                   onSelected: (id) => setState(() => _selectedCommessaId = id),
                   onFreeText: (text) {
@@ -340,9 +402,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
                         subtitle: l.city,
                       ),
                   ],
-                  emptyCacheHint: _selectedCustomerId == null
-                      ? null
-                      : 'Nessuna sede esistente per questo cliente: scrivi per inserirne un nuovo indirizzo.',
+                  emptyCacheHint: _selectedCustomerId == null ? null : 'Nessuna sede esistente per questo cliente: scrivi per inserirne un nuovo indirizzo.',
                   // Picking a suggestion copies that sede's address into these fields — see the
                   // clientLocations doc comment above for why this isn't a real link.
                   onSelected: (id) {

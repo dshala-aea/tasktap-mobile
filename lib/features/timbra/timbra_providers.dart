@@ -1,12 +1,14 @@
 // dart format width=100
-import 'dart:async' show unawaited;
+import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
+import '../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../data/sync/sync_service.dart';
@@ -14,6 +16,7 @@ import '../../data/timbratura/remote_shift.dart';
 import '../../data/timbratura/timbra_sync_service.dart';
 import '../../data/timbratura/work_session_repository.dart';
 import '../../data/timbratura/worklog_api_client.dart';
+import 'day_rail.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const _kIngresso = 'ingresso';
@@ -41,13 +44,68 @@ final todaySessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref
   return repo.watchTodaySessions();
 });
 
+// ── The merged day (server rows + this phone's events) ────────────────────────
+
+/// The server's own attendance rows for today, with their type and origin.
+///
+/// **Its failure is data, not noise.** An unreachable day still lets the rail draw this phone's
+/// own punches — what is missing is only what the phone never knew — but the screen may not then
+/// say "Nessuna timbratura oggi": that is the very claim this screen exists to stop making. So the
+/// error is left on the `AsyncValue` for the surface to read (`hasError`/`hasValue`) instead of
+/// being flattened into an empty list, which is indistinguishable from a day the server really says
+/// is empty. [dayRailProvider] still folds it to `const []` for the merge itself.
+///
+/// This is the fix for the defect this screen carried: the sessions list and the total used to
+/// read the local table only, so a totem punch, a punch from another device and an office
+/// correction were all invisible and the total undercounted. `GET /worklog/mobile/today` is not
+/// the endpoint for it — it omits `workLogType`, so a break arrives indistinguishable from work
+/// and the day's arithmetic would be wrong in a new way. See [DayWorkLogEntry].
+final serverDayProvider = FutureProvider.autoDispose<List<DayWorkLogEntry>>((ref) async {
+  // `GET /api/WorkLog?userId=` expects the internal database Guid, not the OIDC `sub` that
+  // `currentUserProvider.id` carries. Sending the sub made the whole server-day read fail (400 /
+  // no rows), which is the "giornata del server non è raggiungibile" banner. See
+  // `internalUserIdProvider`'s own doc comment: it exists precisely for server-side foreign keys.
+  // `watch(...).value` (not `await ...future`) keeps the first frame's empty rail a normal
+  // empty day while the id loads; the provider re-reads as soon as the id arrives.
+  final userId = ref.watch(internalUserIdProvider).value;
+  if (userId == null) return const [];
+
+  final client = ref.watch(worklogApiClientProvider);
+  // The date window binds `WorkDate`, whose labels live in the legacy (Rome) frame — not the
+  // device zone. Same anchoring step_ore.dart uses for the same endpoint.
+  final today = ref.watch(businessTimeProvider).legacyToday();
+  return client.fetchDayEntries(userId: userId, day: today);
+});
+
+/// Today as one line: the server's rows merged with this phone's own punches.
+///
+/// `now` is read once here, on a data change (a punch, a sync, the 15s refresh). The running
+/// band in the rail ticks on its own inside that widget; a whole-screen rebuild every second to
+/// age one number is what the old hero deliberately avoided and this keeps avoiding.
+final dayRailProvider = Provider.autoDispose<DayRail>((ref) {
+  final local = ref.watch(todaySessionsProvider).value ?? const <WorkSession>[];
+  final server = ref.watch(serverDayProvider).value ?? const <DayWorkLogEntry>[];
+  return buildDayRail(localEvents: local, serverRows: server, now: DateTime.now());
+});
+
 /// True when at least one of today's events has not yet been synced.
 final hasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
-  final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? [];
-  // Reconciler-mirrored events (reconciledOrphanMarker) are pending by construction but are never
-  // uploaded — the server already holds them. Counting them left a permanent "Non sincronizzato"
-  // dot and a punch/pause guard stuck on hasPendingSync. Same filter as the sync and reconciler.
+  final sessions = ref.watch(todaySessionsProvider).value ?? [];
+  // Reconciler-mirrored events are pending by construction but are never uploaded — the server
+  // already holds them. Counting them left a permanent "Non sincronizzato" state and a punch/pause
+  // guard stuck on hasPendingSync. Same filter as the sync, the reconciler and the work counter.
   return sessions.any((s) => s.isPendingSync && s.notes != reconciledOrphanMarker);
+});
+
+/// Punches the server permanently refused (`409 active_session_exists`), newest first.
+///
+/// Separate from [todaySessionsProvider] on purpose: those rows are hidden from the shift
+/// arithmetic (a rejected punch must not double a shift) and are no longer pending (nothing will
+/// ever retry them), so every existing count is right to leave them out. That is not the same as
+/// the technician never hearing about them again — the only trace used to be a toast that
+/// scrolled away. This is the list behind the Timbra screen's notice.
+final syncFailedSessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref) {
+  return ref.watch(workSessionRepositoryProvider).watchSyncFailedSessions();
 });
 
 // ── Shift state notifier ──────────────────────────────────────────────────────
@@ -120,8 +178,46 @@ TimbraState deriveShiftState(List<WorkSession> sessions) {
 
 /// Provides the current [TimbraState] derived from today's session stream.
 final timbraStateProvider = Provider.autoDispose<TimbraState>((ref) {
-  final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? [];
+  final sessions = ref.watch(todaySessionsProvider).value ?? [];
   return deriveShiftState(sessions);
+});
+
+/// Every visible punch on any business day — the base for the day-independent shift answer.
+///
+/// Reactive like [todaySessionsProvider] (both watch the same table), just not day-scoped. See
+/// [IWorkSessionRepository.watchAllSessions] for why the whole log is read.
+final allSessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref) {
+  return ref.watch(workSessionRepositoryProvider).watchAllSessions();
+});
+
+/// The shift state a punch control may ACT on: [timbraStateProvider]'s answer, widened by the whole
+/// local punch log.
+///
+/// Why a second state rather than making [timbraStateProvider] day-independent: everything else on
+/// the Timbra screen is genuinely about *today* — "Sessioni di oggi", "Ore lavorate oggi", the
+/// unsent-events count — and widening the one provider would silently redefine all of them (plus
+/// every test that seeds state through `todaySessionsProvider`) for a question none of them ask.
+///
+/// The question this answers is the one that must not follow the business-day boundary: a shift
+/// opened at 22:00 is still open at 00:01, and the technician has to be able to finish it. So the
+/// answer comes from the whole log ALONE, through ONE stream:
+///
+/// - whole log delivered → `deriveShiftState` over it. Open there is open, closed is closed — it
+///   covers the cross-midnight shift and carries its real opener time and break state;
+/// - not yet delivered (first frame) or errored → [timbraStateProvider], the day-scoped answer.
+///
+/// Merging the two answers instead — either "prefer whichever says open" — makes the control flap,
+/// because the two drift streams over the same table re-emit in no guaranteed order: on a pause the
+/// stale-but-open whole log would override the fresh paused day (IN TURNO right after tapping
+/// PAUSA), and on a finish the stale-but-open day would override the fresh closed whole log (the
+/// pause button lingering after FINE TURNO). One source cannot disagree with itself.
+///
+/// The flag in [isButtonPunchWithheld] may remove a way to START work, never a way to finish it —
+/// this is what keeps that promise true past midnight.
+final actionableShiftStateProvider = Provider.autoDispose<TimbraState>((ref) {
+  final all = ref.watch(allSessionsProvider).value;
+  if (all == null) return ref.watch(timbraStateProvider);
+  return deriveShiftState(all);
 });
 
 // ── Computed total (minutes worked today, excluding pauses) ───────────────────
@@ -162,7 +258,7 @@ Duration computeTotalWorked(List<WorkSession> sessions, DateTime now) {
 }
 
 final totalWorkedTodayProvider = Provider.autoDispose<Duration>((ref) {
-  final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? [];
+  final sessions = ref.watch(todaySessionsProvider).value ?? [];
   return computeTotalWorked(sessions, DateTime.now());
 });
 
@@ -193,7 +289,11 @@ class TimbraGuard {
 }
 
 /// Human-readable text for a server reason code, falling back to the server's own prose.
-String? _guardReason(GiornataActionDto action) {
+///
+/// Public because more than one surface has to explain the same refusal: the punch guard here,
+/// and the kiosk prompt (which disables the actions the day does not allow). A second copy of
+/// this map is how the same reason ends up worded two different ways on two screens.
+String? reasonTextFor(GiornataActionDto action) {
   const known = <String, String>{
     'payroll_locked': 'Il periodo è chiuso per le buste paga: chiedi all\'amministrazione.',
     'already_clocked_in': 'Risulti già in servizio.',
@@ -239,14 +339,19 @@ TimbraGuard resolveGuard({
   final isLock = availability.reasonCode == 'payroll_locked';
   if (hasPendingSync && !isLock) return TimbraGuard.allowed;
 
-  return TimbraGuard(blocked: true, reason: _guardReason(availability));
+  return TimbraGuard(blocked: true, reason: reasonTextFor(availability));
 }
 
 /// The guard for the punch button, whose action depends on whether a shift is open.
+///
+/// Reads [actionableShiftStateProvider], not [timbraStateProvider]: the guard has to explain the
+/// transition the button will actually attempt. A shift opened before midnight makes the button a
+/// ClockOut, and asking the server about a ClockIn there would disable the one control that can
+/// finish that shift ("Risulti già in servizio").
 final punchGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
-  final shift = ref.watch(timbraStateProvider);
+  final shift = ref.watch(actionableShiftStateProvider);
   return resolveGuard(
-    giornata: ref.watch(giornataProvider).valueOrNull,
+    giornata: ref.watch(giornataProvider).value,
     hasPendingSync: ref.watch(hasPendingSyncProvider),
     action: shift.isOnShift ? 'ClockOut' : 'ClockIn',
   );
@@ -257,9 +362,11 @@ final punchGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
 /// Mirrors [punchGuardProvider] exactly — same `resolveGuard` merge rule, different action pair
 /// (`StartBreak` / `EndBreak` instead of `ClockIn` / `ClockOut`).
 final pauseGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
-  final shift = ref.watch(timbraStateProvider);
+  // Same whole-log state as [punchGuardProvider], for the same reason: a break left open across
+  // midnight must still be told "not on break"/"on break" from what the server holds.
+  final shift = ref.watch(actionableShiftStateProvider);
   return resolveGuard(
-    giornata: ref.watch(giornataProvider).valueOrNull,
+    giornata: ref.watch(giornataProvider).value,
     hasPendingSync: ref.watch(hasPendingSyncProvider),
     action: shift.isOnPause ? 'EndBreak' : 'StartBreak',
   );
@@ -274,7 +381,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     this._syncService,
     ILocationService? locationService,
     this._confirmOnline,
-    this._onSynced,
+    this._onShiftChanged,
   ]) : _locationService = locationService ?? const DisabledLocationService(),
        super(const AsyncData(null));
 
@@ -283,32 +390,27 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
   /// Authoritative "is there really a connection right now" probe. Null = never gate.
   final Future<bool> Function()? _confirmOnline;
 
-  /// Runs once the post-punch sync attempt has finished (success or not). Used to re-read the
-  /// server's `availableActions`: right after a punch they are stale, and the moment the sync
-  /// marks the events synced the guards stop treating them as pending and start trusting that
-  /// stale copy — which blocks the next tap (typically Pausa straight after Inizia).
-  final void Function()? _onSynced;
-
-  void _syncAfterPunch() {
-    final sync = _syncService;
-    if (sync == null) {
-      _onSynced?.call();
-      return;
-    }
-    unawaited(sync.syncNow().whenComplete(() => _onSynced?.call()));
-  }
+  /// Re-read the server's day after a local punch (and again after the best-effort sync lands).
+  /// Without this the punch guard keeps the pre-punch `/api/worklog/today` answer and can leave
+  /// the finish button disabled with a false "Non risulti in servizio".
+  final void Function()? _onShiftChanged;
 
   /// Fine / Pausa / Ripresa on a shift started on ANOTHER device are online-only — the server
   /// stamps its own clock, so an offline tap would be recorded at delivery time. See
   /// remote_shift.dart (incl. the backend follow-up). Throws [OfflineRemoteShiftException] so the
   /// caller records nothing and local state stays unchanged.
+  ///
+  /// The whole log, not today's: a shift opened before midnight is still a remote shift, and the
+  /// control that hands this tap over draws from [actionableShiftStateProvider] (whole log).
+  /// Reading today's rows here would let an offline tap through on the shift the button shows.
   Future<void> _requireOnlineForRemoteShift() async {
     final probe = _confirmOnline;
     if (probe == null) return;
-    final remote = analyseRemoteShifts(await _repo.getTodaySessions()).openShiftIsRemote;
+    final remote = analyseRemoteShifts(await _repo.getAllSessions()).openShiftIsRemote;
     if (!remote) return;
     if (!await probe()) throw const OfflineRemoteShiftException();
   }
+
   final TimbraSyncService? _syncService;
   final ILocationService _locationService;
 
@@ -328,6 +430,11 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
+  /// [current] must be the state the control was DRAWN from — [actionableShiftStateProvider], not
+  /// the day-scoped [timbraStateProvider]. Its `isOnShift` decides start vs finish, and the two
+  /// must never disagree: a button that says "FINE TURNO" has to end the shift, and one that says
+  /// "INIZIA TURNO" has to start one (a shift opened before midnight would otherwise take the
+  /// ClockIn branch and 409 against the still-open row).
   Future<void> punch(TimbraState current) async {
     state = const AsyncLoading();
     try {
@@ -343,20 +450,28 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
           longitude: coords?.lng,
           gpsAccuracyMeters: coords?.accuracy,
         );
+        _onShiftChanged?.call();
       } else {
         // End shift
         await _requireOnlineForRemoteShift();
         var stop = DateTime.now().toUtc();
         // A remote shift's opener carries the SERVER's start; a phone clock that is behind would
-        // stamp the stop before it and leave a negative interval. Keep it at least 1s after.
-        final opener =
-            analyseRemoteShifts(await _repo.getTodaySessions()).openRemoteOpenerTime;
+        // stamp the stop before it and leave a negative interval. Keep it at least 1s after. The
+        // whole log again: an opener from a previous business day is exactly the one a day-scoped
+        // read would miss, leaving the clamp inert.
+        final opener = analyseRemoteShifts(await _repo.getAllSessions()).openRemoteOpenerTime;
         if (opener != null && !stop.isAfter(opener)) stop = opener.add(const Duration(seconds: 1));
         await _repo.addEvent(id: _uuid.v4(), eventTime: stop, eventType: _kFine);
+        _onShiftChanged?.call();
       }
       state = const AsyncData(null);
-      // Best-effort sync after punch (fire-and-forget; ignore failure).
-      _syncAfterPunch();
+      // Best-effort sync after punch (fire-and-forget; ignore failure). Re-read the server day
+      // once the sync lands, so the guard sees the same state the server now has.
+      final sync = _syncService?.syncNow();
+      _onShiftChanged?.call();
+      if (sync != null) {
+        unawaited(sync.then((_) => _onShiftChanged?.call()).catchError((_) {}));
+      }
     } catch (e, st) {
       state = AsyncError(e, st);
     }
@@ -378,12 +493,19 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
           longitude: coords?.lng,
           gpsAccuracyMeters: coords?.accuracy,
         );
+        _onShiftChanged?.call();
       } else {
         await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kPausa);
+        _onShiftChanged?.call();
       }
       state = const AsyncData(null);
-      // Best-effort sync after pause/resume (fire-and-forget; ignore failure).
-      _syncAfterPunch();
+      // Best-effort sync after pause/resume (fire-and-forget; ignore failure). Re-read the server
+      // day once the sync lands, same as punch.
+      final sync = _syncService?.syncNow();
+      _onShiftChanged?.call();
+      if (sync != null) {
+        unawaited(sync.then((_) => _onShiftChanged?.call()).catchError((_) {}));
+      }
     } catch (e, st) {
       state = AsyncError(e, st);
     }
@@ -413,6 +535,10 @@ final punchNotifierProvider = StateNotifierProvider<PunchNotifier, AsyncValue<vo
       final r = await Connectivity().checkConnectivity();
       return r.any((c) => c != ConnectivityResult.none);
     },
-    () => ref.invalidate(giornataProvider),
+    () {
+      // The local punch has changed the day; the server answer the guard holds is now stale.
+      ref.invalidate(giornataProvider);
+      ref.invalidate(serverDayProvider);
+    },
   );
 });

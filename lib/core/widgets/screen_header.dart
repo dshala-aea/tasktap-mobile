@@ -3,6 +3,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_rack.dart';
 import 'app_tappable.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -95,7 +96,10 @@ class HeaderIconBtn extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: context.colors.red,
                         shape: BoxShape.circle,
-                        border: Border.all(color: context.colors.bg3, width: 1.5),
+                        border: Border.all(
+                          color: context.colors.bg3,
+                          width: 1.5,
+                        ),
                       ),
                     ),
                   ),
@@ -114,7 +118,7 @@ class HeaderIconBtn extends StatelessWidget {
 /// Spec padding: top 8 / horizontal 19 / bottom 12.
 ///
 /// ```dart
-/// ScreenHeader(title: 'Rapportini');
+/// ScreenHeader(title: 'Rapporti');
 /// ScreenHeader(
 ///   title: 'Dettaglio',
 ///   subtitle: 'Ticket #1024',
@@ -127,6 +131,7 @@ class ScreenHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.subtitleMaxLines = 1,
     this.showBack = false,
     this.onBack,
     this.actions = const [],
@@ -134,6 +139,10 @@ class ScreenHeader extends StatelessWidget {
 
   final String title;
   final String? subtitle;
+
+  /// A list header's subtitle is a sentence, not a code: allow it to wrap when the caller needs
+  /// the full copy. Defaults to the one-line behaviour every existing screen already has.
+  final int subtitleMaxLines;
   final bool showBack;
   final VoidCallback? onBack;
   final List<Widget> actions;
@@ -179,9 +188,11 @@ class ScreenHeader extends StatelessWidget {
                 if (subtitle != null)
                   Text(
                     subtitle!,
-                    maxLines: 1,
+                    maxLines: subtitleMaxLines,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: context.colors.inkMuted,
+                    ),
                   ),
               ],
             ),

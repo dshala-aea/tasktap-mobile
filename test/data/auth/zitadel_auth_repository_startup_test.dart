@@ -15,6 +15,8 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tasktap_mobile/data/auth/session_recovery.dart';
 import 'package:tasktap_mobile/data/auth/zitadel_auth_repository.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
@@ -44,6 +46,7 @@ void main() {
   setUp(() {
     store = {};
     emitted = [];
+    SharedPreferences.setMockInitialValues({});
     appAuth = MockAppAuth();
     storage = MockSecureStorage();
     when(
@@ -210,6 +213,61 @@ void main() {
       // result is discarded: no emit, no persist. The reconnect watcher / 401 path retries.
       expect(emitted.map((u) => u?.id), ['u1']);
       expect(store[_refreshTokenKey], 'rt-1');
+    });
+  });
+
+  // A session that dies while the app is closed is the OTHER way a session ends without anyone
+  // consenting to it — the interceptor's 401 → `SessionEnder.endForced()` path never runs, because
+  // nothing is in flight yet. `_restore()` deletes the credentials by itself, and the local
+  // database deliberately stays (unsent work — audit F1). What it used to skip is the owner
+  // marker: `SessionRecoveryController` gates the next sign-in on that marker, so with none
+  // written a different account — a different tenant, on a shared van tablet — inherited the
+  // previous technician's tickets, customers and delta cursor with no prompt at all, while its own
+  // sync ran against that stale cursor. Exactly the reported symptom: no fresh data from online,
+  // stale rows from someone else's account.
+  group('a dead refresh token found at cold start', () {
+    setUp(() {
+      stubReadFromMap();
+      store[_refreshTokenKey] = 'rt-dead';
+      store[_cachedIdentityKey] = jsonEncode({
+        'id': 'sub-owner',
+        'email': 'owner@tasktap.io',
+        'displayName': 'Proprietario',
+      });
+      when(() => appAuth.token(any())).thenThrow(Exception('invalid_grant'));
+    });
+
+    testWidgets('records the retained-data owner before the identity is gone', (tester) async {
+      build();
+      await tester.pump(Duration.zero);
+
+      // The teardown itself is unchanged: credentials go, and the app asks for a sign-in.
+      expect(emitted, [null]);
+      expect(store[_refreshTokenKey], isNull);
+      expect(store[_cachedIdentityKey], isNull);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString(sessionRetainedOwnerSubKey),
+        'sub-owner',
+        reason:
+            'the local database survived this ending; without the marker the next sign-in has no '
+            'idea whose it is and the recovery gate cannot fire',
+      );
+    });
+
+    testWidgets('without a cached identity there is nobody to name, and nothing else changes', (
+      tester,
+    ) async {
+      store.remove(_cachedIdentityKey);
+
+      build();
+      await tester.pump(Duration.zero);
+
+      expect(emitted, [null]);
+      expect(store[_refreshTokenKey], isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(sessionRetainedOwnerSubKey), isNull);
     });
   });
 }

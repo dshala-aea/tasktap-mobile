@@ -5,13 +5,16 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
+
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
+import '../../../core/dictation/dictate_button.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/time/business_time.dart' show BusinessTime;
 import '../../../core/time/business_time_providers.dart' show businessTimeProvider;
@@ -23,12 +26,17 @@ import '../../../data/sync/draft_submission_state.dart';
 import '../../../data/sync/submission_queue.dart' show isStaleSubmitConflictMessage;
 import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../data/users/user_signature_api_client.dart';
+import '../../../data/users/user_signature_cache.dart';
+import '../../../presentation/providers/auth_providers.dart' show internalUserIdProvider;
 import '../../../domain/reports/draft_validation.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
+import '../absence/customer_absence.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../../core/router/app_router.dart';
+import '../report_submission_destination.dart';
 import '../../../domain/checklist/checklist_items.dart' show ChecklistFilter;
 import '../../checklist/checklist_warning_panel.dart';
+
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -54,6 +62,14 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   bool _submitting = false;
   String? _submitError;
 
+  /// True when the last manual "Invia" finished with the row still queued, because the device
+  /// could not reach the network. The cached `isOnlineProvider` value cannot answer this
+  /// honestly — it says "the interface is up", which is also true on a captive portal or a Wi-Fi
+  /// with no internet — so the screen asks the persisted row instead: a forced attempt that ends
+  /// with the row still `readyToSubmit` did not leave the phone. Drives the calm blue "In attesa
+  /// di connessione" card, never "Invio fallito".
+  bool _deferredOffline = false;
+
   // Opened once, not re-called from build() — build() runs on every setState during submit
   // (_submitting flips twice per _onInvia), and calling repo.watchDraft(...) inline there tore
   // down and reopened the underlying DB stream on each of those, instead of just re-subscribing
@@ -69,11 +85,21 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   // during the widget tree's build phase, which Flutter disallows.
   StreamSubscription<DraftReport?>? _submitCompletionSub;
   bool _hasHandledSubmitSuccess = false;
+  bool _hasNavigated = false;
   bool _sawNonSubmittedState = false;
+
+  /// The customer's signoff text ("Osservazioni cliente"). Seeded from the hydrated editor state:
+  /// this step only mounts once the draft has finished loading (see `rapportino_form_screen`'s
+  /// `editorState.isLoading` gate), and a reopened draft's text is a column on
+  /// `DraftReports.customerSignoffText`.
+  late final TextEditingController _signoffCtrl;
 
   @override
   void initState() {
     super.initState();
+    _signoffCtrl = TextEditingController(
+      text: ref.read(reportEditorProvider(widget.reportId)).customerSignoffText ?? '',
+    );
     unawaited(_maybePrefillTechnicianSignature());
     _submitCompletionSub = _draftStream.listen(_handleDraftUpdateForNavigation);
   }
@@ -81,6 +107,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   @override
   void dispose() {
     _submitCompletionSub?.cancel();
+    _signoffCtrl.dispose();
     super.dispose();
   }
 
@@ -98,6 +125,11 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   void _handleDraftUpdateForNavigation(DraftReport? draft) {
     if (_hasHandledSubmitSuccess) return;
     final subState = DraftSubmissionState.fromString(draft?.submissionState ?? 'draft');
+    // The offline card describes "queued, waiting for a connection" — the moment the row leaves
+    // that state (a later reconnect sent it, or a real failure arrived) the card no longer applies.
+    if (_deferredOffline && subState != DraftSubmissionState.readyToSubmit) {
+      setState(() => _deferredOffline = false);
+    }
     if (subState != DraftSubmissionState.submitted) {
       // Real submissions always start from a non-submitted state within this sheet's own
       // lifetime — only after seeing that do we trust the next `submitted` as one this session
@@ -115,9 +147,36 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     _hasHandledSubmitSuccess = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showAppToast(context, message: 'Rapportino inviato con successo', tone: ToastTone.success);
-      Navigator.of(context).pop();
+      _navigateAfterSave();
     });
+  }
+
+  /// Leave the wizard for the job it belongs to: ticket detail when the ticket is still open,
+  /// cantiere detail when the report belongs to a site, home otherwise. The sheet is popped and
+  /// the route replaced, so Back never reopens a report that has already been sent.
+  void _navigateAfterSave() {
+    if (_hasNavigated) return;
+    _hasNavigated = true;
+
+    final state = ref.read(reportEditorProvider(widget.reportId));
+    final tickets = ref.read(allTicketsProvider).value ?? const <Ticket>[];
+    final ticket = state.ticketId == null
+        ? null
+        : tickets.where((t) => t.id == state.ticketId).firstOrNull;
+    final target = reportSubmissionDestination(
+      ticketId: state.ticketId,
+      cantiereId: state.cantiereId,
+      ticketIsClosed: ticket?.closedAt != null,
+    );
+
+    final router = GoRouter.maybeOf(context);
+    showAppToast(
+      context,
+      message: 'Rapporto di intervento inviato con successo',
+      tone: ToastTone.success,
+    );
+    Navigator.of(context).pop();
+    router?.go(target);
   }
 
   /// Pre-fills "Firma tecnico" from the technician's own saved signature (see
@@ -151,13 +210,23 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   /// Never blocks the editor from opening: a fetch failure or a missing saved signature both
   /// no-op silently (see `UserSignatureApiClient.fetchSavedSignatureContent`'s own "never blocks"
   /// contract).
+  ///
+  /// Offline the server cannot be asked, so this reads the copy this phone last saw
+  /// (`UserSignatureCache`, via [signatureToPrefill]) — a rapportino written with no signal is
+  /// exactly the case the saved signature exists to spare the technician redrawing, and it used
+  /// to silently lose it.
   Future<void> _maybePrefillTechnicianSignature() async {
     final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
     await notifier.ready;
     if (!mounted) return;
     if (_technicianPrefillBlocked()) return;
 
-    final bytes = await ref.read(userSignatureApiClientProvider).fetchSavedSignatureContent();
+    final bytes = await signatureToPrefill(
+      online: ref.read(isOnlineProvider),
+      userId: await _internalUserId(ref),
+      api: ref.read(userSignatureApiClientProvider),
+      cache: ref.read(userSignatureCacheProvider),
+    );
     if (bytes == null || !mounted) return;
     // Re-check after the fetch: a resumed draft's hydration, a manual capture, or a deliberate
     // Cancella could all have completed while the network call was in flight.
@@ -190,17 +259,33 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     setState(() {
       _submitting = true;
       _submitError = null;
+      _deferredOffline = false;
     });
     try {
       await queue.enqueue(widget.reportId);
       // Manual send: attempt the network regardless of the cached connectivity value, so a real
       // failure becomes a visible "Invio fallito" instead of a silent no-op.
       await queue.processAll(force: true);
+
+      // A row that is STILL readyToSubmit after a forced attempt never left the phone: the queue
+      // puts it back there (no error, no attempt spent) when the failure was "no response, no
+      // network". Say so calmly instead of leaving "Pronto per l'invio" on screen, which would
+      // read as if the send had gone through.
+      final after = await ref.read(draftReportRepositoryProvider).getDraft(widget.reportId);
+      final deferred =
+          after != null &&
+          DraftSubmissionState.fromString(after.submissionState) ==
+              DraftSubmissionState.readyToSubmit;
+      if (mounted && deferred) setState(() => _deferredOffline = true);
     } catch (e) {
       // The red line under the submit button. It printed `e.toString()`, which put a Dio stack at
       // the exact moment two people have just signed and the only question is whether the record
       // survived.
-      setState(() => _submitError = humanErrorMessage(e, azione: 'inviare il rapportino'));
+      if (mounted) {
+        setState(
+          () => _submitError = humanErrorMessage(e, azione: 'inviare il rapporto di intervento'),
+        );
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -213,7 +298,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   static String _customerLabel(WidgetRef ref, ReportEditorState state) {
     final id = state.customerId;
     if (id != null && id.isNotEmpty) {
-      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[]) {
+      for (final c in ref.watch(allCustomersProvider).value ?? const <Customer>[]) {
         if (c.id == id) return c.companyName;
       }
     }
@@ -226,19 +311,37 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   static String? _riferimento(WidgetRef ref, ReportEditorState state) {
     final ticketId = state.ticketId;
     if (ticketId != null && ticketId.isNotEmpty) {
-      for (final t in ref.watch(allTicketsProvider).valueOrNull ?? const <Ticket>[]) {
+      for (final t in ref.watch(allTicketsProvider).value ?? const <Ticket>[]) {
         if (t.id == ticketId) return 'Ticket · ${t.title}';
       }
     }
     final cantiereId = state.cantiereId;
     if (cantiereId != null && cantiereId.isNotEmpty) {
-      for (final c in ref.watch(allCantieriProvider).valueOrNull ?? const <CantieriData>[]) {
+      for (final c in ref.watch(allCantieriProvider).value ?? const <CantieriData>[]) {
         if (c.id == cantiereId) return 'Cantiere · ${c.name}';
       }
     }
     if (state.ticketFreeText?.isNotEmpty ?? false) return 'Ticket · ${state.ticketFreeText}';
     if (state.cantiereFreeText?.isNotEmpty ?? false) return 'Cantiere · ${state.cantiereFreeText}';
     return null;
+  }
+
+  /// Opens the "Il cliente non può firmare" dialog and records the chosen reason + note.
+  ///
+  /// A null result (Annulla or a dismiss) leaves whatever was already recorded untouched — the
+  /// same "cancel changes nothing" contract every other dialog in the app has.
+  Future<void> _editCustomerAbsence(ReportEditorState state) async {
+    final choice = await showDialog<CustomerAbsenceChoice>(
+      context: context,
+      builder: (_) => CustomerAbsenceDialog(
+        initialReason: state.customerSignatureAbsenceReason,
+        initialNote: state.customerSignatureAbsenceNote,
+      ),
+    );
+    if (choice == null) return;
+    await ref
+        .read(reportEditorProvider(widget.reportId).notifier)
+        .setCustomerSignatureAbsence(reason: choice.reason, note: choice.note);
   }
 
   @override
@@ -350,16 +453,67 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
             const SizedBox(height: 20),
           ],
 
-          // ── Firma cliente ──────────────────────────────────────────────────
-          StepLabel(title: 'Firma cliente *'),
-          const SizedBox(height: 8),
-          _SignatureBlock(
-            label: 'cliente',
-            allegatoId: state.customerSignatureAllegatoId,
-            localPath: state.customerSignatureLocalPath,
-            isCustomer: true,
-            reportId: widget.reportId,
+          // ── Osservazioni cliente (facoltative) ─────────────────────────────
+          // What the customer is signing off on, captured on the signing step itself — the field
+          // the web editor carries above its two signature pads ("Dichiarazione cliente",
+          // `Report.CustomerSignoffText`). The office asked for it as "Osservazioni cliente", so
+          // that is the label here. Optional, like the customer's own signature: sending never
+          // requires it.
+          AppTextField.multiline(
+            controller: _signoffCtrl,
+            label: 'Osservazioni cliente',
+            hint:
+                'Confermo l\'esecuzione dei lavori e la presa visione del rapporto di intervento.',
+            maxLines: 3,
+            suffixIcon: DictateButton(
+              controller: _signoffCtrl,
+              onChanged: (v) => ref
+                  .read(reportEditorProvider(widget.reportId).notifier)
+                  .setCustomerSignoffText(v),
+            ),
+            onChanged: (v) =>
+                ref.read(reportEditorProvider(widget.reportId).notifier).setCustomerSignoffText(v),
           ),
+          const SizedBox(height: 20),
+
+          // ── Firma cliente ──────────────────────────────────────────────────
+          // No asterisk: the customer's signature is collected when the customer is there to
+          // sign. When they are not, "Il cliente non può firmare" records why, and that reason is
+          // what lets the report be sent without a signature (see validateDraft's rule 6).
+          StepLabel(title: 'Firma cliente'),
+          const SizedBox(height: 8),
+          if (state.customerSignatureAllegatoId == null &&
+              state.customerSignatureAbsenceReason != null)
+            // The chosen reason stands in for the empty signature pad. A signature, if one was
+            // ever captured, always wins — the two are mutually exclusive (see the Drift column's
+            // doc comment), so this branch is unreachable with one.
+            CustomerAbsenceCard(
+              reason: state.customerSignatureAbsenceReason!,
+              note: state.customerSignatureAbsenceNote,
+              onEdit: () => _editCustomerAbsence(state),
+            )
+          else ...[
+            _SignatureBlock(
+              label: 'cliente',
+              allegatoId: state.customerSignatureAllegatoId,
+              localPath: state.customerSignatureLocalPath,
+              isCustomer: true,
+              reportId: widget.reportId,
+            ),
+            // Hidden once a customer signature exists — a signed report has nothing to explain.
+            if (state.customerSignatureAllegatoId == null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => _editCustomerAbsence(state),
+                  style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                  child: Text(
+                    'Il cliente non può firmare',
+                    style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
+                  ),
+                ),
+              ),
+          ],
           const SizedBox(height: 20),
 
           // ── Firma tecnico ──────────────────────────────────────────────────
@@ -391,9 +545,10 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                 return _StatusCard(
                   color: context.colors.red,
                   icon: LucideIcons.xCircle,
-                  title: "L'ufficio ha respinto questo rapportino.",
-                  subtitle: 'Sola lettura. Rilavoralo dalla lista rapportini per correggerlo '
-                      'e inviarlo di nuovo.',
+                  title: "L'ufficio ha respinto questo rapporto di intervento.",
+                  subtitle:
+                      'Sola lettura. Rilavoralo dalla lista dei rapporti di intervento per '
+                      'correggerlo e inviarlo di nuovo.',
                 );
               }
 
@@ -404,7 +559,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                     _StatusCard(
                       color: context.colors.green,
                       icon: LucideIcons.checkCircle2,
-                      title: 'Rapportino inviato con successo.',
+                      title: 'Rapporto di intervento inviato con successo.',
                     ),
                     const SizedBox(height: 10),
                     // The one moment worth a stamping entrance (see StatusStamp.animate's own
@@ -421,7 +576,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   icon: LucideIcons.refreshCw,
                   title: subState == DraftSubmissionState.uploadingMedia
                       ? 'Caricamento media in corso...'
-                      : 'Invio rapportino...',
+                      : 'Invio rapporto di intervento...',
                   showProgress: true,
                 );
               }
@@ -470,26 +625,38 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
               }
 
               // Draft state — show validation + invia button
+              //
+              // Read unconditionally (not inside the condition below) so the subscription is
+              // stable across rebuilds: a `ref.watch` that only runs on some branches
+              // subscribes/unsubscribes as the state flips, and a conditional provider read in a
+              // build is a lint trap besides.
+              final isOnline = ref.watch(isOnlineProvider);
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Queued but the device is offline: say so, instead of a form that looks unsent.
                   // The button below stays live — a stale connectivity value must never remove the
                   // technician's manual, forced send. The queue also flushes on reconnect/resume.
+                  //
+                  // `_deferredOffline` covers the case the cached value gets wrong: the interface
+                  // is up (so `isOnlineProvider` reads true) but nothing is reachable, and the
+                  // forced attempt came straight back. Same card — the send is queued, not failed.
                   if (subState == DraftSubmissionState.readyToSubmit &&
-                      !ref.watch(isOnlineProvider))
+                      (_deferredOffline || !isOnline))
                     _StatusCard(
                       color: context.colors.blue,
                       icon: LucideIcons.refreshCw,
                       title: 'In attesa di connessione',
-                      subtitle: 'Il rapportino è salvato e verrà inviato appena torni online.',
+                      subtitle:
+                          'Il rapporto di intervento è salvato e verrà inviato appena '
+                          'torni online.',
                     )
                   else if (validation.isValid)
                     _StatusCard(
                       color: context.colors.green,
                       icon: LucideIcons.checkCircle2,
                       title: 'Pronto per l\'invio',
-                      subtitle: 'Il rapportino è completo e pronto per essere inviato.',
+                      subtitle: 'Il rapporto di intervento è completo e pronto per essere inviato.',
                     ),
                   if (_submitError != null) ...[
                     const SizedBox(height: 8),
@@ -497,7 +664,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   ],
                   const SizedBox(height: 12),
                   AppButton(
-                    label: _submitting ? 'Invio in corso...' : 'Invia rapportino',
+                    label: _submitting ? 'Invio in corso...' : 'Invia rapporto di intervento',
                     icon: _submitting ? null : const Icon(LucideIcons.send),
                     onPressed: validation.isValid && !_submitting ? _onInvia : null,
                     isLoading: _submitting,
@@ -849,6 +1016,13 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
   Future<void> _uploadForReuse(Uint8List bytes, ScaffoldMessengerState? messenger) async {
     try {
       await ref.read(userSignatureApiClientProvider).uploadSignature(bytes);
+      // The server accepted it, so this phone may keep it for the next rapportino opened with no
+      // signal. Cached only after the upload succeeds: "saved" means saved on the server, and the
+      // cache is the offline stand-in for that record, not a substitute for it.
+      final userId = await _internalUserId(ref);
+      if (userId != null) {
+        await ref.read(userSignatureCacheProvider).write(userId, bytes);
+      }
     } catch (_) {
       messenger?.showSnackBar(
         const SnackBar(content: Text('Impossibile salvare la firma per il riutilizzo.')),
@@ -863,6 +1037,20 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
     } else {
       await notifier.clearTechnicianSignature();
     }
+  }
+}
+
+/// The signed-in technician's internal id, or null when nothing knows it yet.
+///
+/// An unreadable store reads as "no user known" rather than as an error: the id is only the cache
+/// key, so losing it costs a pre-fill, and letting it throw would turn a convenience into a failure
+/// of the step that hosts it (the reuse upload would then report a save that did succeed as
+/// failed). Top-level because both the step and the signature block need it.
+Future<String?> _internalUserId(WidgetRef ref) async {
+  try {
+    return await ref.read(internalUserIdProvider.future);
+  } catch (_) {
+    return null;
   }
 }
 
@@ -974,6 +1162,7 @@ class _TypedSigDialogState extends State<_TypedSigDialog> {
               hint: 'Mario Rossi',
               controller: _nameCtrl,
               textInputAction: TextInputAction.done,
+              suffixIcon: DictateButton(controller: _nameCtrl, onChanged: (_) => setState(() {})),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),

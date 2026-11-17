@@ -1,6 +1,8 @@
 // Dart DTOs for the MobileUserSyncResult payload.
 // These mirror the C# entities serialised as JSON from GET /api/sync/mobile.
-import '../../core/time/business_time.dart' show parseDateOnly;
+import '../../core/time/business_time.dart'
+    show parseDateOnly, parseDateOnlyOrThrow;
+import '../../core/time/work_time.dart' show parseTimeSpan;
 import 'checklist_sync_dto.dart';
 
 class SyncResultDto {
@@ -21,10 +23,28 @@ class SyncResultDto {
   final List<SyncTicketMaterialeDto> ticketMateriali;
   final List<MaterialeDto> materiali;
   final List<MaterialeBarcodeDto> materialiBarcodes;
+
+  /// The tenant's active warehouses — every one of them, re-sent whole on every sync. The
+  /// rapportino material line's source: without it, the furgone default and the "cambia magazzino"
+  /// picker both needed a live call, and an offline line was saved with no provenance at all.
+  final List<SyncMagazzinoDto> magazzini;
   final List<CantiereDto> cantieri;
+
+  /// The crew of every cantiere [cantieri] carries this time — the complete set per cantiere, with
+  /// no delta filter on these rows, so that a lead change reaches a device whose cantiere row
+  /// itself did not change. Mirrored into `cantiere_crew_assignments` so the lead-only clock-in
+  /// affordances and the teammate picker work offline (see SyncService).
+  final List<SyncCantiereCrewAssignmentDto> cantiereCrewAssignments;
+
   final List<TicketStatusDto> ticketStatuses;
   final List<TicketTypeDto> ticketTypes;
   final List<ColleagueDto> colleagues;
+
+  /// Every contact of every customer [customers] carries — the people a technician phones from the
+  /// site. The complete list per customer, never delta-filtered: a contact has no tombstone, so the
+  /// device replaces each customer's list from this payload instead of merging into it (see
+  /// `SyncService`), and [carriesContacts] keeps an older backend from looking like a mass deletion.
+  final List<CustomerContactDto> contacts;
 
   /// The reference entities a ticket is made of, mirrored so the create wizard can be filled from
   /// the local cache while offline (spec 6.2, 7.4). Scoped, never tenant-wide: contracts, commesse
@@ -35,12 +55,92 @@ class SyncResultDto {
   final List<ProdottoAssistenzaSyncDto> prodottiAssistenza;
   final List<AgentSyncDto> agents;
 
+  /// The maintenance checklist templates the technician may attach to a NEW ticket — the create
+  /// wizard's "Modello checklist" picker. Scoped to the templates this technician's payload can see
+  /// (curated plus this tenant's own); the whole visible set travels on every sync, so it is
+  /// replaced wholesale rather than merged (see SyncService).
+  final List<SyncMaintenanceTemplateDto> maintenanceTemplates;
+
+  /// The tenant's active custom-field definitions, mirrored into `extension_field_definitions` so
+  /// the "campi aggiuntivi" section renders with no network. The whole visible set travels every
+  /// sync, so it is replaced wholesale (see `SyncService._replaceExtensionFieldDefinitions`).
+  final List<SyncExtensionFieldDefinitionDto> extensionFieldDefinitions;
+
   final List<SyncControlGroupDto> controlGroups;
   final List<SyncTicketControlDto> ticketControls;
   final List<SyncTicketAssetDto> ticketAssets;
   final List<SyncAssetDto> assets;
   final List<SyncStrumentoDto> strumenti;
   final List<SyncReportStrumentoDto> reportStrumenti;
+
+  /// The full aggregate of every report the payload covers: who worked on it, what was used,
+  /// which checklist items were answered, which files it carries, and the row version of each.
+  ///
+  /// Headers alone left a report opened from sync a blank shell — the Rapportini list could show
+  /// its state and dates, but its Squadra/Materiali/Controlli/Foto sections had nothing to render
+  /// unless this device had authored or explicitly imported it. See
+  /// `SyncService._applyReportAggregate` for the scope rules, which are the backend's: children
+  /// travel in full for every report in scope on every sync, because a child deleted in the
+  /// office has no change marker of its own.
+  final List<SyncReportStaffDto> reportStaff;
+  final List<SyncReportMaterialeDto> reportMateriali;
+  final List<SyncReportControlloDto> reportControlli;
+
+  /// Attachments for BOTH report and ticket entities, discriminated by `entityType`/`entityId`,
+  /// active rows only. One list rather than two because that is what the payload sends and what
+  /// `report_allegati` holds: that table has always carried ticket attachments too.
+  final List<SyncReportAllegatoDto> allegati;
+
+  /// `{reportId, version}` — the version `GET /api/reports/{id}` reports for that row, which is
+  /// what the submit's stale-copy guard compares against (`DraftReports.expectedVersion`).
+  final List<SyncReportVersionDto> reportVersions;
+
+  /// The caller's OWN ticket timer sessions, replaced wholesale on every sync (see
+  /// `SyncService._applyTicketTimers`). Only rows this user owns travel, so a supervisor's view of
+  /// a colleague's hours stays an online read.
+  final List<SyncTicketWorkLogDto> ticketWorkLogs;
+
+  /// The recorded field changes of every ticket in scope — the Storico tab's timeline.
+  ///
+  /// Append-only on the server, so unlike every other member here the cutoff is exact: a full sync
+  /// carries a window of it and each delta only what was written since. The applier therefore
+  /// UPSERTS and never replaces a ticket's set; rows are pruned with their ticket, through the
+  /// ticket manifest, because the payload has no manifest of its own for them.
+  final List<SyncTicketHistoryDto> ticketHistory;
+
+  /// The caller's OWN cantiere punches — the read mirror of site time. Re-sent in full on every
+  /// sync (the window plus anything still open), so the applier upserts and the manifest prunes;
+  /// a colleague's shift never travels here, the same rule as [ticketWorkLogs].
+  ///
+  /// Distinct from the local outbox (`cantiere_punches`), which holds punches this device still
+  /// owes the server. Merging the two would put unsent state into a mirror of the server.
+  final List<SyncCantiereWorkLogDto> cantiereWorkLogs;
+
+  /// False when the payload came from a backend that predates the cantiere-punch mirror. Without
+  /// it, an older server would look like "every shift was deleted" and the manifest prune would
+  /// empty the device's site history — see `SyncService._pruneToScope`.
+  final bool carriesCantiereWorkLogs;
+
+  /// Every ferie / permesso / malattia request the caller filed for themselves. Carried in full on
+  /// every sync — never delta-filtered, and with no manifest of its own — so when this member is
+  /// present its list IS the whole in-scope set and the applier replaces what the device holds.
+  ///
+  /// Only rows where the caller is the person the absence is FOR arrive: an office-filed request
+  /// counts, a colleague's never does.
+  final List<SyncAbsenceRequestDto> absenceRequests;
+
+  /// False when the payload came from a backend that predates this mirror. The applier then leaves
+  /// the table alone — an older server must not look like "every request was withdrawn".
+  final bool carriesAbsenceRequests;
+
+  /// False when the payload came from a backend that predates the report aggregate. Without it an
+  /// older backend would look like "every report lost its staff, materials and answers", and the
+  /// per-report replace would delete children the device already holds.
+  final bool carriesReportAggregate;
+
+  /// Same, for the attachment list — kept apart because it is pruned over a different entity set
+  /// (reports AND tickets) and travels under its own member.
+  final bool carriesAllegati;
 
   /// True when the server stopped at its 5000-row cap. Informational: the authoritative list of
   /// what was left out is [checklistOmittedTicketIds].
@@ -65,6 +165,47 @@ class SyncResultDto {
   final bool carriesProdottiAssistenza;
   final bool carriesAgents;
 
+  /// False when the payload came from a backend that predates the maintenance-template catalogue.
+  /// Without it an older backend would look like "every template was deleted" and the wholesale
+  /// replace would wipe the picker.
+  final bool carriesMaintenanceTemplates;
+
+  /// False when the payload came from a backend that predates the per-ticket fabbisogno mirror.
+  /// Without it an older backend would look like "every ticket's planned materials were cleared"
+  /// and the per-ticket replace would empty the Fabbisogno tab.
+  final bool carriesTicketMateriali;
+
+  /// False when the payload came from a backend that predates the cantiere-crew member. Without it
+  /// an older backend would look like "every crew is empty" and the per-cantiere replace would wipe
+  /// the mirror — the same trap [carriesMaintenanceTemplates] closes for the template catalogue.
+  final bool carriesCantiereCrewAssignments;
+
+  /// False when the payload came from a backend that predates the ticket-history member. Only
+  /// informational: history is upsert-only and pruned by the ticket manifest, so a missing member
+  /// deletes nothing — it just means this sync carries no timeline.
+  final bool carriesTicketHistory;
+
+  /// False when the payload came from a backend that predates the warehouse member. Without it an
+  /// older backend would look like "the tenant has no warehouses" and the wholesale replace would
+  /// empty the material picker's sources — the same trap [carriesMaintenanceTemplates] closes.
+  final bool carriesMagazzini;
+
+  /// False when the payload came from a backend that predates the extension-field definitions.
+  /// Without it an older backend would look like "every custom field was deleted" and the
+  /// wholesale replace would empty the section — the same trap
+  /// [carriesMaintenanceTemplates] closes for the template catalogue.
+  final bool carriesExtensionFieldDefinitions;
+
+  /// False when the payload came from a backend that predates the customer-contacts member. Without
+  /// it an older backend would look like "every customer lost their contacts" and the scoped replace
+  /// would empty the Contatti section.
+  final bool carriesContacts;
+
+  /// The server's authoritative in-scope id sets, one nullable list per collection (sync v2).
+  /// Null when the backend predates it — and null means NO PRUNE, never "everything left scope".
+  /// See [SyncScopeDto] and [SyncService]'s prune.
+  final SyncScopeDto? scope;
+
   static const Set<String> checklistWireKeys = {
     'controlGroups',
     'ticketControls',
@@ -77,13 +218,50 @@ class SyncResultDto {
   };
 
   /// The reference members, kept apart from [checklistWireKeys]: they carry the mirror the create
-  /// wizard reads, not a ticket's checklist state.
+  /// wizard reads, not a ticket's checklist state. `ticketMateriali` rides here too — it is a
+  /// mirrored, replace-on-arrival list like the rest, just scoped per ticket rather than per tenant.
+  /// The reference members, kept apart from [checklistWireKeys]: they carry local mirrors, not a
+  /// ticket's checklist state.
+  ///
+  /// `cantiereCrewAssignments` mirrors the crew of the payload's cantieri (who is assigned to each
+  /// worksite and which of them is lead) into `cantiere_crew_assignments`, so the lead-only
+  /// clock-in affordances and the teammate picker work offline. It is additive and old-backend
+  /// tolerant: a server that predates the member omits the key, and
+  /// [carriesCantiereCrewAssignments] then reads false so the mirror keeps whatever it holds
+  /// instead of being wiped as "every crew is empty".
   static const Set<String> referenceWireKeys = {
     'contracts',
     'commesse',
     'prodottiAssistenza',
     'agents',
+    'contacts',
+    'maintenanceTemplates',
+    'ticketMateriali',
+    'cantiereCrewAssignments',
+    'extensionFieldDefinitions',
+    'magazzini',
   };
+
+  /// The sync-v2 additions that travel beside the row lists: the authoritative scope and the
+  /// barcode collection the offline scan resolves through.
+  static const Set<String> scopeWireKeys = {'scope', 'materialiBarcodes'};
+
+  /// The report aggregate (O-8a). Its own set rather than a member of [checklistWireKeys]: these
+  /// rows describe reports, not a ticket's checklist, and the contract gate checks this group
+  /// still names members `MobileUserSyncResult` declares.
+  static const Set<String> reportAggregateWireKeys = {
+    'reportStaff',
+    'reportMateriali',
+    'reportControlli',
+    'allegati',
+    'reportVersions',
+  };
+
+  /// The caller's own ticket timer sessions (O-9). Its own set for the same reason as the report
+  /// aggregate: these rows fill the Ore tab and the running-timer indicator, not a ticket
+  /// checklist, and the contract gate checks this group still names members
+  /// `MobileUserSyncResult` declares.
+  static const Set<String> ticketTimerWireKeys = {'ticketWorkLogs'};
 
   const SyncResultDto({
     required this.syncedAt,
@@ -97,20 +275,38 @@ class SyncResultDto {
     this.ticketMateriali = const [],
     required this.materiali,
     this.materialiBarcodes = const [],
+    this.magazzini = const [],
     required this.cantieri,
+    this.cantiereCrewAssignments = const [],
     required this.ticketStatuses,
     required this.ticketTypes,
     required this.colleagues,
+    this.contacts = const [],
     this.contracts = const [],
     this.commesse = const [],
     this.prodottiAssistenza = const [],
     this.agents = const [],
+    this.maintenanceTemplates = const [],
+    this.extensionFieldDefinitions = const [],
     this.controlGroups = const [],
     this.ticketControls = const [],
     this.ticketAssets = const [],
     this.assets = const [],
     this.strumenti = const [],
     this.reportStrumenti = const [],
+    this.reportStaff = const [],
+    this.reportMateriali = const [],
+    this.reportControlli = const [],
+    this.allegati = const [],
+    this.reportVersions = const [],
+    this.ticketWorkLogs = const [],
+    this.ticketHistory = const [],
+    this.cantiereWorkLogs = const [],
+    this.carriesCantiereWorkLogs = false,
+    this.absenceRequests = const [],
+    this.carriesAbsenceRequests = false,
+    this.carriesReportAggregate = false,
+    this.carriesAllegati = false,
     this.checklistTruncated = false,
     this.checklistOmittedTicketIds = const [],
     this.carriesChecklist = false,
@@ -119,6 +315,14 @@ class SyncResultDto {
     this.carriesCommesse = false,
     this.carriesProdottiAssistenza = false,
     this.carriesAgents = false,
+    this.carriesMaintenanceTemplates = false,
+    this.carriesTicketMateriali = false,
+    this.carriesCantiereCrewAssignments = false,
+    this.carriesTicketHistory = false,
+    this.carriesMagazzini = false,
+    this.carriesExtensionFieldDefinitions = false,
+    this.carriesContacts = false,
+    this.scope,
   });
 
   factory SyncResultDto.fromJson(Map<String, dynamic> j) {
@@ -140,10 +344,16 @@ class SyncResultDto {
         j['materialiBarcodes'],
         MaterialeBarcodeDto.fromJson,
       ),
+      magazzini: _list(j['magazzini'], SyncMagazzinoDto.fromJson),
       cantieri: _list(j['cantieri'], CantiereDto.fromJson),
+      cantiereCrewAssignments: _list(
+        j['cantiereCrewAssignments'],
+        SyncCantiereCrewAssignmentDto.fromJson,
+      ),
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
       colleagues: _list(j['colleagues'], ColleagueDto.fromJson),
+      contacts: _list(j['contacts'], CustomerContactDto.fromJson),
       contracts: _list(j['contracts'], ContractSyncDto.fromJson),
       commesse: _list(j['commesse'], CommessaSyncDto.fromJson),
       prodottiAssistenza: _list(
@@ -151,6 +361,14 @@ class SyncResultDto {
         ProdottoAssistenzaSyncDto.fromJson,
       ),
       agents: _list(j['agents'], AgentSyncDto.fromJson),
+      maintenanceTemplates: _list(
+        j['maintenanceTemplates'],
+        SyncMaintenanceTemplateDto.fromJson,
+      ),
+      extensionFieldDefinitions: _list(
+        j['extensionFieldDefinitions'],
+        SyncExtensionFieldDefinitionDto.fromJson,
+      ),
       controlGroups: _list(j['controlGroups'], SyncControlGroupDto.fromJson),
       ticketControls: _list(j['ticketControls'], SyncTicketControlDto.fromJson),
       ticketAssets: _list(j['ticketAssets'], SyncTicketAssetDto.fromJson),
@@ -159,6 +377,27 @@ class SyncResultDto {
       reportStrumenti: _list(
         j['reportStrumenti'],
         SyncReportStrumentoDto.fromJson,
+      ),
+      reportStaff: _list(j['reportStaff'], SyncReportStaffDto.fromJson),
+      reportMateriali: _list(
+        j['reportMateriali'],
+        SyncReportMaterialeDto.fromJson,
+      ),
+      reportControlli: _list(
+        j['reportControlli'],
+        SyncReportControlloDto.fromJson,
+      ),
+      allegati: _list(j['allegati'], SyncReportAllegatoDto.fromJson),
+      reportVersions: _list(j['reportVersions'], SyncReportVersionDto.fromJson),
+      ticketWorkLogs: _list(j['ticketWorkLogs'], SyncTicketWorkLogDto.fromJson),
+      ticketHistory: _list(j['ticketHistory'], SyncTicketHistoryDto.fromJson),
+      cantiereWorkLogs: _list(
+        j['cantiereWorkLogs'],
+        SyncCantiereWorkLogDto.fromJson,
+      ),
+      absenceRequests: _list(
+        j['absenceRequests'],
+        SyncAbsenceRequestDto.fromJson,
       ),
       checklistTruncated: j['checklistTruncated'] as bool? ?? false,
       checklistOmittedTicketIds:
@@ -170,8 +409,116 @@ class SyncResultDto {
       carriesCommesse: j.containsKey('commesse'),
       carriesProdottiAssistenza: j.containsKey('prodottiAssistenza'),
       carriesAgents: j.containsKey('agents'),
+      carriesMaintenanceTemplates: j.containsKey('maintenanceTemplates'),
+      carriesReportAggregate: j.containsKey('reportStaff'),
+      carriesAllegati: j.containsKey('allegati'),
+      carriesTicketMateriali: j.containsKey('ticketMateriali'),
+      carriesCantiereCrewAssignments: j.containsKey('cantiereCrewAssignments'),
+      carriesTicketHistory: j.containsKey('ticketHistory'),
+      carriesCantiereWorkLogs: j.containsKey('cantiereWorkLogs'),
+      carriesAbsenceRequests: j.containsKey('absenceRequests'),
+      carriesMagazzini: j.containsKey('magazzini'),
+      carriesExtensionFieldDefinitions: j.containsKey(
+        'extensionFieldDefinitions',
+      ),
+      carriesContacts: j.containsKey('contacts'),
+      scope: j['scope'] == null
+          ? null
+          : SyncScopeDto.fromJson(j['scope'] as Map<String, dynamic>),
     );
   }
+}
+
+// ── Scope ─────────────────────────────────────────────────────────────────────
+//
+// The authoritative in-scope id set per collection (sync v2). Distinct from the row lists it
+// travels with: on a delta those carry only what changed after the cursor, while this carries
+// everything still in scope. The phone prunes what is absent — see `SyncService`'s prune.
+//
+// Nullability is load-bearing in BOTH directions:
+//   * the whole object null   → an older backend, or a server that could not compute scope:
+//                                no authoritative set at all, so no prune;
+//   * a member null           → this caller is not delivered that collection at all (today:
+//                                `strumenti` without `team.strumento.read`): no prune for it;
+//   * a member `[]`           → genuinely nothing is in scope: everything local goes.
+// That is why every member is `List<String>?` and not a non-null list with an `isEmpty` flag.
+class SyncScopeDto {
+  const SyncScopeDto({
+    this.schedules,
+    this.tickets,
+    this.locations,
+    this.customers,
+    this.cantieri,
+    this.agents,
+    this.draftReports,
+    this.submittedReports,
+    this.materiali,
+    this.materialiBarcodes,
+    this.strumenti,
+    this.ticketWorkLogs,
+    this.cantiereWorkLogs,
+  });
+
+  final List<String>? schedules;
+  final List<String>? tickets;
+  final List<String>? locations;
+  final List<String>? customers;
+  final List<String>? cantieri;
+  final List<String>? agents;
+  final List<String>? draftReports;
+  final List<String>? submittedReports;
+  final List<String>? materiali;
+  final List<String>? materialiBarcodes;
+  final List<String>? strumenti;
+
+  /// The caller's own ticket timer sessions the server currently holds in scope (the 90-day window
+  /// plus any still running). Null on an older backend → no prune. Never includes another user's
+  /// session, so this never says a colleague's rows were deleted.
+  final List<String>? ticketWorkLogs;
+
+  /// The caller's own cantiere punches the server currently holds in scope (the window plus any
+  /// still-open shift). Null on an older backend → no prune, so a server that predates the member
+  /// cannot empty the device's site history. Never includes a colleague's punch.
+  final List<String>? cantiereWorkLogs;
+
+  /// The exact keys `fromJson` reads — compared with the OpenAPI snapshot by the inbound
+  /// contract gate.
+  static const Set<String> wireKeys = {
+    'schedules',
+    'tickets',
+    'locations',
+    'customers',
+    'cantieri',
+    'agents',
+    'draftReports',
+    'submittedReports',
+    'materiali',
+    'materialiBarcodes',
+    'strumenti',
+    'ticketWorkLogs',
+    'cantiereWorkLogs',
+  };
+
+  factory SyncScopeDto.fromJson(Map<String, dynamic> j) => SyncScopeDto(
+    schedules: _idList(j['schedules']),
+    tickets: _idList(j['tickets']),
+    locations: _idList(j['locations']),
+    customers: _idList(j['customers']),
+    cantieri: _idList(j['cantieri']),
+    agents: _idList(j['agents']),
+    draftReports: _idList(j['draftReports']),
+    submittedReports: _idList(j['submittedReports']),
+    materiali: _idList(j['materiali']),
+    materialiBarcodes: _idList(j['materialiBarcodes']),
+    strumenti: _idList(j['strumenti']),
+    ticketWorkLogs: _idList(j['ticketWorkLogs']),
+    cantiereWorkLogs: _idList(j['cantiereWorkLogs']),
+  );
+
+  /// Null stays null ("no authoritative set"); an empty array stays an empty list ("nothing in
+  /// scope"). Never collapse the two.
+  static List<String>? _idList(dynamic v) =>
+      v == null ? null : (v as List<dynamic>).cast<String>();
 }
 
 // ── Colleague ──────────────────────────────────────────────────────────────────
@@ -188,6 +535,82 @@ class ColleagueDto {
     id: j['id'] as String,
     displayName: j['displayName'] as String? ?? '',
   );
+}
+
+// ── Customer contacts ─────────────────────────────────────────────────────────
+
+/// One person at a customer site, as the office recorded them.
+///
+/// Mirrored so the customer screen's *Contatti* section renders from the local cache: it used to
+/// call `GET /api/customers/{id}/contacts` on every open and show an error card offline, which is
+/// exactly where a technician needs a phone number. See the backend's
+/// `MobileUserSyncResult.Contacts` for the scoping and why it is never delta-filtered.
+class CustomerContactDto {
+  final String id;
+
+  /// The audit members every synced entity carries. None of them is rendered on the phone: the
+  /// contact card shows a name, a role and the two ways of reaching that person. They are read
+  /// anyway because the inbound contract gate compares this class's key set with the server's
+  /// schema in BOTH directions — a schema member the app silently ignores is exactly the drift the
+  /// gate exists to make visible, and `MaterialeBarcodeDto` set this precedent.
+  final String? tenantId;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  /// Who last edited the contact, on the office side. Carried, never shown; see [tenantId].
+  final String? updatedByUserId;
+
+  final String customerId;
+  final String name;
+  final String? role;
+  final String? phone;
+  final String? email;
+  final String? notes;
+
+  const CustomerContactDto({
+    required this.id,
+    required this.customerId,
+    required this.name,
+    this.tenantId,
+    this.createdAt,
+    this.updatedAt,
+    this.updatedByUserId,
+    this.role,
+    this.phone,
+    this.email,
+    this.notes,
+  });
+
+  factory CustomerContactDto.fromJson(Map<String, dynamic> j) =>
+      CustomerContactDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String?,
+        createdAt: _dt(j['createdAt']),
+        updatedAt: _dt(j['updatedAt']),
+        updatedByUserId: j['updatedByUserId'] as String?,
+        customerId: j['customerId'] as String,
+        name: j['name'] as String? ?? '',
+        role: j['role'] as String?,
+        phone: j['phone'] as String?,
+        email: j['email'] as String?,
+        notes: j['notes'] as String?,
+      );
+
+  /// The exact keys [fromJson] reads, for the inbound contract gate — see
+  /// `test/contract/sync_inbound_contract_test.dart`.
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'updatedByUserId',
+    'customerId',
+    'name',
+    'role',
+    'phone',
+    'email',
+    'notes',
+  };
 }
 
 // ── Customer ───────────────────────────────────────────────────────────────────
@@ -209,6 +632,27 @@ class CustomerDto {
   final String? notes;
   final bool isActive;
 
+  /// `Customer.AgentId` — the customer's one agent, which pre-fills a new ticket's Riferimento.
+  /// Absent from an older backend's payload, which reads as null: no pre-fill, never an error.
+  final String? agentId;
+
+  /// Mobile number, distinct from the landline [phone] (`cellulare` on the wire).
+  final String? cellulare;
+
+  /// Codice Fiscale — `fiscalCode` on the wire, not `codiceFiscale`: the server entity overrides
+  /// its own name and the default camelCase policy would emit the wrong key. Null on an older
+  /// backend's payload, which is simply "unknown", never an error.
+  final String? fiscalCode;
+
+  /// Codice Destinatario SDI — `sdiCode` on the wire.
+  final String? sdiCode;
+
+  /// PEC address — `pec` on the wire (`PECEmail` on the entity).
+  final String? pec;
+
+  /// Province code (sigla) — `province` on the wire (`Provincia` on the entity).
+  final String? province;
+
   const CustomerDto({
     required this.id,
     required this.tenantId,
@@ -225,6 +669,12 @@ class CustomerDto {
     this.contactPerson,
     this.notes,
     this.isActive = true,
+    this.agentId,
+    this.cellulare,
+    this.fiscalCode,
+    this.sdiCode,
+    this.pec,
+    this.province,
   });
 
   factory CustomerDto.fromJson(Map<String, dynamic> j) => CustomerDto(
@@ -243,6 +693,12 @@ class CustomerDto {
     contactPerson: j['contactPerson'] as String?,
     notes: j['notes'] as String?,
     isActive: j['isActive'] as bool? ?? true,
+    agentId: j['agentId'] as String?,
+    cellulare: j['cellulare'] as String?,
+    fiscalCode: j['fiscalCode'] as String?,
+    sdiCode: j['sdiCode'] as String?,
+    pec: j['pec'] as String?,
+    province: j['province'] as String?,
   );
 }
 
@@ -332,7 +788,6 @@ class TicketDto {
   final String? technicianNotes;
   final String? internalNotes;
   final String? contractId;
-  final String? prodottoAssistenzaId;
   final String? commessaId;
 
   /// The cantiere this ticket is linked to, when it has one. See `Tickets.cantiereId`'s own doc
@@ -350,6 +805,21 @@ class TicketDto {
 
   /// Free-form labels — see `Tickets.tagsJson`'s own doc comment in `app_database.dart`.
   final List<String> tags;
+
+  /// The tenant's custom-field values for this ticket, as the server's raw JSON-object text.
+  ///
+  /// On the wire this is a JSON *string* holding JSON — `Ticket.ExtensionValues` is a `string?` over
+  /// a Postgres `jsonb` column, so System.Text.Json writes it quoted — hence `String?` here and a
+  /// double decode at the point of use. Null means the ticket has no custom-field values.
+  final String? extensionValues;
+
+  /// The products (units) this ticket covers — see `Tickets.prodottoAssistenzaIdsJson`'s own doc
+  /// comment in `app_database.dart`.
+  ///
+  /// Not a column on the server: `MobileUserSyncService` fills it per synced ticket from the
+  /// `TicketProdottoAssistenza` join table. Empty means the ticket covers no unit, which is also
+  /// what an older server that does not yet fill it sends — the list is additive on the wire.
+  final List<String> prodottoAssistenzaIds;
 
   const TicketDto({
     required this.id,
@@ -369,12 +839,13 @@ class TicketDto {
     this.technicianNotes,
     this.internalNotes,
     this.contractId,
-    this.prodottoAssistenzaId,
     this.commessaId,
     this.cantiereId,
     this.priority,
     this.dueDate,
     this.tags = const [],
+    this.extensionValues,
+    this.prodottoAssistenzaIds = const [],
   });
 
   factory TicketDto.fromJson(Map<String, dynamic> j) => TicketDto(
@@ -395,13 +866,57 @@ class TicketDto {
     technicianNotes: j['technicianNotes'] as String?,
     internalNotes: j['internalNotes'] as String?,
     contractId: j['contractId'] as String?,
-    prodottoAssistenzaId: j['prodottoAssistenzaId'] as String?,
     commessaId: j['commessaId'] as String?,
     cantiereId: j['cantiereId'] as String?,
-    priority: j['priority'] as String?,
+    // The backend property is `Priorita` with `[JsonPropertyName("priorita")]`, so the wire key is
+    // the Italian word — reading `priority` yielded null on every ticket ever synced, and the card
+    // (and its stripe) has always shown the default. Pinned by [readKeys] below.
+    priority: j['priorita'] as String?,
     dueDate: parseDateOnly(j['dueDate']),
     tags: (j['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
+    extensionValues: j['extensionValues'] as String?,
+    prodottoAssistenzaIds:
+        (j['prodottoAssistenzaIds'] as List<dynamic>?)?.cast<String>() ??
+        const [],
   );
+
+  /// Every wire key [TicketDto.fromJson] reads.
+  ///
+  /// Deliberately not `wireKeys` like the reference DTOs: those are compared with the OpenAPI
+  /// schema in BOTH directions, and that cannot hold for an entity graph the server composes —
+  /// `Ticket` carries members this client ignores on purpose. The contract test compares this set
+  /// one way only: every key here must exist on the server's `Ticket` schema. That is what catches
+  /// a rename — the `priorita` key was read as `priority` for as long as this DTO has existed, and
+  /// nothing failed, because a missing JSON key is just `null`.
+  ///
+  /// Keep it in step with `fromJson`: a key added there and not here is unpinned, which is the
+  /// state this comment is here to make expensive.
+  static const Set<String> readKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'title',
+    'numero',
+    'description',
+    'customerId',
+    'locationId',
+    'assignedUserId',
+    'statusId',
+    'typeId',
+    'agentId',
+    'closedAt',
+    'technicianNotes',
+    'internalNotes',
+    'contractId',
+    'commessaId',
+    'cantiereId',
+    'priorita',
+    'dueDate',
+    'tags',
+    'extensionValues',
+    'prodottoAssistenzaIds',
+  };
 }
 
 // ── Materiale ──────────────────────────────────────────────────────────────────
@@ -475,6 +990,7 @@ class SyncTicketMaterialeDto {
   final String? unitOfMeasure;
   final String? notes;
   final bool isAvailable;
+  final String? magazzinoId;
 
   const SyncTicketMaterialeDto({
     required this.id,
@@ -488,6 +1004,7 @@ class SyncTicketMaterialeDto {
     this.unitOfMeasure,
     this.notes,
     this.isAvailable = false,
+    this.magazzinoId,
   });
 
   factory SyncTicketMaterialeDto.fromJson(Map<String, dynamic> j) =>
@@ -503,6 +1020,7 @@ class SyncTicketMaterialeDto {
         unitOfMeasure: j['unitOfMeasure'] as String?,
         notes: j['notes'] as String?,
         isAvailable: j['isAvailable'] as bool? ?? false,
+        magazzinoId: j['magazzinoId'] as String?,
       );
 }
 
@@ -532,6 +1050,20 @@ class MaterialeBarcodeDto {
     this.isPrimary = false,
   });
 
+  /// The exact keys `fromJson` reads — compared with the OpenAPI snapshot by the inbound
+  /// contract gate. The server carries all eight on the wire (including the nullable ones, which
+  /// it must send rather than omit: this parser reads them unconditionally).
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'materialeId',
+    'barcode',
+    'barcodeType',
+    'isPrimary',
+  };
+
   factory MaterialeBarcodeDto.fromJson(Map<String, dynamic> j) =>
       MaterialeBarcodeDto(
         id: j['id'] as String,
@@ -543,6 +1075,62 @@ class MaterialeBarcodeDto {
         barcodeType: j['barcodeType'] as String?,
         isPrimary: j['isPrimary'] as bool? ?? false,
       );
+}
+
+// ── Magazzino ────────────────────────────────────────────────────────────────
+//
+// Mirrors the backend's SyncMagazzinoDto: the tenant's warehouse rows, so the rapportino material
+// picker can name a line's source with no signal. See Magazzini (local Drift table) for the bug
+// this closes.
+class SyncMagazzinoDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String nome;
+
+  /// `"Sede"` or `"Furgone"` — the enum's own `JsonStringEnumConverter` label, the same string
+  /// [MagazzinoDto.tipo] carries from the REST endpoints.
+  final String tipo;
+
+  /// For a Furgone: the technician it is assigned to. Null for a Sede.
+  final String? assegnatoUserId;
+  final bool isActive;
+
+  const SyncMagazzinoDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.nome,
+    required this.tipo,
+    this.assegnatoUserId,
+    this.isActive = true,
+  });
+
+  /// The exact keys `fromJson` reads — compared with the OpenAPI snapshot by the inbound
+  /// contract gate. The server carries all eight unconditionally, nullable ones included.
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'nome',
+    'tipo',
+    'assegnatoUserId',
+    'isActive',
+  };
+
+  factory SyncMagazzinoDto.fromJson(Map<String, dynamic> j) => SyncMagazzinoDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    nome: j['nome'] as String,
+    tipo: j['tipo'] as String? ?? 'Sede',
+    assegnatoUserId: j['assegnatoUserId'] as String?,
+    isActive: j['isActive'] as bool? ?? true,
+  );
 }
 
 // ── Cantiere ───────────────────────────────────────────────────────────────────
@@ -577,6 +1165,10 @@ class CantiereDto {
   final String? customerId;
   final String? commessaId;
 
+  /// The tenant's custom-field values for this cantiere, raw JSON-object text — see
+  /// `TicketDto.extensionValues` for the double-encoded wire shape.
+  final String? extensionValues;
+
   const CantiereDto({
     required this.id,
     required this.tenantId,
@@ -592,6 +1184,7 @@ class CantiereDto {
     this.status = 0,
     this.customerId,
     this.commessaId,
+    this.extensionValues,
   });
 
   factory CantiereDto.fromJson(Map<String, dynamic> j) => CantiereDto(
@@ -609,7 +1202,116 @@ class CantiereDto {
     status: parseCantiereStatus(j['status']),
     customerId: j['customerId'] as String?,
     commessaId: j['commessaId'] as String?,
+    extensionValues: j['extensionValues'] as String?,
   );
+}
+
+// ── Tenant extension-field definitions ─────────────────────────────────────────
+
+/// One `extensionFieldDefinitions[]` row — a tenant-configured custom field ("campo aggiuntivo")
+/// for an extensible entity type.
+///
+/// Mirrors the server's `SyncExtensionFieldDefinitionDto`, which itself carries exactly the members
+/// `ExtensionFieldDefinitionSummaryDto` hands the office forms — so the mirrored section renders
+/// the same online and offline. `showInList` travels on the wire (it is an office-grid concern) and
+/// is deliberately not read here: nothing on the phone renders a list column from it.
+class SyncExtensionFieldDefinitionDto {
+  final String id;
+  final String key;
+  final String label;
+  final String entityType;
+  final String fieldType;
+  final bool isRequired;
+  final bool showInCard;
+  final int sortOrder;
+  final String? options;
+  final String? unit;
+  final String? defaultValue;
+  final String? placeholder;
+
+  const SyncExtensionFieldDefinitionDto({
+    required this.id,
+    required this.key,
+    required this.label,
+    required this.entityType,
+    required this.fieldType,
+    this.isRequired = false,
+    this.showInCard = false,
+    this.sortOrder = 0,
+    this.options,
+    this.unit,
+    this.defaultValue,
+    this.placeholder,
+  });
+
+  /// Exactly the keys [fromJson] reads — the inbound contract test compares this with the
+  /// server's declared schema in both directions, so a member added on one side alone fails.
+  static const Set<String> wireKeys = {
+    'id',
+    'key',
+    'label',
+    'entityType',
+    'fieldType',
+    'isRequired',
+    'showInList',
+    'showInCard',
+    'sortOrder',
+    'options',
+    'unit',
+    'defaultValue',
+    'placeholder',
+  };
+
+  factory SyncExtensionFieldDefinitionDto.fromJson(Map<String, dynamic> j) =>
+      SyncExtensionFieldDefinitionDto(
+        id: j['id'] as String,
+        key: j['key'] as String,
+        label: j['label'] as String,
+        entityType: j['entityType'] as String,
+        fieldType: j['fieldType'] as String? ?? 'text',
+        isRequired: j['isRequired'] as bool? ?? false,
+        showInCard: j['showInCard'] as bool? ?? false,
+        sortOrder: (j['sortOrder'] as num?)?.toInt() ?? 0,
+        options: j['options'] as String?,
+        unit: j['unit'] as String?,
+        defaultValue: j['defaultValue'] as String?,
+        placeholder: j['placeholder'] as String?,
+      );
+}
+
+// ── Cantiere crew assignment ────────────────────────────────────────────────────
+
+/// One `cantiereCrewAssignments[]` row — a person assigned to a cantiere, and whether they are its
+/// lead.
+///
+/// Mirrors the server's `CantiereCrewAssignment` through the sync payload rather than the
+/// paginated `GET /api/cantieri/{id}/assegnazioni` shape the live client parses: the same facts,
+/// plus the `cantiereId` the live endpoint already has in its path. Ids are Guids on the wire and
+/// stay strings here, exactly like every other sync DTO.
+class SyncCantiereCrewAssignmentDto {
+  final String id;
+  final String cantiereId;
+  final String userId;
+  final bool isLead;
+
+  const SyncCantiereCrewAssignmentDto({
+    required this.id,
+    required this.cantiereId,
+    required this.userId,
+    this.isLead = false,
+  });
+
+  /// Exactly the keys [fromJson] reads — the inbound contract test compares this with the
+  /// server's declared schema in both directions, so a member added on one side alone fails.
+  static const Set<String> wireKeys = {'id', 'cantiereId', 'userId', 'isLead'};
+
+  factory SyncCantiereCrewAssignmentDto.fromJson(Map<String, dynamic> j) =>
+      SyncCantiereCrewAssignmentDto(
+        id: j['id'] as String,
+        cantiereId: j['cantiereId'] as String,
+        userId: j['userId'] as String,
+        isLead: j['isLead'] as bool? ?? false,
+      );
 }
 
 // ── TicketStatus ───────────────────────────────────────────────────────────────
@@ -620,6 +1322,11 @@ class TicketStatusDto {
   final String name;
   final bool isDefault;
   final bool isClosed;
+  final bool isInProgress;
+
+  /// "Solo ufficio" — only a caller holding `interventi.ticket.configure` may move a ticket into or
+  /// out of this status. See the `TicketStatuses` table's own comment.
+  final bool officeOnly;
 
   const TicketStatusDto({
     required this.id,
@@ -627,6 +1334,8 @@ class TicketStatusDto {
     required this.name,
     required this.isDefault,
     required this.isClosed,
+    required this.isInProgress,
+    this.officeOnly = false,
   });
 
   factory TicketStatusDto.fromJson(Map<String, dynamic> j) => TicketStatusDto(
@@ -635,6 +1344,12 @@ class TicketStatusDto {
     name: j['name'] as String,
     isDefault: j['isDefault'] as bool? ?? false,
     isClosed: j['isClosed'] as bool? ?? false,
+    // Absent from a payload an older server sends: false is the safe default — the dashboard then
+    // keeps falling back to a running timer as its only "work has started" signal, as before.
+    isInProgress: j['isInProgress'] as bool? ?? false,
+    // Same rule: an older server does not send it, and "no restriction" is what every status meant
+    // before the flag existed.
+    officeOnly: j['officeOnly'] as bool? ?? false,
   );
 }
 
@@ -683,6 +1398,29 @@ class ScheduleDto {
   final String title;
   final String description;
 
+  /// True when this row exists because an absence request (Ferie/Permesso/Malattia) was approved,
+  /// not because someone scheduled real work.
+  ///
+  /// The server materialises an approved absence as a completely ordinary `Schedule` row, so
+  /// without this flag the device cannot tell one apart from a job: it counted in "oggi" and in
+  /// the work queue. Defaults to false so a build talking to an older backend reads every row as a
+  /// job — the behaviour it had before the flag existed — rather than guessing.
+  final bool isAssenza;
+
+  /// True when this day belongs to a multi-day plan rather than to a job scheduled on its own.
+  ///
+  /// A block reserves every day it covers, so the day is not free to edit, drag or delete; the
+  /// admin screens read this the same way they already read [isAssenza]. Defaults to false so a
+  /// build talking to an older backend reads every row as an ordinary day — the behaviour it had
+  /// before the flag existed — rather than locking a day nobody reserved.
+  final bool isBlockOccupied;
+
+  /// The absence request this row was materialised from, when it is one.
+  ///
+  /// Null on every ordinary job and on a multi-day block, which is not an absence: only an
+  /// approved absence request produces this value.
+  final String? absenceRequestId;
+
   /// Everyone on this schedule, with every reason they are on it.
   ///
   /// Replaces teamLeadId / staffIds / squadraId, which the server dropped (backend ADR-0009).
@@ -705,6 +1443,9 @@ class ScheduleDto {
     required this.allDay,
     required this.title,
     required this.description,
+    this.isAssenza = false,
+    this.isBlockOccupied = false,
+    this.absenceRequestId,
     this.assignees = const [],
   });
 
@@ -728,6 +1469,9 @@ class ScheduleDto {
       allDay: j['allDay'] as bool? ?? false,
       title: j['title'] as String? ?? '',
       description: j['description'] as String? ?? '',
+      isAssenza: j['isAssenza'] as bool? ?? false,
+      isBlockOccupied: j['isBlockOccupied'] as bool? ?? false,
+      absenceRequestId: j['absenceRequestId'] as String?,
       assignees: (j['assignees'] as List<dynamic>? ?? const [])
           .map((e) => ScheduleAssigneeDto.fromJson(e as Map<String, dynamic>))
           .toList(growable: false),
@@ -800,6 +1544,10 @@ class ReportDto {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final String title;
+
+  /// The rapportino's human number, server-assigned — see `DraftReports.numero`'s own doc comment
+  /// in `app_database.dart`. Null on a draft created locally and not yet submitted.
+  final String? numero;
   final String? scheduleId;
   final String? ticketId;
   final String? customerId;
@@ -811,7 +1559,6 @@ class ReportDto {
   final String locationId;
   final DateTime? startedAt;
   final DateTime? endedAt;
-  final String? documentTemplateId;
   final String? customerSignatureAllegatoId;
   final String? technicianSignatureAllegatoId;
   final String? technicianNotes;
@@ -825,12 +1572,27 @@ class ReportDto {
   final String? customerSignoffText;
   final DateTime? customerSignoffAt;
 
+  /// Whether a model produced any of this rapportino's text, as the server recorded it.
+  ///
+  /// The server has carried `isAiAssisted` since ADR-0016 (it is `Report.IsAiAssisted`, and the
+  /// column here has existed since the draft editor started setting it locally). This DTO never
+  /// read it, so a report that arrived from the server — a draft written on another device, or
+  /// this one after a reinstall — lost its provenance marker, and `_upsertDraftReports` wrote the
+  /// Drift default `false` over it. Authorship is a compliance claim (ADR-0016 §2), not a UI hint:
+  /// the flag has to survive a round trip through the server unchanged.
+  final bool isAiAssisted;
+
+  /// The tenant's custom-field values for this rapportino, raw JSON-object text — see
+  /// `TicketDto.extensionValues` for the double-encoded wire shape.
+  final String? extensionValues;
+
   const ReportDto({
     required this.id,
     required this.tenantId,
     required this.createdAt,
     this.updatedAt,
     required this.title,
+    this.numero,
     this.scheduleId,
     this.ticketId,
     this.customerId,
@@ -842,7 +1604,6 @@ class ReportDto {
     required this.locationId,
     this.startedAt,
     this.endedAt,
-    this.documentTemplateId,
     this.customerSignatureAllegatoId,
     this.technicianSignatureAllegatoId,
     this.technicianNotes,
@@ -855,6 +1616,8 @@ class ReportDto {
     this.materialiNotRequired = false,
     this.customerSignoffText,
     this.customerSignoffAt,
+    this.isAiAssisted = false,
+    this.extensionValues,
   });
 
   factory ReportDto.fromJson(Map<String, dynamic> j) => ReportDto(
@@ -863,6 +1626,7 @@ class ReportDto {
     createdAt: DateTime.parse(j['createdAt'] as String),
     updatedAt: _dt(j['updatedAt']),
     title: j['title'] as String,
+    numero: j['numero'] as String?,
     scheduleId: j['scheduleId'] as String?,
     ticketId: j['ticketId'] as String?,
     customerId: j['customerId'] as String?,
@@ -874,7 +1638,6 @@ class ReportDto {
     locationId: j['locationId'] as String,
     startedAt: _dt(j['startedAt']),
     endedAt: _dt(j['endedAt']),
-    documentTemplateId: j['documentTemplateId'] as String?,
     customerSignatureAllegatoId: j['customerSignatureAllegatoId'] as String?,
     technicianSignatureAllegatoId:
         j['technicianSignatureAllegatoId'] as String?,
@@ -888,7 +1651,46 @@ class ReportDto {
     materialiNotRequired: j['materialiNotRequired'] as bool? ?? false,
     customerSignoffText: j['customerSignoffText'] as String?,
     customerSignoffAt: _dt(j['customerSignoffAt']),
+    isAiAssisted: j['isAiAssisted'] as bool? ?? false,
+    extensionValues: j['extensionValues'] as String?,
   );
+
+  /// Every wire key [ReportDto.fromJson] reads — the same one-way pin as [TicketDto.readKeys],
+  /// and here it has already earned its keep: `documentTemplateId` was read for years against a
+  /// server schema that has no such property, so the field was permanently null.
+  static const Set<String> readKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'title',
+    'numero',
+    'scheduleId',
+    'ticketId',
+    'customerId',
+    'cantiereId',
+    'details',
+    'diagnosi',
+    'soluzione',
+    'insertedUserId',
+    'locationId',
+    'startedAt',
+    'endedAt',
+    'customerSignatureAllegatoId',
+    'technicianSignatureAllegatoId',
+    'technicianNotes',
+    'closedAt',
+    'stato',
+    'inviatoAt',
+    'controllatoAt',
+    'controllatoDa',
+    'fatturatoAt',
+    'materialiNotRequired',
+    'customerSignoffText',
+    'customerSignoffAt',
+    'isAiAssisted',
+    'extensionValues',
+  };
 }
 
 // ── Reference entities ──────────────────────────────────────────────────────────
@@ -1135,8 +1937,755 @@ class AgentSyncDto {
   );
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Maintenance template ───────────────────────────────────────────────────────
 
+/// One maintenance checklist template a technician may attach to a new ticket as its checklist —
+/// the "Modello checklist" the web ticket form offers. Mirrors `SyncMaintenanceTemplateDto`; the
+/// `MaintenanceTemplates` table's own doc comment records why the mirror is exactly these six fields.
+class SyncMaintenanceTemplateDto {
+  final String id;
+
+  /// MaintenanceTemplateOrigin: "System" (curated) | "Tenant" (this tenant's own). Kept as the wire
+  /// string rather than parsed to an enum — nothing on the device branches on it.
+  final String origin;
+  final String name;
+  final String? description;
+  final bool isActive;
+
+  /// The version a new ticket would resolve to today, or null while every version is a draft or
+  /// already retired. Null is a real state, not missing data.
+  final int? latestPublishedVersion;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'origin',
+    'name',
+    'description',
+    'isActive',
+    'latestPublishedVersion',
+  };
+
+  const SyncMaintenanceTemplateDto({
+    required this.id,
+    required this.origin,
+    required this.name,
+    this.description,
+    this.isActive = true,
+    this.latestPublishedVersion,
+  });
+
+  factory SyncMaintenanceTemplateDto.fromJson(Map<String, dynamic> j) =>
+      SyncMaintenanceTemplateDto(
+        id: j['id'] as String,
+        origin: j['origin'] as String,
+        name: j['name'] as String,
+        description: j['description'] as String?,
+        isActive: j['isActive'] as bool? ?? true,
+        latestPublishedVersion: _intOrNull(j['latestPublishedVersion']),
+      );
+
+  /// Serializes back to the wire shape. The device only ever READS this DTO; `toJson` exists so a
+  /// test can round-trip its own fixture through the exact keys `fromJson` reads.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'origin': origin,
+    'name': name,
+    'description': description,
+    'isActive': isActive,
+    'latestPublishedVersion': latestPublishedVersion,
+  };
+}
+
+// ── Report aggregate (O-8a) ───────────────────────────────────────────────────
+//
+// The child rows of a report, plus its version and its files. Six classes, one per backend
+// `SyncReport*Dto`; every one of them is a straight wire mirror — no device-side interpretation,
+// because the same values already exist in these tables for reports authored here
+// (`ReportStaffTable`, `ReportStaffSegments`, `ReportMateriali`, `ReportControlli`,
+// `ReportAllegati`), and the point of the mirror is that the two origins become indistinguishable
+// to every reader.
+
+/// One technician's line on a report: hours, kilometres, vehicle and pause.
+class SyncReportStaffDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String reportId;
+  final String userId;
+  final double? hoursWorked;
+  final double kmTraveled;
+  final String? vehicle;
+  final double? costPerKm;
+  final String? notes;
+  final DateTime? startTime;
+  final DateTime? endTime;
+  final int pauseMinutes;
+
+  /// Where this row's hours come from: `Legacy` (0), `Timer` (1), `Manual` (2). Carried so the UI
+  /// can say why a number is what it is.
+  ///
+  /// NOT persisted: `report_staff` has no column for it and the applier drops it, so nothing here
+  /// can read it back after a sync — only a freshly parsed payload has it. The editor's read-only
+  /// rule keys off [segments] instead, which is safe even though a `Manual` row keeps its
+  /// intervals: a corrected figure only exists on a report past Bozza, and `_hydrateBody`
+  /// (`report_editor_providers.dart:623`) refuses to hydrate a server-known non-`Bozza` report at
+  /// all, so one never reaches an editable form.
+  final int hoursSource;
+
+  /// The intervals recorded for this row, oldest first. Always a list, empty when none.
+  final List<SyncReportSegmentDto> segments;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'reportId',
+    'userId',
+    'hoursWorked',
+    'kmTraveled',
+    'vehicle',
+    'costPerKm',
+    'notes',
+    'startTime',
+    'endTime',
+    'pauseMinutes',
+    'hoursSource',
+    'segments',
+  };
+
+  const SyncReportStaffDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.reportId,
+    required this.userId,
+    this.hoursWorked,
+    this.kmTraveled = 0,
+    this.vehicle,
+    this.costPerKm,
+    this.notes,
+    this.startTime,
+    this.endTime,
+    this.pauseMinutes = 0,
+    this.hoursSource = 0,
+    this.segments = const [],
+  });
+
+  factory SyncReportStaffDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportStaffDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        reportId: j['reportId'] as String,
+        userId: j['userId'] as String,
+        hoursWorked: _dbl(j['hoursWorked']),
+        kmTraveled: _dbl(j['kmTraveled']) ?? 0,
+        vehicle: j['vehicle'] as String?,
+        costPerKm: _dbl(j['costPerKm']),
+        notes: j['notes'] as String?,
+        startTime: _dt(j['startTime']),
+        endTime: _dt(j['endTime']),
+        pauseMinutes: _intOrNull(j['pauseMinutes']) ?? 0,
+        hoursSource: _intOrNull(j['hoursSource']) ?? 0,
+        segments: _list(j['segments'], SyncReportSegmentDto.fromJson),
+      );
+}
+
+/// One work interval of a `SyncReportStaffDto` — the mirror of the server's
+/// `SyncReportSegmentDto`, and the reason a rapportino shows the hours the timer recorded instead
+/// of the span from first start to last stop.
+class SyncReportSegmentDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String reportId;
+  final String userId;
+  final DateTime startUtc;
+  final DateTime endUtc;
+
+  /// The phone's own id for the tap, when this interval originated on a device that sent one.
+  final String? clientId;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'reportId',
+    'userId',
+    'startUtc',
+    'endUtc',
+    'clientId',
+  };
+
+  const SyncReportSegmentDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.reportId,
+    required this.userId,
+    required this.startUtc,
+    required this.endUtc,
+    this.clientId,
+  });
+
+  factory SyncReportSegmentDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportSegmentDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        reportId: j['reportId'] as String,
+        userId: j['userId'] as String,
+        startUtc: DateTime.parse(j['startUtc'] as String),
+        endUtc: DateTime.parse(j['endUtc'] as String),
+        clientId: j['clientId'] as String?,
+      );
+}
+
+/// One material used on a report — either a catalogue reference or free text.
+class SyncReportMaterialeDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String reportId;
+  final String? materialeId;
+  final String? freeTextName;
+  final double quantity;
+  final String? unitOfMeasure;
+  final double? unitPrice;
+  final String? notes;
+  final String? magazzinoId;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'reportId',
+    'materialeId',
+    'freeTextName',
+    'quantity',
+    'unitOfMeasure',
+    'unitPrice',
+    'notes',
+    'magazzinoId',
+  };
+
+  const SyncReportMaterialeDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.reportId,
+    this.materialeId,
+    this.freeTextName,
+    required this.quantity,
+    this.unitOfMeasure,
+    this.unitPrice,
+    this.notes,
+    this.magazzinoId,
+  });
+
+  factory SyncReportMaterialeDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportMaterialeDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        reportId: j['reportId'] as String,
+        materialeId: j['materialeId'] as String?,
+        freeTextName: j['freeTextName'] as String?,
+        quantity: _dbl(j['quantity']) ?? 0,
+        unitOfMeasure: j['unitOfMeasure'] as String?,
+        unitPrice: _dbl(j['unitPrice']),
+        notes: j['notes'] as String?,
+        magazzinoId: j['magazzinoId'] as String?,
+      );
+}
+
+/// One answered checklist item on a report. `ticketControlId` is the wire's name for what
+/// `ReportControlli` stores as `controlId` — the Drift column keeps its own name.
+class SyncReportControlloDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String reportId;
+  final String ticketControlId;
+  final String? stringValue;
+  final bool? boolValue;
+  final DateTime? dateValue;
+  final double? numberValue;
+  final String? note;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'reportId',
+    'ticketControlId',
+    'stringValue',
+    'boolValue',
+    'dateValue',
+    'numberValue',
+    'note',
+  };
+
+  const SyncReportControlloDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.reportId,
+    required this.ticketControlId,
+    this.stringValue,
+    this.boolValue,
+    this.dateValue,
+    this.numberValue,
+    this.note,
+  });
+
+  factory SyncReportControlloDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportControlloDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        reportId: j['reportId'] as String,
+        ticketControlId: j['ticketControlId'] as String,
+        stringValue: j['stringValue'] as String?,
+        boolValue: j['boolValue'] as bool?,
+        dateValue: _dt(j['dateValue']),
+        numberValue: _dbl(j['numberValue']),
+        note: j['note'] as String?,
+      );
+}
+
+/// One attachment, for a report OR a ticket. `entityType`/`entityId` say which, and they are the
+/// only keys that matter: `report_allegati` has never had a report column.
+class SyncReportAllegatoDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+
+  /// AllegatoEntityTypeEnum: 0 = Ticket, 1 = Report, 2 = Materiale. Sent as the enum's ordinal.
+  final int entityType;
+  final String entityId;
+  final String fileName;
+  final String contentType;
+  final int sizeBytes;
+
+  /// AllegatoKindEnum: 0 = UserUpload, 1 = SystemArtifact (captured signatures).
+  final int kind;
+  final String uploadedByUserId;
+  final bool isActive;
+
+  /// SHA-256 of the bytes, lowercase hex. Null on rows written before the column existed.
+  final String? contentHash;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'entityType',
+    'entityId',
+    'fileName',
+    'contentType',
+    'sizeBytes',
+    'kind',
+    'uploadedByUserId',
+    'isActive',
+    'contentHash',
+  };
+
+  const SyncReportAllegatoDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.entityType,
+    required this.entityId,
+    required this.fileName,
+    required this.contentType,
+    required this.sizeBytes,
+    required this.kind,
+    required this.uploadedByUserId,
+    this.isActive = true,
+    this.contentHash,
+  });
+
+  factory SyncReportAllegatoDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportAllegatoDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        entityType: _intOrNull(j['entityType']) ?? 0,
+        entityId: j['entityId'] as String,
+        fileName: j['fileName'] as String,
+        contentType: j['contentType'] as String,
+        sizeBytes: _intOrNull(j['sizeBytes']) ?? 0,
+        kind: _intOrNull(j['kind']) ?? 0,
+        uploadedByUserId: j['uploadedByUserId'] as String,
+        isActive: j['isActive'] as bool? ?? true,
+        contentHash: j['contentHash'] as String?,
+      );
+}
+
+/// The version of one report's server row (`xmin`), as `GET /api/reports/{id}` reports it.
+class SyncReportVersionDto {
+  final String reportId;
+  final String version;
+
+  static const Set<String> wireKeys = {'reportId', 'version'};
+
+  const SyncReportVersionDto({required this.reportId, required this.version});
+
+  factory SyncReportVersionDto.fromJson(Map<String, dynamic> j) =>
+      SyncReportVersionDto(
+        reportId: j['reportId'] as String,
+        version: j['version'] as String,
+      );
+}
+
+/// One ticket timer session the caller owns, as the server holds it (O-9).
+///
+/// Mirrors `SyncTicketWorkLogDto` on the backend. `workDate` + `startTime`/`endTime` are the
+/// Rome-local frame every ticket worklog reader uses; `startUtc`/`endUtc` are the true instants and
+/// are null on rows the backend wrote before it recorded them. Durations must prefer the instants:
+/// subtracting two bare times of day gives a negative number for an overnight session.
+class SyncTicketWorkLogDto {
+  final String id;
+  final String tenantId;
+  final String ticketId;
+  final String userId;
+  final DateTime workDate;
+  final Duration startTime;
+  final Duration? endTime;
+  final DateTime? startUtc;
+  final DateTime? endUtc;
+
+  /// `WorkLogApprovalStatusEnum` ordinal: 0 Draft, 1 Submitted, 2 Approved, 3 Rejected.
+  final int approvalStatus;
+  final String? description;
+  final bool isManualEntry;
+
+  /// The device's own id for this session, when it was born on a phone; null for a row created in
+  /// the office or by the online start/stop pair. Lets the device recognise the server row of a
+  /// session it may still be holding in its own queue.
+  final String? clientId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'ticketId',
+    'userId',
+    'workDate',
+    'startTime',
+    'endTime',
+    'startUtc',
+    'endUtc',
+    'approvalStatus',
+    'description',
+    'isManualEntry',
+    'clientId',
+    'createdAt',
+    'updatedAt',
+  };
+
+  const SyncTicketWorkLogDto({
+    required this.id,
+    required this.tenantId,
+    required this.ticketId,
+    required this.userId,
+    required this.workDate,
+    required this.startTime,
+    this.endTime,
+    this.startUtc,
+    this.endUtc,
+    this.approvalStatus = 0,
+    this.description,
+    this.isManualEntry = false,
+    this.clientId,
+    required this.createdAt,
+    this.updatedAt,
+  });
+
+  factory SyncTicketWorkLogDto.fromJson(Map<String, dynamic> j) =>
+      SyncTicketWorkLogDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        ticketId: j['ticketId'] as String,
+        userId: j['userId'] as String,
+        workDate: parseDateOnlyOrThrow(j['workDate']),
+        startTime: parseTimeSpan(j['startTime']) ?? Duration.zero,
+        endTime: j['endTime'] == null ? null : parseTimeSpan(j['endTime']),
+        startUtc: _dt(j['startUtc']),
+        endUtc: _dt(j['endUtc']),
+        approvalStatus: _intOrNull(j['approvalStatus']) ?? 0,
+        description: j['description'] as String?,
+        isManualEntry: j['isManualEntry'] as bool? ?? false,
+        clientId: j['clientId'] as String?,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+      );
+}
+
+/// One cantiere clock-in/clock-out of the signed-in technician, as the server holds it.
+///
+/// Mirrors `SyncCantiereWorkLogDto` on the backend. `workDate` + `startTime`/`endTime` are the
+/// Rome-local values the WorkLogs domain stores; `startUtc`/`endUtc` are the true instants and are
+/// null on legacy rows — prefer them for a duration, because subtracting a time-of-day pair across
+/// midnight is negative.
+///
+/// Only the caller's own punches ever arrive here. A lead's team hours stay an online read, the
+/// same rule `SyncTicketWorkLogDto` follows.
+class SyncCantiereWorkLogDto {
+  final String id;
+  final String tenantId;
+  final String cantiereId;
+  final String userId;
+  final String? ticketId;
+  final DateTime workDate;
+  final Duration startTime;
+  final Duration? endTime;
+  final DateTime? startUtc;
+  final DateTime? endUtc;
+
+  /// `CantiereWorkLogTypeEnum`: 0 Site, 1 Travel, 2 Setup.
+  final int workLogType;
+
+  /// `WorkLogApprovalStatusEnum`: 0 Draft, 1 Submitted, 2 Approved, 3 Rejected.
+  final int approvalStatus;
+  final String? description;
+
+  /// The device's own key for the punch, when it queued one — what lets the screen recognise the
+  /// server's row of a shift it is still holding in the outbox.
+  final String? clientId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'cantiereId',
+    'userId',
+    'ticketId',
+    'workDate',
+    'startTime',
+    'endTime',
+    'startUtc',
+    'endUtc',
+    'workLogType',
+    'approvalStatus',
+    'description',
+    'clientId',
+    'createdAt',
+    'updatedAt',
+  };
+
+  const SyncCantiereWorkLogDto({
+    required this.id,
+    required this.tenantId,
+    required this.cantiereId,
+    required this.userId,
+    this.ticketId,
+    required this.workDate,
+    required this.startTime,
+    this.endTime,
+    this.startUtc,
+    this.endUtc,
+    this.workLogType = 0,
+    this.approvalStatus = 0,
+    this.description,
+    this.clientId,
+    required this.createdAt,
+    this.updatedAt,
+  });
+
+  factory SyncCantiereWorkLogDto.fromJson(Map<String, dynamic> j) =>
+      SyncCantiereWorkLogDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        cantiereId: j['cantiereId'] as String,
+        userId: j['userId'] as String,
+        ticketId: j['ticketId'] as String?,
+        workDate: parseDateOnlyOrThrow(j['workDate']),
+        startTime: parseTimeSpan(j['startTime']) ?? Duration.zero,
+        endTime: j['endTime'] == null ? null : parseTimeSpan(j['endTime']),
+        startUtc: _dt(j['startUtc']),
+        endUtc: _dt(j['endUtc']),
+        workLogType: _intOrNull(j['workLogType']) ?? 0,
+        approvalStatus: _intOrNull(j['approvalStatus']) ?? 0,
+        description: j['description'] as String?,
+        clientId: j['clientId'] as String?,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+      );
+}
+
+/// One ferie / permesso / malattia request the signed-in technician filed for themselves.
+///
+/// Mirrors `SyncAbsenceRequestDto` on the backend. [startDate]/[endDate] are CIVIL days parsed to
+/// UTC midnight (the same `parseDateOnlyOrThrow` the ticket due date uses) — render them through a
+/// formatter that prints y/m/d, never through a zone conversion. [startTime]/[endTime] are the
+/// wire's own `HH:mm:ss` strings and mean Rome office time, not an instant.
+///
+/// [type] is an `AbsenceTypeEnum` ordinal 0..9 — read it through `absenceTypeLabel`, which knows all
+/// ten; the list is not dense, and the legacy `Permesso` (1) still appears on old rows.
+class SyncAbsenceRequestDto {
+  final String id;
+  final String tenantId;
+  final String requestedByUserId;
+  final String createdByUserId;
+  final int type;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String? startTime;
+  final String? endTime;
+  final String? reason;
+
+  /// `AbsenceRequestStatusEnum`: 0 Pending, 1 Approved, 2 Rejected, 3 Cancelled.
+  final int status;
+  final String? decidedByUserId;
+  final DateTime? decidedAt;
+  final String? decisionReason;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'requestedByUserId',
+    'createdByUserId',
+    'type',
+    'startDate',
+    'endDate',
+    'startTime',
+    'endTime',
+    'reason',
+    'status',
+    'decidedByUserId',
+    'decidedAt',
+    'decisionReason',
+    'createdAt',
+    'updatedAt',
+  };
+
+  const SyncAbsenceRequestDto({
+    required this.id,
+    required this.tenantId,
+    required this.requestedByUserId,
+    required this.createdByUserId,
+    required this.type,
+    required this.startDate,
+    required this.endDate,
+    this.startTime,
+    this.endTime,
+    this.reason,
+    this.status = 0,
+    this.decidedByUserId,
+    this.decidedAt,
+    this.decisionReason,
+    required this.createdAt,
+    this.updatedAt,
+  });
+
+  factory SyncAbsenceRequestDto.fromJson(Map<String, dynamic> j) =>
+      SyncAbsenceRequestDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        requestedByUserId: j['requestedByUserId'] as String,
+        createdByUserId: j['createdByUserId'] as String,
+        type: _intOrNull(j['type']) ?? 0,
+        startDate: parseDateOnlyOrThrow(j['startDate']),
+        endDate: parseDateOnlyOrThrow(j['endDate']),
+        startTime: j['startTime'] as String?,
+        endTime: j['endTime'] as String?,
+        reason: j['reason'] as String?,
+        status: _intOrNull(j['status']) ?? 0,
+        decidedByUserId: j['decidedByUserId'] as String?,
+        decidedAt: _dt(j['decidedAt']),
+        decisionReason: j['decisionReason'] as String?,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+      );
+}
+
+/// One recorded change of one ticket, as the server holds it.
+///
+/// Mirrors `SyncTicketHistoryDto` on the backend. `oldValue`/`newValue` are the server's RAW,
+/// invariant text — ids as `D` GUIDs, instants as round-trip `O` — never a rendered label, because
+/// the timeline resolves them through the mirrors this device already holds (a status id to the
+/// status name in the tenant's language). Storing labels would freeze a translation at write time
+/// and lie after a rename.
+///
+/// [changedByUserId] is empty for a change no person made (a background job, the customer portal);
+/// the screen says so instead of guessing a colleague.
+class SyncTicketHistoryDto {
+  final String id;
+  final String tenantId;
+  final String ticketId;
+
+  /// The ticket property name (`StatusId`, `AssignedUserId`, …). Unknown names are still shown
+  /// with their raw value rather than dropped.
+  final String fieldName;
+  final String? oldValue;
+  final String? newValue;
+  final String changedByUserId;
+  final DateTime changedAt;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'ticketId',
+    'fieldName',
+    'oldValue',
+    'newValue',
+    'changedByUserId',
+    'changedAt',
+  };
+
+  const SyncTicketHistoryDto({
+    required this.id,
+    required this.tenantId,
+    required this.ticketId,
+    required this.fieldName,
+    this.oldValue,
+    this.newValue,
+    required this.changedByUserId,
+    required this.changedAt,
+  });
+
+  factory SyncTicketHistoryDto.fromJson(Map<String, dynamic> j) =>
+      SyncTicketHistoryDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        ticketId: j['ticketId'] as String,
+        fieldName: j['fieldName'] as String? ?? '',
+        oldValue: j['oldValue'] as String?,
+        newValue: j['newValue'] as String?,
+        changedByUserId: j['changedByUserId'] as String? ?? '',
+        // The instant the change was recorded. `_dt` parses the server's `Z` instant; Drift hands
+        // it back later as a LOCAL-kind value, so readers re-stamp it to UTC before comparing.
+        changedAt: _dt(j['changedAt']) ?? DateTime.now().toUtc(),
+      );
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 DateTime? _dt(dynamic v) => v == null ? null : DateTime.parse(v as String);
 
 /// `int32` may arrive as a JSON number or a numeric string (see checklist_sync_dto.dart). Unlike

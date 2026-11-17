@@ -107,7 +107,7 @@ void main() {
     bool prodottiEditable = true,
   }) async {
     await tester.pumpWidget(
-      ProviderScope(
+      ProviderScope(retry: (_, _) => null, 
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(mockDio),
@@ -201,7 +201,7 @@ void main() {
 
     // Nothing mirrored, nothing typed: without this line the sheet is a lone "Nessuno" row, which
     // reads as the picker being broken rather than as the device holding no agents yet.
-    expect(find.text('Nessun agente in cache. Cerca per nome.'), findsOneWidget);
+    expect(find.text('Nessun riferimento in cache. Cerca per nome.'), findsOneWidget);
 
     await unmount(tester);
   });
@@ -216,8 +216,8 @@ void main() {
 
     // The two empty states are different news: one is "type a name", the other is "this name is not
     // there". Telling a technician who just searched to go and search again is the bug.
-    expect(find.text('Nessun agente trovato.'), findsOneWidget);
-    expect(find.text('Nessun agente in cache. Cerca per nome.'), findsNothing);
+    expect(find.text('Nessun riferimento trovato.'), findsOneWidget);
+    expect(find.text('Nessun riferimento in cache. Cerca per nome.'), findsNothing);
 
     await unmount(tester);
   });
@@ -233,7 +233,7 @@ void main() {
     expect(
       find.text(
         'Il riferimento non è più valido: scegline un altro. '
-        'La copertura è stata azzerata: i prodotti vanno scelti di nuovo.',
+        'La copertura è stata azzerata: gli asset vanno scelti di nuovo.',
       ),
       findsOneWidget,
     );
@@ -273,7 +273,7 @@ void main() {
     // The riepilogo drops an id it cannot label rather than print it; this chip cannot be dropped —
     // it is the only way to remove the selection — so it gets a state, not a GUID a technician would
     // read as a product's name.
-    expect(find.text('Prodotto non disponibile'), findsOneWidget);
+    expect(find.text('Asset non disponibile'), findsOneWidget);
     expect(find.text('ghost-1'), findsNothing);
 
     await unmount(tester);

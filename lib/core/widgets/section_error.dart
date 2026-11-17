@@ -41,7 +41,8 @@ class AppSectionError extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.red),
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: context.colors.red),
             ),
           ),
           TextButton(onPressed: onRetry, child: const Text('Riprova')),

@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
+import 'package:tasktap_mobile/data/sync/sync_service.dart'
+    show appDatabaseProvider;
 import 'package:tasktap_mobile/features/checklist/checklist_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
@@ -20,15 +21,23 @@ void main() {
   tearDown(() => db.close());
 
   ProviderContainer container({String? ticketId = 't1'}) {
-    final c = ProviderContainer(overrides: [
-      appDatabaseProvider.overrideWithValue(db),
-      reportEditorProvider('r1').overrideWith(
-        (ref) => ReportEditorNotifier(
-          initialState: ReportEditorState(reportId: 'r1', tenantId: 't', insertedUserId: 'u', ticketId: ticketId),
-          repo: DraftReportRepository(db),
+    final c = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        reportEditorProvider('r1').overrideWith(
+          (ref) => ReportEditorNotifier(
+            initialState: ReportEditorState(
+              reportId: 'r1',
+              tenantId: 't',
+              insertedUserId: 'u',
+              ticketId: ticketId,
+            ),
+            repo: DraftReportRepository(db),
+          ),
         ),
-      ),
-    ]);
+      ],
+    );
     addTearDown(c.dispose);
     return c;
   }
@@ -36,13 +45,24 @@ void main() {
   test('counts required rows that are still empty and updates as the technician answers', () async {
     await seedBigTicket(db, assets: 2);
     final c = container();
+    c.listen(ticketChecklistProvider('t1'), (_, _) {});
     await c.read(ticketChecklistProvider('t1').future);
 
     var status = c.read(assetChecklistStatusProvider('r1'))!;
-    expect((status.assetCount, status.missing.length, status.requiredTotal), (2, 10, 10));
+    expect(
+      (status.assetCount, status.missing.length, status.requiredTotal),
+      (2, 10, 10),
+    );
 
-    await c.read(reportEditorProvider('r1').notifier).upsertControllo(
-          const ControlloRow(id: 'ctrl-r1-c-0-0', reportId: 'r1', controlId: 'c-0-0', boolValue: false),
+    await c
+        .read(reportEditorProvider('r1').notifier)
+        .upsertControllo(
+          const ControlloRow(
+            id: 'ctrl-r1-c-0-0',
+            reportId: 'r1',
+            controlId: 'c-0-0',
+            boolValue: false,
+          ),
         );
     status = c.read(assetChecklistStatusProvider('r1'))!;
     expect(status.missing.length, 9);

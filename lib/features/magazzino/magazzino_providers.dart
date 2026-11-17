@@ -1,8 +1,10 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/utils/error_message.dart' show isTransportOrServerFault;
 import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
+import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 
 /// All active materiali, alphabetical by name.
@@ -25,13 +27,19 @@ final materialiCatalogProvider =
 /// offline" would have sent them to the phone instead. So this reads through, and the screen says
 /// so when it cannot.
 ///
+/// It watches [isOnlineProvider] — not for the value, but because that watch is what brings the
+/// list back on its own. Without it the provider kept its failure from the offline moment until
+/// the technician pulled to refresh, on a screen that was by then perfectly connected.
+///
 /// Autodisposed and family-keyed on the search term so switching filters does not hold a stale
 /// page alive behind the new one.
 final giacenzeProvider = FutureProvider.autoDispose
     .family<PagedResult<GiacenzaDto>, GiacenzeQuery>((ref, query) async {
+      if (!ref.watch(isOnlineProvider)) throw const MagazzinoOfflineException();
       final client = ref.watch(magazzinoApiClientProvider);
       return client.getGiacenze(
         q: query.q,
+        magazzinoId: query.magazzinoId,
         sottoScorta: query.soloSottoScorta ? true : null,
         pageSize: query.pageSize,
       );
@@ -44,11 +52,17 @@ final giacenzeProvider = FutureProvider.autoDispose
 class GiacenzeQuery {
   const GiacenzeQuery({
     this.q,
+    this.magazzinoId,
     this.soloSottoScorta = false,
     this.pageSize = 50,
   });
 
   final String? q;
+
+  /// Scope the page to one warehouse. The detail screen uses this to answer "what is short here"
+  /// without pulling every warehouse's lines; the giacenze list leaves it null.
+  final String? magazzinoId;
+
   final bool soloSottoScorta;
   final int pageSize;
 
@@ -56,36 +70,156 @@ class GiacenzeQuery {
   bool operator ==(Object other) =>
       other is GiacenzeQuery &&
       other.q == q &&
+      other.magazzinoId == magazzinoId &&
       other.soloSottoScorta == soloSottoScorta &&
       other.pageSize == pageSize;
 
   @override
-  int get hashCode => Object.hash(q, soloSottoScorta, pageSize);
+  int get hashCode => Object.hash(q, magazzinoId, soloSottoScorta, pageSize);
 }
 
-/// Recent stock movements, most recent first. Same online-only reasoning as [giacenzeProvider].
+/// Recent stock movements, most recent first. Same online-only reasoning — and the same
+/// reconnect watch — as [giacenzeProvider].
 final movimentiProvider = FutureProvider.autoDispose<PagedResult<MovimentoDto>>(
   (ref) async {
+    if (!ref.watch(isOnlineProvider)) throw const MagazzinoOfflineException();
     final client = ref.watch(magazzinoApiClientProvider);
     return client.getMovimenti(pageSize: 30);
   },
 );
 
+/// Recent movements for one warehouse, most recent first.
+///
+/// Same online-only/reconnect contract as [movimentiProvider]; the family key is the warehouse id
+/// so the magazzino detail can ask "what moved here" on demand without reading every warehouse.
+final movimentiMagazzinoProvider = FutureProvider.autoDispose
+    .family<PagedResult<MovimentoDto>, String>((ref, magazzinoId) async {
+      if (!ref.watch(isOnlineProvider)) throw const MagazzinoOfflineException();
+      final client = ref.watch(magazzinoApiClientProvider);
+      return client.getMovimenti(magazzinoId: magazzinoId, pageSize: 30);
+    });
+
 /// The current technician's assigned van warehouse, from
 /// `GET /api/magazzino/furgone/{userId}` — the default source for rapportino material lines
 /// (`step_materiali_fold.dart`). Null when this user has no furgone assigned; the caller falls
 /// back to an explicit picker in that case.
+///
+/// Online it reads through, so an office reassignment reaches the phone on the next visit rather
+/// than after the next sync. Offline — or online with a request that never arrived / a server fault
+/// — it answers from the `magazzini` mirror, where `assegnatoUserId` travels on the warehouse row
+/// itself: the assignment is a device-local lookup, never a live call. Null there means either "no
+/// van assigned" or "no mirror yet"; both leave the line's source unset instead of blocking the
+/// add, and the picker below says why when it cannot offer the alternatives.
+///
+/// The fallback matters more here than the null it produces: without it a technician with a weak
+/// signal got *no* default source and had to pick a warehouse by hand on every material line, for
+/// an assignment the phone was already holding.
 final furgoneDiUserProvider = FutureProvider.autoDispose
-    .family<MagazzinoDto?, String>((ref, userId) {
-      final client = ref.watch(magazzinoApiClientProvider);
-      return client.getFurgoneByUser(userId);
+    .family<MagazzinoDto?, String>((ref, userId) async {
+      Future<MagazzinoDto?> fromMirror() async {
+        final db = ref.watch(appDatabaseProvider);
+        final row =
+            await (db.select(db.magazzini)
+                  ..where(
+                    (w) =>
+                        w.tipo.equals('Furgone') &
+                        w.assegnatoUserId.equals(userId),
+                  )
+                  ..limit(1))
+                .getSingleOrNull();
+        return row == null ? null : _fromMirror(row);
+      }
+
+      if (ref.watch(isOnlineProvider)) {
+        try {
+          return await ref
+              .watch(magazzinoApiClientProvider)
+              .getFurgoneByUser(userId);
+        } catch (e) {
+          if (!isTransportOrServerFault(e)) rethrow;
+        }
+      }
+      return fromMirror();
     });
 
 /// All warehouses (for admin CRUD and the "cambia magazzino" override picker).
-final magazziniProvider = FutureProvider.autoDispose<List<MagazzinoDto>>((ref) {
-  final client = ref.watch(magazzinoApiClientProvider);
-  return client.getMagazzini();
+///
+/// Online it reads through — the office may have just created a Sede, and a connected device
+/// shows the server's copy. Offline it answers from the `magazzini` mirror, so a material line
+/// picked up on site can still name the Sede it came from.
+///
+/// A *never-synced* device is not the same as a tenant with no warehouses: before the first sync
+/// an empty mirror throws [MagazziniOfflineException] rather than returning `[]`, because the
+/// picker renders an empty list as "Nessun magazzino disponibile." — a false statement about the
+/// tenant's stock that a technician would act on. Once something *has* synced, an empty mirror is
+/// the tenant's real answer and is returned as such.
+///
+/// Same online-then-mirror shape as [furgoneDiUserProvider]: a request that never arrived (5xx,
+/// 408, 429, timeout) falls back to the mirror instead of failing the line.
+final magazziniProvider = FutureProvider.autoDispose<List<MagazzinoDto>>((
+  ref,
+) async {
+  Future<List<MagazzinoDto>> fromMirror() async {
+    final db = ref.watch(appDatabaseProvider);
+    final rows = await (db.select(
+      db.magazzini,
+    )..orderBy([(w) => OrderingTerm.asc(w.nome)])).get();
+    if (rows.isEmpty && await db.getLastSync() == null) {
+      throw const MagazziniOfflineException();
+    }
+    return rows.map(_fromMirror).toList(growable: false);
+  }
+
+  if (ref.watch(isOnlineProvider)) {
+    try {
+      return await ref.watch(magazzinoApiClientProvider).getMagazzini();
+    } catch (e) {
+      if (!isTransportOrServerFault(e)) rethrow;
+    }
+  }
+  return fromMirror();
 });
+
+/// Stock and movement reads refused locally because there is no backend to read them from.
+///
+/// Thrown before the request so an offline device does not queue a doomed call and report it as a
+/// transport error: the screen's own copy already says quantities are online-only, and this keeps
+/// the reason honest for anything that logs it. The list comes back by itself when
+/// [isOnlineProvider] flips — the providers watch it.
+class MagazzinoOfflineException implements Exception {
+  const MagazzinoOfflineException();
+
+  @override
+  String toString() =>
+      'Magazzino offline: giacenze e movimenti si leggono solo online.';
+}
+
+/// The warehouses live on the server but this device has never downloaded them.
+///
+/// `humanErrorMessage` folds anything that is not a `DioException` into "Errore imprevisto", which
+/// would be a lie about the cause here — the radio is off, not the app broken. The picker
+/// (`step_materiali_fold.dart`) renders this one's own message instead.
+class MagazziniOfflineException implements Exception {
+  const MagazziniOfflineException();
+
+  String get message =>
+      'Magazzini non ancora scaricati su questo dispositivo: riprova quando torni online.';
+
+  @override
+  String toString() => message;
+}
+
+/// A mirror row as the DTO the rest of the app already speaks.
+///
+/// `indirizzo`/`note` are not in the sync member — nothing offline reads them, and the admin
+/// screens that show them are live-only — so they are null here rather than guessed.
+MagazzinoDto _fromMirror(MagazziniData row) => MagazzinoDto(
+  id: row.id,
+  nome: row.nome,
+  tipo: row.tipo,
+  assegnatoUserId: row.assegnatoUserId,
+  isActive: row.isActive,
+);
 
 /// Distinct non-null category values from the materiali table.
 final materialiCategoriesProvider = StreamProvider.autoDispose<List<String>>((

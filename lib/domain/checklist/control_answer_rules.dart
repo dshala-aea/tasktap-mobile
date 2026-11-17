@@ -54,13 +54,23 @@ AssetProgress progressOf(
     if (!done && c.isRequired) missing++;
     if (isException(c, a)) exceptions++;
   }
-  return AssetProgress(total: total, answered: answered, requiredMissing: missing, exceptions: exceptions);
+  return AssetProgress(
+    total: total,
+    answered: answered,
+    requiredMissing: missing,
+    exceptions: exceptions,
+  );
 }
 
 /// A short human value of [a] for [c], or null when that type's column is empty.
 String? describeAnswer(ChecklistControl c, ChecklistAnswer a) {
   switch (c.type) {
+    // A tick is an assertion; Sì/No is a choice between two valid answers. Reading a checkbox back
+    // as "Sì" made it indistinguishable from a TrueFalse control on every read-only surface — the
+    // asset checklist row here, the ticket detail and the rapportino view all call this. The web
+    // backoffice keeps the two types apart too (it draws a check box).
     case ControlType.checkbox:
+      return a.boolValue == null ? null : (a.boolValue! ? 'Spuntato' : 'Non spuntato');
     case ControlType.trueFalse:
       return a.boolValue == null ? null : (a.boolValue! ? 'Sì' : 'No');
     case ControlType.number:

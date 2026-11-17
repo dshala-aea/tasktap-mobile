@@ -14,6 +14,8 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
+import 'package:tasktap_mobile/features/rapportino/rapportini_list_screen.dart';
+import 'package:tasktap_mobile/features/ticket/ticket_list_screen.dart';
 import 'package:tasktap_mobile/main.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
@@ -40,7 +42,7 @@ Map<String, dynamic> _emptySyncPayload() => {
 /// - A provided in-memory Drift DB.
 /// - Stub Dio that returns an empty sync payload.
 Widget _buildAuthenticatedApp(MockAuthRepository repo, AppDatabase db, MockDio mockDio) {
-  return ProviderScope(
+  return ProviderScope(retry: (_, _) => null, 
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
@@ -129,19 +131,76 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('tapping Ticket tab switches branch', (tester) async {
+    testWidgets('dashboard quick actions clear the floating nav when scrolled to the end', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.viewPadding = const FakeViewPadding(bottom: 34);
+      tester.view.padding = const FakeViewPadding(bottom: 34);
+      addTearDown(tester.view.reset);
+
       await tester.pumpWidget(_buildAuthenticatedApp(repo, db, mockDio));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      // Inactive tabs render icon-only; find by Semantics label.
-      final ticketTab = find.byWidgetPredicate(
-        (w) => w is Semantics && w.properties.label == 'Ticket',
+
+      await tester.drag(find.byType(CustomScrollView).first, const Offset(0, -2000));
+      await tester.pumpAndSettle();
+
+      final quickRect = tester.getRect(find.byType(QuickAction).last);
+      final navRect = tester.getRect(find.byType(AppBottomNav));
+      expect(
+        quickRect.bottom,
+        lessThanOrEqualTo(navRect.top),
+        reason: 'dashboard buttons must scroll clear of the floating nav',
       );
-      expect(ticketTab, findsWidgets);
-      await tester.tap(ticketTab.first);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('tapping Reports tab opens the report list', (tester) async {
+      await tester.pumpWidget(_buildAuthenticatedApp(repo, db, mockDio));
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final reportsTab = find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == 'Reports',
+      );
+      expect(reportsTab, findsWidgets);
+      await tester.tap(reportsTab.first);
       await tester.pumpAndSettle(const Duration(seconds: 1));
-      // Ticket is now the active tab → its label is shown in the nav.
-      // (TicketListScreen also renders a "Ticket" heading, so at least one match.)
-      expect(find.text('Ticket'), findsWidgets);
+
+      expect(find.byType(RapportiniListScreen), findsOneWidget);
+      expect(
+        tester.widget<AppBottomNav>(find.byType(AppBottomNav)).currentIndex,
+        equals(1),
+        reason: 'Rapportini owns shell branch 1',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Altro › Interventi opens the ticket list and back returns to Altro', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildAuthenticatedApp(repo, db, mockDio));
+      await tester.pumpAndSettle();
+
+      final altroTab = find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == 'Altro',
+      );
+      await tester.tap(altroTab.first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Interventi'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TicketListScreen), findsOneWidget);
+
+      final back = find.bySemanticsLabel('Indietro');
+      await tester.tap(back.first);
+      await tester.pumpAndSettle();
+      expect(find.text('Gestione'), findsOneWidget);
+
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

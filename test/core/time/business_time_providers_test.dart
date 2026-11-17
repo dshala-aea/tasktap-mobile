@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // Transitive dependency; needed only to inject a failing platform store.
@@ -47,7 +48,7 @@ class _CountingStore extends BusinessZoneStore {
 }
 
 ProviderContainer _container({List<Override> overrides = const []}) {
-  final c = ProviderContainer(overrides: overrides);
+  final c = ProviderContainer(retry: (_, _) => null, overrides: overrides);
   addTearDown(c.dispose);
   return c;
 }
@@ -161,27 +162,22 @@ void main() {
     expect(c.read(businessZoneIdProvider), 'America/New_York');
   });
 
-  test(
-    'logout resets the zone to Rome and a following /me without the key stays Rome',
-    () async {
-      final c = _container();
-      final n = c.read(businessZoneIdProvider.notifier);
-      await n.set('America/New_York');
-      await n.reset();
-      expect(c.read(businessZoneIdProvider), 'Europe/Rome');
-      expect(await BusinessZoneStore().readCached(), isNull);
-      expect(
-        (await SharedPreferences.getInstance()).containsKey(
-          tenantTimeZonePrefsKey,
-        ),
-        isFalse,
-      );
-      await n.set(
-        null,
-      ); // what the /me callback does for a body without the key
-      expect(c.read(businessZoneIdProvider), 'Europe/Rome');
-    },
-  );
+  test('logout resets the zone to Rome and a following /me without the key stays Rome', () async {
+    final c = _container();
+    final n = c.read(businessZoneIdProvider.notifier);
+    await n.set('America/New_York');
+    await n.reset();
+    expect(c.read(businessZoneIdProvider), 'Europe/Rome');
+    expect(await BusinessZoneStore().readCached(), isNull);
+    expect(
+      (await SharedPreferences.getInstance()).containsKey(
+        tenantTimeZonePrefsKey,
+      ),
+      isFalse,
+    );
+    await n.set(null); // what the /me callback does for a body without the key
+    expect(c.read(businessZoneIdProvider), 'Europe/Rome');
+  });
 
   test('prefs failure is swallowed by the store', () async {
     final previous = SharedPreferencesStorePlatform.instance;

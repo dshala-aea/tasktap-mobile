@@ -12,11 +12,15 @@ final onboardingCompletedProvider =
       OnboardingCompletedNotifier.new,
     );
 
-class OnboardingCompletedNotifier extends FamilyAsyncNotifier<bool, String> {
+class OnboardingCompletedNotifier extends AsyncNotifier<bool> {
+  OnboardingCompletedNotifier(this.arg);
+
+  final String arg;
+
   @override
-  Future<bool> build(String userId) async {
+  Future<bool> build() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_key(userId)) ?? false;
+    return prefs.getBool(_key(arg)) ?? false;
   }
 
   /// Marks onboarding done for this notifier's user. The router's redirect gate re-reads this

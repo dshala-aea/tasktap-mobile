@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_rack.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -7,7 +9,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
-import '../../data/sync/sync_service.dart';
+import '../../data/entitlements/entitlement_providers.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../altro/notifiche_provider.dart';
 import '../timbra/timbra_providers.dart';
@@ -17,6 +19,7 @@ import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
 import 'id_plate_hero_comp.dart';
 import 'work_queue_section.dart';
+
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -32,7 +35,8 @@ class DashboardScreen extends StatelessWidget {
   /// Keeps the running clocks honest about other devices: refresh on focus/resume and a 15s
   /// foreground poll. See WorkLogLiveRefresh.
   @override
-  Widget build(BuildContext context) => const WorkLogLiveRefresh(child: _DashboardView());
+  Widget build(BuildContext context) =>
+      const WorkLogLiveRefresh(child: _DashboardView());
 }
 
 class _DashboardView extends ConsumerWidget {
@@ -45,6 +49,10 @@ class _DashboardView extends ConsumerWidget {
     final stats = ref.watch(dashboardStatsProvider);
     final trackers = ref.watch(visibleTrackersProvider);
     final unreadNotifiche = ref.watch(notificheUnreadCountProvider);
+    // Tenant default merged with this user's own override (and the Kiosk entitlement) by the
+    // server — /auth/me's own answer, cached. 'Both' until the first /auth/me lands, matching
+    // effectiveClockInMethodProvider's documented "no answer means allow" asymmetry.
+    final clockInMethod = ref.watch(effectiveClockInMethodProvider);
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -54,20 +62,10 @@ class _DashboardView extends ConsumerWidget {
         // performSync() itself never throws — SyncNotifier catches internally and parks the
         // failure in SyncState.status/errorMessage (see sync_service.dart) — so a pull-to-refresh
         // that hit a real failure used to just stop spinning with zero feedback, the technician
-        // left to guess whether it actually synced. Same showAppToast/ToastTone.error convention
-        // this screen's own _ClockInPrompt already uses for a failed punch below, and
-        // ai_draft_action.dart's AI-generation errors use the same way.
-        onRefresh: () async {
-          await ref.read(syncProvider.notifier).performSync();
-          if (!context.mounted) return;
-          if (ref.read(syncProvider).status == SyncStatus.error) {
-            showAppToast(
-              context,
-              message: 'Aggiornamento non riuscito. Riprova.',
-              tone: ToastTone.error,
-            );
-          }
-        },
+        // left to guess whether it actually synced. That check now lives in
+        // `refreshWithFeedback`, shared with every other pull-to-refresh in the app so the
+        // feedback cannot drift back out of one screen at a time.
+        onRefresh: () => refreshWithFeedback(context, ref),
         child: CustomScrollView(
           slivers: [
             // ── Hero ──────────────────────────────────────────────────────────
@@ -79,6 +77,7 @@ class _DashboardView extends ConsumerWidget {
                 userName: userName,
                 todayCount: stats.todayCount,
                 completedCount: stats.completedCount,
+                upcomingCount: stats.upcomingCount,
                 actions: [
                   HeaderIconBtn(
                     icon: LucideIcons.bell,
@@ -122,7 +121,10 @@ class _DashboardView extends ConsumerWidget {
                   ),
                   child: trackers.isEmpty
                       ? const _ClockInPrompt(key: ValueKey('idle'))
-                      : ActiveTrackerStrip(key: const ValueKey('active'), trackers: trackers),
+                      : ActiveTrackerStrip(
+                          key: const ValueKey('active'),
+                          trackers: trackers,
+                        ),
                 ),
               ),
             ),
@@ -141,6 +143,10 @@ class _DashboardView extends ConsumerWidget {
                 trailing: stats.completedCount > 0
                     ? '${stats.completedCount} di ${stats.todayCount} completati'
                     : null,
+                action: TextButton(
+                  onPressed: () => context.push(AppRoutes.storico),
+                  child: const Text('Storico'),
+                ),
               ),
             ),
             const SliverToBoxAdapter(child: WorkQueueSection()),
@@ -191,25 +197,31 @@ class _DashboardView extends ConsumerWidget {
                         onTap: () => context.push(AppRoutes.timbra),
                       ),
                     ),
-                    Expanded(
-                      child: QuickAction(
-                        icon: LucideIcons.scanLine,
-                        label: 'Timbra\ncon QR',
-                        // Same destination as TimbraScreen's own header action — there's no
-                        // Timbra bottom-nav tab, so this was previously two taps deep (Dashboard →
-                        // Timbra → QR) for what's meant to be the fast path when arriving at a
-                        // kiosk totem. TimbraScreen keeps its own copy of this action too; nothing
-                        // else about that screen changes.
-                        onTap: () => context.push(AppRoutes.timbraQr),
+                    // ButtonOnly: no server endpoint accepts a kiosk-QR punch (the backend's own
+                    // EnsureClockInMethodAllowedAsync), so the entry point is hidden rather than
+                    // shown-but-doomed — same rule TimbraScreen's header action already applies.
+                    if (clockInMethod != 'ButtonOnly')
+                      Expanded(
+                        child: QuickAction(
+                          icon: LucideIcons.scanLine,
+                          label: 'Timbra\ncon QR',
+                          // Same destination as TimbraScreen's own header action — there's no
+                          // Timbra bottom-nav tab, so this was previously two taps deep (Dashboard →
+                          // Timbra → QR) for what's meant to be the fast path when arriving at a
+                          // kiosk totem. TimbraScreen keeps its own copy of this action too; nothing
+                          // else about that screen changes.
+                          onTap: () => context.push(AppRoutes.timbraQr),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
             ),
 
             // Bottom padding so the last card clears the floating bottom nav.
-            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: context.navClearance),
+            ),
           ],
         ),
       ),
@@ -229,6 +241,60 @@ class _ClockInPrompt extends ConsumerWidget {
     final punchState = ref.watch(punchNotifierProvider);
     final busy = punchState.isLoading;
 
+    // QrOnly: the tenant (or this user's override) requires a kiosk scan, and the server refuses a
+    // button punch outright (WorkLogService.EnsureClockInMethodAllowedAsync) — unless today is an
+    // approved smart-working day, which is the one case that gate relaxes for and exactly when the
+    // technician has no totem to reach. Offering "Timbra ingresso" on any other day would be a CTA
+    // whose only outcome is a refused request.
+    //
+    // The rule itself is [isButtonPunchWithheld]'s, not a local copy: this slot starts work only and
+    // can always offer the scanner instead, so it is the `startOnly` surface. An explicit `false`
+    // sends the technician to the scanner; `null` does not — nobody has answered yet (cold start,
+    // another user, /auth/me still in flight), and on an approved remote day the scanner is the one
+    // affordance that cannot work. Same fail-open answer as the timbra panel.
+    final withheld = isButtonPunchWithheld(
+      surface: ButtonPunchSurface.startOnly,
+      clockInMethod: ref.watch(effectiveClockInMethodProvider),
+      smartWorkingToday: ref.watch(smartWorkingTodayProvider),
+      hasOpenShift: false,
+    );
+    if (withheld) {
+      return AppCard(
+        padding: EdgeInsets.zero,
+        backgroundColor: AppColors.Y,
+        onTap: () => context.push(AppRoutes.timbraQr),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.base),
+          child: Row(
+            children: [
+              const Icon(
+                LucideIcons.scanLine,
+                size: 18,
+                color: AppColors.WHITE,
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Timbra con QR',
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.WHITE,
+                  ),
+                ),
+              ),
+              Icon(
+                LucideIcons.chevronRight,
+                size: 16,
+                color: AppColors.WHITE.withAlpha(179),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     // A CTA, not a passive readout — flat AppColors.Y fill + white ink, same primary-action
     // language AppButton's own primary variant already uses (this replaces the old VetroGlass
     // panel, which only read as an action via its own onTap; AppCard's onTap does that job here
@@ -246,7 +312,10 @@ class _ClockInPrompt extends ConsumerWidget {
               const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.WHITE),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.WHITE,
+                ),
               )
             else
               const Icon(LucideIcons.clock, size: 18, color: AppColors.WHITE),
@@ -261,7 +330,11 @@ class _ClockInPrompt extends ConsumerWidget {
               ),
             ),
             const Spacer(),
-            Icon(LucideIcons.chevronRight, size: 16, color: AppColors.WHITE.withAlpha(179)),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: AppColors.WHITE.withAlpha(179),
+            ),
           ],
         ),
       ),
@@ -283,7 +356,9 @@ class _ClockInPrompt extends ConsumerWidget {
   /// the call directly and reading its own outcome right back out ties the toast to the tap that
   /// caused it, not to ambient state this instance never touched.
   Future<void> _punchIn(BuildContext context, WidgetRef ref) async {
-    await ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider));
+    await ref
+        .read(punchNotifierProvider.notifier)
+        .punch(ref.read(timbraStateProvider));
     if (!context.mounted) return;
     final result = ref.read(punchNotifierProvider);
     if (result is AsyncError) {

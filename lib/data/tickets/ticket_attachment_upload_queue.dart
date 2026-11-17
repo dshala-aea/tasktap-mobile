@@ -20,7 +20,8 @@ import 'pending_ticket_attachment_state.dart';
 //
 //   pendingSync ──(never sent — device was offline when picked)──► submitting
 //   submitting  ──(200 OK)─────────────────────────────────────────► submitted
-//   submitting  ──(error — outcome on the server is now unknown)───► failed
+//   submitting  ──(connection refused before the request left)────► pendingSync
+//   submitting  ──(any other error — outcome now unknown)─────────► failed
 //
 // Only `pendingSync` rows are auto-retried by [processAll]. `failed` rows sit
 // until an explicit, user-initiated [retry] — never auto-retried. Invariant,
@@ -76,6 +77,30 @@ class TicketAttachmentUploadQueue {
     return _attempt(id);
   }
 
+  /// Surface rows an app kill left mid-upload, so they are neither invisible nor auto-resent.
+  ///
+  /// `submitting` is a state the queue only holds *during* an attempt. When the process dies
+  /// before the response arrives, the state outlives the attempt: [processAll] sweeps only
+  /// `pendingSync`, and the Allegati tab renders `submitting` as "Caricamento…" forever — the
+  /// attachment is never retried, never reported as failed, and never reaches the ticket.
+  ///
+  /// The outcome is genuinely unknown (the request may have reached the server), which is exactly
+  /// the condition this queue already answers with `failed` — kept for a manual "Riprova" instead
+  /// of an automatic resend, because the endpoint has no client idempotency key and a resend
+  /// could attach the same photo twice. Returns how many rows were surfaced.
+  Future<int> recoverInterrupted() async {
+    final interrupted = await _repo.getByState(PendingTicketAttachmentState.submitting);
+    for (final a in interrupted) {
+      await _repo.updateState(
+        id: a.id,
+        state: PendingTicketAttachmentState.failed,
+        error:
+            'Caricamento interrotto. Verifica che l\'allegato non sia già presente, poi riprova.',
+      );
+    }
+    return interrupted.length;
+  }
+
   /// Auto-retry every attachment that has not reached the server yet — only `pendingSync`. See
   /// the class doc comment for why `failed` is excluded. Called on reconnect and on app start.
   Future<void> processAll() async {
@@ -117,6 +142,19 @@ class TicketAttachmentUploadQueue {
       _onUploaded?.call(a.ticketId);
       return TicketAttachmentUploadOutcome.submitted(id, a.ticketId, result.allegatoId);
     } catch (e) {
+      // A connection that could not be opened means the file never left the phone: put it back in
+      // `pendingSync` so the reconnect sweep ([processAll]) sends it, and say so honestly instead
+      // of reporting a server rejection that never happened. Narrower than "no response" on
+      // purpose — a send/receive timeout may be an upload the server already stored, and with no
+      // idempotency key on this endpoint that row has to stay a manual retry.
+      if (neverReachedServer(e)) {
+        await _repo.updateState(
+          id: id,
+          state: PendingTicketAttachmentState.pendingSync,
+          clearError: true,
+        );
+        return TicketAttachmentUploadOutcome.queuedOffline(id, a.ticketId);
+      }
       // NEVER delete on failure — keep the attachment for a manual retry. The stored string is
       // rendered verbatim under "Caricamento non riuscito", so it has to be a sentence.
       final reason = humanErrorMessage(e, azione: 'caricare l\'allegato');

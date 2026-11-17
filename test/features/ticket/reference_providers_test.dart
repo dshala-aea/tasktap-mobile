@@ -28,6 +28,7 @@ void main() {
     db = AppDatabase(NativeDatabase.memory());
     repo = ReferenceCacheRepository(db);
     container = ProviderContainer(
+      retry: (_, _) => null,
       overrides: [appDatabaseProvider.overrideWithValue(db)],
     );
   });
@@ -76,6 +77,7 @@ void main() {
     );
     await repo.upsertContracts([withNumero, onlyCodice]);
 
+    container.listen(localContractsProvider('cu1'), (_, _) {});
     final opts = await container.read(localContractsProvider('cu1').future);
 
     pin(
@@ -103,6 +105,7 @@ void main() {
     );
     await repo.upsertCommesse([dto]);
 
+    container.listen(localCommesseProvider('cu1'), (_, _) {});
     final opts = await container.read(localCommesseProvider('cu1').future);
 
     pin(
@@ -125,6 +128,7 @@ void main() {
     );
     await repo.upsertProdottiAssistenza([dto]);
 
+    container.listen(localProdottiProvider('cu1'), (_, _) {});
     final opts = await container.read(localProdottiProvider('cu1').future);
 
     pin(
@@ -153,6 +157,7 @@ void main() {
     );
     await repo.upsertAgents([withPhone, onlyEmail]);
 
+    container.listen(localAgentsProvider(''), (_, _) {});
     final opts = await container.read(localAgentsProvider('').future);
 
     pin(
