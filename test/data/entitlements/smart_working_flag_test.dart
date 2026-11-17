@@ -42,8 +42,8 @@ class MockDio extends Mock implements Dio {}
 /// between the request and the cache invalidation that follows it.
 class _GatedEntitlementService extends EntitlementService {
   _GatedEntitlementService({
-    required Dio super.dio,
-    required EntitlementRepository super.repository,
+    required super.dio,
+    required super.repository,
     super.currentSessionId,
     required this.gate,
   });
