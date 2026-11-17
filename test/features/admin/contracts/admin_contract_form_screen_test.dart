@@ -537,4 +537,65 @@ void main() {
       await teardown(tester);
     });
   });
+
+  group('a failing asset load (production: 504 from the gateway)', () {
+    DioException gatewayTimeout() => DioException(
+      requestOptions: RequestOptions(path: '/api/prodottoassistenza'),
+      response: Response<dynamic>(
+        statusCode: 504,
+        requestOptions: RequestOptions(path: '/api/prodottoassistenza'),
+      ),
+      type: DioExceptionType.badResponse,
+    );
+
+    testWidgets('does not throw, says so, and retries when the field is tapped', (tester) async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/customers',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _ok({
+          'items': [
+            {'id': 'cust-1', 'companyName': 'Acme Srl'},
+          ],
+        }, '/api/customers'),
+      );
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => throw gatewayTimeout());
+
+      await openForm(tester);
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Acme Srl').last);
+      await tester.pumpAndSettle();
+
+      // The unawaited load used to rethrow into the zone; now the form stays up and the field says why.
+      expect(tester.takeException(), isNull);
+      expect(find.text('Impossibile caricare gli asset — tocca per riprovare'), findsOneWidget);
+
+      // The server is back: tapping the field retries and opens the picker with the assets.
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _ok({
+          'items': [
+            {'id': 'prod-1', 'name': 'Caldaia'},
+          ],
+        }, '/api/prodottoassistenza'),
+      );
+      await tester.tap(find.text('Impossibile caricare gli asset — tocca per riprovare'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Caldaia'), findsOneWidget);
+      await teardown(tester);
+    });
+  });
 }
