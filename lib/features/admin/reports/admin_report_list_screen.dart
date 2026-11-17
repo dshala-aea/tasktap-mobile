@@ -355,7 +355,7 @@ class _AdminReportListBody extends ConsumerWidget {
     final hasNumero = numero != null && numero.isNotEmpty;
     final displayTitle = (title != null && title.isNotEmpty)
         ? (hasNumero && !title.contains(numero) ? '$title · $numero' : title)
-        : (hasNumero ? 'Rapportino $numero' : 'Rapportino');
+        : (hasNumero ? 'Rapporto $numero' : 'Rapporto');
 
     final customer = customerNames[report['customerId']];
     final meta = [

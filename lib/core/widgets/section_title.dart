@@ -12,7 +12,7 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 ///
 /// ```dart
 /// SectionTitle(title: 'Attività recenti');
-/// SectionTitle(title: 'Rapportini', action: TextButton(onPressed: ..., child: Text('Vedi tutti')));
+/// SectionTitle(title: 'Rapporti', action: TextButton(onPressed: ..., child: Text('Vedi tutti')));
 /// ```
 class SectionTitle extends StatelessWidget {
   const SectionTitle({

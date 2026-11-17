@@ -269,10 +269,10 @@ void main() {
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rapportini di intervento'), findsOneWidget);
+      expect(find.text('Rapporti di intervento'), findsOneWidget);
       expect(find.textContaining('Il documento che deve uscire'), findsNothing);
       expect(find.byIcon(LucideIcons.chevronLeft), findsNothing);
-      expect(find.text('Cerca rapportino, cliente, sede o data…'), findsOneWidget);
+      expect(find.text('Cerca rapporto, cliente, sede o data…'), findsOneWidget);
       expect(find.text('NUOVO'), findsOneWidget);
       expect(find.byType(AppFab), findsNothing);
 
@@ -1028,12 +1028,12 @@ void main() {
   });
 
   group('RapportiniListScreen — empty states', () {
-    testWidgets('an empty catalogue shows "Nessun rapportino" once synced', (tester) async {
+    testWidgets('an empty catalogue shows "Nessun rapporto" once synced', (tester) async {
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
       expect(find.byType(EmptyState), findsOneWidget);
-      expect(find.text('Nessun rapportino'), findsOneWidget);
+      expect(find.text('Nessun rapporto'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1046,7 +1046,7 @@ void main() {
       await tester.pumpWidget(_buildList(db: fresh));
       await tester.pumpAndSettle();
 
-      expect(find.text('Rapportini non ancora scaricati'), findsOneWidget);
+      expect(find.text('Rapporti non ancora scaricati'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -1367,11 +1367,11 @@ void main() {
     expect(find.text('editor:loc-1'), findsNothing);
     expect(find.text('view:loc-1'), findsNothing);
     expect(
-      find.text('Non hai i permessi per modificare questo rapportino.'),
+      find.text('Non hai i permessi per modificare questo rapporto.'),
       findsOneWidget,
     );
     // Still on the list: the tap produced feedback, not a navigation.
-    expect(find.text('Rapportini di intervento'), findsOneWidget);
+    expect(find.text('Rapporti di intervento'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

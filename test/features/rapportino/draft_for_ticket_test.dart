@@ -1,7 +1,7 @@
 // dart format width=100
 // test/features/rapportino/draft_for_ticket_test.dart
 //
-// "Crea rapportino" used to mint a second Bozza for a ticket that already had one. These cover the
+// "Crea rapporto" used to mint a second Bozza for a ticket that already had one. These cover the
 // query that notices the existing draft and the dialog that asks what to do about it.
 
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;

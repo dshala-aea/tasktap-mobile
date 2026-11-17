@@ -265,29 +265,29 @@ class _RapportiniListBody extends ConsumerWidget {
         ? const EmptyState(
             icon: LucideIcons.searchX,
             title: 'Nessun risultato',
-            body: 'Nessun rapportino corrisponde ai filtri scelti.',
+            body: 'Nessun rapporto corrisponde ai filtri scelti.',
           )
         : neverSynced
         ? const EmptyState(
             icon: LucideIcons.cloudOff,
-            title: 'Rapportini non ancora scaricati',
+            title: 'Rapporti non ancora scaricati',
             body:
-                'Questo telefono non ha ancora completato una sincronizzazione: i rapportini '
+                'Questo telefono non ha ancora completato una sincronizzazione: i rapporti '
                 'compariranno qui appena i dati saranno scaricati.',
           )
         : const EmptyState(
             icon: LucideIcons.fileText,
-            title: 'Nessun rapportino',
-            body: 'I rapportini appariranno qui.',
+            title: 'Nessun rapporto',
+            body: 'I rapporti appariranno qui.',
           );
 
     return ListShell(
-      title: 'Rapportini di intervento',
+      title: 'Rapporti di intervento',
       action: canWrite
           ? ListHeaderAction(label: 'Nuovo', onPressed: creating ? null : onNew)
           : null,
       searchController: searchCtrl,
-      searchHint: 'Cerca rapportino, cliente, sede o data…',
+      searchHint: 'Cerca rapporto, cliente, sede o data…',
       onSearchChanged: onQueryChanged,
       filters: _quickFilters,
       activeFilterId: filters.status.name,
@@ -316,8 +316,8 @@ class _RapportiniListBody extends ConsumerWidget {
       empty: empty,
       unavailable: UnavailableState(
         icon: LucideIcons.alertTriangle,
-        titolo: 'Rapportini non disponibili',
-        motivo: 'Non è stato possibile leggere i rapportini salvati su questo telefono.',
+        titolo: 'Rapporti non disponibili',
+        motivo: 'Non è stato possibile leggere i rapporti salvati su questo telefono.',
         action: AppButton(
           label: 'Riprova',
           onPressed: () async {
@@ -609,7 +609,7 @@ class _RapportinoRow extends ConsumerWidget {
       if (!canWriteReports) {
         showAppToast(
           context,
-          message: 'Non hai i permessi per modificare questo rapportino.',
+          message: 'Non hai i permessi per modificare questo rapporto.',
           tone: ToastTone.warning,
         );
         return;
@@ -809,7 +809,7 @@ class _RapportinoFilterSheetState extends ConsumerState<_RapportinoFilterSheet> 
               children: [
                 Expanded(child: Text('Filtri', style: Theme.of(context).textTheme.titleMedium)),
                 Text(
-                  'Rapportini',
+                  'Rapporti',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,

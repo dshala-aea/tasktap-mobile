@@ -111,7 +111,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 ),
                 const SizedBox(height: AppSpacing.base),
                 Text(
-                  'Ti avvisiamo quando ti viene assegnato un intervento o quando un rapportino ha '
+                  'Ti avvisiamo quando ti viene assegnato un intervento o quando un rapporto ha '
                   'bisogno di te. Gli altri permessi li chiederemo quando servono davvero.',
                   textAlign: TextAlign.center,
                   style: TextStyle(

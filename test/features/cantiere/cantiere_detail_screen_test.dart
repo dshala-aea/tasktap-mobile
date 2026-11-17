@@ -121,7 +121,7 @@ GoRouter _makeTimbraForwardingRouter({required String cantiereId, required Strin
 
 /// Builds this screen's `/cantieri/:id` route behind a real [GoRouter], with a marker screen at
 /// the rapportini-editor route that echoes back its `:id` path parameter — the same shape
-/// `AppRoutes.rapportiniEditor(id)` produces. Used to verify "Crea rapportino" pushes to the
+/// `AppRoutes.rapportiniEditor(id)` produces. Used to verify "Crea rapporto" pushes to the
 /// editor with the report id [createCantiereReportDraft] returned, not just that it renders.
 GoRouter _makeCreaRapportinoRouter({required String cantiereId}) => GoRouter(
   initialLocation: '/cantieri/$cantiereId',
@@ -268,7 +268,7 @@ void main() {
     },
   );
 
-  group('Crea rapportino', () {
+  group('Crea rapporto', () {
     testWidgets('renders the button', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       await db
@@ -299,7 +299,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('Crea rapporto'), findsOneWidget);
 
       await db.close();
     });
@@ -342,8 +342,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Crea rapportino'));
-        await tester.tap(find.text('Crea rapportino'));
+        await tester.ensureVisible(find.text('Crea rapporto'));
+        await tester.tap(find.text('Crea rapporto'));
         for (var i = 0; i < 12; i++) {
           await tester.pump(const Duration(milliseconds: 250));
         }
@@ -390,7 +390,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Crea rapportino'));
+      await tester.tap(find.text('Crea rapporto'));
       await tester.pumpAndSettle();
 
       expect(find.text('Accedi per creare un rapporto di intervento.'), findsOneWidget);
@@ -440,8 +440,8 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Crea rapportino'));
-        await tester.tap(find.text('Crea rapportino'));
+        await tester.ensureVisible(find.text('Crea rapporto'));
+        await tester.tap(find.text('Crea rapporto'));
         for (var i = 0; i < 12; i++) {
           await tester.pump(const Duration(milliseconds: 250));
         }
@@ -603,7 +603,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final timbraY = tester.getTopLeft(find.text('Timbra cantiere')).dy;
-      final creaRapportinoY = tester.getTopLeft(find.text('Crea rapportino')).dy;
+      final creaRapportinoY = tester.getTopLeft(find.text('Crea rapporto')).dy;
       final giornoY = tester.getTopLeft(find.text('Il giorno')).dy;
       final squadraY = tester.getTopLeft(find.text('Squadra')).dy;
       final ticketsY = tester.getTopLeft(find.text('Ticket collegati')).dy;

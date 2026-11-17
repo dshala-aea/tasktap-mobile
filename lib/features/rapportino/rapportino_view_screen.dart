@@ -83,12 +83,12 @@ class RapportinoViewScreen extends ConsumerWidget {
     final draftAsync = ref.watch(rapportinoByIdProvider(reportId));
 
     return draftAsync.when(
-      loading: () => const DetailScaffold.loading(screenTitle: 'Rapportino'),
+      loading: () => const DetailScaffold.loading(screenTitle: 'Rapporto'),
       // No online/offline distinction to draw here (unlike the ticket detail tabs): this reads
       // the local Drift mirror only (rapportinoByIdProvider), never the network, so an error
       // here is a local read failure, not connectivity — and a retry re-opens that same stream.
       error: (e, _) => DetailScaffold.unavailable(
-        screenTitle: 'Rapportino',
+        screenTitle: 'Rapporto',
         icon: LucideIcons.xCircle,
         title: 'Impossibile caricare il rapporto di intervento',
         reason: 'Si è verificato un errore imprevisto. Riprova.',
@@ -97,7 +97,7 @@ class RapportinoViewScreen extends ConsumerWidget {
       data: (draft) {
         if (draft == null) {
           return const DetailScaffold.unavailable(
-            screenTitle: 'Rapportino',
+            screenTitle: 'Rapporto',
             icon: LucideIcons.fileX,
             title: 'Rapporto di intervento non trovato',
             reason: 'Il rapporto di intervento richiesto non è disponibile in cache.',
@@ -231,7 +231,7 @@ class _RapportinoViewBody extends ConsumerWidget {
     final gap = const SizedBox(height: AppSpacing.base);
 
     return DetailScaffold(
-      screenTitle: 'Rapportino',
+      screenTitle: 'Rapporto',
       onRefresh: () => refreshWithFeedback(context, ref),
       hero: _buildRapportinoHero(context, ref, draft, techNames: techNames),
       sections: [
@@ -262,11 +262,17 @@ class _RapportinoViewBody extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               DetailFactsGrid(facts: facts),
-              if (details.isNotEmpty) ...[gap, _TextBlock(label: 'Descrizione', text: details)],
+              // Always rendered. These three are the report's written record, and hiding an empty
+              // one made "not written up yet" indistinguishable from "the text was lost" (owner
+              // report, 2026-11-17: the detail page looked like it was missing them).
+              gap,
+              _TextBlock(label: 'Descrizione', text: details, empty: 'Non indicata'),
+              gap,
               // Diagnosi names the cause and soluzione the remedy; the office searches on those
               // two, so they are not folded into Descrizione.
-              if (diagnosi.isNotEmpty) ...[gap, _TextBlock(label: 'Diagnosi', text: diagnosi)],
-              if (soluzione.isNotEmpty) ...[gap, _TextBlock(label: 'Soluzione', text: soluzione)],
+              _TextBlock(label: 'Diagnosi', text: diagnosi, empty: 'Non indicata'),
+              gap,
+              _TextBlock(label: 'Soluzione', text: soluzione, empty: 'Non indicata'),
               // Internal, not printed on the customer PDF (Report.technicianNotes) — its own block
               // so it is never mistaken for the description.
               if (notes.isNotEmpty) ...[gap, _TextBlock(label: 'Note tecnico', text: notes)],
@@ -506,24 +512,28 @@ class _MonoLabel extends StatelessWidget {
 
 /// A written field (Descrizione, Diagnosi…): mono label over 12px body text, no card.
 class _TextBlock extends StatelessWidget {
-  const _TextBlock({required this.label, required this.text});
+  const _TextBlock({required this.label, required this.text, this.empty});
 
   final String label;
   final String text;
 
+  /// Shown, in muted ink, when [text] is blank — instead of the whole block disappearing.
+  final String? empty;
+
   @override
   Widget build(BuildContext context) {
+    final blank = text.trim().isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _MonoLabel(label),
         const SizedBox(height: 4),
         Text(
-          text,
+          blank ? (empty ?? '') : text,
           style: AppTextStyles.bodySmall.copyWith(
             fontSize: 12,
             height: 1.5,
-            color: context.colors.ink,
+            color: blank ? context.colors.inkMuted : context.colors.ink,
           ),
         ),
       ],
@@ -782,7 +792,7 @@ DetailHeroData _buildRapportinoHero(
   return DetailHeroData(
     variant: DetailHeroVariant.operational,
     title: draft.title,
-    kicker: numero == null || numero.isEmpty ? 'Rapportino' : 'Rapportino · $numero',
+    kicker: numero == null || numero.isEmpty ? 'Rapporto' : 'Rapporto · $numero',
     kickerContext: _kickerContext(touched),
     subtitle: '${_customerLabel(context, ref, draft)} · $site\n$techNames',
     status: DetailStatus(label: rapportinoStatusLabel(draft)),

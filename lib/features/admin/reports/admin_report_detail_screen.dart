@@ -76,7 +76,7 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
     final hasNumero = numero != null && numero.isNotEmpty;
     final entityTitle = (title != null && title.isNotEmpty)
         ? (hasNumero && !title.contains(numero) ? '$title · $numero' : title)
-        : (hasNumero ? 'Rapportino $numero' : 'Rapportino');
+        : (hasNumero ? 'Rapporto $numero' : 'Rapporto');
 
     // Local only: a report's photos/signature images, when this device holds them. No network read
     // at open — a report synced without its allegati simply has no photo rows.

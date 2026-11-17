@@ -179,7 +179,7 @@ Widget _buildScreen({
           ),
         ),
       ),
-      // Explicit null (not left unoverridden) so "Crea rapportino" — the only control that reads
+      // Explicit null (not left unoverridden) so "Crea rapporto" — the only control that reads
       // this — has a deterministic, unauthenticated starting point.
       currentUserProvider.overrideWithValue(null),
       // Same determinism for the internal id createLocalDraft actually keys its refusal on — left
@@ -582,9 +582,9 @@ void main() {
     });
   });
 
-  group('Crea rapportino', () {
+  group('Crea rapporto', () {
     // Only exercised up to (not through) context.push here: this harness's MaterialApp has no
-    // GoRouter installed, matching ticket_detail_screen_test.dart's own "Crea rapportino" test —
+    // GoRouter installed, matching ticket_detail_screen_test.dart's own "Crea rapporto" test —
     // it renders the button but never taps it, for the same reason. The prefill payload itself
     // (cantiereId/customerId/tenantId/workAddress) is verified directly against createLocalDraft
     // in create_draft_test.dart, without needing a router at all.

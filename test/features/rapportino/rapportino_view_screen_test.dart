@@ -413,26 +413,32 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('a report with only a diagnosis does not print an empty Soluzione', (tester) async {
+    testWidgets('a report with only a diagnosis says "Non indicata" for the fix', (tester) async {
+      // A blank field is shown as blank, not omitted: an empty Soluzione used to be
+      // indistinguishable from one whose text had been lost.
       await _seedSubmittedDraft(db, diagnosi: 'Guarnizione consumata');
 
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
       expect(find.text('DIAGNOSI'), findsOneWidget);
-      expect(find.text('SOLUZIONE'), findsNothing);
+      expect(find.text('SOLUZIONE'), findsOneWidget);
+      expect(find.text('Non indicata'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('a report with neither shows no Diagnosi section at all', (tester) async {
+    testWidgets('a report with neither still names all three fields', (tester) async {
       await _seedSubmittedDraft(db);
 
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Diagnosi e soluzione'), findsNothing);
+      expect(find.text('DESCRIZIONE'), findsOneWidget);
+      expect(find.text('DIAGNOSI'), findsOneWidget);
+      expect(find.text('SOLUZIONE'), findsOneWidget);
+      expect(find.text('Non indicata'), findsNWidgets(3));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
