@@ -61,6 +61,21 @@ void main() {
   });
   tearDown(() => db.close());
 
+  test('punch re-reads the server availableActions only after its sync attempt ends', () async {
+    final order = <String>[];
+    final n = PunchNotifier(
+      repo,
+      TimbraSyncService(repo: repo, apiClient: api),
+      null,
+      () async => online,
+      () => order.add('giornata'),
+    );
+    await n.punch(await local());
+    // Sync is fire-and-forget; let it settle.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(order, ['giornata'], reason: 'one refetch, once the sync attempt has completed');
+  });
+
   test('offline Fine on a remote shift: refused, nothing recorded, state unchanged', () async {
     await seedRemoteShift();
     online = false;

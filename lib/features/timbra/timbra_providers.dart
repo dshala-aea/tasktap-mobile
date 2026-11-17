@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:async' show unawaited;
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -42,7 +44,10 @@ final todaySessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref
 /// True when at least one of today's events has not yet been synced.
 final hasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
   final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? [];
-  return sessions.any((s) => s.isPendingSync);
+  // Reconciler-mirrored events (reconciledOrphanMarker) are pending by construction but are never
+  // uploaded — the server already holds them. Counting them left a permanent "Non sincronizzato"
+  // dot and a punch/pause guard stuck on hasPendingSync. Same filter as the sync and reconciler.
+  return sessions.any((s) => s.isPendingSync && s.notes != reconciledOrphanMarker);
 });
 
 // ── Shift state notifier ──────────────────────────────────────────────────────
@@ -269,6 +274,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     this._syncService,
     ILocationService? locationService,
     this._confirmOnline,
+    this._onSynced,
   ]) : _locationService = locationService ?? const DisabledLocationService(),
        super(const AsyncData(null));
 
@@ -276,6 +282,21 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
 
   /// Authoritative "is there really a connection right now" probe. Null = never gate.
   final Future<bool> Function()? _confirmOnline;
+
+  /// Runs once the post-punch sync attempt has finished (success or not). Used to re-read the
+  /// server's `availableActions`: right after a punch they are stale, and the moment the sync
+  /// marks the events synced the guards stop treating them as pending and start trusting that
+  /// stale copy — which blocks the next tap (typically Pausa straight after Inizia).
+  final void Function()? _onSynced;
+
+  void _syncAfterPunch() {
+    final sync = _syncService;
+    if (sync == null) {
+      _onSynced?.call();
+      return;
+    }
+    unawaited(sync.syncNow().whenComplete(() => _onSynced?.call()));
+  }
 
   /// Fine / Pausa / Ripresa on a shift started on ANOTHER device are online-only — the server
   /// stamps its own clock, so an offline tap would be recorded at delivery time. See
@@ -335,7 +356,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
       }
       state = const AsyncData(null);
       // Best-effort sync after punch (fire-and-forget; ignore failure).
-      _syncService?.syncNow();
+      _syncAfterPunch();
     } catch (e, st) {
       state = AsyncError(e, st);
     }
@@ -362,7 +383,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
       }
       state = const AsyncData(null);
       // Best-effort sync after pause/resume (fire-and-forget; ignore failure).
-      _syncService?.syncNow();
+      _syncAfterPunch();
     } catch (e, st) {
       state = AsyncError(e, st);
     }
@@ -392,5 +413,6 @@ final punchNotifierProvider = StateNotifierProvider<PunchNotifier, AsyncValue<vo
       final r = await Connectivity().checkConnectivity();
       return r.any((c) => c != ConnectivityResult.none);
     },
+    () => ref.invalidate(giornataProvider),
   );
 });
