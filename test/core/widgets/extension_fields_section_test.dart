@@ -4,7 +4,7 @@
 // class doc comment) and its save gate (disabled until something changes, then a single PUT with
 // every current value).
 
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,22 +20,37 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 
 class _FakeExtensionFieldsApiClient implements ExtensionFieldsApiClient {
-  _FakeExtensionFieldsApiClient({required this.defs, required this.values});
+  _FakeExtensionFieldsApiClient({
+    required this.defs,
+    required this.values,
+    this.failDefinitions = false,
+  });
 
   final List<ExtensionFieldDefinitionDto> defs;
   final Map<String, String> values;
+  final bool failDefinitions;
+
+  /// Every values read/write the widget attempted — a local draft must make none.
+  int valueCalls = 0;
 
   /// What the widget last tried to save — null until a save happens.
   Map<String, String>? savedValues;
 
   @override
-  Future<List<ExtensionFieldDefinitionDto>> fetchDefinitions(String entityType) async => defs;
+  Future<List<ExtensionFieldDefinitionDto>> fetchDefinitions(String entityType) async {
+    if (failDefinitions) throw Exception('network down');
+    return defs;
+  }
 
   @override
-  Future<Map<String, String>> fetchValues(String entityType, String entityId) async => values;
+  Future<Map<String, String>> fetchValues(String entityType, String entityId) async {
+    valueCalls++;
+    return values;
+  }
 
   @override
   Future<void> saveValues(String entityType, String entityId, Map<String, String> values) async {
+    valueCalls++;
     savedValues = values;
   }
 }
@@ -71,6 +86,21 @@ Widget _wrap(ExtensionFieldsApiClient client) {
       home: Scaffold(body: ExtensionFieldsSection(entityType: 'ticket', entityId: 'tk-1')),
     ),
   );
+}
+
+class _MemoryStore implements ExtensionValuesStore {
+  _MemoryStore(this.initial);
+
+  final Map<String, String> initial;
+
+  /// What the section last stored — null until it stores something.
+  Map<String, String>? saved;
+
+  @override
+  Future<Map<String, String>> load() async => initial;
+
+  @override
+  Future<void> save(Map<String, String> values) async => saved = values;
 }
 
 void main() {
@@ -212,6 +242,167 @@ void main() {
 
       expect(find.text('Altri campi'), findsNothing);
       expect(find.byType(AppTextField), findsNothing);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // A rapportino draft exists only on the phone until it is submitted: its values come from, and
+  // go to, the draft itself — the same online and offline, never over the network.
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  group('local draft', () {
+    late AppDatabase db;
+
+    setUp(() => db = AppDatabase(NativeDatabase.memory()));
+    tearDown(() => db.close());
+
+    Future<void> mirror(String key, {String label = 'Zona', bool required = false}) => db
+        .into(db.extensionFieldDefinitions)
+        .insert(
+          ExtensionFieldDefinitionsCompanion.insert(
+            id: 'm-$key',
+            key: key,
+            label: label,
+            entityType: 'report',
+            fieldType: 'text',
+            isRequired: Value(required),
+          ),
+        );
+
+    Widget wrapLocal(
+      _FakeExtensionFieldsApiClient client,
+      _MemoryStore store, {
+      bool online = true,
+    }) => ProviderScope(
+      retry: (_, _) => null,
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        isOnlineProvider.overrideWithValue(online),
+        extensionFieldsApiClientProvider.overrideWithValue(client),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: ExtensionFieldsSection(entityType: 'report', entityId: 'rep-1', localStore: store),
+        ),
+      ),
+    );
+
+    testWidgets('online: shows the draft\'s own values and never calls the values endpoints', (
+      tester,
+    ) async {
+      final client = _FakeExtensionFieldsApiClient(
+        defs: [_def(key: 'zona', label: 'Zona', fieldType: 'text')],
+        values: const {'zona': 'DA-SERVER'},
+      );
+      final store = _MemoryStore({'zona': 'Nord'});
+
+      await tester.pumpWidget(wrapLocal(client, store));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nord'), findsOneWidget);
+      expect(find.text('DA-SERVER'), findsNothing);
+      expect(client.valueCalls, 0, reason: 'the server has no row for an unsent draft: it would 404');
+      expect(find.byType(AppButton), findsNothing, reason: 'no Save button: edits are stored as typed');
+    });
+
+    testWidgets('offline: same fields, still editable, from the mirror', (tester) async {
+      await mirror('zona');
+      final client = _FakeExtensionFieldsApiClient(defs: const [], values: const {});
+      final store = _MemoryStore({'zona': 'Nord'});
+
+      await tester.pumpWidget(wrapLocal(client, store, online: false));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Altri campi'), findsOneWidget);
+      expect(find.text('Nord'), findsOneWidget);
+      expect(find.textContaining('Sola lettura'), findsNothing);
+    });
+
+    testWidgets('typing is stored on the draft after a short pause, as the full value set', (
+      tester,
+    ) async {
+      final client = _FakeExtensionFieldsApiClient(
+        defs: [
+          _def(key: 'zona', label: 'Zona', fieldType: 'text'),
+          _def(key: 'lotto', label: 'Lotto', fieldType: 'text', sortOrder: 1),
+        ],
+        values: const {},
+      );
+      final store = _MemoryStore({'lotto': '7'});
+
+      await tester.pumpWidget(wrapLocal(client, store));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).first, 'Sud');
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(store.saved, {'zona': 'Sud', 'lotto': '7'});
+    });
+
+    testWidgets('an edit made just before leaving the step is not lost', (tester) async {
+      final client = _FakeExtensionFieldsApiClient(
+        defs: [_def(key: 'zona', label: 'Zona', fieldType: 'text')],
+        values: const {},
+      );
+      final store = _MemoryStore({});
+
+      await tester.pumpWidget(wrapLocal(client, store));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField), 'Est');
+      // Leave before the debounce fires.
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pumpAndSettle();
+
+      expect(store.saved, {'zona': 'Est'});
+    });
+
+    testWidgets('the mirror shows at once and the live list adds a new field without touching '
+        'what was typed', (tester) async {
+      await mirror('zona');
+      final client = _FakeExtensionFieldsApiClient(
+        defs: [
+          _def(key: 'zona', label: 'Zona', fieldType: 'text'),
+          _def(key: 'lotto', label: 'Lotto', fieldType: 'text', sortOrder: 1),
+        ],
+        values: const {},
+      );
+      final store = _MemoryStore({'zona': 'Nord'});
+
+      await tester.pumpWidget(wrapLocal(client, store));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextFormField), findsNWidgets(2), reason: 'the live list added "Lotto"');
+      expect(find.text('Nord'), findsOneWidget);
+    });
+
+    testWidgets('a failed live read keeps the mirrored fields instead of hiding the section', (
+      tester,
+    ) async {
+      await mirror('zona');
+      final client = _FakeExtensionFieldsApiClient(
+        defs: const [],
+        values: const {},
+        failDefinitions: true,
+      );
+
+      await tester.pumpWidget(wrapLocal(client, _MemoryStore({})));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextFormField), findsOneWidget);
+      expect(find.text('Impossibile caricare i campi aggiuntivi.'), findsNothing);
+    });
+
+    testWidgets('a failed read with no mirror says so and offers a retry', (tester) async {
+      final client = _FakeExtensionFieldsApiClient(
+        defs: const [],
+        values: const {},
+        failDefinitions: true,
+      );
+
+      await tester.pumpWidget(wrapLocal(client, _MemoryStore({})));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Impossibile caricare i campi aggiuntivi.'), findsOneWidget);
+      expect(find.text('Riprova'), findsOneWidget);
     });
   });
 }

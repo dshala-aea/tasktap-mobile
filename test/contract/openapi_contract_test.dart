@@ -108,6 +108,7 @@ void main() {
       technicianSignatureAllegatoId: '00000000-0000-0000-0000-000000000006',
       customerSignoffText: 'accettato',
       materialiNotRequired: false,
+      extensionValues: const {'zona': 'Nord'},
       photoAllegatoIds: const ['00000000-0000-0000-0000-000000000007'],
       staff: [
         SubmitReportStaffDto(

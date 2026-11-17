@@ -1,6 +1,11 @@
 // dart format width=100
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
+import '../../domain/reports/extension_values.dart';
+import '../extension_fields/extension_fields_api_client.dart'
+    show decodeExtensionValues, mirroredExtensionDefinitions;
 import '../local/app_database.dart';
 import '../sync/draft_submission_state.dart';
 
@@ -59,6 +64,37 @@ class DraftReportRepository {
   /// disappear the moment `markSubmitted`/a sync clears the flag.
   Stream<List<DraftReport>> watchAllReports() {
     return (_db.select(_db.draftReports)..orderBy([(r) => OrderingTerm.desc(r.updatedAt)])).watch();
+  }
+
+  // ── Extension fields ("Altri campi") ──────────────────────────────────────
+
+  /// The custom-field values stored on this draft (key → text); empty when none were ever saved.
+  Future<Map<String, String>> getExtensionValues(String reportId) async {
+    final draft = await getDraft(reportId);
+    return decodeExtensionValues(draft?.extensionValues);
+  }
+
+  /// Stores [values] as the draft's custom-field values. Touches only that column, so it cannot
+  /// race the editor's own header autosave.
+  Future<void> setExtensionValues(String reportId, Map<String, String> values) async {
+    await (_db.update(_db.draftReports)..where((r) => r.id.equals(reportId))).write(
+      DraftReportsCompanion(extensionValues: Value(jsonEncode(values))),
+    );
+  }
+
+  /// What `SubmitReportRequest.extensionValues` must carry for this draft: the effective value of
+  /// every active `report` definition the device knows (stored → default → empty), or null when the
+  /// mirror holds none.
+  ///
+  /// Null is deliberate, not "no values": it tells the server this build does not own the field,
+  /// so stored values stay untouched and nothing is enforced. That is the right answer when the
+  /// device has no definitions — a tenant with no custom fields, or a seat the server withheld
+  /// them from — and the only safe one: sending an empty map would assert "these are all of the
+  /// report's values".
+  Future<Map<String, String>?> buildSubmitExtensionValues(String reportId) async {
+    final definitions = await mirroredExtensionDefinitions(_db, 'report');
+    if (definitions.isEmpty) return null;
+    return effectiveExtensionValues(definitions, await getExtensionValues(reportId));
   }
 
   /// Delete a draft and all its children.

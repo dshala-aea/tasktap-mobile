@@ -474,6 +474,10 @@ class SubmissionQueue {
       // time would always match the row being compared and the guard would be inert. Null for a
       // draft that has never been on the server → the request omits it and the server skips the check.
       expectedVersion: draft.expectedVersion,
+      // The wizard's "Altri campi". A draft the server has never seen has no row to PUT them to,
+      // so they ride with the submit; null (no definitions known) tells the server this build does
+      // not own the field.
+      extensionValues: await _repo.buildSubmitExtensionValues(draft.id),
       scheduleId: draft.scheduleId,
       ticketId: draft.ticketId,
       locationId: draft.locationId,

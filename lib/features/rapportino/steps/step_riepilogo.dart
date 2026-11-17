@@ -31,6 +31,7 @@ import '../../../presentation/providers/auth_providers.dart' show internalUserId
 import '../../../domain/reports/draft_validation.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../absence/customer_absence.dart';
+import '../report_extension_validation.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../../core/router/app_router.dart';
 import '../report_submission_destination.dart';
@@ -347,7 +348,11 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(reportEditorProvider(widget.reportId));
-    final validation = state.validation;
+    // The pure draft rules plus the tenant's required "Altri campi" (their definitions live in the
+    // sync mirror, which only this layer can reach).
+    final missingExtension =
+        ref.watch(reportMissingExtensionFieldsProvider(widget.reportId)).value ?? const <String>[];
+    final validation = state.validation.withMissingExtensionFields(missingExtension);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(

@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -38,12 +40,20 @@ import 'section_title.dart';
 // only mount this once editing an existing one, not while creating a new one.
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// Where a draft entity keeps its custom-field values on this device — see
+/// [ExtensionFieldsSection.localStore].
+abstract class ExtensionValuesStore {
+  Future<Map<String, String>> load();
+  Future<void> save(Map<String, String> values);
+}
+
 class ExtensionFieldsSection extends ConsumerStatefulWidget {
   const ExtensionFieldsSection({
     super.key,
     required this.entityType,
     required this.entityId,
     this.canEdit = true,
+    this.localStore,
   });
 
   /// The backend's own lowercase entity-type key — 'ticket', 'cantiere', 'report',
@@ -57,6 +67,13 @@ class ExtensionFieldsSection extends ConsumerStatefulWidget {
   /// save control and no editable fields) instead of offering a save the server would refuse.
   final bool canEdit;
 
+  /// Set for an entity that exists only on this device until it is submitted (a rapportino draft):
+  /// its values are read from and written to [localStore] — no network, so the section behaves the
+  /// same online and offline — instead of the `/extension-fields/.../values` endpoints, which would
+  /// 404 for a row the server has never seen. There is no Save button in this mode: edits are
+  /// stored as the technician types and travel with the entity's own submit.
+  final ExtensionValuesStore? localStore;
+
   @override
   ConsumerState<ExtensionFieldsSection> createState() => _ExtensionFieldsSectionState();
 }
@@ -69,26 +86,67 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
   /// so their working state lives here instead, keyed the same way as [_controllers].
   final Map<String, String> _otherValues = {};
 
-  /// Populated once, from the first successful defs+values load — see [_seed]. Re-fetches after
-  /// that (e.g. a pull elsewhere invalidating the provider) do not re-seed and blow away whatever
-  /// the technician has typed since.
+  /// The latest definitions (see [_sync]).
   List<ExtensionFieldDefinitionDto>? _defs;
 
   bool _dirty = false;
   bool _isSaving = false;
 
+  bool get _local => widget.localStore != null;
+
+  /// Local mode: the values the store held when the section opened, null until loaded.
+  Map<String, String>? _localValues;
+  Object? _localError;
+  Timer? _localSaveTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_local) unawaited(_loadLocal());
+  }
+
+  Future<void> _loadLocal() async {
+    try {
+      final values = await widget.localStore!.load();
+      if (!mounted) return;
+      setState(() {
+        _localValues = values;
+        _localError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _localError = e);
+    }
+  }
+
   @override
   void dispose() {
+    // A pending debounced save must not be lost when the step is left within its window.
+    if (_localSaveTimer?.isActive ?? false) {
+      _localSaveTimer!.cancel();
+      unawaited(_saveLocal());
+    }
     for (final c in _controllers.values) {
       c.dispose();
     }
     super.dispose();
   }
 
-  void _seed(List<ExtensionFieldDefinitionDto> defs, Map<String, String> values) {
-    if (_defs != null) return;
+  /// Reconciles the working state with the latest [defs], key by key. The definitions can change
+  /// while the form is open — the device's mirror is shown first and the live list replaces it a
+  /// moment later, or the office edits a field — so this runs on every emission, not once:
+  /// a field that appears is seeded (stored value, else its default), one that vanished is dropped,
+  /// and a field that was already there keeps exactly what the technician typed.
+  void _sync(List<ExtensionFieldDefinitionDto> defs, Map<String, String> values) {
     _defs = defs;
+    final keys = {for (final d in defs) d.key};
+    for (final gone in _controllers.keys.where((k) => !keys.contains(k)).toList()) {
+      _controllers.remove(gone)?.dispose();
+    }
+    _otherValues.removeWhere((k, _) => !keys.contains(k));
+
     for (final d in defs) {
+      if (_controllers.containsKey(d.key) || _otherValues.containsKey(d.key)) continue;
       final raw = values[d.key] ?? d.defaultValue ?? '';
       switch (d.renderType) {
         case ExtensionFieldRenderType.text:
@@ -102,13 +160,30 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
     }
   }
 
+  void _markDirty() {
+    setState(() => _dirty = true);
+    if (_local) {
+      _localSaveTimer?.cancel();
+      _localSaveTimer = Timer(const Duration(milliseconds: 400), () => unawaited(_saveLocal()));
+    }
+  }
+
+  Future<void> _saveLocal() async {
+    final defs = _defs;
+    final store = widget.localStore;
+    if (defs == null || store == null) return;
+    try {
+      await store.save({for (final d in defs) d.key: _valueFor(d.key)});
+    } catch (_) {
+      // Best effort: the next edit retries, and the pre-submit check reads what was stored.
+    }
+  }
+
   String _valueFor(String key) => _controllers[key]?.text ?? _otherValues[key] ?? '';
 
   void _setOther(String key, String value) {
-    setState(() {
-      _otherValues[key] = value;
-      _dirty = true;
-    });
+    _otherValues[key] = value;
+    _markDirty();
   }
 
   Future<void> _save() async {
@@ -144,32 +219,59 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
     // Offline, a type whose values the mirror does not carry would render every field blank in
     // read-only mode with a "sola lettura" note — which reads as "this asset has no custom fields"
     // when the truth is that the values never reached this device. Rendering nothing is the honest
-    // answer; the fields come back with the connection, not with a stale empty copy.
-    if (!ref.watch(isOnlineProvider) &&
+    // answer; the fields come back with the connection, not with a stale empty copy. A local draft
+    // is exempt: its values ARE on this device.
+    if (!_local &&
+        !ref.watch(isOnlineProvider) &&
         !mirroredExtensionValueEntityTypes.contains(widget.entityType)) {
       return const SizedBox.shrink();
     }
 
-    final defsAsync = ref.watch(extensionFieldDefinitionsProvider(widget.entityType));
+    final defsAsync = _local
+        ? ref.watch(extensionFieldDefinitionsFreshProvider(widget.entityType))
+        : ref.watch(extensionFieldDefinitionsProvider(widget.entityType));
+
+    void retryDefinitions() {
+      if (_local) {
+        ref.invalidate(extensionFieldDefinitionsFreshProvider(widget.entityType));
+      } else {
+        ref.invalidate(extensionFieldDefinitionsProvider(widget.entityType));
+      }
+    }
 
     return defsAsync.when(
-      // Loading/error both render nothing: this section is supplementary to whatever primary form
-      // hosts it, and a failed or slow fetch of a feature most entities don't even use must never
-      // block or clutter the fields the technician actually came here for.
+      // Loading renders nothing: this section is supplementary to whatever primary form hosts it,
+      // and a slow fetch of a feature most entities don't even use must never block or clutter the
+      // fields the technician actually came here for. A FAILED load is different — it used to
+      // vanish just as silently, which read as "this tenant has no custom fields" — so it says so
+      // and offers a retry.
       loading: () => const SizedBox.shrink(),
-      error: (e, _) => const SizedBox.shrink(),
+      error: (e, _) => _buildError(context, onRetry: retryDefinitions),
       data: (defs) {
         if (defs.isEmpty) return const SizedBox.shrink();
+
+        if (_local) {
+          if (_localError != null) {
+            return _buildError(context, onRetry: () => unawaited(_loadLocal()));
+          }
+          final values = _localValues;
+          if (values == null) return _buildLoading(context);
+          _sync(defs, values);
+          return _buildSection(context, defs);
+        }
 
         final valuesKey = (widget.entityType, widget.entityId);
         final valuesAsync = ref.watch(extensionFieldValuesProvider(valuesKey));
 
         return valuesAsync.when(
           loading: () => _buildLoading(context),
-          error: (e, _) => _buildError(context, valuesKey),
+          error: (e, _) => _buildError(
+            context,
+            onRetry: () => ref.invalidate(extensionFieldValuesProvider(valuesKey)),
+          ),
           data: (values) {
-            _seed(defs, values);
-            return _buildSection(context, _defs!);
+            _sync(defs, values);
+            return _buildSection(context, defs);
           },
         );
       },
@@ -201,7 +303,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
     );
   }
 
-  Widget _buildError(BuildContext context, (String, String) valuesKey) {
+  Widget _buildError(BuildContext context, {required VoidCallback onRetry}) {
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.lg),
       child: Column(
@@ -218,10 +320,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
                     style: TextStyle(fontSize: 13, color: context.colors.inkMuted),
                   ),
                 ),
-                TextButton(
-                  onPressed: () => ref.invalidate(extensionFieldValuesProvider(valuesKey)),
-                  child: const Text('Riprova'),
-                ),
+                TextButton(onPressed: onRetry, child: const Text('Riprova')),
               ],
             ),
           ),
@@ -239,7 +338,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
     // appear offline. A seat without the entity's write capability gets the same treatment, even
     // online: the fields are shown, but there is no actionable save to refuse.
     final online = ref.watch(isOnlineProvider);
-    final editable = online && widget.canEdit;
+    final editable = (_local || online) && widget.canEdit;
 
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.lg),
@@ -258,9 +357,14 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
                 ],
                 if (!editable)
                   Text(
-                    online
+                    (_local || online)
                         ? 'Sola lettura: non hai i permessi per modificare questi campi.'
                         : 'Sola lettura finché non torna la connessione.',
+                    style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+                  )
+                else if (_local)
+                  Text(
+                    'Salvati su questo dispositivo e inviati con il rapportino.',
                     style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
                   )
                 else
@@ -300,7 +404,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
           controller: _controllers[d.key],
           keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
           readOnly: !editable,
-          onChanged: (_) => setState(() => _dirty = true),
+          onChanged: (_) => _markDirty(),
           suffixIcon: (d.unit != null && d.unit!.isNotEmpty)
               ? Padding(
                   padding: const EdgeInsets.only(right: AppSpacing.md),
@@ -350,7 +454,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
               () => TextEditingController(text: _otherValues[d.key] ?? ''),
             ),
             readOnly: !editable,
-            onChanged: (_) => setState(() => _dirty = true),
+            onChanged: (_) => _markDirty(),
           );
         }
         final current = _otherValues[d.key];
@@ -372,7 +476,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
           hint: d.placeholder,
           controller: _controllers[d.key],
           readOnly: !editable,
-          onChanged: (_) => setState(() => _dirty = true),
+          onChanged: (_) => _markDirty(),
         );
     }
   }

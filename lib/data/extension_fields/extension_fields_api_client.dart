@@ -84,10 +84,32 @@ final extensionFieldsApiClientProvider = Provider<ExtensionFieldsApiClient>((ref
 final extensionFieldDefinitionsProvider = FutureProvider.autoDispose
     .family<List<ExtensionFieldDefinitionDto>, String>((ref, entityType) async {
       if (!ref.watch(isOnlineProvider)) {
-        return _mirroredDefinitions(ref.watch(appDatabaseProvider), entityType);
+        return mirroredExtensionDefinitions(ref.watch(appDatabaseProvider), entityType);
       }
       final api = ref.watch(extensionFieldsApiClientProvider);
       return api.fetchDefinitions(entityType);
+    });
+
+/// Definitions for [entityType] with the freshest data available NOW and the freshest data
+/// available LATER: the device's mirror is emitted immediately (it is the same active set the last
+/// sync delivered), and — when the backend is reachable — replaced by the live list as soon as it
+/// arrives. A failed live read keeps the mirror; it only surfaces as an error when there is no
+/// mirror to fall back on, so a flaky connection never hides fields the device already knows.
+final extensionFieldDefinitionsFreshProvider = StreamProvider.autoDispose
+    .family<List<ExtensionFieldDefinitionDto>, String>((ref, entityType) async* {
+      final online = ref.watch(isOnlineProvider);
+      final api = ref.watch(extensionFieldsApiClientProvider);
+      final db = ref.watch(appDatabaseProvider);
+
+      final mirror = await mirroredExtensionDefinitions(db, entityType);
+      if (mirror.isNotEmpty || !online) yield mirror;
+      if (!online) return;
+
+      try {
+        yield await api.fetchDefinitions(entityType);
+      } catch (_) {
+        if (mirror.isEmpty) rethrow;
+      }
     });
 
 /// One entity's current extension-field values, keyed by `(entityType, entityId)` so a ticket and
@@ -106,7 +128,7 @@ final extensionFieldValuesProvider = FutureProvider.autoDispose
     });
 
 /// Definitions this device mirrored for [entityType], in the order the office arranged them.
-Future<List<ExtensionFieldDefinitionDto>> _mirroredDefinitions(
+Future<List<ExtensionFieldDefinitionDto>> mirroredExtensionDefinitions(
   AppDatabase db,
   String entityType,
 ) async {
