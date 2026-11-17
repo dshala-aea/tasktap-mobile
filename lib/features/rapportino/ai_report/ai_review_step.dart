@@ -63,6 +63,8 @@ class AiReviewStep extends StatelessWidget {
         .whereType<double>()
         .fold<double>(0, (a, b) => a + b);
     final note = draft.customerSignoffText?.trim();
+    final diagnosi = (draft.diagnosi ?? '').trim();
+    final soluzione = (draft.soluzione ?? '').trim();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -119,6 +121,43 @@ class AiReviewStep extends StatelessWidget {
                           .join(' · '),
                     ),
                   ),
+              ],
+            ),
+          ),
+        const AiCardGap(dense: true),
+
+        // ── Causa e soluzione ─────────────────────────────────────────────────
+        // What the office reads first, and the half of the report a spoken description almost never
+        // contains. The review is the last place before signatures, so an empty pair is worth a
+        // dashed "Da completare" card here rather than discovering it in the PDF.
+        if (diagnosi.isEmpty && soluzione.isEmpty)
+          AiCard(
+            todo: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                AiLabel('Diagnosi e soluzione'),
+                SizedBox(height: 4),
+                AiHelper('Da completare'),
+              ],
+            ),
+          )
+        else
+          AiCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (diagnosi.isNotEmpty) ...[
+                  const AiLabel('Diagnosi'),
+                  const SizedBox(height: 4),
+                  AiValue(diagnosi),
+                ],
+                if (diagnosi.isNotEmpty && soluzione.isNotEmpty) const SizedBox(height: 10),
+                if (soluzione.isNotEmpty) ...[
+                  const AiLabel('Soluzione'),
+                  const SizedBox(height: 4),
+                  AiValue(soluzione),
+                ],
               ],
             ),
           ),

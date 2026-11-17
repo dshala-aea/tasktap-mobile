@@ -317,6 +317,14 @@ class LucideIcons {
     fontPackage: 'lucide_icons',
   );
 
+  /// The assistant's own mark. Lucide's `sparkles`, the glyph every assistant UI uses for
+  /// "generated/suggested" — its codepoint copied from lucide_icons 0.257.0 like the rest.
+  static const IconData sparkles = IconData(
+    0xf4e8,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
   static const IconData package = IconData(
     0xf414,
     fontFamily: 'Lucide',

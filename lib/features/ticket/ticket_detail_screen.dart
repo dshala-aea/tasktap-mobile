@@ -328,19 +328,22 @@ class _TicketDetailBody extends ConsumerWidget {
         // pretending the ticket timer is a cantiere punch.
         secondaryActions: [
           if (hasOwner && !closed && canWriteReport) ...[
-            // The report is the ticket's primary downstream action, so it leads the row and takes
-            // the filled secondary style (the hero's timer stays the primary action).
+            // Two ways to the same outcome, and the assistant leads: on site the technician can
+            // TALK the report into existence instead of filling four tiles with a gloved hand.
+            // The hero's timer stays the screen's primary action; this is the first of the
+            // secondaries, so it keeps the filled style and the manual form follows as the ghost.
+            DetailAction(
+              label: 'Assistente AI',
+              icon: const Icon(LucideIcons.sparkles, size: 16),
+              onPressed: () => context.push(
+                AppRoutes.rapportiniCopilot(ticketId: ticket.id),
+              ),
+            ),
             DetailAction(
               label: 'Crea report',
               icon: const Icon(LucideIcons.fileEdit, size: 16),
               onPressed: () =>
                   _createRapportino(context, ref, ticket, locationAddress),
-            ),
-            DetailAction(
-              label: 'AI Copilot',
-              onPressed: () => context.push(
-                AppRoutes.rapportiniCopilot(ticketId: ticket.id),
-              ),
             ),
           ],
           if (ticket.cantiereId != null)
