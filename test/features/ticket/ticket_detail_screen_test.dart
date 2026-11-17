@@ -443,18 +443,23 @@ void main() {
       },
     );
 
-    testWidgets('Crea report and AI Copilot move into the hero', (
+    testWidgets('the assistant leads the report actions, the form follows', (
       tester,
     ) async {
       await seedBase(db);
       await pump(tester);
       final hero = find.byType(DetailHero);
       expect(
-        find.descendant(of: hero, matching: find.text('Crea report')),
+        find.descendant(of: hero, matching: find.text('Assistente AI')),
         findsOneWidget,
       );
       expect(
-        find.descendant(of: hero, matching: find.text('AI Copilot')),
+        find.descendant(of: hero, matching: find.byIcon(LucideIcons.sparkles)),
+        findsOneWidget,
+        reason: 'the assistant is recognisable at a glance, not just by its name',
+      );
+      expect(
+        find.descendant(of: hero, matching: find.text('Crea report')),
         findsOneWidget,
       );
       await tester.pumpWidget(const SizedBox.shrink());
