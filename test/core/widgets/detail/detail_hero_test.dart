@@ -134,7 +134,7 @@ void main() {
                 ),
                 secondaryActions: const [
                   DetailAction(label: 'AI Copilot', onPressed: _noop),
-                  DetailAction(label: 'Crea rapportino', onPressed: _noop),
+                  DetailAction(label: 'Crea rapporto', onPressed: _noop),
                 ],
               ),
             ),
@@ -147,7 +147,7 @@ void main() {
       expect(find.textContaining('Perdita acqua sotto'), findsOneWidget);
       expect(find.text('Avvia intervento'), findsOneWidget);
       expect(find.text('AI Copilot'), findsOneWidget);
-      expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('Crea rapporto'), findsOneWidget);
     },
   );
 
@@ -168,7 +168,7 @@ void main() {
               ),
               secondaryActions: const [
                 DetailAction(label: 'AI Copilot', onPressed: _noop),
-                DetailAction(label: 'Crea rapportino', onPressed: _noop),
+                DetailAction(label: 'Crea rapporto', onPressed: _noop),
               ],
             ),
           ),

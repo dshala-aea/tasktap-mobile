@@ -65,9 +65,9 @@ class UnavailableState extends StatelessWidget {
   ///   error: (e, _) => UnavailableState.forFetchError(
   ///     icon: LucideIcons.fileText,
   ///     offline: e is TicketDetailOfflineException,
-  ///     offlineTitle: 'Rapportini non disponibili offline',
+  ///     offlineTitle: 'Rapporti non disponibili offline',
   ///     offlineBody: 'La lista richiede una connessione: riprova quando torni online.',
-  ///     errorTitle: 'Impossibile caricare i rapportini',
+  ///     errorTitle: 'Impossibile caricare i rapporti',
   ///     errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
   ///   ),
   ///   ...

@@ -256,7 +256,7 @@ void main() {
   /// an empty location and a null customer while the ticket chip still showed. The Dettagli step
   /// then drew two empty Cliente/Sede pickers under a linked ticket, and the report failed
   /// `missingLocation` at submit. The ticket's own mirrored row is the prefill the manual
-  /// "Crea rapportino" path already applies, so it is the one used here.
+  /// "Crea rapporto" path already applies, so it is the one used here.
   testWidgets("takes the linked ticket's customer, location and tenant from the mirror", (
     tester,
   ) async {

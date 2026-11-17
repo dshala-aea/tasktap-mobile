@@ -51,7 +51,7 @@ class CantiereDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
-  // Guards "Crea rapportino" against a double-tap: the button awaits a real network round-trip
+  // Guards "Crea rapporto" against a double-tap: the button awaits a real network round-trip
   // (POST /api/reports/from-cantiere-worklogs), and on a slow connection — which this app is
   // explicitly built for — a second tap during that window would fire the create call again. The
   // first call already consumed this cantiere's unconsumed worklogs, so the second would create a
@@ -190,7 +190,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
     );
   }
 
-  /// "Crea rapportino" — calls `POST /api/reports/from-cantiere-worklogs` and opens the ordinary
+  /// "Crea rapporto" — calls `POST /api/reports/from-cantiere-worklogs` and opens the ordinary
   /// rapportino editor on the resulting draft. See [createCantiereReportDraft] for the full
   /// create-then-hydrate flow and why the local draft reuses the backend-issued report id.
   Future<void> _handleCreateRapportino(CantieriData cantiere) async {
@@ -464,7 +464,7 @@ class _SiteStateCard extends ConsumerWidget {
               children: [
                 Expanded(
                   child: CantiereButton(
-                    label: 'Crea rapportino',
+                    label: 'Crea rapporto',
                     kind: CantiereButtonKind.secondary,
                     compact: true,
                     loading: isCreatingRapportino,

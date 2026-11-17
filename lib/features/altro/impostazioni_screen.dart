@@ -910,7 +910,7 @@ class _GpsNotice extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'La posizione viene registrata solo in momenti puntuali (timbratura, rapportino, '
+              'La posizione viene registrata solo in momenti puntuali (timbratura, rapporto, '
               "caricamento). Non c'è tracciamento continuo in background. Il titolare può "
               "disattivare la geolocalizzazione per tutta l'azienda.",
               style: TextStyle(

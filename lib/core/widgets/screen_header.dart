@@ -118,7 +118,7 @@ class HeaderIconBtn extends StatelessWidget {
 /// Spec padding: top 8 / horizontal 19 / bottom 12.
 ///
 /// ```dart
-/// ScreenHeader(title: 'Rapportini');
+/// ScreenHeader(title: 'Rapporti');
 /// ScreenHeader(
 ///   title: 'Dettaglio',
 ///   subtitle: 'Ticket #1024',
