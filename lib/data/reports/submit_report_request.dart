@@ -16,6 +16,7 @@ class SubmitReportRequest {
     required this.id,
     this.expectedVersion,
     this.extensionValues,
+    this.customerCopyRecipient,
     this.scheduleId,
     this.ticketId,
     this.cantiereId,
@@ -64,6 +65,13 @@ class SubmitReportRequest {
   /// the server leaves the stored values alone; present, they are merged per key and a required
   /// field left blank refuses the submit. Mirrors backend `SubmitReportRequest.ExtensionValues`.
   final Map<String, String>? extensionValues;
+
+  /// The address the technician confirmed for the customer's copy of the signed rapportino. Null =
+  /// no copy requested (omitted from the JSON — also the shape every older build sends). The
+  /// server stages the send with this submit and only when the customer actually signed; an invalid
+  /// address never fails the submit, it is recorded as a failed delivery the office can see.
+  /// Mirrors backend `SubmitReportRequest.CustomerCopyRecipient`.
+  final String? customerCopyRecipient;
 
   /// Optional schedule the report belongs to.
   final String? scheduleId;
@@ -169,6 +177,8 @@ class SubmitReportRequest {
     // all, exactly the pre-guard wire shape.
     if (expectedVersion != null) 'expectedVersion': expectedVersion,
     if (extensionValues != null) 'extensionValues': extensionValues,
+    if (customerCopyRecipient != null && customerCopyRecipient!.trim().isNotEmpty)
+      'customerCopyRecipient': customerCopyRecipient!.trim(),
     if (scheduleId != null) 'scheduleId': scheduleId,
     if (ticketId != null) 'ticketId': ticketId,
     if (cantiereId != null) 'cantiereId': cantiereId,
