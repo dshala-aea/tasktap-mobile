@@ -48,6 +48,22 @@ void main() {
       });
     });
 
+    test('giornata is refetched only AFTER sync and reconcile have run', () {
+      fakeAsync((async) {
+        final order = <String>[];
+        final c = WorkLogRefreshCoordinator(
+          reconcile: () async => order.add('reconcile'),
+          refetchTrackers: () {},
+          syncPending: () async => order.add('sync'),
+          refetchGiornata: () => order.add('giornata'),
+        );
+        c.refreshNow();
+        async.flushMicrotasks();
+        expect(order, ['sync', 'reconcile', 'giornata']);
+        c.dispose();
+      });
+    });
+
     test('refreshNow acts immediately and cancels a pending debounced one', () {
       fakeAsync((async) {
         var reconciles = 0;
