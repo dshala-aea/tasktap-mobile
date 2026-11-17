@@ -72,6 +72,10 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
   List<Map<String, dynamic>> _prodotti = [];
   bool _isLoadingProdotti = false;
 
+  /// The last attempt to load the customer's assets failed (a 504, no network). The picker retries
+  /// instead of opening on an empty list, and the field says so rather than "Nessun asset".
+  bool _prodottiLoadFailed = false;
+
   /// `ContractFrequencyUnit`'s own wire spelling — see [AdminApiClient.createContract]'s doc
   /// comment for why this is a string, not the ordinal int the form used to send.
   String _frequencyUnit = 'Months';
@@ -121,13 +125,26 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
     try {
       final api = ref.read(adminApiClientProvider);
       final items = await api.fetchProdottiAssistenza(customerId: customerId);
-      if (mounted) setState(() => _prodotti = items);
+      if (mounted) {
+        setState(() {
+          _prodotti = items;
+          _prodottiLoadFailed = false;
+        });
+      }
+    } catch (_) {
+      // Called unawaited (initState, customer change): rethrowing here surfaced a gateway 504 as an
+      // unhandled async error. Keep the form usable and let the field offer a retry instead.
+      if (mounted) setState(() => _prodottiLoadFailed = true);
     } finally {
       if (mounted) setState(() => _isLoadingProdotti = false);
     }
   }
 
   Future<void> _openAssetPicker() async {
+    if (_prodottiLoadFailed) {
+      await _loadProdottiForCustomer(_selectedCustomerId);
+      if (!mounted || _prodottiLoadFailed) return;
+    }
     final result = await openProdottoMultiPickerSheet(
       context,
       prodotti: _prodotti,
@@ -423,6 +440,8 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
               label: 'Asset coperti',
               value: _isLoadingProdotti
                   ? 'Caricamento…'
+                  : _prodottiLoadFailed
+                  ? 'Impossibile caricare gli asset — tocca per riprovare'
                   : _selectedProdottoIds.isEmpty
                   ? 'Nessun asset selezionato'
                   : '${_selectedProdottoIds.length} asset selezionati',
