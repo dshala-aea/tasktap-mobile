@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/audio/speech_synthesis.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 
 class _Adapter implements HttpClientAdapter {
@@ -653,6 +654,61 @@ void main() {
       expect(await gone.tryAbandonConversation('s'), isTrue);
       final down = _clientThrowing(_err(type: DioExceptionType.connectionError));
       expect(await down.tryAbandonConversation('s'), isFalse);
+    });
+  });
+
+  group('synthesize (POST /api/ai/speech)', () {
+    test('returns the audio bytes and its content type', () async {
+      RequestOptions? seen;
+      final dio = Dio()
+        ..httpClientAdapter = _Adapter((o) async {
+          seen = o;
+          return ResponseBody.fromBytes(
+            [1, 2, 3],
+            200,
+            headers: {
+              Headers.contentTypeHeader: ['audio/mpeg; charset=binary'],
+            },
+          );
+        });
+      final clip = await AiApiClient(dio).synthesize('Ciao a tutti');
+      expect(clip.bytes, [1, 2, 3]);
+      expect(clip.contentType, 'audio/mpeg');
+      expect(seen!.path, '/api/ai/speech');
+      expect(seen!.data, {'text': 'Ciao a tutti'});
+    });
+
+    test('maps the server answers to a fallback decision', () async {
+      Future<SpeechSynthesisFailure> failureFor(int status) async {
+        final dio = Dio()
+          ..httpClientAdapter = _Adapter((_) async => ResponseBody.fromBytes([0], status));
+        try {
+          await AiApiClient(dio).synthesize('x');
+        } on SpeechSynthesisException catch (e) {
+          return e.failure;
+        }
+        fail('expected a SpeechSynthesisException for $status');
+      }
+
+      expect(await failureFor(503), SpeechSynthesisFailure.notAvailable);
+      expect(await failureFor(403), SpeechSynthesisFailure.notAvailable);
+      expect(await failureFor(429), SpeechSynthesisFailure.quotaExhausted);
+      expect(await failureFor(502), SpeechSynthesisFailure.transient);
+      expect(await failureFor(400), SpeechSynthesisFailure.transient);
+    });
+
+    test('a dead connection is transient', () async {
+      final client = _clientThrowing(_err(type: DioExceptionType.connectionError));
+      await expectLater(
+        () => client.synthesize('x'),
+        throwsA(
+          isA<SpeechSynthesisException>().having(
+            (e) => e.failure,
+            'failure',
+            SpeechSynthesisFailure.transient,
+          ),
+        ),
+      );
     });
   });
 }

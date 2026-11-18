@@ -113,6 +113,7 @@ dependencies:
   wakelock_plus: ^1.8.0
   flutter_tts: ^4.2.5
   sqlite3: ^3.9.1
+  just_audio: ^0.10.6
 
 # package:sqlite3 3.x bundles SQLite through Dart build hooks. Selecting the SQLCipher build here
 # replaces sqlcipher_flutter_libs (0.7.0+eol is an end-of-life no-op).
