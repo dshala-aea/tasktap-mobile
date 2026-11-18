@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskTap — Anteprima liste</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@600;700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#F1EEE7;--sheet:#FBF9F4;--fill:#EDEAE3;--rule:#DED9CE;--ink:#22252E;--muted:#5E6878;--red:#C03221;--green:#248A3D;--amber:#B36200;--blue:#4F6BFF;--display:"Archivo Narrow","Arial Narrow",system-ui,sans-serif;--body:"Archivo",system-ui,-apple-system,sans-serif;--mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  *{box-sizing:border-box}html,body{margin:0;min-height:100%}
+  body{background:radial-gradient(1100px 520px at 50% -10%,rgba(251,249,244,.85),transparent 70%),repeating-linear-gradient(90deg,rgba(34,37,46,.028) 0 1px,transparent 1px 96px),var(--paper);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  .page{max-width:1340px;margin:0 auto;padding:30px 28px 70px}
+  .masthead{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--rule)}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.11em;text-transform:uppercase}
+  .brand-mark{width:26px;height:26px;display:grid;place-items:center;background:var(--red);color:var(--sheet);font-family:var(--mono);font-size:10px;border-radius:2px;transform:rotate(-2deg)}
+  .brand span{color:var(--muted);font-weight:600}
+  .meta{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;text-align:right}
+  .intro{display:grid;grid-template-columns:1.2fr .8fr;gap:36px;align-items:end;padding:40px 0 24px}
+  .kicker{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin:0 0 12px}
+  h1{font-family:var(--display);font-size:clamp(44px,5.8vw,76px);line-height:.9;letter-spacing:-.035em;margin:0}
+  h1 em{font-style:normal;color:var(--red)}
+  .lede{font-size:14px;line-height:1.6;color:var(--muted);margin:0;max-width:58ch}.lede b{color:var(--ink)}
+  .board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-items:start}
+  .option-head{min-height:64px;padding-bottom:10px}
+  .option-head h2{font-family:var(--display);font-size:22px;line-height:1;margin:0 0 4px;letter-spacing:-.01em}
+  .option-head p{font-size:11px;line-height:1.4;color:var(--muted);margin:0}
+  .phone{width:min(100%,372px);height:740px;background:#1B1D22;border-radius:40px;padding:9px;box-shadow:0 24px 60px rgba(34,37,46,.14);position:relative;margin:0 auto}
+  .phone::before{content:"";position:absolute;top:17px;left:50%;transform:translateX(-50%);width:92px;height:22px;background:#1B1D22;border-radius:0 0 14px 14px;z-index:5}
+  .screen{position:relative;width:100%;height:100%;overflow:hidden;background:var(--paper);border-radius:32px;display:flex;flex-direction:column}
+  .statusbar{flex:none;height:42px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 20px 5px;font-family:var(--mono);font-size:10.5px;font-weight:600}
+  .status-right{display:flex;gap:5px;align-items:center}.sig{display:flex;align-items:flex-end;gap:1.5px;height:9px}.sig i{display:block;width:2.5px;background:var(--ink)}.sig i:nth-child(1){height:3px}.sig i:nth-child(2){height:5px}.sig i:nth-child(3){height:7px}.sig i:nth-child(4){height:9px}
+  .wifi{width:12px;height:9px;border:1.4px solid var(--ink);border-bottom:0;border-radius:8px 8px 0 0}.battery{width:18px;height:9px;border:1.2px solid var(--ink);border-radius:2px;position:relative}.battery::before{content:"";position:absolute;inset:1.5px;right:5px;background:var(--ink)}
+  .appbar{flex:none;height:48px;display:flex;align-items:center;gap:9px;padding:0 15px}
+  .back{width:28px;height:28px;border:1px solid transparent;background:transparent;border-radius:2px;font-size:20px;color:var(--ink)}
+  .appbar-title{font-family:var(--display);font-size:18px;font-weight:600;flex:1}
+  .appbar .action{font-family:var(--mono);font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--red)}
+  .search{margin:0 15px 10px;height:36px;border:1px solid var(--rule);background:var(--sheet);border-radius:2px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:11px;color:var(--muted)}
+  .search b{font-family:var(--mono);font-size:9px;color:var(--muted)}
+  .chips{display:flex;gap:6px;padding:0 15px 10px;flex-wrap:wrap}
+  .chip{border:1px solid var(--rule);background:var(--sheet);border-radius:2px;padding:5px 7px;font-family:var(--mono);font-size:8px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .chip.on{background:var(--ink);border-color:var(--ink);color:var(--sheet)}
+  .scroll{flex:1;overflow:hidden;padding:0 15px 20px}
+  .group{display:flex;align-items:baseline;justify-content:space-between;padding:11px 0 6px;border-bottom:1px solid var(--rule);margin-bottom:2px}
+  .group b{font-family:var(--display);font-size:16px;font-weight:600}
+  .group span{font-family:var(--mono);font-size:8px;color:var(--muted)}
+  .row{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--rule)}
+  .row:last-child{border-bottom:0}
+  .row-main{flex:1;min-width:0}
+  .row-title{font-size:11.5px;font-weight:600;margin:0 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row-meta{font-size:10px;line-height:1.35;color:var(--muted);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stamp{display:inline-flex;align-items:center;gap:4px;border:1.3px double currentColor;border-radius:2px;font-family:var(--display);font-size:7px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:3px 5px;transform:rotate(-3deg);white-space:nowrap}
+  .stamp.green{color:var(--green)}.stamp.amber{color:var(--amber)}.stamp.red{color:var(--red)}.stamp.blue{color:var(--blue)}.stamp .dot{width:3px;height:3px;border-radius:50%;background:currentColor}
+  .chev{color:var(--muted);font-size:15px}
+  .count{font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .card-row{background:var(--sheet);border:1px solid var(--rule);border-radius:2px;padding:11px;margin-bottom:8px}
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px}
+  .card-title{font-family:var(--display);font-size:17px;line-height:1.05;margin:0 0 3px;max-width:20ch}
+  .card-meta{font-size:9.5px;line-height:1.4;color:var(--muted);margin:0 0 7px}
+  .card-foot{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--rule);padding-top:6px}
+  .card-foot span{font-family:var(--mono);font-size:7.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .card-foot b{font-family:var(--body);font-size:9.5px;font-weight:600;color:var(--red)}
+  .table{width:100%;border-collapse:collapse}
+  .table th{font-family:var(--mono);font-size:7px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:left;padding:5px 4px;border-bottom:1px solid var(--rule);font-weight:500}
+  .table td{padding:8px 4px;border-bottom:1px solid var(--rule);font-size:9.5px;line-height:1.3;vertical-align:top}
+  .table td:last-child{text-align:right;font-family:var(--mono);font-size:8px;color:var(--muted)}
+  .table .name{font-weight:600}
+  .summary{margin-top:12px;padding:9px 10px;background:var(--sheet);border:1px solid var(--rule);border-radius:2px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .why{margin-top:10px;font-size:10px;line-height:1.5;color:var(--muted)}.why b{color:var(--ink);font-family:var(--mono);font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:2px}
+  .decisions{margin-top:38px;border-top:1px solid var(--rule);padding-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:30px}
+  .decisions h2{font-family:var(--display);font-size:24px;margin:0 0 6px}
+  .decisions p{font-size:12px;line-height:1.55;color:var(--muted);margin:0 0 10px;max-width:62ch}
+  .map{border-top:1px solid var(--rule);padding:8px 0;font-size:11px;line-height:1.45;color:var(--muted)}.map b{color:var(--ink);display:block;margin-bottom:2px}
+  .footer{margin-top:34px;border-top:1px solid var(--rule);padding-top:14px;display:flex;justify-content:space-between;gap:20px;font-size:10.5px;color:var(--muted)}
+  .footer b{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);display:block;margin-bottom:2px}
+  @media(max-width:1050px){.board{grid-template-columns:1fr 1fr}.board .option:last-child{grid-column:1/-1;max-width:560px}.intro,.decisions{grid-template-columns:1fr}}
+  @media(max-width:720px){.page{padding:18px 14px 50px}.board{grid-template-columns:1fr}.option:last-child{max-width:none}.phone{height:720px}.meta{display:none}.footer{flex-direction:column}}
+  @media(prefers-reduced-motion:no-preference){.option{animation:rise .55s cubic-bezier(.16,1,.3,1) both}.option:nth-child(2){animation-delay:.07s}.option:nth-child(3){animation-delay:.14s}@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark">TT</span> TaskTap <span>/ Mobile</span></div>
+    <div class="meta">Liste · anteprima<br>prima del prototipo finale</div>
+  </header>
+
+  <section class="intro">
+    <div><p class="kicker">Anteprima · liste</p><h1>Indice, schede<br><em>o registro.</em></h1></div>
+    <p class="lede">Le liste sono l’ingresso al dettaglio. Tre modi di organizzare la stessa lista Cantieri: raggruppata per tempo, a schede per il lavoro di oggi, o a registro per l’ufficio. Dopo la scelta genero il prototipo finale in <code>prototypes/</code>.</p>
+  </section>
+
+  <section class="board">
+    <article class="option">
+      <div class="option-head"><h2>A · Indice</h2><p>Ricerca, filtri e gruppi temporali. Denso, prevedibile, uguale per ogni lista.</p></div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="status-right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="battery"></span></span></div>
+        <div class="appbar"><span class="back">‹</span><span class="appbar-title">Cantieri</span><span class="action">Nuovo</span></div>
+        <div class="search"><b>⌕</b> Cerca cantiere, cliente, indirizzo…</div>
+        <div class="chips"><span class="chip on">Tutti</span><span class="chip">Attivi</span><span class="chip">Oggi</span><span class="chip">Chiusi</span></div>
+        <div class="scroll">
+          <div class="group"><b>Oggi</b><span>3</span></div>
+          <div class="row"><div class="row-main"><p class="row-title">Ristrutturazione Via Roma</p><p class="row-meta">Rossi Srl · 3 in squadra</p></div><span class="stamp green"><span class="dot"></span>Attivo</span><span class="chev">›</span></div>
+          <div class="row"><div class="row-main"><p class="row-title">Manutenzione caldaie</p><p class="row-meta">Bianchi Srl · 2 in squadra</p></div><span class="stamp amber"><span class="dot"></span>In corso</span><span class="chev">›</span></div>
+          <div class="row"><div class="row-main"><p class="row-title">Cantiere Nord</p><p class="row-meta">Verdi Spa · 4 in squadra</p></div><span class="stamp green"><span class="dot"></span>Attivo</span><span class="chev">›</span></div>
+          <div class="group"><b>Questa settimana</b><span>5</span></div>
+          <div class="row"><div class="row-main"><p class="row-title">Sostituzione infissi</p><p class="row-meta">Neri Srl · Milano</p></div><span class="stamp blue">Pianificato</span><span class="chev">›</span></div>
+          <div class="row"><div class="row-main"><p class="row-title">Pulizia impianti</p><p class="row-meta">Gialli Srl · Monza</p></div><span class="stamp green"><span class="dot"></span>Attivo</span><span class="chev">›</span></div>
+          <div class="summary"><span>12 cantieri</span><span>3 attivi · 2 oggi</span></div>
+        </div>
+      </div></div>
+      <p class="why"><b>Pro / Contro</b>Massima densità e confronto. Meno “azione” per riga, meno adatta al pollice con i guanti.</p>
+    </article>
+
+    <article class="option">
+      <div class="option-head"><h2>B · Schede</h2><p>Una scheda per cantiere, con stato, luogo e prossima azione. Più spazio, più tocco.</p></div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="status-right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="battery"></span></span></div>
+        <div class="appbar"><span class="back">‹</span><span class="appbar-title">Cantieri</span><span class="action">Nuovo</span></div>
+        <div class="search"><b>⌕</b> Cerca cantiere, cliente, indirizzo…</div>
+        <div class="chips"><span class="chip on">Tutti</span><span class="chip">Attivi</span><span class="chip">Oggi</span></div>
+        <div class="scroll">
+          <div class="card-row"><div class="card-top"><span class="stamp green"><span class="dot"></span>Attivo</span><span class="count">OGGI</span></div><p class="card-title">Ristrutturazione Via Roma</p><p class="card-meta">Rossi Srl · Via Roma 1, Milano<br>3 in squadra · 2 ticket aperti</p><div class="card-foot"><span>08:30 → in corso</span><b>Timbra uscita</b></div></div>
+          <div class="card-row"><div class="card-top"><span class="stamp amber"><span class="dot"></span>In corso</span><span class="count">OGGI</span></div><p class="card-title">Manutenzione caldaie</p><p class="card-meta">Bianchi Srl · Via Verdi 8, Milano<br>2 in squadra · 1 ticket</p><div class="card-foot"><span>09:00 → 11:30</span><b>Apri</b></div></div>
+          <div class="card-row"><div class="card-top"><span class="stamp green"><span class="dot"></span>Attivo</span><span class="count">DOMANI</span></div><p class="card-title">Cantiere Nord</p><p class="card-meta">Verdi Spa · Sesto San Giovanni<br>4 in squadra</p><div class="card-foot"><span>Prossimo: 08:00</span><b>Apri</b></div></div>
+          <div class="summary"><span>12 cantieri</span><span>3 attivi</span></div>
+        </div>
+      </div></div>
+      <p class="why"><b>Pro / Contro</b>Leggibile e “toccabile” sul campo. Più scroll e meno righe visibili.</p>
+    </article>
+
+    <article class="option">
+      <div class="option-head"><h2>C · Registro</h2><p>Tabella compatta per l’ufficio: stato, soggetto, date, ore. Filtri in testata.</p></div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="status-right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="battery"></span></span></div>
+        <div class="appbar"><span class="back">‹</span><span class="appbar-title">Cantieri</span><span class="action">Nuovo</span></div>
+        <div class="search"><b>⌕</b> Cerca cantiere, cliente, indirizzo…</div>
+        <div class="chips"><span class="chip on">Tutti</span><span class="chip">Attivi</span><span class="chip">Oggi</span><span class="chip">Chiusi</span></div>
+        <div class="scroll">
+          <table class="table">
+            <thead><tr><th>Stato</th><th>Cantiere</th><th>Cliente</th><th>Ore</th></tr></thead>
+            <tbody>
+              <tr><td><span class="stamp green">Attivo</span></td><td><span class="name">Via Roma</span><br><small>Milano</small></td><td>Rossi Srl</td><td>42h</td></tr>
+              <tr><td><span class="stamp amber">In corso</span></td><td><span class="name">Caldaie</span><br><small>Milano</small></td><td>Bianchi Srl</td><td>18h</td></tr>
+              <tr><td><span class="stamp green">Attivo</span></td><td><span class="name">Cantiere Nord</span><br><small>Sesto</small></td><td>Verdi Spa</td><td>76h</td></tr>
+              <tr><td><span class="stamp blue">Pianificato</span></td><td><span class="name">Infissi</span><br><small>Milano</small></td><td>Neri Srl</td><td>—</td></tr>
+              <tr><td><span class="stamp red">Chiuso</span></td><td><span class="name">Pulizia</span><br><small>Monza</small></td><td>Gialli Srl</td><td>12h</td></tr>
+            </tbody>
+          </table>
+          <div class="summary"><span>12 cantieri</span><span>3 attivi · 2 oggi</span></div>
+        </div>
+      </div></div>
+      <p class="why"><b>Pro / Contro</b>Confronto immediato tra righe. Poco adatto al pollice e ai contesti outdoor.</p>
+    </article>
+  </section>
+
+  <section class="decisions">
+    <div>
+      <h2>Dove usarle</h2>
+      <p>La stessa shell di lista, tre densità. La scelta non è per schermata: è per pubblico.</p>
+      <div class="map"><b>Indice</b>Cantieri, Ticket, Rapportini: la lista operativa predefinita, con gruppi Oggi / Questa settimana / Altro.</div>
+      <div class="map"><b>Schede</b>Solo “il lavoro di oggi” o una lista con una prossima azione chiara per riga. Non per l’archivio.</div>
+      <div class="map"><b>Registro</b>Clienti, Sedi, Commesse, Contratti, Prodotti, Materiali, Magazzini, Squadre, Pianificazioni, Report: l’ufficio confronta, non corre.</div>
+    </div>
+    <div>
+      <h2>Raccomandazione</h2>
+      <p>Adottare <b>Indice</b> come lista predefinita per tutti, con <b>Registro</b> come densità amministrativa per i master data. Tenere <b>Schede</b> per la corsia “oggi” di Cantieri/Ticket, non come lista principale.</p>
+      <p>La shell di lista condivisa: header + ricerca + filtri + gruppi + righe. Le varianti cambiano solo la riga, non la struttura.</p>
+      <p>Dopo la conferma genero <code>prototypes/list-screens.html</code>.</p>
+    </div>
+  </section>
+
+  <footer class="footer"><div><b>Anteprima</b>· non è il prototipo finale</div><div><b>Dopo</b>· scelta per pubblico, poi prototipo in <code>prototypes/</code></div></footer>
+</div>
+</body>
+</html>

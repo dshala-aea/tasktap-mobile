@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskTap — Cantieri · indice operativo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@600;700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#F1EEE7;--sheet:#FBF9F4;--fill:#EDEAE3;--rule:#DED9CE;--ink:#22252E;--muted:#5E6878;--red:#C03221;--green:#248A3D;--amber:#B36200;--blue:#4F6BFF;--display:"Archivo Narrow","Arial Narrow",system-ui,sans-serif;--body:"Archivo",system-ui,-apple-system,sans-serif;--mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  *{box-sizing:border-box}html,body{margin:0;min-height:100%}
+  body{background:radial-gradient(1100px 520px at 50% -10%,rgba(251,249,244,.85),transparent 70%),repeating-linear-gradient(90deg,rgba(34,37,46,.028) 0 1px,transparent 1px 96px),var(--paper);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  .page{max-width:1240px;margin:0 auto;padding:30px 28px 70px}
+  .masthead{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--rule)}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.11em;text-transform:uppercase}
+  .brand-mark{width:26px;height:26px;display:grid;place-items:center;background:var(--red);color:var(--sheet);font-family:var(--mono);font-size:10px;border-radius:2px;transform:rotate(-2deg)}
+  .brand span{color:var(--muted);font-weight:600}
+  .meta{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;text-align:right}
+  .intro{display:grid;grid-template-columns:1.15fr .85fr;gap:36px;align-items:end;padding:40px 0 28px}
+  .kicker{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin:0 0 12px}
+  h1{font-family:var(--display);font-size:clamp(42px,5.4vw,70px);line-height:.9;letter-spacing:-.035em;margin:0}
+  h1 em{font-style:normal;color:var(--red)}
+  .lede{font-size:14px;line-height:1.6;color:var(--muted);margin:0;max-width:58ch}.lede b{color:var(--ink)}
+  .workspace{display:grid;grid-template-columns:390px minmax(0,1fr);gap:44px;align-items:start}
+  .phone-wrap{position:sticky;top:24px}
+  .phone{width:100%;height:760px;background:#1B1D22;border-radius:40px;padding:9px;box-shadow:0 24px 60px rgba(34,37,46,.14);position:relative}
+  .phone::before{content:"";position:absolute;top:17px;left:50%;transform:translateX(-50%);width:92px;height:22px;background:#1B1D22;border-radius:0 0 14px 14px;z-index:5}
+  .screen{position:relative;width:100%;height:100%;overflow:hidden;background:var(--paper);border-radius:32px;display:flex;flex-direction:column}
+  .statusbar{flex:none;height:42px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 20px 5px;font-family:var(--mono);font-size:10.5px;font-weight:600}
+  .status-right{display:flex;gap:5px;align-items:center}.sig{display:flex;align-items:flex-end;gap:1.5px;height:9px}.sig i{display:block;width:2.5px;background:var(--ink)}.sig i:nth-child(1){height:3px}.sig i:nth-child(2){height:5px}.sig i:nth-child(3){height:7px}.sig i:nth-child(4){height:9px}
+  .wifi{width:12px;height:9px;border:1.4px solid var(--ink);border-bottom:0;border-radius:8px 8px 0 0}.battery{width:18px;height:9px;border:1.2px solid var(--ink);border-radius:2px;position:relative}.battery::before{content:"";position:absolute;inset:1.5px;right:5px;background:var(--ink)}
+  .appbar{flex:none;height:50px;display:flex;align-items:center;gap:9px;padding:0 15px}
+  .back{width:28px;height:28px;border:1px solid transparent;background:transparent;border-radius:2px;font-size:20px;color:var(--ink)}
+  .appbar-title{font-family:var(--display);font-size:19px;font-weight:600;flex:1}
+  .appbar .action{font-family:var(--mono);font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--red)}
+  .search{margin:0 15px 9px;height:38px;border:1px solid var(--rule);background:var(--sheet);border-radius:2px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:11px;color:var(--muted)}
+  .chips{display:flex;gap:6px;padding:0 15px 10px;flex-wrap:wrap}
+  .chip{border:1px solid var(--rule);background:var(--sheet);border-radius:2px;padding:6px 8px;font-family:var(--mono);font-size:8px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .chip.on{background:var(--ink);border-color:var(--ink);color:var(--sheet)}
+  .scroll{flex:1;overflow:hidden;padding:0 15px 20px}
+  .group{display:flex;align-items:baseline;justify-content:space-between;padding:13px 0 7px;border-bottom:1px solid var(--rule);margin-bottom:2px}
+  .group b{font-family:var(--display);font-size:17px;font-weight:600}.group span{font-family:var(--mono);font-size:8px;color:var(--muted)}
+  .row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--rule)}
+  .row:last-child{border-bottom:0}
+  .row-main{flex:1;min-width:0}
+  .row-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:2px}
+  .row-title{font-size:12px;font-weight:600;margin:0;line-height:1.25;max-width:21ch}
+  .row-meta{font-size:10.5px;line-height:1.4;color:var(--muted);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row-work{display:flex;align-items:center;gap:5px;font-size:9.5px;line-height:1.35;color:var(--muted);margin-top:3px}
+  .row-work b{color:var(--ink);font-weight:600}
+  .row-work .live{width:6px;height:6px;border-radius:50%;background:var(--green);flex:none}
+  .stamp{display:inline-flex;align-items:center;gap:4px;border:1.3px double currentColor;border-radius:2px;font-family:var(--display);font-size:7px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:3px 5px;transform:rotate(-3deg);white-space:nowrap;flex:none}
+  .stamp.green{color:var(--green)}.stamp.amber{color:var(--amber)}.stamp.red{color:var(--red)}.stamp.blue{color:var(--blue)}.stamp .dot{width:3px;height:3px;border-radius:50%;background:currentColor}
+  .chev{color:var(--muted);font-size:16px;margin-top:7px;flex:none}
+  .summary{margin-top:12px;padding:9px 10px;background:var(--sheet);border:1px solid var(--rule);border-radius:2px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .notes h2{font-family:var(--display);font-size:30px;line-height:1;margin:0 0 6px;letter-spacing:-.02em}
+  .notes > p{font-size:13px;line-height:1.6;color:var(--muted);margin:0 0 18px;max-width:62ch}
+  .note{border-top:1px solid var(--rule);padding:11px 0;display:grid;grid-template-columns:26px 1fr;gap:10px}
+  .note b{font-family:var(--mono);font-size:9px;color:var(--red);padding-top:2px}
+  .note h3{font-family:var(--display);font-size:17px;margin:0 0 2px;font-weight:600}
+  .note p{font-size:11.5px;line-height:1.55;color:var(--muted);margin:0;max-width:62ch}
+  .note p strong{color:var(--ink);font-weight:600}
+  .admin{margin-top:26px;border:1px solid var(--rule);border-radius:2px;background:var(--sheet);padding:14px}
+  .admin .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+  .admin h3{font-family:var(--display);font-size:20px;margin:0}
+  .admin .tag{font-family:var(--mono);font-size:8px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px solid var(--rule);padding:4px 6px;border-radius:2px}
+  .admin p{font-size:11.5px;line-height:1.5;color:var(--muted);margin:0 0 10px}
+  .table{width:100%;border-collapse:collapse}
+  .table th{font-family:var(--mono);font-size:7px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:left;padding:5px 4px;border-bottom:1px solid var(--rule);font-weight:500}
+  .table td{padding:7px 4px;border-bottom:1px solid var(--rule);font-size:9.5px;vertical-align:top}
+  .table td:last-child{text-align:right;font-family:var(--mono);font-size:8px;color:var(--muted)}
+  .table .name{font-weight:600}
+  .color-note{margin-top:24px;border-top:1px solid var(--rule);padding-top:12px;font-size:10.5px;line-height:1.55;color:var(--muted)}
+  .color-note b{font-family:var(--mono);font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);display:block;margin-bottom:3px}
+  .foot{margin-top:36px;border-top:1px solid var(--rule);padding-top:14px;display:flex;justify-content:space-between;gap:20px;font-size:10.5px;color:var(--muted)}
+  .foot b{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);display:block;margin-bottom:2px}
+  @media(max-width:1000px){.workspace{grid-template-columns:1fr}.phone-wrap{position:static;max-width:390px}.intro{grid-template-columns:1fr}}
+  @media(max-width:720px){.page{padding:18px 14px 50px}.meta{display:none}.phone{height:720px}.foot{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark">TT</span> TaskTap <span>/ Mobile</span></div>
+    <div class="meta">Cantieri · indice operativo<br>revisione A + B · anteprima</div>
+  </header>
+
+  <section class="intro">
+    <div><p class="kicker">Revisione · Cantieri</p><h1>Indice operativo,<br><em>non archivio.</em></h1></div>
+    <p class="lede">La lista parte da ciò che il tecnico deve seguire: <b>cantieri attivi assegnati</b>, raggruppati per stato operativo. Le schede di B entrano nella riga, non sostituiscono la densità di A. C resta una vista amministrativa per tablet/web.</p>
+  </section>
+
+  <section class="workspace">
+    <div class="phone-wrap">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="status-right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="battery"></span></span></div>
+        <div class="appbar"><span class="back">‹</span><span class="appbar-title">Cantieri</span><span class="action">Nuovo</span></div>
+        <div class="search"><span>⌕</span> Cerca cantiere, cliente, indirizzo o codice…</div>
+        <div class="chips"><span class="chip on">Attivi</span><span class="chip">Tutti</span><span class="chip">Pianificati</span><span class="chip">Chiusi</span></div>
+        <div class="scroll">
+          <div class="group"><b>Da seguire oggi</b><span>2</span></div>
+          <div class="row"><div class="row-main">
+            <div class="row-top"><p class="row-title">Ristrutturazione Via Roma</p><span class="stamp green"><span class="dot"></span>Attivo</span></div>
+            <p class="row-meta">Rossi Srl · Via Roma 1, Milano · 3 operatori</p>
+            <p class="row-work"><span class="live"></span><b>In corso</b> · 08:30–12:30</p>
+          </div><span class="chev">›</span></div>
+          <div class="row"><div class="row-main">
+            <div class="row-top"><p class="row-title">Manutenzione caldaie</p><span class="stamp green"><span class="dot"></span>Attivo</span></div>
+            <p class="row-meta">Bianchi Srl · Via Verdi 8, Milano · 2 operatori</p>
+            <p class="row-work"><b>Timbrato oggi</b> · 09:00–11:30</p>
+          </div><span class="chev">›</span></div>
+
+          <div class="group"><b>Altri cantieri attivi</b><span>4</span></div>
+          <div class="row"><div class="row-main">
+            <div class="row-top"><p class="row-title">Cantiere Nord</p><span class="stamp green"><span class="dot"></span>Attivo</span></div>
+            <p class="row-meta">Verdi Spa · Sesto San Giovanni · 4 operatori</p>
+            <p class="row-work"><b>Nessuna attività oggi</b> · prossima domani 08:00</p>
+          </div><span class="chev">›</span></div>
+          <div class="row"><div class="row-main">
+            <div class="row-top"><p class="row-title">Pulizia impianti</p><span class="stamp green"><span class="dot"></span>Attivo</span></div>
+            <p class="row-meta">Gialli Srl · Monza · 2 operatori</p>
+            <p class="row-work"><b>Ultima attività</b> · 12/11</p>
+          </div><span class="chev">›</span></div>
+
+          <div class="group"><b>Pianificati</b><span>2</span></div>
+          <div class="row"><div class="row-main">
+            <div class="row-top"><p class="row-title">Sostituzione infissi</p><span class="stamp blue">Pianificato</span></div>
+            <p class="row-meta">Neri Srl · Milano · squadra da assegnare</p>
+            <p class="row-work"><b>Inizio</b> · 18/11</p>
+          </div><span class="chev">›</span></div>
+          <div class="summary"><span>8 cantieri attivi</span><span>2 oggi</span></div>
+        </div>
+      </div></div>
+    </div>
+
+    <aside class="notes">
+      <h2>Cosa cambia</h2>
+      <p>La riga resta densa, ma risponde alle due domande del tecnico: <strong>quale cantiere sto cercando</strong> e <strong>cosa devo fare lì</strong>.</p>
+
+      <div class="note"><b>01</b><div><h3>Filtri per stato, non per tempo</h3><p><strong>Attivi</strong> è il default; <strong>Tutti</strong>, <strong>Pianificati</strong> e <strong>Chiusi</strong> restano a un tap. L’archivio non occupa la vista operativa.</p></div></div>
+      <div class="note"><b>02</b><div><h3>Gruppi operativi</h3><p><strong>Da seguire oggi</strong> → <strong>Altri attivi</strong> → <strong>Pianificati</strong>. Il tempo non è il criterio: un cantiere può durare mesi.</p></div></div>
+      <div class="note"><b>03</b><div><h3>Stato cantiere ≠ stato lavoro</h3><p>Il badge dice se il cantiere è <strong>Attivo / Pianificato / Chiuso</strong>. La riga di lavoro dice <strong>In corso</strong>, <strong>Timbrato oggi</strong>, <strong>Nessuna attività</strong> o l’ultima attività. Non sono lo stesso dato.</p></div></div>
+      <div class="note"><b>04</b><div><h3>La riga è il target</h3><p>Tutta la riga apre il dettaglio; il chevron è solo un’affordance. Nessun bersaglio piccolo da centrare con i guanti.</p></div></div>
+      <div class="note"><b>05</b><div><h3>Contesto, non rumore</h3><p><strong>Cliente · località · squadra</strong> identificano il cantiere. La <strong>prossima attività + orario</strong> dice cosa fare. Le ore restano nel Registro.</p></div></div>
+
+      <div class="admin">
+        <div class="top"><h3>C · Registro</h3><span class="tag">Tablet / web</span></div>
+        <p>Per l’ufficio, la stessa lista in tabella: stato, cantiere, cliente, località, ore — con la distinzione tra consuntivate e pianificate.</p>
+        <table class="table">
+          <thead><tr><th>Stato</th><th>Cantiere</th><th>Cliente</th><th>Ore</th></tr></thead>
+          <tbody>
+            <tr><td><span class="stamp green">Attivo</span></td><td><span class="name">Via Roma</span></td><td>Rossi Srl</td><td>42h</td></tr>
+            <tr><td><span class="stamp green">Attivo</span></td><td><span class="name">Cantiere Nord</span></td><td>Verdi Spa</td><td>76h</td></tr>
+            <tr><td><span class="stamp blue">Pianificato</span></td><td><span class="name">Infissi</span></td><td>Neri Srl</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="color-note"><b>Nota colore</b>Il mockup mantiene lo <strong>stamp red #C03221</strong>, che è l’accento attuale del design system. Il giallo non è più un token attivo: se vuoi riportarlo, è un cambio di brand separato da questa lista.</div>
+    </aside>
+  </section>
+
+  <footer class="foot"><div><b>Prossimo passo</b>Conferma questa variante e genero <code>prototypes/list-screens.html</code> con Cantieri + le altre liste operative.</div><div><b>Regola</b>Nessuna scheda completa nella lista principale; nessun dato amministrativo nella riga operativa.</div></footer>
+</div>
+</body>
+</html>

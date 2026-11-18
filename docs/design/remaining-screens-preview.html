@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskTap — Anteprima altri dettagli</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@600;700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1EEE7;--sheet:#FBF9F4;--fill:#EDEAE3;--rule:#DED9CE;--ink:#22252E;--muted:#5E6878;
+    --red:#C03221;--green:#248A3D;--amber:#B36200;--blue:#4F6BFF;
+    --display:"Archivo Narrow","Arial Narrow",system-ui,sans-serif;
+    --body:"Archivo",system-ui,-apple-system,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}html,body{margin:0;min-height:100%}
+  body{background:radial-gradient(1100px 520px at 50% -10%,rgba(251,249,244,.85),transparent 70%),repeating-linear-gradient(90deg,rgba(34,37,46,.028) 0 1px,transparent 1px 96px),var(--paper);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  .page{max-width:1380px;margin:0 auto;padding:30px 28px 70px}
+  .masthead{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--rule)}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.11em;text-transform:uppercase}
+  .brand-mark{width:26px;height:26px;display:grid;place-items:center;background:var(--red);color:var(--sheet);font-family:var(--mono);font-size:10px;border-radius:2px;transform:rotate(-2deg)}
+  .brand span{color:var(--muted);font-weight:600}
+  .meta{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;text-align:right}
+  .intro{display:grid;grid-template-columns:1.2fr .8fr;gap:36px;align-items:end;padding:40px 0 26px}
+  .kicker{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin:0 0 12px}
+  h1{font-family:var(--display);font-size:clamp(44px,5.8vw,76px);line-height:.9;letter-spacing:-.035em;margin:0}
+  h1 em{font-style:normal;color:var(--red)}
+  .lede{font-size:14px;line-height:1.6;color:var(--muted);margin:0;max-width:58ch}.lede b{color:var(--ink)}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
+  .legend span{font-family:var(--mono);font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px solid var(--rule);border-radius:2px;padding:5px 7px;background:rgba(251,249,244,.5)}
+  .legend .red{color:var(--red);border-color:var(--red)}
+  .workspace{display:grid;grid-template-columns:360px minmax(0,1fr);gap:34px;align-items:start}
+  .reference{position:sticky;top:24px}
+  .reference h2{font-family:var(--display);font-size:24px;margin:0 0 4px;letter-spacing:-.01em}
+  .reference p{font-size:11.5px;line-height:1.5;color:var(--muted);margin:0 0 12px}
+  .phone{width:100%;height:710px;background:#1B1D22;border-radius:40px;padding:9px;box-shadow:0 24px 60px rgba(34,37,46,.14);position:relative}
+  .phone::before{content:"";position:absolute;top:17px;left:50%;transform:translateX(-50%);width:92px;height:22px;background:#1B1D22;border-radius:0 0 14px 14px;z-index:5}
+  .screen{position:relative;width:100%;height:100%;overflow:hidden;background:var(--paper);border-radius:32px;display:flex;flex-direction:column}
+  .statusbar{flex:none;height:40px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 18px 5px;font-family:var(--mono);font-size:10px;font-weight:600}
+  .status-right{display:flex;gap:4px;align-items:center}.sig{display:flex;align-items:flex-end;gap:1.5px;height:8px}.sig i{display:block;width:2.5px;background:var(--ink)}.sig i:nth-child(1){height:3px}.sig i:nth-child(2){height:5px}.sig i:nth-child(3){height:7px}.sig i:nth-child(4){height:8px}
+  .wifi{width:11px;height:8px;border:1.3px solid var(--ink);border-bottom:0;border-radius:8px 8px 0 0}.battery{width:16px;height:8px;border:1.2px solid var(--ink);border-radius:2px;position:relative}.battery::before{content:"";position:absolute;inset:1.5px;right:4px;background:var(--ink)}
+  .appbar{flex:none;height:46px;display:flex;align-items:center;gap:8px;padding:0 15px}
+  .back{width:28px;height:28px;border:1px solid transparent;background:transparent;border-radius:2px;font-size:20px;color:var(--ink);cursor:pointer}
+  .appbar-title{font-family:var(--display);font-size:17px;font-weight:600;flex:1}
+  .scroll{flex:1;overflow:hidden;padding:0 15px 22px}
+  .doc-kicker{display:flex;gap:7px;font-family:var(--mono);font-size:8px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}.doc-kicker .ref{color:var(--red)}
+  .title{font-family:var(--display);font-size:27px;line-height:1;letter-spacing:-.025em;margin:0 0 5px;max-width:18ch}
+  .sub{font-size:11px;line-height:1.4;color:var(--muted);margin:0 0 12px}
+  .stamp{display:inline-flex;align-items:center;gap:5px;border:1.5px double currentColor;border-radius:2px;font-family:var(--display);font-size:8.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;padding:4px 6px;transform:rotate(-3deg);white-space:nowrap}
+  .stamp.green{color:var(--green)}.stamp.amber{color:var(--amber)}.stamp.red{color:var(--red)}.stamp.blue{color:var(--blue)}
+  .stamp .dot{width:3px;height:3px;border-radius:50%;background:currentColor}
+  .card{background:var(--sheet);border:1px solid var(--rule);border-radius:2px;padding:12px}
+  .hero-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .mini{font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .hero-title{font-family:var(--display);font-size:21px;line-height:1.02;margin:0 0 4px;letter-spacing:-.01em}
+  .hero-sub{font-size:10px;color:var(--muted);margin:0 0 10px}
+  .btn{border:0;border-radius:2px;min-height:38px;width:100%;display:flex;align-items:center;justify-content:center;font-family:var(--body);font-size:11px;font-weight:600;background:var(--red);color:var(--sheet)}
+  .section{margin-top:16px}.section-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}.section-head h3{font-family:var(--display);font-size:16px;margin:0;font-weight:600}.section-head span,.section-head a{font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;text-decoration:none}
+  .line{height:1px;background:var(--rule);margin:7px 0}.line.short{width:62%}.line.mid{width:82%}
+  .rows{border:1px solid var(--rule);background:var(--sheet);border-radius:2px;overflow:hidden}
+  .row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--rule);font-size:10.5px}.row:last-child{border-bottom:0}.row b{font-weight:600;flex:1;min-width:0}.row small{font-family:var(--mono);font-size:8px;color:var(--muted)}
+  .section-list{padding:4px 0}.section-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--rule);font-size:11px}.section-item:last-child{border-bottom:0}.section-item span:last-child{font-family:var(--mono);font-size:8px;color:var(--muted)}
+  .note{margin-top:10px;font-family:var(--mono);font-size:8px;line-height:1.5;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+  .screen-card{min-width:0}
+  .screen-card h3{font-family:var(--display);font-size:18px;margin:0 0 2px;letter-spacing:-.01em}
+  .screen-card .headline{font-size:10.5px;color:var(--muted);margin:0 0 9px;line-height:1.45}
+  .mini-phone{background:var(--sheet);border:1px solid var(--rule);border-radius:2px;padding:11px;min-height:250px;display:flex;flex-direction:column}
+  .mini-phone .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:5px}
+  .mini-phone .kind{font-family:var(--mono);font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .mini-phone .name{font-family:var(--display);font-size:18px;line-height:1;margin:0 0 4px}
+  .mini-phone .facts{font-size:9.5px;line-height:1.45;color:var(--muted);margin:0 0 9px;min-height:28px}
+  .mini-phone .cta{font-family:var(--body);font-size:10px;font-weight:600;background:var(--red);color:var(--sheet);border-radius:2px;padding:7px 8px;text-align:center}
+  .mini-phone .sections{margin-top:10px;border-top:1px solid var(--rule);padding-top:7px;display:grid;gap:5px}
+  .mini-phone .sections span{font-size:9px;color:var(--ink);display:flex;justify-content:space-between;gap:8px}.mini-phone .sections span::after{content:"›";color:var(--muted)}
+  .decisions{margin-top:40px;border-top:1px solid var(--rule);padding-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:30px}
+  .decisions h2{font-family:var(--display);font-size:24px;margin:0 0 6px}
+  .decisions p{font-size:12px;line-height:1.55;color:var(--muted);margin:0 0 10px;max-width:60ch}
+  .question{border-top:1px solid var(--rule);padding:9px 0;font-size:11px;line-height:1.45;color:var(--muted)}
+  .question b{color:var(--ink);font-weight:600;display:block;margin-bottom:2px}
+  .rec{background:var(--sheet);border:1px solid var(--rule);border-radius:2px;padding:14px}
+  .rec h3{font-family:var(--display);font-size:18px;margin:0 0 5px}
+  .rec p{font-size:11.5px;line-height:1.55;color:var(--muted);margin:0 0 8px}
+  .rec ul{margin:0;padding-left:16px;font-size:11.5px;line-height:1.6;color:var(--muted)}
+  .foot{margin-top:36px;border-top:1px solid var(--rule);padding-top:14px;font-size:10.5px;color:var(--muted);display:flex;justify-content:space-between;gap:20px}
+  .foot b{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
+  @media(max-width:1150px){.workspace{grid-template-columns:1fr}.reference{position:static;max-width:380px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:760px){.page{padding:18px 14px 50px}.intro,.decisions{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.meta{display:none}.foot{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark">TT</span> TaskTap <span>/ Mobile</span></div>
+    <div class="meta">Altri dettagli · anteprima<br>non è il prototipo finale</div>
+  </header>
+
+  <section class="intro">
+    <div>
+      <p class="kicker">Anteprima · altri dettagli</p>
+      <h1>Lo stesso documento,<br><em>dieci soggetti.</em></h1>
+    </div>
+    <p class="lede">La shell è già decisa: <b>Hero + stack</b>. Qui c’è la mappa completa degli altri dettagli, per decidere insieme facts, azione primaria, sezioni e dove serve un’eccezione. Il prototipo finale verrà generato solo dopo.</p>
+  </section>
+
+  <div class="legend">
+    <span class="red">Hero + stack</span><span>SummaryHero</span><span>OperationalHero</span><span>Sezioni vuote nascoste</span><span>No FAB quando il hero ha un’azione</span>
+  </div>
+
+  <section class="workspace">
+    <aside class="reference">
+      <h2>Cliente · riferimento</h2>
+      <p>Un master data completo: stato, tre facts, azione primaria e relazioni prima del resto.</p>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="status-right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="battery"></span></span></div>
+        <div class="appbar"><button class="back">‹</button><div class="appbar-title">Cliente</div><span style="color:var(--muted);letter-spacing:2px">···</span></div>
+        <div class="scroll">
+          <div class="doc-kicker"><span class="ref">CLIENTE · C-0042</span><span>·</span><span>ATTIVO</span></div>
+          <div class="card">
+            <div class="hero-top"><span class="stamp green"><span class="dot"></span>Attivo</span><span class="mini">Dal 2021</span></div>
+            <h2 class="hero-title">Rossi Srl</h2>
+            <p class="hero-sub">Milano · Manutenzione impianti</p>
+            <div style="display:flex;gap:10px;margin:0 0 11px;font-size:10px;color:var(--muted)"><span><b style="color:var(--ink)">12</b> sedi</span><span><b style="color:var(--ink)">4</b> contratti</span><span><b style="color:var(--ink)">3</b> referenti</span></div>
+            <button class="btn">Modifica</button>
+          </div>
+
+          <div class="section"><div class="section-head"><h3>Relazioni</h3><a href="#">Apri</a></div>
+            <div class="rows">
+              <div class="row"><b>Sedi</b><small>12</small><span>›</span></div>
+              <div class="row"><b>Contratti</b><small>4</small><span>›</span></div>
+              <div class="row"><b>Referenti</b><small>3</small><span>›</span></div>
+            </div>
+          </div>
+
+          <div class="section"><div class="section-head"><h3>Sintesi</h3></div>
+            <div class="rows">
+              <div class="row"><b>Ragione sociale</b><small>Rossi Srl</small></div>
+              <div class="row"><b>Partita IVA</b><small>IT 0123…</small></div>
+              <div class="row"><b>Telefono</b><small>+39 02…</small></div>
+            </div>
+          </div>
+
+          <div class="section"><div class="section-head"><h3>Attività</h3><a href="#">Tutte</a></div>
+            <div class="section-list">
+              <div class="section-item"><span>Ultimo intervento</span><span>12/11</span></div>
+              <div class="section-item"><span>Rapportini aperti</span><span>2</span></div>
+            </div>
+          </div>
+
+          <div class="section"><div class="section-head"><h3>Documenti</h3><span>7</span></div>
+            <div class="section-list"><div class="section-item"><span>Contratti e allegati</span><span>Apri ›</span></div></div>
+          </div>
+        </div>
+      </div></div>
+    </aside>
+
+    <div>
+      <div class="grid">
+        <article class="screen-card"><h3>Sede</h3><p class="headline">Un luogo del cliente: indirizzo e mappa prima delle relazioni.</p><div class="mini-phone"><div class="top"><span class="kind">Summary · luogo</span><span class="stamp green">Attiva</span></div><h4 class="name">Sede Milano</h4><p class="facts">Rossi Srl · Milano<br>3 interventi aperti</p><div class="cta">Modifica</div><div class="sections"><span>Sintesi</span><span>Relazioni</span><span>Attività</span><span>Documenti & mappa</span></div></div></article>
+
+        <article class="screen-card"><h3>Commessa</h3><p class="headline">Lavoro commissionato: periodo e cantieri/ticket collegati.</p><div class="mini-phone"><div class="top"><span class="kind">Summary · lavoro</span><span class="stamp amber">Aperta</span></div><h4 class="name">CM-2026-018</h4><p class="facts">Rossi Srl · 01/11–15/12<br>2 cantieri · 8 ticket</p><div class="cta">Modifica</div><div class="sections"><span>Sintesi</span><span>Relazioni</span><span>Attività</span><span>Documenti</span></div></div></article>
+
+        <article class="screen-card"><h3>Contratto</h3><p class="headline">Accordo attivo: scadenza e condizioni in evidenza.</p><div class="mini-phone"><div class="top"><span class="kind">Summary · accordo</span><span class="stamp green">Attivo</span></div><h4 class="name">Full service</h4><p class="facts">Rossi Srl · scade 31/12/2026<br>Rinnovo automatico</p><div class="cta">Modifica</div><div class="sections"><span>Sintesi</span><span>Relazioni</span><span>Attività</span><span>Documenti</span></div></div></article>
+
+        <article class="screen-card"><h3>Prodotto in assistenza</h3><p class="headline">L’asset del cliente: seriale, garanzia e storico.</p><div class="mini-phone"><div class="top"><span class="kind">Summary · asset</span><span class="stamp green">In garanzia</span></div><h4 class="name">Caldaia Vaillant</h4><p class="facts">Rossi Srl · SN-9<br>Ultima manutenzione 03/10</p><div class="cta">Modifica</div><div class="sections"><span>Sintesi</span><span>Relazioni</span><span>Attività</span><span>Documenti</span></div></div></article>
+
+        <article class="screen-card"><h3>Materiale</h3><p class="headline">Anagrafica articolo: giacenza e movimenti sono il centro.</p><div class="mini-phone"><div class="top"><span class="kind">Summary · articolo</span><span class="stamp green">Attivo</span></div><h4 class="name">Sifone 40 mm</h4><p class="facts">Idraulica · 24 pz<br>€ 4,20 · sotto scorta</p><div class="cta">Modifica</div><div class="sections"><span>Sintesi</span><span>Movimenti</span><span>Documenti</span></div></div></article>
+
+        <article class="screen-card"><h3>Magazzino</h3><p class="headline">Un luogo fisico: capienza, articoli e sotto scorta.</p><div class="mini-phone"><div class="top"><span class="kind">Summary · luogo</span><span class="stamp amber">6 sotto scorta</span></div><h4 class="name">Magazzino Milano</h4><p class="facts">Principale · 148 articoli<br>Via Roma 1</p><div class="cta">Modifica</div><div class="sections"><span>Sintesi</span><span>Movimenti</span><span>Documenti</span></div></div></article>
+
+        <article class="screen-card"><h3>Squadra</h3><p class="headline">Persone e cantieri: il lead è il primo fatto.</p><div class="mini-phone"><div class="top"><span class="kind">Summary · team</span><span class="stamp green">Attiva</span></div><h4 class="name">Squadra Nord</h4><p class="facts">Lead Daniel Shala · 4 membri<br>2 cantieri attivi</p><div class="cta">Modifica</div><div class="sections"><span>Sintesi</span><span>Relazioni</span><span>Attività</span></div></div></article>
+
+        <article class="screen-card"><h3>Pianificazione</h3><p class="headline">Un impegno: data, ora e squadra prima delle note.</p><div class="mini-phone"><div class="top"><span class="kind">Summary · impegno</span><span class="stamp blue">Oggi</span></div><h4 class="name">Sopralluogo Rossi</h4><p class="facts">Oggi 14:00 · Daniel<br>Sede Milano</p><div class="cta">Modifica</div><div class="sections"><span>Sintesi</span><span>Relazioni</span><span>Attività</span></div></div></article>
+
+        <article class="screen-card"><h3>Report admin</h3><p class="headline">Il documento ufficio: stato e PDF prima delle transizioni.</p><div class="mini-phone"><div class="top"><span class="kind">Summary · documento</span><span class="stamp blue">Inviato</span></div><h4 class="name">Rapportino 2026-0412</h4><p class="facts">Rossi Srl · Novembre<br>30 ore · 2 firme</p><div class="cta">Apri PDF</div><div class="sections"><span>Sintesi</span><span>Attività</span><span>Documenti</span></div></div></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="decisions">
+    <div>
+      <h2>Da decidere insieme</h2>
+      <p>Queste sono le scelte che cambiano il prototipo finale, non solo l’estetica.</p>
+      <div class="question"><b>1. Hero unico per i master data?</b>Stato + 3 facts + <i>Modifica</i> nel hero, FAB rimosso. Vale per Cliente, Sede, Commessa, Contratto, Prodotto, Materiale, Magazzino, Squadra, Pianificazione.</div>
+      <div class="question"><b>2. Report admin: Apri PDF o Cambia stato?</b>Il documento è già un PDF; le transizioni sono azioni di stato. Una sola primaria, l’altra nel hero come secondaria o nella sezione.</div>
+      <div class="question"><b>3. Materiale/Magazzino: Movimenti è una sezione specialistica?</b>Sì: è il loro lavoro principale. Vale l’eccezione già prevista per Rapportino.</div>
+      <div class="question"><b>4. Attività esiste su tutti?</b>No. Le sezioni senza dati spariscono; non inventiamo una timeline per un’anagrafica.</div>
+    </div>
+    <div class="rec">
+      <h3>Raccomandazione</h3>
+      <p>Tenere la stessa shell per tutti, con due eccezioni già motivate:</p>
+      <ul>
+        <li><b>Materiale/Magazzino</b> → sezione specialistica <i>Movimenti</i>.</li>
+        <li><b>Report admin</b> → primaria <i>Apri PDF</i>; <i>Cambia stato</i> come secondaria.</li>
+      </ul>
+      <p style="margin-top:8px">Dopo la conferma genero <code>prototypes/other-details.html</code> con i mockup definitivi, non questa anteprima.</p>
+    </div>
+  </section>
+
+  <footer class="foot"><span><b>Anteprima</b> · non è il prototipo finale</span><span><b>Dopo</b> · decidiamo facts, azioni e sezioni, poi genero il file in <code>prototypes/</code></span></footer>
+</div>
+</body>
+</html>

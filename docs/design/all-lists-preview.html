@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskTap — Tutte le liste · anteprima</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@600;700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#F1EEE7;--sheet:#FBF9F4;--fill:#EDEAE3;--rule:#DED9CE;--ink:#22252E;--muted:#5E6878;--red:#C03221;--green:#248A3D;--amber:#B36200;--blue:#4F6BFF;--display:"Archivo Narrow","Arial Narrow",system-ui,sans-serif;--body:"Archivo",system-ui,-apple-system,sans-serif;--mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+  *{box-sizing:border-box}html,body{margin:0;min-height:100%}
+  body{background:radial-gradient(1100px 520px at 50% -10%,rgba(251,249,244,.85),transparent 70%),repeating-linear-gradient(90deg,rgba(34,37,46,.028) 0 1px,transparent 1px 96px),var(--paper);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  .page{max-width:1280px;margin:0 auto;padding:30px 28px 70px}
+  .masthead{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--rule)}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.11em;text-transform:uppercase}
+  .brand-mark{width:26px;height:26px;display:grid;place-items:center;background:var(--red);color:var(--sheet);font-family:var(--mono);font-size:10px;border-radius:2px;transform:rotate(-2deg)}
+  .brand span{color:var(--muted);font-weight:600}
+  .meta{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;text-align:right}
+  .intro{display:grid;grid-template-columns:1.15fr .85fr;gap:36px;align-items:end;padding:40px 0 22px}
+  .kicker{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin:0 0 12px}
+  h1{font-family:var(--display);font-size:clamp(42px,5.4vw,70px);line-height:.9;letter-spacing:-.035em;margin:0}
+  h1 em{font-style:normal;color:var(--red)}
+  .lede{font-size:14px;line-height:1.6;color:var(--muted);margin:0;max-width:58ch}.lede b{color:var(--ink)}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;padding:13px 0 16px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+  .tab{appearance:none;border:1px solid var(--rule);background:rgba(251,249,244,.55);color:var(--muted);padding:6px 8px;border-radius:2px;font-family:var(--mono);font-size:8.5px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer}
+  .tab:hover{border-color:var(--ink);color:var(--ink)}.tab.active{background:var(--red);border-color:var(--red);color:var(--sheet)}
+  .workspace{display:grid;grid-template-columns:390px minmax(0,1fr);gap:40px;align-items:start;padding-top:22px}
+  .phone-wrap{position:sticky;top:24px}
+  .phone{width:100%;height:760px;background:#1B1D22;border-radius:40px;padding:9px;box-shadow:0 24px 60px rgba(34,37,46,.14);position:relative}
+  .phone::before{content:"";position:absolute;top:17px;left:50%;transform:translateX(-50%);width:92px;height:22px;background:#1B1D22;border-radius:0 0 14px 14px;z-index:5}
+  .screen{position:relative;width:100%;height:100%;overflow:hidden;background:var(--paper);border-radius:32px;display:flex;flex-direction:column}
+  .statusbar{flex:none;height:42px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 20px 5px;font-family:var(--mono);font-size:10.5px;font-weight:600}
+  .status-right{display:flex;gap:5px;align-items:center}.sig{display:flex;align-items:flex-end;gap:1.5px;height:9px}.sig i{display:block;width:2.5px;background:var(--ink)}.sig i:nth-child(1){height:3px}.sig i:nth-child(2){height:5px}.sig i:nth-child(3){height:7px}.sig i:nth-child(4){height:9px}
+  .wifi{width:12px;height:9px;border:1.4px solid var(--ink);border-bottom:0;border-radius:8px 8px 0 0}.battery{width:18px;height:9px;border:1.2px solid var(--ink);border-radius:2px;position:relative}.battery::before{content:"";position:absolute;inset:1.5px;right:5px;background:var(--ink)}
+  .appbar{flex:none;height:50px;display:flex;align-items:center;gap:9px;padding:0 15px}
+  .back{width:28px;height:28px;border:1px solid transparent;background:transparent;border-radius:2px;font-size:20px;color:var(--ink)}
+  .appbar-title{font-family:var(--display);font-size:19px;font-weight:600;flex:1}
+  .appbar .action{font-family:var(--mono);font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--red)}
+  .search{margin:0 15px 9px;height:38px;border:1px solid var(--rule);background:var(--sheet);border-radius:2px;display:flex;align-items:center;gap:8px;padding:0 10px;font-size:11px;color:var(--muted)}
+  .chips{display:flex;gap:6px;padding:0 15px 10px;flex-wrap:wrap}
+  .chip{border:1px solid var(--rule);background:var(--sheet);border-radius:2px;padding:6px 8px;font-family:var(--mono);font-size:8px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .chip.on{background:var(--ink);border-color:var(--ink);color:var(--sheet)}
+  .scroll{flex:1;overflow:hidden;padding:0 15px 20px}
+  .group{display:flex;align-items:baseline;justify-content:space-between;padding:12px 0 6px;border-bottom:1px solid var(--rule);margin-bottom:2px}
+  .group b{font-family:var(--display);font-size:16px;font-weight:600}.group span{font-family:var(--mono);font-size:8px;color:var(--muted)}
+  .row{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--rule)}.row:last-child{border-bottom:0}
+  .row-main{flex:1;min-width:0}
+  .row-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:2px}
+  .row-title{font-size:11.5px;font-weight:600;margin:0;line-height:1.25;max-width:21ch}
+  .row-meta{font-size:10px;line-height:1.4;color:var(--muted);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row-work{display:flex;align-items:center;gap:5px;font-size:9.5px;line-height:1.35;color:var(--muted);margin-top:3px}
+  .row-work b{color:var(--ink);font-weight:600}.row-work .live{width:6px;height:6px;border-radius:50%;background:var(--green);flex:none}
+  .stamp{display:inline-flex;align-items:center;gap:4px;border:1.3px double currentColor;border-radius:2px;font-family:var(--display);font-size:7px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:3px 5px;transform:rotate(-3deg);white-space:nowrap;flex:none}
+  .stamp.green{color:var(--green)}.stamp.amber{color:var(--amber)}.stamp.red{color:var(--red)}.stamp.blue{color:var(--blue)}.stamp .dot{width:3px;height:3px;border-radius:50%;background:currentColor}
+  .chev{color:var(--muted);font-size:16px;margin-top:7px;flex:none}
+  .summary{margin-top:12px;padding:9px 10px;background:var(--sheet);border:1px solid var(--rule);border-radius:2px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .side h2{font-family:var(--display);font-size:30px;line-height:1;margin:0 0 4px;letter-spacing:-.02em}
+  .side > p{font-size:12.5px;line-height:1.55;color:var(--muted);margin:0 0 16px;max-width:62ch}
+  .config{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+  .config div{border:1px solid var(--rule);background:var(--sheet);border-radius:2px;padding:9px 10px}
+  .config small{display:block;font-family:var(--mono);font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+  .config b{font-size:10.5px;line-height:1.4;font-weight:600}
+  .note{border-top:1px solid var(--rule);padding:10px 0;display:grid;grid-template-columns:24px 1fr;gap:9px}
+  .note b{font-family:var(--mono);font-size:8.5px;color:var(--red);padding-top:1px}
+  .note h3{font-family:var(--display);font-size:16px;margin:0 0 2px;font-weight:600}
+  .note p{font-size:11px;line-height:1.5;color:var(--muted);margin:0;max-width:62ch}
+  .note p strong{color:var(--ink)}
+  .registry{margin-top:20px;border:1px solid var(--rule);border-radius:2px;background:var(--sheet);padding:12px}
+  .registry .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .registry h3{font-family:var(--display);font-size:18px;margin:0}
+  .registry .tag{font-family:var(--mono);font-size:7.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px solid var(--rule);padding:3px 5px;border-radius:2px}
+  .registry p{font-size:10.5px;line-height:1.45;color:var(--muted);margin:0}
+  .foot{margin-top:34px;border-top:1px solid var(--rule);padding-top:14px;display:flex;justify-content:space-between;gap:20px;font-size:10.5px;color:var(--muted)}
+  .foot b{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);display:block;margin-bottom:2px}
+  @media(max-width:1000px){.workspace{grid-template-columns:1fr}.phone-wrap{position:static;max-width:390px}.intro{grid-template-columns:1fr}}
+  @media(max-width:720px){.page{padding:18px 14px 50px}.phone{height:720px}.meta{display:none}.config{grid-template-columns:1fr}.foot{flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark">TT</span> TaskTap <span>/ Mobile</span></div>
+    <div class="meta">Tutte le liste · anteprima<br>indice operativo · una shell</div>
+  </header>
+
+  <section class="intro">
+    <div><p class="kicker">Anteprima · tutte le liste</p><h1>Una shell,<br><em>tredici liste.</em></h1></div>
+    <p class="lede">La stessa struttura di Cantieri applicata a Ticket, Rapportini, Clienti, Sedi, Commesse, Contratti, Prodotti, Materiali, Magazzini, Squadre, Pianificazioni, Report admin e Ferie. Cambiano filtri, gruppi e riga; non cambia il modello.</p>
+  </section>
+
+  <nav class="tabs" id="tabs" aria-label="Liste"></nav>
+
+  <section class="workspace">
+    <div class="phone-wrap">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span class="status-right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="wifi"></span><span class="battery"></span></span></div>
+        <div class="appbar"><span class="back">‹</span><span class="appbar-title" id="screenTitle"></span><span class="action" id="screenAction"></span></div>
+        <div class="search"><span>⌕</span> <span id="searchText"></span></div>
+        <div class="chips" id="chips"></div>
+        <div class="scroll" id="content"></div>
+      </div></div>
+    </div>
+
+    <aside class="side">
+      <h2 id="listTitle"></h2>
+      <p id="listSubtitle"></p>
+      <div class="config">
+        <div><small>Filtri</small><b id="cfgFilters"></b></div>
+        <div><small>Gruppi</small><b id="cfgGroups"></b></div>
+        <div><small>Riga</small><b id="cfgRow"></b></div>
+        <div><small>Azione</small><b id="cfgAction"></b></div>
+        <div style="grid-column:1/-1"><small>Filtri API disponibili</small><b id="cfgApi"></b></div>
+      </div>
+
+      <div class="note"><b>01</b><div><h3>Stato ≠ lavoro</h3><p>Il badge descrive il record (Attivo, Inviato, In scadenza…). La riga di lavoro descrive l’oggi (<strong>In corso</strong>, <strong>Da fare</strong>, <strong>In attesa</strong>).</p></div></div>
+      <div class="note"><b>02</b><div><h3>La riga è il target</h3><p>Tutta la riga apre il dettaglio; il chevron è solo un’affordance. I guanti non centrano icone piccole.</p></div></div>
+      <div class="note"><b>03</b><div><h3>Contesto prima dell’archivio</h3><p>Cliente, luogo, persona e prossima azione nella riga. Ore e dati fiscali solo nella vista Registro.</p></div></div>
+      <div class="note"><b>04</b><div><h3>API e locale</h3><p>I filtri qui sotto sono quelli <strong>davvero disponibili sul backend</strong>. Oggi molte liste leggono il mirror Drift e filtrano in locale: esporre un filtro server richiede anche il fallback offline. Il <strong>barcode</strong> di Materiali non è un filtro di lista: è una lookup separata (<code>/api/Materiali/lookup?barcode=</code>) da agganciare allo scanner.</p></div></div>
+
+      <div class="registry">
+        <div class="top"><h3>C · Registro</h3><span class="tag">Tablet / web</span></div>
+        <p>Per l’ufficio: tabella compatta con stato, soggetto, cliente e ore. Non è la vista mobile primaria.</p>
+      </div>
+    </aside>
+  </section>
+
+  <footer class="foot"><div><b>Anteprima</b>· una configurazione per lista, non tredici design.</div><div><b>Dopo</b>· conferma le configurazioni e genero <code>prototypes/list-screens.html</code>.</div></footer>
+</div>
+
+<script>
+const lists = [
+  {id:"cantieri",title:"Cantieri",action:"Nuovo",search:"Cerca cantiere, cliente, indirizzo o codice…",filters:["Attivi","Tutti","Pianificati","Chiusi"],active:0,
+   subtitle:"Cosa devo seguire oggi, e quali cantieri sono ancora attivi.",
+   cfg:{filters:"Attivi · Tutti · Pianificati · Chiusi",groups:"Da seguire oggi · Altri attivi · Pianificati",row:"Cliente · luogo · squadra · prossima attività",action:"Apri il cantiere"},
+   groups:[
+    {name:"Da seguire oggi",count:2,rows:[["Ristrutturazione Via Roma","Rossi Srl · Milano · 3 operatori","In corso · 08:30–12:30","Attivo","green"],["Manutenzione caldaie","Bianchi Srl · Milano · 2 operatori","Timbrato oggi · 09:00–11:30","Attivo","green"]]},
+    {name:"Altri cantieri attivi",count:2,rows:[["Cantiere Nord","Verdi Spa · Sesto · 4 operatori","Nessuna attività oggi · prossima domani 08:00","Attivo","green"],["Pulizia impianti","Gialli Srl · Monza · 2 operatori","Ultima attività · 12/11","Attivo","green"]]},
+    {name:"Pianificati",count:1,rows:[["Sostituzione infissi","Neri Srl · Milano","Inizio · 18/11","Pianificato","blue"]]}
+   ],summary:["8 cantieri attivi","2 oggi"]},
+  {id:"ticket",title:"Ticket",action:"Nuovo",search:"Cerca ticket, cliente, sede o numero…",filters:["Tutti","Oggi","In corso","In attesa","Chiusi"],active:1,
+   subtitle:"Il lavoro aperto adesso, non l’archivio degli interventi.",
+   cfg:{filters:"Oggi · In corso · In attesa · Chiusi",groups:"Oggi · In corso · Altri aperti · In attesa",row:"Titolo · cliente/sede · tecnico · priorità",action:"Apri il ticket"},
+   groups:[
+    {name:"Oggi",count:2,rows:[["Perdita acqua sotto il lavello","Rossi Srl · Milano · Daniel","In corso da 42m · alta priorità","In corso","amber"],["Caldaia non parte","Bianchi Srl · Sesto · Marco","Da fare · SLA 14:00","Aperto","blue"]]},
+    {name:"Altri aperti",count:2,rows:[["Sostituzione sifone","Verdi Spa · Monza · Luca","Assegnato · domani 09:00","Aperto","blue"],["Controllo impianto","Neri Srl · Milano · Daniel","In attesa cliente","In attesa","amber"]]}
+   ],summary:["24 ticket","3 in corso"]},
+  {id:"rapportini",title:"Rapportini",action:"Nuovo",search:"Cerca rapportino, cliente, sede o data…",filters:["Tutti","Da inviare","In revisione","Firmati","Fatturati"],active:1,
+   subtitle:"Il documento che deve uscire dal cantiere: bozza, firma, invio.",
+   cfg:{filters:"Da inviare · In revisione · Firmati · Fatturati",groups:"Da inviare · In revisione · Firmati · Fatturati",row:"Cliente/sede · data · ore · stato firma",action:"Apri il rapportino"},
+   groups:[
+    {name:"Da inviare",count:2,rows:[["Rapportino 2026-0412","Rossi Srl · Milano · oggi","2 firme · 4h 30m","Bozza","amber"],["Rapportino 2026-0411","Bianchi Srl · Sesto · oggi","Firma cliente mancante · 2h","Bozza","amber"]]},
+    {name:"In revisione",count:1,rows:[["Rapportino 2026-0409","Verdi Spa · Monza · 12/11","Inviato · 6h","Inviato","blue"]]}
+   ],summary:["18 rapportini","2 da inviare"]},
+  {id:"clienti",title:"Clienti",action:"Nuovo",search:"Cerca ragione sociale, città o P.IVA…",filters:["Attivi","Tutti","Inattivi"],active:0,
+   subtitle:"Chi sono i clienti e cosa hanno aperto con noi.",
+   cfg:{filters:"Attivi · Inattivi · Tutti",groups:"Attivi · Inattivi",row:"Ragione sociale · città · ticket aperti · contratti",action:"Apri il cliente"},
+   groups:[
+    {name:"Attivi",count:2,rows:[["Rossi Srl","Milano · 3 ticket aperti · 4 contratti","Cliente dal 2021","Attivo","green"],["Bianchi Srl","Sesto · 1 ticket aperto · 2 contratti","Cliente dal 2023","Attivo","green"]]},
+    {name:"Inattivi",count:1,rows:[["Neri Srl","Milano · nessun ticket · 0 contratti","Disattivato 10/2025","Inattivo","red"]]}
+   ],summary:["42 clienti","38 attivi"]},
+  {id:"sedi",title:"Sedi",action:"Nuovo",search:"Cerca sede, cliente, indirizzo o città…",filters:["Tutti","Con ticket","Senza ticket"],active:0,
+   subtitle:"Dove andare, per quale cliente, con cosa è aperto.",
+   cfg:{filters:"Tutti · Con ticket · Senza ticket",groups:"Per cliente · località",row:"Sede · cliente · indirizzo · ticket aperti",action:"Apri la sede"},
+   groups:[
+    {name:"Rossi Srl",count:2,rows:[["Sede Milano","Via Roma 1 · 2 ticket aperti","Ultimo intervento 12/11","Attiva","green"],["Sede Monza","Via Manzoni 4 · 0 ticket","Nessuna attività recente","Attiva","green"]]},
+    {name:"Bianchi Srl",count:1,rows:[["Sede Sesto","Via Verdi 8 · 1 ticket aperto","Intervento oggi 14:00","Attiva","green"]]}
+   ],summary:["36 sedi","12 con ticket"]},
+  {id:"commesse",title:"Commesse",action:"Nuovo",search:"Cerca codice, descrizione o cliente…",filters:["Aperte","Tutte","Chiuse"],active:0,
+   subtitle:"Il lavoro commissionato e i cantieri che contiene.",
+   cfg:{filters:"Aperte · Chiuse · Tutte",groups:"Aperte · Chiuse",row:"Codice/descrizione · cliente · periodo · cantieri",action:"Apri la commessa"},
+   groups:[
+    {name:"Aperte",count:2,rows:[["CM-2026-018 · Ristrutturazione","Rossi Srl · 01/11–15/12","2 cantieri · 8 ticket","Aperta","amber"],["CM-2026-017 · Manutenzione","Bianchi Srl · 01/10–31/12","1 cantiere · 4 ticket","Aperta","amber"]]},
+    {name:"Chiuse",count:1,rows:[["CM-2025-044 · Pulizie","Verdi Spa · 01/09–30/09","Chiusa · 12 ticket","Chiusa","red"]]}
+   ],summary:["14 commesse","8 aperte"]},
+  {id:"contratti",title:"Contratti",action:"Nuovo",search:"Cerca contratto, cliente o codice…",filters:["Attivi","In scadenza","Scaduti","Tutti"],active:1,
+   subtitle:"Cosa scade, cosa si rinnova, cosa è coperto.",
+   cfg:{filters:"In scadenza · Attivi · Scaduti",groups:"In scadenza · Attivi · Scaduti",row:"Contratto · cliente · scadenza · rinnovo",action:"Apri il contratto"},
+   groups:[
+    {name:"In scadenza",count:2,rows:[["Full service","Rossi Srl · scade 31/12","Rinnovo automatico · preavviso 30gg","In scadenza","amber"],["Manutenzione caldaie","Bianchi Srl · scade 15/12","Rinnovo manuale","In scadenza","amber"]]},
+    {name:"Attivi",count:1,rows:[["Assistenza impianti","Verdi Spa · scade 30/06/2027","Rinnovo automatico","Attivo","green"]]}
+   ],summary:["26 contratti","3 in scadenza"]},
+  {id:"prodotti",title:"Prodotti in assistenza",action:"Nuovo",search:"Cerca prodotto, seriale, cliente…",filters:["Tutti","In garanzia","Garanzia scaduta","Inattivi"],active:0,
+   subtitle:"Gli asset del cliente e la loro prossima manutenzione.",
+   cfg:{filters:"In garanzia · Garanzia scaduta · Inattivi",groups:"In garanzia · Garanzia scaduta · Inattivi",row:"Prodotto · cliente · seriale · prossima manutenzione",action:"Apri il prodotto"},
+   groups:[
+    {name:"In garanzia",count:2,rows:[["Caldaia Vaillant","Rossi Srl · SN-9","Prossima manutenzione 03/12","In garanzia","green"],["Climatizzatore Daikin","Bianchi Srl · SN-14","Prossima manutenzione 10/12","In garanzia","green"]]},
+    {name:"Garanzia scaduta",count:1,rows:[["Caldaia Baxi","Verdi Spa · SN-2","Ultima manutenzione 02/10","Scaduta","amber"]]}
+   ],summary:["64 prodotti","6 in scadenza"]},
+  {id:"materiali",title:"Materiali",action:"Nuovo",search:"Cerca codice, nome o categoria…",filters:["Tutti","Sotto scorta","Attivi","Inattivi"],active:1,
+   subtitle:"Cosa c’è, cosa manca, quanto costa.",
+   cfg:{filters:"Sotto scorta · Attivi · Inattivi",groups:"Sotto scorta · Attivi · Inattivi",row:"Materiale · categoria · giacenza · prezzo",action:"Apri il materiale"},
+   groups:[
+    {name:"Sotto scorta",count:2,rows:[["Sifone 40 mm","Idraulica · 4 pz · € 4,20","Sotto scorta · riordino","Attivo","amber"],["Guarnizione 1/2","Idraulica · 2 pz · € 1,10","Sotto scorta · riordino","Attivo","amber"]]},
+    {name:"Attivi",count:1,rows:[["Tubo rame 15","Idraulica · 24 pz · € 6,80","Giacenza ok","Attivo","green"]]}
+   ],summary:["148 materiali","6 sotto scorta"]},
+  {id:"magazzini",title:"Magazzini",action:"Nuovo",search:"Cerca magazzino, tipo o indirizzo…",filters:["Tutti","Principali","Secondari"],active:0,
+   subtitle:"Dove sono le cose e cosa manca in ogni luogo.",
+   cfg:{filters:"Principali · Secondari · Tutti",groups:"Principali · Secondari",row:"Magazzino · luogo · articoli · sotto scorta",action:"Apri il magazzino"},
+   groups:[
+    {name:"Principali",count:2,rows:[["Magazzino Milano","Via Roma 1 · 148 articoli","6 sotto scorta","Principale","green"],["Magazzino Monza","Via Manzoni 4 · 82 articoli","2 sotto scorta","Principale","green"]]},
+    {name:"Secondari",count:1,rows:[["Furgone 3","Assegnato a Daniel · 34 articoli","1 sotto scorta","Secondario","blue"]]}
+   ],summary:["4 magazzini","3 attivi"]},
+  {id:"squadre",title:"Squadre",action:"Nuovo",search:"Cerca squadra, lead o membro…",filters:["Attive","Tutte","Inattive"],active:0,
+   subtitle:"Chi lavora insieme e su quali cantieri.",
+   cfg:{filters:"Attive · Inattive · Tutte",groups:"Attive · Inattive",row:"Squadra · lead · membri · cantieri",action:"Apri la squadra"},
+   groups:[
+    {name:"Attive",count:2,rows:[["Squadra Nord","Lead Daniel · 4 membri","2 cantieri attivi","Attiva","green"],["Squadra Sud","Lead Marco · 3 membri","1 cantiere attivo","Attiva","green"]]},
+    {name:"Inattive",count:1,rows:[["Squadra Est","Lead Luca · 2 membri","Nessun cantiere","Inattiva","red"]]}
+   ],summary:["8 squadre","6 attive"]},
+  {id:"pianificazioni",title:"Pianificazioni",action:"Nuovo",search:"Cerca titolo, sede, tecnico o data…",filters:["Oggi","Settimana","Futuro","Tutte"],active:0,
+   subtitle:"Gli impegni nel tempo, non i cantieri.",
+   cfg:{filters:"Oggi · Settimana · Futuro",groups:"Oggi · Questa settimana · Futuro",row:"Titolo · ora · tecnico · sede",action:"Apri la pianificazione"},
+   groups:[
+    {name:"Oggi",count:2,rows:[["Sopralluogo Rossi","14:00 · Daniel · Sede Milano","Confermato","Oggi","blue"],["Manutenzione Bianchi","16:30 · Marco · Sede Sesto","Confermato","Oggi","blue"]]},
+    {name:"Questa settimana",count:1,rows:[["Installazione Verdi","Domani 09:00 · Luca · Monza","Da confermare","Pianificato","amber"]]}
+   ],summary:["12 impegni","2 oggi"]},
+  {id:"report",title:"Report admin",action:"",search:"Cerca report, cliente o periodo…",filters:["Inviati","Controllati","Fatturati","Tutti"],active:0,
+   subtitle:"Il documento ufficio e il suo stato nel flusso.",
+   cfg:{filters:"Inviati · Controllati · Fatturati",groups:"Inviati · Controllati · Fatturati",row:"Report · cliente · periodo · ore · stato",action:"Apri il report"},
+   groups:[
+    {name:"Inviati",count:2,rows:[["Rapportino 2026-0412","Rossi Srl · Novembre · 30h","In attesa di controllo","Inviato","blue"],["Rapportino 2026-0411","Bianchi Srl · Novembre · 18h","In attesa di controllo","Inviato","blue"]]},
+    {name:"Controllati",count:1,rows:[["Rapportino 2026-0409","Verdi Spa · Ottobre · 22h","Pronto per fatturazione","Controllato","amber"]]}
+   ],summary:["36 report","12 da controllare"]},
+  {id:"ferie",title:"Ferie e permessi",action:"Nuovo",search:"Cerca persona, tipo o periodo…",filters:["In attesa","Approvate","Respinte","Tutte"],active:0,
+   subtitle:"Le richieste del team e il loro stato.",
+   cfg:{filters:"In attesa · Approvate · Respinte",groups:"In attesa · Approvate · Respinte",row:"Persona · tipo · periodo · stato",action:"Apri la richiesta"},
+   groups:[
+    {name:"In attesa",count:2,rows:[["Daniel Shala","Ferie · 18–22/11","3 giorni · in attesa","In attesa","amber"],["Marco Rossi","Permesso · 12/11","2 ore · in attesa","In attesa","amber"]]},
+    {name:"Approvate",count:1,rows:[["Luca Bianchi","Ferie · 02–06/12","5 giorni · approvate","Approvata","green"]]}
+   ],summary:["9 richieste","2 in attesa"]}
+];
+
+const apiFilters = {
+  cantieri: "Q · search · customerId · commessaId · status",
+  ticket: "Q · statusId · priorita · customerId · userId · dateFrom/To · isClosed · commessaId · cantiereId · contractId",
+  rapportini: "Q · stato/stati · dateFrom/To · customerId · locationId · ticketId · cantiereId · scheduleId",
+  clienti: "Q · isActive · externalId · codice",
+  sedi: "Q · search · customerId · isActive",
+  commesse: "Q · isActive · customerId · stato",
+  contratti: "Q · isActive · customerId · locationId · externalId · codice",
+  prodotti: "Q · isActive · customerId · locationId · categoria · librettoId",
+  materiali: "Q · category · isActive · barcode = lookup separata",
+  magazzini: "Q · isActive · tipo",
+  squadre: "Q · isActive",
+  pianificazioni: "Q · userId · statusId · squadraId · ticketId · dateFrom/To",
+  report: "Q · stato/stati · dateFrom/To · customerId · locationId · ticketId · cantiereId · scheduleId",
+  ferie: "userId · status"
+};
+
+const tabs = document.getElementById('tabs');
+const content = document.getElementById('content');
+const chips = document.getElementById('chips');
+let current = 0;
+
+function renderTabs(){
+  tabs.innerHTML = lists.map((l,i)=>`<button class="tab ${i===current?'active':''}" data-i="${i}">${l.title}</button>`).join('');
+  tabs.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{current=Number(b.dataset.i);render();}));
+}
+
+function render(){
+  renderTabs();
+  const l = lists[current];
+  document.getElementById('screenTitle').textContent = l.title;
+  document.getElementById('screenAction').textContent = l.action;
+  document.getElementById('searchText').textContent = l.search;
+  document.getElementById('listTitle').textContent = l.title;
+  document.getElementById('listSubtitle').textContent = l.subtitle;
+  document.getElementById('cfgFilters').textContent = l.cfg.filters;
+  document.getElementById('cfgGroups').textContent = l.cfg.groups;
+  document.getElementById('cfgRow').textContent = l.cfg.row;
+  document.getElementById('cfgAction').textContent = l.cfg.action;
+  document.getElementById('cfgApi').textContent = apiFilters[l.id] || '—';
+  chips.innerHTML = l.filters.map((f,i)=>`<span class="chip ${i===l.active?'on':''}">${f}</span>`).join('');
+  content.innerHTML = l.groups.map(g=>`
+    <div class="group"><b>${g.name}</b><span>${g.count}</span></div>
+    ${g.rows.map(r=>`<div class="row"><div class="row-main">
+      <div class="row-top"><p class="row-title">${r[0]}</p><span class="stamp ${r[4]}"><span class="dot"></span>${r[3]}</span></div>
+      <p class="row-meta">${r[1]}</p>
+      <p class="row-work">${r[2]}</p>
+    </div><span class="chev">›</span></div>`).join('')}
+  `).join('') + `<div class="summary"><span>${l.summary[0]}</span><span>${l.summary[1]}</span></div>`;
+}
+
+render();
+</script>
+</body>
+</html>

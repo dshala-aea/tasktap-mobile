@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskTap — Proposte per gli altri dettagli</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@600;700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1EEE7;--sheet:#FBF9F4;--fill:#EDEAE3;--rule:#DED9CE;--ink:#22252E;--muted:#5E6878;
+    --red:#C03221;--green:#248A3D;--amber:#B36200;--blue:#4F6BFF;
+    --display:"Archivo Narrow","Arial Narrow",system-ui,sans-serif;
+    --body:"Archivo",system-ui,-apple-system,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}html,body{margin:0;min-height:100%}
+  body{background:radial-gradient(1100px 520px at 50% -10%,rgba(251,249,244,.85),transparent 70%),repeating-linear-gradient(90deg,rgba(34,37,46,.028) 0 1px,transparent 1px 96px),var(--paper);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  .page{max-width:1380px;margin:0 auto;padding:30px 28px 70px}
+  .masthead{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--rule)}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.11em;text-transform:uppercase}
+  .brand-mark{width:26px;height:26px;display:grid;place-items:center;background:var(--red);color:var(--sheet);font-family:var(--mono);font-size:10px;border-radius:2px;transform:rotate(-2deg)}
+  .brand span{color:var(--muted);font-weight:600}
+  .meta{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;text-align:right}
+  .intro{display:grid;grid-template-columns:1.2fr .8fr;gap:36px;align-items:end;padding:40px 0 24px}
+  .kicker{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin:0 0 12px}
+  h1{font-family:var(--display);font-size:clamp(44px,5.8vw,76px);line-height:.9;letter-spacing:-.035em;margin:0}
+  h1 em{font-style:normal;color:var(--red)}
+  .lede{font-size:14px;line-height:1.6;color:var(--muted);margin:0;max-width:58ch}.lede b{color:var(--ink)}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;padding:14px 0 18px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+  .tab{appearance:none;border:1px solid var(--rule);background:rgba(251,249,244,.55);color:var(--muted);padding:7px 9px;border-radius:2px;font-family:var(--mono);font-size:9px;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+  .tab:hover{border-color:var(--ink);color:var(--ink)}
+  .tab.active{background:var(--red);border-color:var(--red);color:var(--sheet)}
+  .screen-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:24px 0 14px}
+  .screen-head h2{font-family:var(--display);font-size:34px;line-height:.95;margin:0;letter-spacing:-.02em}
+  .screen-head p{font-size:11.5px;line-height:1.5;color:var(--muted);margin:0;max-width:48ch;text-align:right}
+  .proposals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+  .proposal{min-width:0}
+  .proposal-head{display:flex;align-items:flex-start;gap:10px;min-height:58px;padding-bottom:8px}
+  .letter{flex:none;width:26px;height:26px;display:grid;place-items:center;border:1px solid var(--ink);border-radius:2px;font-family:var(--mono);font-size:10px;margin-top:1px}
+  .proposal h3{font-family:var(--display);font-size:20px;line-height:1;margin:0 0 4px}
+  .proposal-head p{font-size:10.5px;line-height:1.4;color:var(--muted);margin:0;max-width:30ch}
+  .phone{background:var(--sheet);border:1px solid var(--rule);border-radius:2px;padding:13px;min-height:390px;display:flex;flex-direction:column}
+  .phone-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .kind{font-family:var(--mono);font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .stamp{display:inline-flex;align-items:center;gap:4px;border:1.3px double currentColor;border-radius:2px;font-family:var(--display);font-size:7.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:3px 5px;transform:rotate(-3deg);white-space:nowrap}
+  .stamp.green{color:var(--green)}.stamp.amber{color:var(--amber)}.stamp.red{color:var(--red)}.stamp.blue{color:var(--blue)}
+  .stamp .dot{width:3px;height:3px;border-radius:50%;background:currentColor}
+  .phone h4{font-family:var(--display);font-size:23px;line-height:1;margin:0 0 4px;letter-spacing:-.02em;max-width:17ch}
+  .phone .sub{font-size:9.5px;line-height:1.4;color:var(--muted);margin:0 0 11px;min-height:26px}
+  .cta{background:var(--red);color:var(--sheet);border-radius:2px;font-family:var(--body);font-size:10.5px;font-weight:600;padding:8px;text-align:center;margin-bottom:10px}
+  .sections{border-top:1px solid var(--rule);padding-top:6px;display:grid;gap:0}
+  .section-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--rule);font-size:10.5px;line-height:1.2}
+  .section-row:last-child{border-bottom:0}
+  .section-row b{font-weight:600}.section-row small{font-family:var(--mono);font-size:7.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .why{margin-top:8px;font-size:10.5px;line-height:1.5;color:var(--muted)}
+  .why b{color:var(--ink);font-family:var(--mono);font-size:8px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:2px}
+  .footer{margin-top:38px;border-top:1px solid var(--rule);padding-top:16px;display:flex;justify-content:space-between;gap:24px;font-size:11px;line-height:1.5;color:var(--muted)}
+  .footer b{color:var(--ink);font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:2px}
+  @media(max-width:1050px){.proposals{grid-template-columns:1fr 1fr}.proposal:last-child{grid-column:1/-1;max-width:560px}.intro{grid-template-columns:1fr}.screen-head{display:block}.screen-head p{text-align:left;margin-top:8px}}
+  @media(max-width:720px){.page{padding:18px 14px 50px}.proposals{grid-template-columns:1fr}.proposal:last-child{max-width:none}.meta{display:none}.footer{display:block}.footer div{margin-bottom:10px}}
+  @media(prefers-reduced-motion:no-preference){.proposal{animation:rise .5s cubic-bezier(.16,1,.3,1) both}.proposal:nth-child(2){animation-delay:.06s}.proposal:nth-child(3){animation-delay:.12s}@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark">TT</span> TaskTap <span>/ Mobile</span></div>
+    <div class="meta">Altri dettagli · proposte<br>anteprima, non prototipo finale</div>
+  </header>
+
+  <section class="intro">
+    <div>
+      <p class="kicker">Proposte · altri dettagli</p>
+      <h1>Per ogni schermata,<br><em>tre ordini.</em></h1>
+    </div>
+    <p class="lede">La shell resta <b>Hero + stack</b>. Per ogni dettaglio cambia cosa sale subito sotto il hero: la sintesi, le relazioni o il documento. Scegli una proposta per schermata; poi genero il prototipo finale in <code>prototypes/</code>.</p>
+  </section>
+
+  <nav class="tabs" id="tabs" aria-label="Schermate"></nav>
+
+  <section class="screen-head">
+    <h2 id="screenTitle"></h2>
+    <p id="screenSubtitle"></p>
+  </section>
+
+  <section class="proposals" id="proposals"></section>
+
+  <footer class="footer">
+    <div><b>Anteprima</b>Le tre proposte sono ordini di sezioni, non tre shell diverse.</div>
+    <div><b>Dopo</b>Scegli A/B/C per ogni schermata e genero <code>prototypes/other-details.html</code> con i mockup definitivi.</div>
+  </footer>
+</div>
+
+<script>
+const screens = [
+  {
+    id:"cliente", title:"Cliente", subtitle:"Anagrafica, relazioni e documenti di un cliente. Il lavoro parte dalle sedi o dai contratti?",
+    entity:"Rossi Srl", status:"Attivo", tone:"green", kind:"Summary · cliente", facts:"Milano · 12 sedi · 4 contratti",
+    proposals:[
+      {name:"Relazioni-first", tagline:"Sedi, contratti e referenti prima dell’anagrafica.", sections:[["Relazioni","12 sedi · 4 contratti · 3 referenti"],["Sintesi","Anagrafica e dati fiscali"],["Attività","Ultimi interventi e rapportini"],["Documenti","Contratti e allegati"]], why:"Chi lavora su un cliente parte da cosa è collegato, non dalla P.IVA."},
+      {name:"Sintesi-first", tagline:"L’anagrafica resta il centro del record.", sections:[["Sintesi","Contatti e dati fiscali"],["Relazioni","Sedi, contratti, referenti"],["Attività","Ultimi interventi"],["Documenti","Contratti e allegati"]], why:"Il record è un’anagrafica: chi lo corregge vuole prima i dati."},
+      {name:"Documenti-first", tagline:"Contratti e allegati come lavoro principale.", sections:[["Documenti","Contratti, PDF, allegati"],["Relazioni","Sedi e referenti"],["Sintesi","Anagrafica"],["Attività","Interventi"]], why:"Per l’ufficio contratti, il documento è il motivo per aprire il cliente."}
+    ]
+  },
+  {
+    id:"sede", title:"Sede", subtitle:"Un luogo del cliente: indirizzo, mappa e chi ci lavora.",
+    entity:"Sede Milano", status:"Attiva", tone:"green", kind:"Summary · sede", facts:"Rossi Srl · Milano · 3 interventi",
+    proposals:[
+      {name:"Mappa-first", tagline:"La sede è un luogo: la mappa apre la pagina.", sections:[["Documenti & mappa","Via Roma 1, Milano"],["Relazioni","Cliente, referenti, contratti"],["Sintesi","Indirizzo, telefono, note"],["Attività","Interventi e ticket"]], why:"Per un tecnico la sede è prima di tutto un posto da raggiungere."},
+      {name:"Relazioni-first", tagline:"Cliente e referenti prima dei dati del luogo.", sections:[["Relazioni","Cliente, referenti, contratti"],["Sintesi","Indirizzo e contatti"],["Attività","Interventi"],["Documenti & mappa","Mappa e allegati"]], why:"La sede appartiene a un cliente: il contesto viene prima dell’indirizzo."},
+      {name:"Sintesi-first", tagline:"Indirizzo e contatti subito, mappa in fondo.", sections:[["Sintesi","Indirizzo, telefono, note"],["Relazioni","Cliente e referenti"],["Attività","Interventi"],["Documenti & mappa","Mappa e allegati"]], why:"Una scheda sede classica, per chi la corregge più che per chi ci va."}
+    ]
+  },
+  {
+    id:"commessa", title:"Commessa", subtitle:"Il lavoro commissionato: periodo, cantieri e ticket.",
+    entity:"CM-2026-018", status:"Aperta", tone:"amber", kind:"Summary · commessa", facts:"Rossi Srl · 01/11–15/12 · € 48.000",
+    proposals:[
+      {name:"Cantieri-first", tagline:"I cantieri sono il corpo della commessa.", sections:[["Relazioni","2 cantieri · 8 ticket"],["Sintesi","Periodo, importo, note"],["Attività","Ticket e avanzamento"],["Documenti","Contratto e allegati"]], why:"Una commessa si legge dai cantieri che contiene."},
+      {name:"Ticket-first", tagline:"Il lavoro operativo prima del contenitore.", sections:[["Attività","8 ticket · avanzamento"],["Relazioni","2 cantieri"],["Sintesi","Periodo e importo"],["Documenti","Contratto e allegati"]], why:"Per chi segue l’operatività, i ticket sono il lavoro vero."},
+      {name:"Sintesi-first", tagline:"Periodo e importo prima delle relazioni.", sections:[["Sintesi","Periodo, importo, note"],["Relazioni","Cantieri e ticket"],["Attività","Avanzamento"],["Documenti","Contratto e allegati"]], why:"Per l’ufficio, la commessa è prima di tutto un valore e una finestra."}
+    ]
+  },
+  {
+    id:"contratto", title:"Contratto", subtitle:"L’accordo: condizioni, scadenze e rinnovo.",
+    entity:"Full service", status:"Attivo", tone:"green", kind:"Summary · contratto", facts:"Rossi Srl · scade 31/12/2026 · rinnovo auto",
+    proposals:[
+      {name:"Scadenze-first", tagline:"La data che conta prima delle condizioni.", sections:[["Sintesi","Scadenza, preavviso, rinnovo"],["Relazioni","Cliente, prodotti, pianificazioni"],["Attività","Interventi coperti"],["Documenti","PDF e allegati"]], why:"Un contratto si apre per sapere quando scade e cosa succede dopo."},
+      {name:"Condizioni-first", tagline:"Prezzo, frequenza e condizioni in testa.", sections:[["Sintesi","Prezzo, frequenza, condizioni"],["Relazioni","Cliente e prodotti"],["Attività","Interventi"],["Documenti","PDF e allegati"]], why:"Per l’ufficio commerciale, le condizioni sono il contenuto."},
+      {name:"Documenti-first", tagline:"Il contratto firmato è il documento.", sections:[["Documenti","PDF, allegati, storico"],["Sintesi","Scadenza e condizioni"],["Relazioni","Cliente e prodotti"],["Attività","Interventi"]], why:"Se il contratto è già firmato, il PDF è ciò che si cerca."}
+    ]
+  },
+  {
+    id:"prodotto", title:"Prodotto in assistenza", subtitle:"L’asset del cliente: seriale, garanzia e storico.",
+    entity:"Caldaia Vaillant", status:"In garanzia", tone:"green", kind:"Summary · asset", facts:"Rossi Srl · SN-9 · ultima 03/10",
+    proposals:[
+      {name:"Storico-first", tagline:"Cosa è successo a questo asset.", sections:[["Attività","Interventi e manutenzioni"],["Sintesi","Seriale, garanzia, dati tecnici"],["Relazioni","Cliente, contratto, sede"],["Documenti","Foto e allegati"]], why:"Un prodotto in assistenza si apre per il suo storico."},
+      {name:"Tecnico-first", tagline:"Dati tecnici e prossima manutenzione.", sections:[["Sintesi","Dati tecnici, garanzia, prossima"],["Attività","Storico interventi"],["Relazioni","Cliente e sede"],["Documenti","Foto e allegati"]], why:"Per il tecnico, il modello e la prossima scadenza vengono prima."},
+      {name:"Garanzia-first", tagline:"Garanzia e copertura come primo fatto.", sections:[["Sintesi","Garanzia, installazione, prossima"],["Attività","Interventi"],["Relazioni","Cliente e contratto"],["Documenti","Foto e allegati"]], why:"Per l’ufficio, la copertura decide se l’intervento è fatturabile."}
+    ]
+  },
+  {
+    id:"materiale", title:"Materiale", subtitle:"Anagrafica articolo: giacenza, prezzi e movimenti.",
+    entity:"Sifone 40 mm", status:"Attivo", tone:"green", kind:"Summary · articolo", facts:"Idraulica · 24 pz · € 4,20",
+    proposals:[
+      {name:"Movimenti-first", tagline:"Dove è andato e da dove è arrivato.", sections:[["Movimenti","Carichi, scarichi, rettifiche"],["Sintesi","Giacenza, prezzi, anagrafica"],["Documenti","Foto e allegati"]], why:"Un materiale si apre per sapere dove è finito."},
+      {name:"Giacenza-first", tagline:"Quanto ne ho e a che prezzo.", sections:[["Sintesi","Giacenza, prezzi, unità"],["Movimenti","Ultimi movimenti"],["Documenti","Foto e allegati"]], why:"Per chi ordina, la giacenza è la prima risposta."},
+      {name:"Anagrafica-first", tagline:"Codice, categoria e descrizione.", sections:[["Sintesi","Codice, categoria, descrizione"],["Movimenti","Ultimi movimenti"],["Documenti","Foto e allegati"]], why:"Per chi corregge l’anagrafica, i dati sono il centro."}
+    ]
+  },
+  {
+    id:"magazzino", title:"Magazzino", subtitle:"Un luogo fisico: articoli, capienza e sotto scorta.",
+    entity:"Magazzino Milano", status:"6 sotto scorta", tone:"amber", kind:"Summary · magazzino", facts:"Principale · 148 articoli · Via Roma 1",
+    proposals:[
+      {name:"Sotto scorta-first", tagline:"Cosa manca adesso.", sections:[["Sintesi","6 sotto scorta · 148 articoli"],["Movimenti","Ultimi carichi e scarichi"],["Documenti","Mappa e allegati"]], why:"Un magazzino si apre per sapere cosa manca."},
+      {name:"Movimenti-first", tagline:"Il flusso prima dell’inventario.", sections:[["Movimenti","Carichi, scarichi, rettifiche"],["Sintesi","Giacenza e sotto scorta"],["Documenti","Mappa e allegati"]], why:"Per chi movimenta, il flusso è il lavoro."},
+      {name:"Sintesi-first", tagline:"Dati del luogo e capienza.", sections:[["Sintesi","Tipo, indirizzo, capienza"],["Movimenti","Ultimi movimenti"],["Documenti","Mappa e allegati"]], why:"Per l’anagrafica, il luogo viene prima del movimento."}
+    ]
+  },
+  {
+    id:"squadra", title:"Squadra", subtitle:"Persone, lead e cantieri su cui lavorano.",
+    entity:"Squadra Nord", status:"Attiva", tone:"green", kind:"Summary · squadra", facts:"Lead Daniel Shala · 4 membri · 2 cantieri",
+    proposals:[
+      {name:"Membri-first", tagline:"Chi c’è, prima di dove lavora.", sections:[["Relazioni","4 membri, lead"],["Attività","2 cantieri attivi"],["Sintesi","Descrizione, note"]], why:"Una squadra è prima di tutto le persone."},
+      {name:"Cantieri-first", tagline:"Dove è impegnata adesso.", sections:[["Attività","2 cantieri attivi"],["Relazioni","Membri e lead"],["Sintesi","Descrizione, note"]], why:"Per il coordinamento, l’impegno operativo è la risposta."},
+      {name:"Sintesi-first", tagline:"Definizione e note della squadra.", sections:[["Sintesi","Descrizione, note, stato"],["Relazioni","Membri"],["Attività","Cantieri"]], why:"Per l’anagrafica, la definizione viene prima delle persone."}
+    ]
+  },
+  {
+    id:"pianificazione", title:"Pianificazione", subtitle:"Un impegno: quando, dove e per chi.",
+    entity:"Sopralluogo Rossi", status:"Oggi", tone:"blue", kind:"Summary · impegno", facts:"Oggi 14:00 · Daniel · Sede Milano",
+    proposals:[
+      {name:"Impegno-first", tagline:"Data, ora e squadra in testa.", sections:[["Sintesi","Oggi 14:00, Daniel, sede"],["Relazioni","Cliente, ticket, contratto"],["Attività","Note e stato"]], why:"Una pianificazione è un impegno: quando e chi."},
+      {name:"Luogo-first", tagline:"Dove andare prima di cosa fare.", sections:[["Relazioni","Sede, cliente, ticket"],["Sintesi","Data, ora, squadra"],["Attività","Note e stato"]], why:"Per chi parte, la destinazione è la prima informazione."},
+      {name:"Note-first", tagline:"Il contesto operativo dell’impegno.", sections:[["Attività","Note, stato, storico"],["Sintesi","Data, ora, squadra"],["Relazioni","Sede e cliente"]], why:"Per un impegno complesso, le note spiegano cosa aspettarsi."}
+    ]
+  },
+  {
+    id:"report", title:"Report admin", subtitle:"Il documento ufficio: PDF, stato e transizioni.",
+    entity:"Rapportino 2026-0412", status:"Inviato", tone:"blue", kind:"Summary · documento", facts:"Rossi Srl · Novembre · 30 ore",
+    proposals:[
+      {name:"PDF-first", tagline:"Il documento è ciò che si apre.", sections:[["Documenti","PDF, firme, foto"],["Sintesi","Stato, cliente, periodo"],["Attività","Storico e transizioni"]], why:"Un report inviato è già un documento: il PDF è l’azione."},
+      {name:"Stato-first", tagline:"Dove è nel flusso ufficio.", sections:[["Sintesi","Stato, cliente, periodo"],["Attività","Transizioni e storico"],["Documenti","PDF e allegati"]], why:"Per l’ufficio, il report è una pratica da far avanzare."},
+      {name:"Attività-first", tagline:"Cosa è successo e chi l’ha toccato.", sections:[["Attività","Transizioni, note, storico"],["Sintesi","Stato e dati"],["Documenti","PDF e allegati"]], why:"Per l’audit, la sequenza delle azioni è il contenuto."}
+    ]
+  }
+];
+
+const tabs = document.getElementById('tabs');
+const proposals = document.getElementById('proposals');
+const titleEl = document.getElementById('screenTitle');
+const subEl = document.getElementById('screenSubtitle');
+let current = 0;
+
+function renderTabs(){
+  tabs.innerHTML = screens.map((s,i)=>`<button class="tab ${i===current?'active':''}" data-i="${i}">${s.title}</button>`).join('');
+  tabs.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{current=Number(b.dataset.i);render();}));
+}
+
+function render(){
+  renderTabs();
+  const s = screens[current];
+  titleEl.textContent = s.title;
+  subEl.textContent = s.subtitle;
+  proposals.innerHTML = s.proposals.map((p,i)=>`
+    <article class="proposal">
+      <div class="proposal-head"><div class="letter">${'ABC'[i]}</div><div><h3>${p.name}</h3><p>${p.tagline}</p></div></div>
+      <div class="phone">
+        <div class="phone-top"><span class="kind">${s.kind}</span><span class="stamp ${s.tone}"><span class="dot"></span>${s.status}</span></div>
+        <h4>${s.entity}</h4>
+        <p class="sub">${s.facts}</p>
+        <div class="cta">Modifica</div>
+        <div class="sections">${p.sections.map(([name, meta])=>`<div class="section-row"><b>${name}</b><small>${meta}</small></div>`).join('')}</div>
+        <p class="why"><b>Perché</b>${p.why}</p>
+      </div>
+    </article>`).join('');
+}
+
+render();
+</script>
+</body>
+</html>

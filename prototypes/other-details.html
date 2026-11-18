@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskTap — Altri dettagli</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@600;700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F1EEE7;--sheet:#FBF9F4;--fill:#EDEAE3;--rule:#DED9CE;--ink:#22252E;--muted:#5E6878;
+    --red:#C03221;--green:#248A3D;--amber:#B36200;--blue:#4F6BFF;
+    --display:"Archivo Narrow","Arial Narrow",system-ui,sans-serif;
+    --body:"Archivo",system-ui,-apple-system,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}html,body{margin:0;min-height:100%}
+  body{background:radial-gradient(1100px 520px at 50% -10%,rgba(251,249,244,.85),transparent 70%),repeating-linear-gradient(90deg,rgba(34,37,46,.028) 0 1px,transparent 1px 96px),var(--paper);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+  .page{max-width:1380px;margin:0 auto;padding:30px 28px 70px}
+  .masthead{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--rule)}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;font-size:14px;letter-spacing:.11em;text-transform:uppercase}
+  .brand-mark{width:26px;height:26px;display:grid;place-items:center;background:var(--red);color:var(--sheet);font-family:var(--mono);font-size:10px;border-radius:2px;transform:rotate(-2deg)}
+  .brand span{color:var(--muted);font-weight:600}
+  .meta{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;text-align:right}
+  .intro{display:grid;grid-template-columns:1.2fr .8fr;gap:36px;align-items:end;padding:40px 0 28px}
+  .kicker{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--red);margin:0 0 12px}
+  h1{font-family:var(--display);font-size:clamp(44px,5.8vw,76px);line-height:.9;letter-spacing:-.035em;margin:0}
+  h1 em{font-style:normal;color:var(--red)}
+  .lede{font-size:14px;line-height:1.6;color:var(--muted);margin:0;max-width:58ch}.lede b{color:var(--ink)}
+  .legend{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 22px}
+  .legend span{font-family:var(--mono);font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border:1px solid var(--rule);border-radius:2px;padding:5px 7px;background:rgba(251,249,244,.5)}
+  .legend .red{color:var(--red);border-color:var(--red)}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:26px 20px}
+  .screen-card{min-width:0}
+  .card-head{min-height:54px;padding-bottom:8px}
+  .card-head h2{font-family:var(--display);font-size:21px;line-height:1;margin:0 0 4px;letter-spacing:-.01em}
+  .card-head p{margin:0;font-size:10px;line-height:1.4;color:var(--muted)}
+  .card-head p b{color:var(--red);font-weight:600}
+  .phone{background:var(--sheet);border:1px solid var(--rule);border-radius:2px;min-height:560px;display:flex;flex-direction:column;overflow:hidden}
+  .appbar{height:40px;flex:none;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--rule);background:var(--sheet)}
+  .back{font-size:18px;line-height:1;color:var(--ink);width:22px}
+  .appbar-title{font-family:var(--display);font-size:15px;font-weight:600;flex:1}
+  .appbar .dots{color:var(--muted);letter-spacing:2px;font-size:12px}
+  .body{padding:11px 12px 13px;flex:1;display:flex;flex-direction:column}
+  .doc-kicker{display:flex;gap:6px;font-family:var(--mono);font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}.doc-kicker .ref{color:var(--red)}
+  .hero{background:var(--sheet);border:1px solid var(--rule);border-radius:2px;padding:10px;margin-bottom:4px}
+  .hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px}
+  .kind{font-family:var(--mono);font-size:7px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .stamp{display:inline-flex;align-items:center;gap:4px;border:1.3px double currentColor;border-radius:2px;font-family:var(--display);font-size:7px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:3px 5px;transform:rotate(-3deg);white-space:nowrap}
+  .stamp.green{color:var(--green)}.stamp.amber{color:var(--amber)}.stamp.red{color:var(--red)}.stamp.blue{color:var(--blue)}
+  .stamp .dot{width:3px;height:3px;border-radius:50%;background:currentColor}
+  .hero h3{font-family:var(--display);font-size:22px;line-height:1;margin:0 0 3px;letter-spacing:-.02em;max-width:17ch}
+  .facts{font-size:9px;line-height:1.4;color:var(--muted);margin:0 0 8px;min-height:24px}
+  .cta{background:var(--red);color:var(--sheet);border-radius:2px;font-family:var(--body);font-size:10px;font-weight:600;padding:7px;text-align:center}
+  .sections{margin-top:10px;border-top:1px solid var(--rule)}
+  .section{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:10.5px}
+  .section span:first-child{font-weight:600}
+  .section span:last-child{font-family:var(--mono);font-size:7.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;text-align:right}
+  .section:last-child{border-bottom:0}
+  .why{margin-top:8px;font-size:9.5px;line-height:1.45;color:var(--muted)}
+  .why b{color:var(--ink);font-family:var(--mono);font-size:7px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:2px}
+  .foot{margin-top:38px;border-top:1px solid var(--rule);padding-top:16px;display:flex;justify-content:space-between;gap:24px;font-size:10.5px;line-height:1.5;color:var(--muted)}
+  .foot b{color:var(--ink);font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:2px}
+  @media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.intro{grid-template-columns:1fr}}
+  @media(max-width:720px){.page{padding:18px 14px 50px}.grid{grid-template-columns:1fr}.meta{display:none}.foot{display:block}.foot div{margin-bottom:10px}}
+  @media(prefers-reduced-motion:no-preference){.screen-card{animation:rise .55s cubic-bezier(.16,1,.3,1) both}.screen-card:nth-child(3n+2){animation-delay:.05s}.screen-card:nth-child(3n+3){animation-delay:.1s}@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div class="brand"><span class="brand-mark">TT</span> TaskTap <span>/ Mobile</span></div>
+    <div class="meta">Altri dettagli · prototipo<br>Hero + stack · scelte applicate</div>
+  </header>
+
+  <section class="intro">
+    <div>
+      <p class="kicker">Prototipo · altri dettagli</p>
+      <h1>Lo stesso documento,<br><em>dieci soggetti.</em></h1>
+    </div>
+    <p class="lede">Le scelte sono applicate: ogni schermata tiene la shell <b>Hero + stack</b> e mette sotto il hero la sezione che conta di più per quel soggetto. I master data usano <b>SummaryHero + Modifica</b>; Report admin usa <b>Apri PDF</b>.</p>
+  </section>
+
+  <div class="legend">
+    <span class="red">Hero + stack</span><span>SummaryHero</span><span>Nove schermate · Modifica</span><span>Report admin · Apri PDF</span><span>Sezioni vuote nascoste</span>
+  </div>
+
+  <section class="grid" id="grid"></section>
+
+  <footer class="foot">
+    <div><b>Scelte</b>Cliente Relazioni-first · Sede Mappa-first · Commessa Cantieri-first · Contratto Scadenze-first · Prodotto Storico-first · Materiale Movimenti-first · Magazzino Sotto scorta-first · Squadra Membri-first · Pianificazione Impegno-first · Report PDF-first.</div>
+    <div><b>Regola</b>Nessun fatto ripetuto tra hero e Sintesi. Nessun FAB quando il hero ha l’azione. Le sezioni senza dati spariscono.</div>
+  </footer>
+</div>
+
+<script>
+const screens = [
+  {screen:"Cliente", choice:"Relazioni-first", kind:"Summary · cliente", entity:"Rossi Srl", status:"Attivo", tone:"green", facts:"Milano · 12 sedi · 4 contratti", primary:"Modifica",
+   sections:[["Relazioni","12 sedi · 4 contratti · 3 referenti"],["Sintesi","Anagrafica e dati fiscali"],["Attività","Ultimi interventi e rapportini"],["Documenti","Contratti e allegati"]],
+   why:"Chi lavora su un cliente parte da cosa è collegato, non dalla P.IVA."},
+  {screen:"Sede", choice:"Mappa-first", kind:"Summary · sede", entity:"Sede Milano", status:"Attiva", tone:"green", facts:"Rossi Srl · Milano · 3 interventi", primary:"Modifica",
+   sections:[["Documenti & mappa","Via Roma 1, Milano"],["Relazioni","Cliente, referenti, contratti"],["Sintesi","Indirizzo, telefono, note"],["Attività","Interventi e ticket"]],
+   why:"Una sede è prima di tutto un posto da raggiungere."},
+  {screen:"Commessa", choice:"Cantieri-first", kind:"Summary · commessa", entity:"CM-2026-018", status:"Aperta", tone:"amber", facts:"Rossi Srl · 01/11–15/12 · € 48.000", primary:"Modifica",
+   sections:[["Relazioni","2 cantieri · 8 ticket"],["Sintesi","Periodo, importo, note"],["Attività","Ticket e avanzamento"],["Documenti","Contratto e allegati"]],
+   why:"Una commessa si legge dai cantieri che contiene."},
+  {screen:"Contratto", choice:"Scadenze-first", kind:"Summary · contratto", entity:"Full service", status:"Attivo", tone:"green", facts:"Rossi Srl · scade 31/12/2026 · rinnovo auto", primary:"Modifica",
+   sections:[["Sintesi","Scadenza, preavviso, rinnovo"],["Relazioni","Cliente, prodotti, pianificazioni"],["Attività","Interventi coperti"],["Documenti","PDF e allegati"]],
+   why:"Un contratto si apre per sapere quando scade e cosa succede dopo."},
+  {screen:"Prodotto in assistenza", choice:"Storico-first", kind:"Summary · asset", entity:"Caldaia Vaillant", status:"In garanzia", tone:"green", facts:"Rossi Srl · SN-9 · ultima 03/10", primary:"Modifica",
+   sections:[["Attività","Interventi e manutenzioni"],["Sintesi","Seriale, garanzia, dati tecnici"],["Relazioni","Cliente, contratto, sede"],["Documenti","Foto e allegati"]],
+   why:"Un prodotto in assistenza si apre per il suo storico."},
+  {screen:"Materiale", choice:"Movimenti-first", kind:"Summary · articolo", entity:"Sifone 40 mm", status:"Attivo", tone:"green", facts:"Idraulica · 24 pz · € 4,20", primary:"Modifica",
+   sections:[["Movimenti","Carichi, scarichi, rettifiche"],["Sintesi","Giacenza, prezzi, anagrafica"],["Documenti","Foto e allegati"]],
+   why:"Un materiale si apre per sapere dove è finito."},
+  {screen:"Magazzino", choice:"Sotto scorta-first", kind:"Summary · magazzino", entity:"Magazzino Milano", status:"6 sotto scorta", tone:"amber", facts:"Principale · 148 articoli · Via Roma 1", primary:"Modifica",
+   sections:[["Sintesi","6 sotto scorta · 148 articoli"],["Movimenti","Ultimi carichi e scarichi"],["Documenti","Mappa e allegati"]],
+   why:"Un magazzino si apre per sapere cosa manca."},
+  {screen:"Squadra", choice:"Membri-first", kind:"Summary · squadra", entity:"Squadra Nord", status:"Attiva", tone:"green", facts:"Lead Daniel Shala · 4 membri · 2 cantieri", primary:"Modifica",
+   sections:[["Relazioni","4 membri, lead"],["Attività","2 cantieri attivi"],["Sintesi","Descrizione, note"]],
+   why:"Una squadra è prima di tutto le persone."},
+  {screen:"Pianificazione", choice:"Impegno-first", kind:"Summary · impegno", entity:"Sopralluogo Rossi", status:"Oggi", tone:"blue", facts:"Oggi 14:00 · Daniel · Sede Milano", primary:"Modifica",
+   sections:[["Sintesi","Oggi 14:00, Daniel, sede"],["Relazioni","Cliente, ticket, contratto"],["Attività","Note e stato"]],
+   why:"Una pianificazione è un impegno: quando e chi."},
+  {screen:"Report admin", choice:"PDF-first", kind:"Summary · documento", entity:"Rapportino 2026-0412", status:"Inviato", tone:"blue", facts:"Rossi Srl · Novembre · 30 ore", primary:"Apri PDF",
+   sections:[["Documenti","PDF, firme, foto"],["Sintesi","Stato, cliente, periodo"],["Attività","Storico e transizioni"]],
+   why:"Un report inviato è già un documento: il PDF è l’azione."}
+];
+
+const grid = document.getElementById('grid');
+grid.innerHTML = screens.map(s=>`
+  <article class="screen-card">
+    <div class="card-head"><h2>${s.screen}</h2><p>Scelta: <b>${s.choice}</b></p></div>
+    <div class="phone">
+      <div class="appbar"><span class="back">‹</span><span class="appbar-title">${s.screen}</span><span class="dots">···</span></div>
+      <div class="body">
+        <div class="doc-kicker"><span class="ref">${s.kind}</span></div>
+        <div class="hero">
+          <div class="hero-top"><span class="kind">${s.kind}</span><span class="stamp ${s.tone}"><span class="dot"></span>${s.status}</span></div>
+          <h3>${s.entity}</h3>
+          <p class="facts">${s.facts}</p>
+          <div class="cta">${s.primary}</div>
+        </div>
+        <div class="sections">${s.sections.map(([name,meta])=>`<div class="section"><span>${name}</span><span>${meta}</span></div>`).join('')}</div>
+        <p class="why"><b>Perché</b>${s.why}</p>
+      </div>
+    </div>
+  </article>`).join('');
+</script>
+</body>
+</html>
