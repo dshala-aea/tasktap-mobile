@@ -127,13 +127,13 @@ void main() {
   /// Store Connect and stays undeliverable to testers until someone fills the questionnaire in by
   /// hand — a step that is easy to miss precisely because the build itself succeeded.
   group('App Store export compliance', () {
-    test('the non-exempt encryption answer ships inside the bundle', () {
+    test('the exempt-encryption answer ships inside the bundle', () {
       expect(
         plist,
-        matches(RegExp(r'<key>ITSAppUsesNonExemptEncryption</key>\s*<true/>')),
+        matches(RegExp(r'<key>ITSAppUsesNonExemptEncryption</key>\s*<false/>')),
         reason:
-            'SQLCipher encrypts the offline database at rest, which is non-exempt encryption. '
-            'The App Store export-compliance answer must say so.',
+            'The export-compliance questionnaire was answered as exempt encryption; "true" makes '
+            'App Store Connect demand an ITSEncryptionExportComplianceCode (upload error 90592).',
       );
     });
 

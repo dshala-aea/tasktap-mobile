@@ -31,12 +31,14 @@
 		     go to testers or be submitted until somebody answers the questionnaire by hand, for
 		     every build. Declaring the answer here makes it a property of the build instead.
 
-		     "true" is the accurate answer: SQLCipher encrypts the offline Drift database at rest.
-		     That is non-exempt encryption, so the App Store export-compliance questionnaire and the
-		     annual self-classification obligation apply. test/platform/permission_declarations_test.dart
-		     pins this answer to the encryption actually present in the app. -->
+		     "false": the owner answered the App Store Connect export-compliance questionnaire
+		     (2026-11-18) and was not asked for documentation, i.e. the app is treated as using only
+		     exempt encryption (HTTPS/OS crypto, plus SQLCipher protecting the app's own local data).
+		     "true" made App Store Connect reject the upload with 90592 (it then requires an
+		     ITSEncryptionExportComplianceCode this app does not have).
+		     test/platform/permission_declarations_test.dart pins this answer. -->
 		<key>ITSAppUsesNonExemptEncryption</key>
-		<true/>
+		<false/>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
