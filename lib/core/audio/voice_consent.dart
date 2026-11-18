@@ -4,18 +4,22 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// FACTUALLY CORRECTED WORDING (v2) — STILL NOT FINAL LEGAL COPY. v1 said the audio was "transcribed"
+/// and kept "as documentation"; in fact it goes to an external AI provider and the server deletes it
+/// after the retention period (`ai-voice-capture`, 30 days by default).
+///
 /// PLACEHOLDER WORDING — NOT FINAL LEGAL COPY. Replace this constant with the text approved by the
 /// owner/legal before release. Bump [voiceConsentVersion] when the text changes materially so
 /// existing users are asked again.
 const String voiceConsentText =
-    'Registrando un aggiornamento vocale, l\'audio viene inviato al server di TaskTap e '
-    'trascritto automaticamente per aiutarti a compilare il rapporto di intervento. La '
-    'registrazione viene conservata come parte della documentazione dell\'intervento. '
-    'Vuoi continuare?';
+    'Registrando un aggiornamento vocale, l\'audio viene inviato al server di TaskTap e a un '
+    'fornitore di intelligenza artificiale che lo elabora per aiutarti a compilare il rapporto '
+    'di intervento. La registrazione viene conservata per un periodo limitato stabilito dalla '
+    'tua azienda (30 giorni se non diversamente impostato) e poi cancellata. Vuoi continuare?';
 
 /// The legal text version. The accepted record also stores the text hash, so changing the wording
 /// without bumping this still forces a fresh consent.
-const String voiceConsentVersion = 'v1';
+const String voiceConsentVersion = 'v2';
 
 /// Append-only list of accepted records. The old boolean key
 /// (`voice_recording_consent_v1`) is intentionally ignored: it carries no actor or timestamp, so
