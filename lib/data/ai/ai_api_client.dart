@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/audio/speech_synthesis.dart';
 import '../../core/time/business_time.dart' show parseDateOnly;
 import '../api/dio_client.dart';
 import '../api/json_parse.dart';
@@ -1057,7 +1059,7 @@ class AiVoiceUploadException implements Exception {
   String toString() => message;
 }
 
-class AiApiClient {
+class AiApiClient implements SpeechSynthesizer {
   AiApiClient(this._dio);
 
   final Dio _dio;
@@ -1068,6 +1070,42 @@ class AiApiClient {
     final data = response.data;
     if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
     return AiQuotaDto.fromJson(data);
+  }
+
+  /// POST /api/ai/speech — the assistant's spoken voice.
+  ///
+  /// Returns the audio of [text] (the server streams it; one short sentence at a time is what the
+  /// player asks for, so the whole clip is read into memory). Spoken replies are an extra: every
+  /// failure is a [SpeechSynthesisException] the caller answers by falling back to the phone's own
+  /// voice, never by showing an error.
+  @override
+  Future<SpeechClip> synthesize(String text) async {
+    try {
+      final response = await _dio.post<List<int>>(
+        '/api/ai/speech',
+        data: {'text': text},
+        options: Options(
+          responseType: ResponseType.bytes,
+          sendTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 25),
+        ),
+      );
+      final data = response.data;
+      if (data == null || data.isEmpty) {
+        throw const SpeechSynthesisException(SpeechSynthesisFailure.transient, 'empty audio');
+      }
+      final type = response.headers.value('content-type') ?? 'audio/mpeg';
+      return SpeechClip(Uint8List.fromList(data), type.split(';').first.trim());
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 429) {
+        throw const SpeechSynthesisException(SpeechSynthesisFailure.quotaExhausted);
+      }
+      if (status == 503 || status == 403) {
+        throw SpeechSynthesisException(SpeechSynthesisFailure.notAvailable, 'HTTP $status');
+      }
+      throw SpeechSynthesisException(SpeechSynthesisFailure.transient, 'HTTP ${status ?? e.type}');
+    }
   }
 
   /// POST /api/ai/reports/draft

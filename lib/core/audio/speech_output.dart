@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../data/ai/ai_api_client.dart';
+import 'gateway_speech_engine.dart';
+
 /// Device-local preference: the technician has opted into hearing assistant replies.
 ///
 /// Off by default. There is no server preference and no migration: each device decides for itself
@@ -127,8 +130,20 @@ class SpeechOutput {
 
 /// The real device adapter, resolved lazily. Auto-disposed with the screen that read it; the
 /// screen also stops speech in its own `dispose` so playback never outlives the conversation.
+///
+/// The voice is the server's (`/api/ai/speech`, sentence by sentence) with the phone's own TTS as
+/// the fallback, so a tenant without the cloud voice, an exhausted allowance or a dead connection
+/// still gets the reply read aloud.
 final speechOutputProvider = FutureProvider<SpeechOutput>((ref) async {
-  final output = SpeechOutput();
+  final player = JustAudioClipPlayer();
+  ref.onDispose(() => unawaited(player.dispose()));
+  final output = SpeechOutput(
+    engine: GatewaySpeechEngine(
+      synthesizer: ref.read(aiApiClientProvider),
+      player: player,
+      fallback: FlutterTtsSpeechEngine(),
+    ),
+  );
   await output.load();
   ref.onDispose(() => unawaited(output.stop()));
   return output;
