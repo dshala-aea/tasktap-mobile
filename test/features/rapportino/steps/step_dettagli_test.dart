@@ -326,9 +326,33 @@ void main() {
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
-      // Titolo, Indirizzo di lavoro, Descrizione, Diagnosi, Soluzione.
-      expect(find.byIcon(LucideIcons.mic), findsNWidgets(5));
+      // Titolo, Indirizzo di lavoro, Descrizione, Diagnosi, Soluzione, Note interne.
+      expect(find.byIcon(LucideIcons.mic), findsNWidgets(6));
       expect(find.byIcon(LucideIcons.micOff), findsNothing);
+    });
+  });
+
+  group('StepDettagli — Note interne', () {
+    testWidgets('the internal notes field is offered and typed text reaches the draft', (
+      tester,
+    ) async {
+      final container = _buildContainer(db: db, ticketId: 'ticket-1');
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('NOTE INTERNE', findRichText: true), findsOneWidget);
+      final field = find.widgetWithText(
+        TextField,
+        'Solo per l\'ufficio, non compaiono nel PDF del cliente',
+      );
+      expect(field, findsOneWidget);
+      await tester.ensureVisible(field);
+      await tester.enterText(field, 'Avvisare ufficio');
+      await tester.pumpAndSettle();
+
+      expect(container.read(reportEditorProvider('draft-1')).technicianNotes, 'Avvisare ufficio');
     });
   });
 }

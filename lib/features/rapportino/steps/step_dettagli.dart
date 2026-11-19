@@ -41,6 +41,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
   late final TextEditingController _detailsCtrl;
   late final TextEditingController _diagnosiCtrl;
   late final TextEditingController _soluzioneCtrl;
+  late final TextEditingController _technicianNotesCtrl;
   late final TextEditingController _workAddressCtrl;
 
   /// Whether the optional ticket/cantiere link is expanded.
@@ -58,6 +59,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     _detailsCtrl = TextEditingController(text: s.details);
     _diagnosiCtrl = TextEditingController(text: s.diagnosi ?? '');
     _soluzioneCtrl = TextEditingController(text: s.soluzione ?? '');
+    _technicianNotesCtrl = TextEditingController(text: s.technicianNotes ?? '');
     _workAddressCtrl = TextEditingController(text: s.workAddress ?? '');
     _showCollegamento =
         (s.ticketFreeText?.isNotEmpty ?? false) || (s.cantiereFreeText?.isNotEmpty ?? false);
@@ -77,6 +79,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     _detailsCtrl.dispose();
     _diagnosiCtrl.dispose();
     _soluzioneCtrl.dispose();
+    _technicianNotesCtrl.dispose();
     _workAddressCtrl.dispose();
     super.dispose();
   }
@@ -222,6 +225,23 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               onChanged: (v) => notifier.setSoluzione(v),
             ),
           ],
+
+          // Internal notes: for the office, never printed on the customer's PDF. Always offered
+          // (unlike Diagnosi/Soluzione) because any rapportino can carry a remark the customer
+          // should not read.
+          const SizedBox(height: 12),
+          AppTextField(
+            controller: _technicianNotesCtrl,
+            label: 'Note interne',
+            hint: 'Solo per l\'ufficio, non compaiono nel PDF del cliente',
+            maxLines: 3,
+            maxLength: 2000,
+            suffixIcon: DictateButton(
+              controller: _technicianNotesCtrl,
+              onChanged: notifier.setTechnicianNotes,
+            ),
+            onChanged: (v) => notifier.setTechnicianNotes(v),
+          ),
 
           // ── Collegamento, only when there isn't one already ─────────────────
           if (linkedTicket == null && linkedCantiere == null) ...[

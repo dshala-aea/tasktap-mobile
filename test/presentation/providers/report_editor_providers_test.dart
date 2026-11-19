@@ -196,6 +196,41 @@ void main() {
       },
     );
 
+    test('setTechnicianNotes persists verbatim; untouched stays null', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.setTitle('Titolo');
+      var draft = await repo.getDraft('draft-1');
+      expect(draft!.technicianNotes, isNull);
+
+      await notifier.setTechnicianNotes('Cliente scontento, avvisare ufficio');
+      draft = await repo.getDraft('draft-1');
+      expect(draft!.technicianNotes, 'Cliente scontento, avvisare ufficio');
+
+      await notifier.setTechnicianNotes('');
+      draft = await repo.getDraft('draft-1');
+      expect(draft!.technicianNotes, '');
+    });
+
+    test('hydrates technicianNotes from the stored draft', () async {
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'draft-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 21, 10),
+              title: 'init',
+              insertedUserId: 'user-1',
+              locationId: 'l1',
+              technicianNotes: const Value('Nota AI'),
+            ),
+          );
+      final (notifier, _) = await _makeEditor(db);
+      expect(notifier.state.technicianNotes, 'Nota AI');
+    });
+
     test('hydrates diagnosi/soluzione from the stored draft', () async {
       await db
           .into(db.draftReports)

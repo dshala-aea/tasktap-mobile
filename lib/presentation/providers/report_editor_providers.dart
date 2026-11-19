@@ -288,6 +288,7 @@ class ReportEditorState {
     this.details = '',
     this.diagnosi,
     this.soluzione,
+    this.technicianNotes,
     this.customerId,
     this.customerFreeText,
     this.workAddress,
@@ -335,6 +336,11 @@ class ReportEditorState {
   /// '' = the technician cleared it, anything else replaces it.
   final String? diagnosi;
   final String? soluzione;
+
+  /// Internal notes for the office (`Report.TechnicianNotes`). Never printed on the customer PDF.
+  /// Tri-state like [diagnosi]: null = never touched (submit omits it, the server keeps its value,
+  /// e.g. text the AI assistant filled in), '' = cleared, anything else replaces it.
+  final String? technicianNotes;
   final String? customerId;
   final String? customerFreeText;
   final String? workAddress;
@@ -453,7 +459,7 @@ class ReportEditorState {
     technicianSignaturePrefillSuppressed: technicianSignaturePrefillSuppressed,
     strumentiPrefilled: false,
     submissionProblemJson: null,
-    technicianNotes: null,
+    technicianNotes: technicianNotes,
     closedAt: null,
     stato: 'Bozza',
     inviatoAt: null,
@@ -478,6 +484,7 @@ class ReportEditorState {
     String? details,
     String? diagnosi,
     String? soluzione,
+    String? technicianNotes,
     String? customerId,
     String? customerFreeText,
     String? workAddress,
@@ -532,6 +539,7 @@ class ReportEditorState {
       details: details ?? this.details,
       diagnosi: diagnosi ?? this.diagnosi,
       soluzione: soluzione ?? this.soluzione,
+      technicianNotes: technicianNotes ?? this.technicianNotes,
       customerId: clearCustomerId ? null : (customerId ?? this.customerId),
       customerFreeText: clearCustomerFreeText ? null : (customerFreeText ?? this.customerFreeText),
       workAddress: workAddress ?? this.workAddress,
@@ -722,6 +730,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       details: draft.details ?? '',
       diagnosi: draft.diagnosi,
       soluzione: draft.soluzione,
+      technicianNotes: draft.technicianNotes,
       customerId: draft.customerId,
       locationId: draft.locationId,
       ticketId: draft.ticketId,
@@ -866,6 +875,11 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
 
   Future<void> setSoluzione(String value) async {
     state = state.copyWith(soluzione: value);
+    await _autosave();
+  }
+
+  Future<void> setTechnicianNotes(String value) async {
+    state = state.copyWith(technicianNotes: value);
     await _autosave();
   }
 
@@ -1441,6 +1455,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       // submit body turns them into "keep server value" vs "clear" respectively.
       diagnosi: Value(state.diagnosi),
       soluzione: Value(state.soluzione),
+      technicianNotes: Value(state.technicianNotes),
       metadataJson: Value(_buildMetadataJson()),
       insertedUserId: Value(state.insertedUserId),
       locationId: Value(state.locationId ?? ''),
