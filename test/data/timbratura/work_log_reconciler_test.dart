@@ -131,6 +131,43 @@ void main() {
       expect(repo.orphanedIds, ['open-1', sessions.last.id]); // the opener, then our own marked 'fine'
     });
 
+    test(
+      'a break started with the pausa button + server holds no open row → no-op (not clocked out)',
+      () async {
+        // The batch closed the ordinary row at the pausa and never sends an open break, so the
+        // server is idle for the whole break. Regression: this used to append a 'fine'.
+        final repo = _FakeRepo([
+          _ws('in-1', 'ingresso', DateTime.utc(2026, 8, 24, 8)),
+          _ws('pause-1', 'pausa', DateTime.utc(2026, 8, 24, 12)),
+        ]);
+        final reconciler = WorkLogReconciler(repo: repo, fetchActive: _noTrackers);
+
+        await reconciler.reconcileWith(
+          const ServerWorkLogSnapshot(isOnShift: false, isOnPause: false),
+        );
+
+        final sessions = await repo.getTodaySessions();
+        expect(sessions.length, 2);
+        expect(deriveShiftState(sessions).isOnPause, isTrue);
+        expect(repo.orphanedIds, isEmpty);
+      },
+    );
+
+    test('a break the reconciler itself backfilled does not shield a server that closed', () async {
+      final repo = _FakeRepo([
+        _ws('in-1', 'ingresso', DateTime.utc(2026, 8, 24, 8)),
+        _ws('pause-1', 'pausa', DateTime.utc(2026, 8, 24, 12), notes: reconciledOrphanMarker),
+      ]);
+      final reconciler = WorkLogReconciler(repo: repo, fetchActive: _noTrackers);
+
+      await reconciler.reconcileWith(
+        const ServerWorkLogSnapshot(isOnShift: false, isOnPause: false),
+      );
+
+      final sessions = await repo.getTodaySessions();
+      expect(sessions.last.eventType, 'fine');
+    });
+
     test('local open shift + server still Working → no-op', () async {
       final t1 = DateTime.utc(2026, 8, 24, 8);
       final repo = _FakeRepo([_ws('open-1', 'ingresso', t1)]);

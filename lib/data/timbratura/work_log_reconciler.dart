@@ -225,6 +225,15 @@ class WorkLogReconciler {
     // still an open shift, and the punch control draws FINE TURNO for it.
     if (!local.isOnShift) return;
 
+    // A break started with the phone's own PAUSA button lives on the phone alone until the RIPRESA
+    // closes it: the batch never sends an open break (the server allows one open row per user), and
+    // sending the pausa closes the ordinary row. So for the whole break the server legitimately
+    // holds no open attendance — that is not "clocked out elsewhere". Ending the shift here turned
+    // every button pause into a shift end seconds after the first sync. A break the SERVER owns
+    // (QR scan, office) is reported by the server as OnBreak and never reaches this branch; one the
+    // reconciler itself backfilled is marked, and is not protected.
+    if (local.isOnPause && _openBreakIsOwn(all)) return;
+
     final opener = _findOpenOpener(all);
     if (opener != null) {
       await _repo.markReconciledOrphan(opener.id);
@@ -308,6 +317,23 @@ class WorkLogReconciler {
       }
     }
     return last;
+  }
+
+  /// True when the break currently open locally was started by this device's own tap (its pausa
+  /// is not one of the reconciler's marked corrections).
+  bool _openBreakIsOwn(List<WorkSession> sessions) {
+    WorkSession? openPausa;
+    for (final s in sessions) {
+      switch (s.eventType) {
+        case 'pausa':
+          openPausa = s;
+        case 'ingresso':
+        case 'ripresa':
+        case 'fine':
+          openPausa = null;
+      }
+    }
+    return openPausa != null && openPausa.notes != reconciledOrphanMarker;
   }
 
   /// The most recent ingresso/ripresa that has no closing fine/pausa after it — i.e. the opener
