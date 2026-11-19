@@ -80,6 +80,32 @@ void main() {
     expect(result.endTime, isNull);
   });
 
+  test('kioskScan sends the idempotency key when it has one and omits it otherwise', () async {
+    final bodies = <Map<String, dynamic>>[];
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.test'));
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          bodies.add(options.data as Map<String, dynamic>);
+          handler.resolve(
+            Response(
+              requestOptions: options,
+              statusCode: 200,
+              data: {'action': 'in', 'workLogId': 'wl-1'},
+            ),
+          );
+        },
+      ),
+    );
+    final client = WorklogApiClient(dio);
+
+    await client.kioskScan(token: args.token, userId: args.userId, clientEventId: 'evt-1');
+    await client.kioskScan(token: args.token, userId: args.userId);
+
+    expect(bodies[0], {'token': args.token, 'userId': args.userId, 'clientEventId': 'evt-1'});
+    expect(bodies[1], {'token': args.token, 'userId': args.userId});
+  });
+
   // The wire shape, not the one this test used to invent. `ClockResultToActionResult` answers
   // clock-out with `{action, workLogId, startTime, endTime}`, and both times come from
   // `ClockResult(string Action, Guid WorkLogId, TimeSpan StartTime, TimeSpan? EndTime)` — a

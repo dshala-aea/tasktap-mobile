@@ -23,6 +23,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/scanner/barcode_scan_sheet.dart';
 import '../../core/theme/app_palette.dart';
@@ -133,6 +134,11 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
 
   String? _userId;
 
+  /// Idempotency key of the scan being sent (EPIC 29) and the action it was made for. See [_submit].
+  String? _eventId;
+  String? _eventAction;
+  static const _uuid = Uuid();
+
   @override
   void initState() {
     super.initState();
@@ -203,15 +209,33 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
       _error = null;
     });
 
+    // One id per scan attempt, kept while the answer may simply have been lost (network, unexpected
+    // error) so the retry of the same scan cannot toggle the day twice. A definite refusal drops it:
+    // the next attempt is a new decision.
+    if (_eventId == null || _eventAction != action) {
+      _eventId = _uuid.v4();
+      _eventAction = action;
+    }
+
     // The try covers the call and nothing else: once [kioskScan] returns, the punch has landed,
     // and a toast or a pop that fails afterwards must not be reported as a failed punch.
     final KioskScanResult result;
     try {
       result = await ref
           .read(worklogApiClientProvider)
-          .kioskScan(token: widget.token, userId: userId, action: action);
+          .kioskScan(
+            token: widget.token,
+            userId: userId,
+            action: action,
+            clientEventId: _eventId,
+          );
     } on KioskScanException catch (e) {
       if (!mounted) return;
+      // Only a lost answer may be the same scan again; anything the server actually decided is over.
+      if (e.reason != KioskScanFailureReason.network && e.reason != KioskScanFailureReason.unknown) {
+        _eventId = null;
+        _eventAction = null;
+      }
       setState(() {
         _submitting = false;
         _terminal = true;

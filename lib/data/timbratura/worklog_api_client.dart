@@ -781,15 +781,25 @@ class WorklogApiClient {
   /// phone still gets its punch, and the server decides. With it, scanning a totem while
   /// something is already open performs exactly the chosen transition instead of toggling —
   /// which is the difference between "pausa" and clocking out by accident.
+  ///
+  /// [clientEventId] (EPIC 29) is generated once per scan attempt and reused when the SAME scan is
+  /// sent again after a reply that never arrived: the server answers a known id with the first
+  /// answer and never toggles the day twice. Omitted by builds and servers that predate it.
   Future<KioskScanResult> kioskScan({
     required String token,
     required String userId,
     String? action,
+    String? clientEventId,
   }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/worklog/kiosk/scan',
-        data: {'token': token, 'userId': userId, 'action': ?action},
+        data: {
+          'token': token,
+          'userId': userId,
+          'action': ?action,
+          'clientEventId': ?clientEventId,
+        },
       );
       final data = response.data ?? const <String, dynamic>{};
       return KioskScanResult(

@@ -36,6 +36,9 @@ class _FakeWorklogApiClient extends WorklogApiClient {
 
   final List<Map<String, String?>> calls = [];
 
+  /// The idempotency key each call carried (EPIC 29), in call order.
+  final List<String?> eventIds = [];
+
   @override
   Future<GiornataDto> getGiornata() async {
     final d = day;
@@ -48,8 +51,10 @@ class _FakeWorklogApiClient extends WorklogApiClient {
     required String token,
     required String userId,
     String? action,
+    String? clientEventId,
   }) async {
     calls.add({'token': token, 'userId': userId, 'action': action});
+    eventIds.add(clientEventId);
     if (error != null) throw error!;
     return result!;
   }
@@ -513,6 +518,60 @@ void main() {
       await _teardown(tester);
     });
 
+    testWidgets('every scan carries an idempotency key', (tester) async {
+      final client = _FakeWorklogApiClient(
+        result: const KioskScanResult(action: 'in', workLogId: 'wl-1'),
+        day: _day('ClockedOut', actions: [_available('ClockIn')]),
+      );
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      expect(client.eventIds.single, isNotNull);
+      expect(client.eventIds.single, isNotEmpty);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('a retry after a lost answer reuses the same key, so the server cannot toggle twice', (
+      tester,
+    ) async {
+      var callCount = 0;
+      final client = _CountingFakeWorklogApiClient(() {
+        callCount++;
+        if (callCount == 1) throw const KioskScanException(KioskScanFailureReason.network);
+        return const KioskScanResult(action: 'in', workLogId: 'wl-1');
+      });
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      await tester.tap(find.widgetWithText(AppButton, 'Riprova'));
+      await tester.pumpAndSettle();
+
+      expect(client.eventIds, hasLength(2));
+      expect(client.eventIds[0], isNotNull);
+      expect(client.eventIds[1], client.eventIds[0]);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('a refusal the server actually made starts a new decision with a new key', (
+      tester,
+    ) async {
+      var callCount = 0;
+      final client = _CountingFakeWorklogApiClient(() {
+        callCount++;
+        if (callCount == 1) throw const KioskScanException(KioskScanFailureReason.forbidden);
+        return const KioskScanResult(action: 'in', workLogId: 'wl-1');
+      });
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+      await tester.tap(find.widgetWithText(AppButton, 'Riprova'));
+      await tester.pumpAndSettle();
+
+      expect(client.eventIds, hasLength(2));
+      expect(client.eventIds[1], isNot(client.eventIds[0]));
+
+      await _teardown(tester);
+    });
+
     testWidgets('a conflict offers Riprova, which re-reads the day instead of repeating it', (
       tester,
     ) async {
@@ -558,6 +617,7 @@ class _SlowFakeWorklogApiClient extends WorklogApiClient {
     required String token,
     required String userId,
     String? action,
+    String? clientEventId,
   }) => pending;
 }
 
@@ -565,6 +625,9 @@ class _CountingFakeWorklogApiClient extends WorklogApiClient {
   _CountingFakeWorklogApiClient(this.onCall) : super(Dio());
 
   final KioskScanResult Function() onCall;
+
+  /// The idempotency key each call carried (EPIC 29), in call order.
+  final List<String?> eventIds = [];
 
   @override
   Future<GiornataDto> getGiornata() async => throw StateError('offline');
@@ -574,7 +637,11 @@ class _CountingFakeWorklogApiClient extends WorklogApiClient {
     required String token,
     required String userId,
     String? action,
-  }) async => onCall();
+    String? clientEventId,
+  }) async {
+    eventIds.add(clientEventId);
+    return onCall();
+  }
 }
 
 /// Fails with an exception the screen's own `on KioskScanException` handler does not model —
@@ -599,6 +666,7 @@ class _ThrowingFakeWorklogApiClient extends WorklogApiClient {
     required String token,
     required String userId,
     String? action,
+    String? clientEventId,
   }) async {
     calls++;
     throw error;
