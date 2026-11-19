@@ -14,6 +14,7 @@ import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/remote_shift.dart';
 import '../../data/timbratura/timbra_sync_service.dart';
+import '../../data/timbratura/punch_pipeline_flag.dart';
 import '../../data/timbratura/work_session_repository.dart';
 import '../../data/timbratura/worklog_api_client.dart';
 import 'day_rail.dart';
@@ -382,6 +383,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     ILocationService? locationService,
     this._confirmOnline,
     this._onShiftChanged,
+    this._punchPipelineEnabled,
   ]) : _locationService = locationService ?? const DisabledLocationService(),
        super(const AsyncData(null));
 
@@ -395,6 +397,11 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
   /// the finish button disabled with a false "Non risulti in servizio".
   final void Function()? _onShiftChanged;
 
+  /// Whether this tenant uses the unified punch pipeline (EPIC 29). There every tap carries its own
+  /// instant and the server judges it against what it holds, so the online-only rule below does not
+  /// apply: a tap on a shift started elsewhere is queued like any other.
+  final Future<bool> Function()? _punchPipelineEnabled;
+
   /// Fine / Pausa / Ripresa on a shift started on ANOTHER device are online-only — the server
   /// stamps its own clock, so an offline tap would be recorded at delivery time. See
   /// remote_shift.dart (incl. the backend follow-up). Throws [OfflineRemoteShiftException] so the
@@ -406,6 +413,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
   Future<void> _requireOnlineForRemoteShift() async {
     final probe = _confirmOnline;
     if (probe == null) return;
+    if (await (_punchPipelineEnabled?.call() ?? Future<bool>.value(false))) return;
     final remote = analyseRemoteShifts(await _repo.getAllSessions()).openShiftIsRemote;
     if (!remote) return;
     if (!await probe()) throw const OfflineRemoteShiftException();
@@ -540,5 +548,6 @@ final punchNotifierProvider = StateNotifierProvider<PunchNotifier, AsyncValue<vo
       ref.invalidate(giornataProvider);
       ref.invalidate(serverDayProvider);
     },
+    ref.read(punchPipelineEnabledReaderProvider),
   );
 });

@@ -57,6 +57,98 @@ class MobileSessionDto {
   };
 }
 
+// ── Unified punch pipeline (EPIC 29) ──────────────────────────────────────────
+
+/// One punch as `POST /api/worklog/punches` takes it. [clientEventId] is the local event's own id, so
+/// a resend of the same tap is answered with the first outcome and never writes a second row.
+class PunchEventDto {
+  const PunchEventDto({
+    required this.clientEventId,
+    required this.type,
+    required this.occurredAtUtc,
+    this.deviceUtc,
+    this.latitude,
+    this.longitude,
+    this.gpsAccuracyMeters,
+  });
+
+  final String clientEventId;
+
+  /// `ClockIn` | `BreakStart` | `BreakEnd` | `ClockOut`.
+  final String type;
+
+  /// When the technician tapped (not when it is sent): offline taps keep their own instant.
+  final DateTime occurredAtUtc;
+
+  /// This device's clock at the moment of sending; the server only uses it to measure clock skew.
+  final DateTime? deviceUtc;
+  final double? latitude;
+  final double? longitude;
+  final double? gpsAccuracyMeters;
+
+  Map<String, dynamic> toJson() => {
+    'clientEventId': clientEventId,
+    'type': type,
+    'occurredAtUtc': occurredAtUtc.toUtc().toIso8601String(),
+    if (deviceUtc != null) 'deviceUtc': deviceUtc!.toUtc().toIso8601String(),
+    'source': 'Button',
+    if (latitude != null) 'latitude': latitude,
+    if (longitude != null) 'longitude': longitude,
+    if (gpsAccuracyMeters != null) 'gpsAccuracyMeters': gpsAccuracyMeters,
+  };
+}
+
+/// What the server did with one event: `Applied`, `NoOp` (the state it asked for already held) or
+/// `Rejected` with a stable [reason] code (`superseded`, `not_clocked_in`, `on_break`, `too_old`,
+/// `in_future`, or a writer's code such as `payroll_period_locked`).
+class PunchEventResultDto {
+  const PunchEventResultDto({required this.clientEventId, required this.outcome, this.reason});
+
+  final String clientEventId;
+  final String outcome;
+  final String? reason;
+
+  bool get rejected => outcome == 'Rejected';
+
+  factory PunchEventResultDto.fromJson(Map<String, dynamic> j) => PunchEventResultDto(
+    clientEventId: j['clientEventId'] as String,
+    outcome: j['outcome'] as String,
+    reason: j['reason'] as String?,
+  );
+}
+
+/// The server's state after the batch: `Idle` | `Working` | `OnBreak`.
+class PunchStateDto {
+  const PunchStateDto({required this.status, this.shiftStartedAtUtc, this.breakStartedAtUtc});
+
+  final String status;
+  final DateTime? shiftStartedAtUtc;
+  final DateTime? breakStartedAtUtc;
+
+  factory PunchStateDto.fromJson(Map<String, dynamic> j) => PunchStateDto(
+    status: j['status'] as String,
+    shiftStartedAtUtc: DateTime.tryParse(j['shiftStartedAtUtc'] as String? ?? '')?.toUtc(),
+    breakStartedAtUtc: DateTime.tryParse(j['breakStartedAtUtc'] as String? ?? '')?.toUtc(),
+  );
+}
+
+class PunchBatchResultDto {
+  const PunchBatchResultDto({required this.results, this.state});
+
+  final List<PunchEventResultDto> results;
+  final PunchStateDto? state;
+
+  factory PunchBatchResultDto.fromJson(Map<String, dynamic> j) => PunchBatchResultDto(
+    results: (j['results'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>()
+        .map(PunchEventResultDto.fromJson)
+        .toList(),
+    state: j['state'] is Map<String, dynamic>
+        ? PunchStateDto.fromJson(j['state'] as Map<String, dynamic>)
+        : null,
+  );
+}
+
 // ── Response DTOs ─────────────────────────────────────────────────────────────
 
 class UpsertSessionResponse {
@@ -497,6 +589,18 @@ class WorklogApiClient {
 
     final list = data['sessions'] as List<dynamic>? ?? [];
     return list.cast<Map<String, dynamic>>().map(UpsertSessionResponse.fromJson).toList();
+  }
+
+  /// POST /api/worklog/punches — the unified pipeline (EPIC 29). Events are applied in order, each with
+  /// its own outcome; a rejection never stops the others. At most 100 per request.
+  Future<PunchBatchResultDto> applyPunches(List<PunchEventDto> events) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/worklog/punches',
+      data: {'events': events.map((e) => e.toJson()).toList()},
+    );
+    final data = response.data;
+    if (data == null) throw StateError('Risposta vuota da applyPunches');
+    return PunchBatchResultDto.fromJson(data);
   }
 
   /// GET /api/worklog/mobile/today
