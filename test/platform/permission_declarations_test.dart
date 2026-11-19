@@ -167,6 +167,25 @@ void main() {
       expect(xml, contains('android.permission.ACCESS_FINE_LOCATION'));
     });
 
+    test('a portrait-locked activity does not make portrait a required hardware feature', () {
+      final xml = manifest.readAsStringSync();
+      if (!xml.contains('android:screenOrientation="portrait"')) {
+        markTestSkipped('activity is not portrait-locked');
+        return;
+      }
+      // Without this, Play infers a REQUIRED android.hardware.screen.portrait and hides the app
+      // from landscape-only devices.
+      expect(
+        xml,
+        matches(
+          RegExp(
+            r'<uses-feature\s+android:name="android.hardware.screen.portrait"\s+'
+            r'android:required="false"\s*/>',
+          ),
+        ),
+      );
+    });
+
     test('no permission is declared that lib/ never uses', () {
       final xml = manifest.readAsStringSync();
       const declaredToTrigger = {
