@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../timbratura/punch_pipeline_flag.dart';
 import 'entitlement_repository.dart';
 
 /// SharedPreferences key for the signed-in user's INTERNAL database Guid (`User.Id` on the
@@ -26,11 +27,16 @@ class EntitlementService {
     required EntitlementRepository repository,
     this.onTenantTimeZone,
     this.currentSessionId,
+    PunchPipelineFlag? punchPipelineFlag,
   }) : _dio = dio,
-       _repository = repository;
+       _repository = repository,
+       _punchPipelineFlag = punchPipelineFlag;
 
   final Dio _dio;
   final EntitlementRepository _repository;
+
+  /// Where `/auth/me`'s `punchPipeline` is kept for the sync (EPIC 29). Null in tests that do not care.
+  final PunchPipelineFlag? _punchPipelineFlag;
 
   /// Receives the raw `tenantTimeZone` of every successfully parsed `/auth/me` (null when the key
   /// is absent or not a string) so the receiver can adopt it or fall back to the default. Called
@@ -105,6 +111,14 @@ class EntitlementService {
     // server omitted the key or sent something that is not a bool — unknown, never a guess.
     if (!_stillCurrent(sessionAtRequest)) return false;
     _repository.setSmartWorkingToday(smartWorkingToday, ownerId: sessionAtRequest);
+
+    // The tenant's punch-pipeline switch, kept per session so a cold start with no network still knows which
+    // path queued taps take. A missing key (older server) is false: the legacy path.
+    final flag = _punchPipelineFlag;
+    if (flag != null && sessionAtRequest != null) {
+      await flag.write(sessionAtRequest, body['punchPipeline'] == true);
+      if (!_stillCurrent(sessionAtRequest)) return false;
+    }
 
     // The response's `user.id` is the backend's internal Users.Id (a Guid) — distinct from the
     // OIDC sub that AuthUser.id carries. Persisted separately (not through EntitlementRepository,

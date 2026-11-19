@@ -38,6 +38,7 @@ import '../../core/time/business_time_providers.dart';
 import '../api/dio_client.dart';
 import '../local/app_database.dart' show WorkSession;
 import '../worklogs/active_tracker_api_client.dart';
+import 'punch_pipeline_flag.dart';
 import 'remote_shift.dart';
 import 'timbra_notice.dart';
 import 'timbra_session_assembler.dart';
@@ -67,8 +68,25 @@ final Provider<TimbraSyncService> timbraSyncServiceProvider = Provider<TimbraSyn
     // surfaced on the timbra screen, where the technician is standing.
     onClockDisagreement: (seconds) =>
         ref.read(timbraClockDisagreementProvider.notifier).record(seconds),
+    punchPipelineEnabled: ref.read(punchPipelineEnabledReaderProvider),
   );
 });
+
+/// What the technician is told when the server refuses one of their taps (unified pipeline). Reason codes
+/// are the server's stable ones; anything unknown gets the generic text.
+String punchRejectionMessage(String? reason) => switch (reason) {
+  'superseded' =>
+    'Una timbratura non è stata registrata: sul server c\'è già un evento più recente. '
+        'Se serve, avvisa l\'ufficio.',
+  'not_clocked_in' => 'Una timbratura non è stata registrata: sul server non risultavi in servizio.',
+  'on_break' => 'Una timbratura non è stata registrata: sul server risultavi in pausa.',
+  'too_old' =>
+    'Una timbratura non è stata registrata: è più vecchia di 3 giorni. Avvisa l\'ufficio.',
+  'in_future' =>
+    'Una timbratura non è stata registrata: controlla data e ora del telefono.',
+  'payroll_period_locked' => payrollLockedMessage,
+  _ => serverErrorMessage,
+};
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
@@ -82,7 +100,9 @@ class TimbraSyncService {
     void Function(int seconds)? onClockDisagreement,
     DateTime Function()? clock,
     BusinessTime? businessTime,
-  }) : _repo = repo,
+    Future<bool> Function()? punchPipelineEnabled,
+  }) : _punchPipelineEnabled = punchPipelineEnabled,
+       _repo = repo,
        _apiClient = apiClient,
        _fetchActive = fetchActive,
        _onRemoteCommandsApplied = onRemoteCommandsApplied,
@@ -93,6 +113,10 @@ class TimbraSyncService {
 
   final IWorkSessionRepository _repo;
   final WorklogApiClient _apiClient;
+
+  /// Whether this tenant's taps go through the unified punch pipeline (EPIC 29). Read at every sync, so a
+  /// tenant switched over (or back) is followed without a restart. Null = never (legacy interval batch).
+  final Future<bool> Function()? _punchPipelineEnabled;
   final Future<List<ActiveTracker>> Function()? _fetchActive;
   final void Function()? _onRemoteCommandsApplied;
   final void Function(String message)? _onNotice;
@@ -212,6 +236,10 @@ class TimbraSyncService {
 
   Future<void> _syncOnce() async {
     try {
+      if (await (_punchPipelineEnabled?.call() ?? Future<bool>.value(false))) {
+        await _syncPunchPipeline();
+        return;
+      }
       final allSessions = await _openUploadQueue();
       // Nothing of ours is waiting (our own marked corrections are pending by construction but are
       // never sent): every trigger — poll, resume, push — calls this, so do not re-POST a day of
@@ -404,6 +432,118 @@ class TimbraSyncService {
     debugPrint('TimbraSyncService: $summary');
     CrashReporter.instance.addBreadcrumb(summary, category: 'sync');
     unawaited(CrashReporter.instance.captureMessage(summary));
+  }
+
+
+  // ── Unified punch pipeline (EPIC 29) ────────────────────────────────────────
+
+  /// The local event types, as the server names them.
+  static const _punchTypes = {
+    'ingresso': 'ClockIn',
+    'pausa': 'BreakStart',
+    'ripresa': 'BreakEnd',
+    'fine': 'ClockOut',
+  };
+
+  /// Sends every pending tap as an event, oldest first, in chunks of at most [_punchBatchSize].
+  ///
+  /// Nothing is assembled into intervals and nothing is guessed: each local event id is the
+  /// idempotency key, the server decides what each tap means against what it holds (state machine,
+  /// one open row per person, no matter which device or method opened it) and answers per event:
+  ///
+  /// - `Applied` / `NoOp`: the event is done — marked synced (a `NoOp` means the state asked for
+  ///   already held, e.g. the same shift was started from another device).
+  /// - `Rejected`: the server refused THIS tap and says why. It is retired like a refused batch
+  ///   (kept for support under [syncFailedMarker], no longer pending, hidden from the derived state)
+  ///   and the technician is told once per reason. The rest of the batch is unaffected.
+  ///
+  /// A transient failure leaves everything pending for the next trigger; a permanent refusal of the
+  /// whole request (4xx other than a per-event rejection) goes through [_handleRefusedBatch].
+  /// Reconciler corrections ([reconciledOrphanMarker]) are never sent: they only mirror what the
+  /// server already holds.
+  Future<void> _syncPunchPipeline() async {
+    final pending = (await _openUploadQueue())
+        .where((s) => s.isPendingSync && s.notes != reconciledOrphanMarker)
+        .toList();
+    if (pending.isEmpty) return;
+
+    for (var i = 0; i < pending.length; i += _punchBatchSize) {
+      if (_batchHeld()) return;
+      final chunk = pending.sublist(
+        i,
+        i + _punchBatchSize > pending.length ? pending.length : i + _punchBatchSize,
+      );
+      final sentAt = _clock().toUtc();
+      final PunchBatchResultDto result;
+      try {
+        result = await _apiClient.applyPunches([
+          for (final s in chunk)
+            if (_punchTypes[s.eventType] != null)
+              PunchEventDto(
+                clientEventId: s.id,
+                type: _punchTypes[s.eventType]!,
+                occurredAtUtc: s.eventTime,
+                deviceUtc: sentAt,
+                latitude: s.latitude,
+                longitude: s.longitude,
+                gpsAccuracyMeters: s.gpsAccuracyMeters,
+              ),
+        ]);
+      } catch (e) {
+        if (e is DioException && e.response != null && !_isTransient(e)) {
+          await _handleRefusedBatch(chunk, e);
+        } else if (e is! DioException) {
+          unawaited(
+            CrashReporter.instance.captureException(
+              e,
+              hint: 'timbra sync (pipeline): non-HTTP failure (events=${chunk.length})',
+            ),
+          );
+        } else {
+          CrashReporter.instance.addBreadcrumb(
+            'timbra sync (pipeline) transient: ${e.response?.statusCode ?? e.type.name} '
+            'events=${chunk.length}',
+            category: 'sync',
+          );
+        }
+        return; // events stay pending (transient) or were retired (refused)
+      }
+
+      _batchFailures = 0;
+      _batchRetryAt = null;
+      final byId = {for (final r in result.results) r.clientEventId: r};
+      final done = <String>[];
+      for (final s in chunk) {
+        final r = byId[s.id];
+        if (r == null) {
+          // An event type this build does not map: nothing the server could do with it.
+          if (_punchTypes[s.eventType] == null) done.add(s.id);
+          continue;
+        }
+        if (!r.rejected) {
+          done.add(s.id);
+          continue;
+        }
+        await _repo.markSyncFailed(s.id);
+        _noticeRejectedPunch(r.reason);
+        CrashReporter.instance.addBreadcrumb(
+          'timbra sync (pipeline): ${s.eventType} rejected: ${r.reason ?? '-'}',
+          category: 'sync',
+        );
+      }
+      if (done.isNotEmpty) await _repo.markSynced(done);
+      // The server's answer is the truth for what the screen shows: re-read it.
+      _onRemoteCommandsApplied?.call();
+    }
+  }
+
+  static const _punchBatchSize = 100;
+
+  /// One notice per reason per app run; the data itself stays on the device for support.
+  void _noticeRejectedPunch(String? reason) {
+    final kind = 'punch_${reason ?? 'unknown'}';
+    if (!_noticeKinds.add(kind)) return;
+    _onNotice?.call(punchRejectionMessage(reason));
   }
 
   // ── Shifts started on another device ────────────────────────────────────────

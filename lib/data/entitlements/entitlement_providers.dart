@@ -19,6 +19,7 @@ import '../../presentation/providers/auth_providers.dart';
 import '../api/dio_client.dart';
 import '../sync/connectivity_provider.dart';
 import '../sync/sync_service.dart';
+import '../timbratura/punch_pipeline_flag.dart';
 import 'entitlement_repository.dart';
 import 'entitlement_service.dart';
 
@@ -33,6 +34,7 @@ final entitlementServiceProvider = Provider<EntitlementService>((ref) {
     // Every /me answer decides the zone: a missing or invalid one resets to Rome.
     onTenantTimeZone: (zone) => ref.read(businessZoneIdProvider.notifier).applyServerZone(zone),
     currentSessionId: () => ref.read(authRepositoryProvider).currentUser?.id,
+    punchPipelineFlag: ref.watch(punchPipelineFlagProvider),
   );
 });
 
