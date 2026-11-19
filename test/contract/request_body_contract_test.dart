@@ -1188,6 +1188,18 @@ void main() {
     const unguarded = <String, String>{
       'POST /api/worklog/end':
           'optional body, app sends none',
+      // Routes added by backend PRs that landed after this repo's snapshot copy was last synced:
+      // test/contract/openapi.snapshot.json does not know them yet, so there is no schema to compare the
+      // body against. Promote each to a real contractTest when the copy is refreshed from the merged
+      // backend (a wholesale copy has to be leaf-diffed first, see the entry below for why).
+      'POST /api/worklog/punches':
+          'unified punch pipeline (api #281): newer than the snapshot copy here',
+      'POST /api/ai/speech':
+          'spoken replies (api #277): newer than the snapshot copy here',
+      'POST /api/access-requests':
+          'newer than the snapshot copy here',
+      'POST /api/mobileauth/methods':
+          'newer than the snapshot copy here',
       // Optional `occurredAtUtc`, sent only when a queued tap is replayed; a live tap sends no
       // body at all. Promote both to a real case once the snapshot here is refreshed from a
       // merged backend — it predates BreakPunchRequest, so there is nothing to compare against
