@@ -38,6 +38,12 @@
     <uses-feature
         android:name="android.hardware.camera.autofocus"
         android:required="false"/>
+    <!-- The main activity is locked to portrait (screenOrientation below), which makes Play infer
+         a REQUIRED android.hardware.screen.portrait and hide the app from landscape-only devices
+         (TV boxes, some tablets/Chromebooks). Declaring it optional keeps the lock and the reach. -->
+    <uses-feature
+        android:name="android.hardware.screen.portrait"
+        android:required="false"/>
     <application
         android:label="TaskTap"
         android:name="${applicationName}"
