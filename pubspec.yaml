@@ -18,7 +18,7 @@ dependencies:
   riverpod_annotation: ^4.0.8
 
   # Navigation
-  go_router: ^14.8.1
+  go_router: ^18.1.4
 
   # Local DB (offline-first)
   drift: ^2.35.4
@@ -26,14 +26,14 @@ dependencies:
   flutter_appauth: ^13.0.0
   dio: ^5.11.1
   # Passkeys / WebAuthn
-  passkeys: ^2.24.1
+  passkeys: ^2.24.2
 
   # Secure storage
   flutter_secure_storage: ^11.2.0
 
   # Push notifications
-  firebase_core: ^5.1.0
-  firebase_messaging: ^17.0.1
+  firebase_core: ^5.2.0
+  firebase_messaging: ^17.1.0
 
   # Settings persistence
   shared_preferences: ^2.5.6
@@ -88,7 +88,7 @@ dependencies:
   # is its actively-maintained, verified-publisher successor (160/160 pub points, 0 open issues,
   # explicitly fixes reconnection stability) — used instead. See task-3-report.md for the full
   # research trail.
-  signalr_hub: ^2.1.1
+  signalr_hub: ^2.3.0
 
   # Crash reporting (Sentry)
   # DSN is supplied via --dart-define=SENTRY_DSN=... at build time.
@@ -97,7 +97,7 @@ dependencies:
   sentry_flutter: ^10.3.0
   speech_to_text: ^7.5.0
   # Online voice update recorder (m4a/AAC) — see lib/core/audio/.
-  record: ^6.2.1
+  record: ^7.2.0
   crypto: ^3.0.8
 
   # Reactive utilities (Rx.combineLatest for stream composition)
