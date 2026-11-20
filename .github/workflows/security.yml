@@ -24,7 +24,7 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@6bc832ee85d316ab9aeccf71929026841bd0e1ee # v2.7.1
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
     with:
       scan-args: |-
         --lockfile=pubspec.lock
