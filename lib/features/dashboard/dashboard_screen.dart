@@ -9,6 +9,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/branding/tenant_branding.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../altro/notifiche_provider.dart';
@@ -74,6 +75,8 @@ class _DashboardView extends ConsumerWidget {
             // dead code (removed along with the ActiveJobCard glass card it alone depended on).
             SliverToBoxAdapter(
               child: IdPlateHeroComp(
+                logoUrl: ref.watch(tenantBrandingProvider).value?.logoUrl,
+                companyName: ref.watch(tenantBrandingProvider).value?.companyName,
                 userName: userName,
                 todayCount: stats.todayCount,
                 completedCount: stats.completedCount,

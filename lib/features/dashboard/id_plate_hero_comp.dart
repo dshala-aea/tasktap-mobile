@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../data/branding/tenant_branding.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_palette.dart';
 
@@ -24,6 +25,8 @@ class IdPlateHeroComp extends StatelessWidget {
     required this.upcomingCount,
     this.actions = const [],
     this.child,
+    this.logoUrl,
+    this.companyName,
   });
 
   final String userName;
@@ -32,6 +35,11 @@ class IdPlateHeroComp extends StatelessWidget {
   final int upcomingCount;
   final List<Widget> actions;
   final Widget? child;
+
+  /// The tenant's logo and name, shown beside the date. Absent or unloadable → the hero looks
+  /// exactly as it did before branding existed.
+  final String? logoUrl;
+  final String? companyName;
 
   /// Quiet (non-accent) text on this hero's solid `AppColors.Y` band. Neither color flips, so
   /// this isn't a dark-mode bug — it's a flat contrast failure found by hand-computing WCAG
@@ -90,15 +98,27 @@ class IdPlateHeroComp extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 4),
-              Text(
-                dateLabel,
-                style: const TextStyle(
-                  fontFamily: 'Archivo',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: _quietOnY,
-                  letterSpacing: 1.2,
-                ),
+              Row(
+                children: [
+                  if (TenantBranding.isLoadableUrl(logoUrl)) ...[
+                    TenantLogo(url: logoUrl!, label: companyName),
+                    const SizedBox(width: 8),
+                  ],
+                  Flexible(
+                    child: Text(
+                      dateLabel,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: const TextStyle(
+                        fontFamily: 'Archivo',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _quietOnY,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               // Restores the readout `todayCount`/`completedCount` were already being computed
@@ -186,6 +206,55 @@ class _Readout extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The logo on a white plate (a tenant logo is designed for a light ground, not for the orange
+/// band). The URL is typed by the tenant, so a failed load removes the plate entirely.
+class TenantLogo extends StatefulWidget {
+  const TenantLogo({super.key, required this.url, this.label, this.imageProvider});
+
+  final String url;
+  final String? label;
+
+  /// Replaces the network image; only for tests that need a deterministic load failure.
+  @visibleForTesting
+  final ImageProvider? imageProvider;
+
+  @override
+  State<TenantLogo> createState() => _TenantLogoState();
+}
+
+class _TenantLogoState extends State<TenantLogo> {
+  bool _failed = false;
+
+  @override
+  void didUpdateWidget(covariant TenantLogo old) {
+    super.didUpdateWidget(old);
+    if (old.url != widget.url) _failed = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_failed) return const SizedBox.shrink();
+    return DecoratedBox(
+      decoration: BoxDecoration(color: AppColors.WHITE, borderRadius: BorderRadius.circular(4)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Image(
+          image: widget.imageProvider ?? NetworkImage(widget.url),
+          height: 20,
+          fit: BoxFit.contain,
+          semanticLabel: widget.label,
+          errorBuilder: (_, _, _) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _failed = true);
+            });
+            return const SizedBox(height: 20);
+          },
+        ),
+      ),
     );
   }
 }
