@@ -21,6 +21,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/dashboard/active_trackers_provider.dart' show activeTrackersProvider;
 import '../../features/timbra/timbra_providers.dart' show giornataProvider;
+import 'punch_pipeline_flag.dart' show punchPipelineEnabledReaderProvider;
+import 'punch_snapshot_providers.dart' show punchSnapshotRefresherProvider;
 import 'timbra_sync_service.dart' show timbraSyncServiceProvider;
 import 'work_log_reconciler.dart';
 
@@ -96,7 +98,15 @@ class WorkLogRefreshCoordinator {
 final Provider<WorkLogRefreshCoordinator> workLogRefreshCoordinatorProvider =
     Provider<WorkLogRefreshCoordinator>((ref) {
       final coordinator = WorkLogRefreshCoordinator(
-        reconcile: () => ref.read(workLogReconcilerProvider).reconcile(),
+        // On the unified pipeline the server's state replaces the phone's snapshot: nothing is invented
+        // into the local log. The legacy reconciler stays for tenants that are not on the pipeline.
+        reconcile: () async {
+          if (await ref.read(punchPipelineEnabledReaderProvider)()) {
+            await ref.read(punchSnapshotRefresherProvider).refresh();
+          } else {
+            await ref.read(workLogReconcilerProvider).reconcile();
+          }
+        },
         refetchTrackers: () => ref.invalidate(activeTrackersProvider),
         refetchGiornata: () => ref.invalidate(giornataProvider),
         syncPending: () => ref.read(timbraSyncServiceProvider).syncNow(),

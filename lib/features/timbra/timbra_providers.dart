@@ -15,6 +15,8 @@ import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/remote_shift.dart';
 import '../../data/timbratura/timbra_sync_service.dart';
 import '../../data/timbratura/punch_pipeline_flag.dart';
+import '../../data/timbratura/punch_snapshot_providers.dart';
+import 'punch_projection.dart';
 import '../../data/timbratura/work_session_repository.dart';
 import '../../data/timbratura/worklog_api_client.dart';
 import 'day_rail.dart';
@@ -177,10 +179,36 @@ TimbraState deriveShiftState(List<WorkSession> sessions) {
   );
 }
 
-/// Provides the current [TimbraState] derived from today's session stream.
+/// On the unified pipeline (EPIC 29) the shift shown is the server's last answer with the taps it has
+/// not answered yet laid on top, never a state inferred from the local log; null on the legacy path or
+/// until the server has answered once on this phone (the caller then keeps using the local log).
+///
+/// Pending = a tap still waiting for its answer: not sent yet, and neither a refused one
+/// ([syncFailedMarker]) nor a legacy reconciler correction ([reconciledOrphanMarker]).
+TimbraState? _pipelineShiftState(Ref ref, List<WorkSession> sessions) {
+  final active = ref.watch(punchPipelineActiveProvider).value ?? false;
+  if (!active) return null;
+  final projected = projectPunchState(
+    ref.watch(punchSnapshotProvider),
+    sessions
+        .where((s) => s.isPendingSync && s.notes != reconciledOrphanMarker && s.notes != syncFailedMarker)
+        .map((s) => PunchTap(s.eventType, s.eventTime.toUtc()))
+        .toList(),
+  );
+  if (projected == null) return null;
+  return TimbraState(
+    isOnShift: projected.isOnShift,
+    isOnPause: projected.isOnPause,
+    shiftStartTime: projected.shiftStartTime,
+    pauseStartTime: projected.pauseStartTime,
+  );
+}
+
+/// Provides the current [TimbraState]: the server's snapshot plus unanswered taps on the unified
+/// pipeline, else derived from today's session stream.
 final timbraStateProvider = Provider.autoDispose<TimbraState>((ref) {
   final sessions = ref.watch(todaySessionsProvider).value ?? [];
-  return deriveShiftState(sessions);
+  return _pipelineShiftState(ref, sessions) ?? deriveShiftState(sessions);
 });
 
 /// Every visible punch on any business day — the base for the day-independent shift answer.
@@ -218,7 +246,7 @@ final allSessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref) 
 final actionableShiftStateProvider = Provider.autoDispose<TimbraState>((ref) {
   final all = ref.watch(allSessionsProvider).value;
   if (all == null) return ref.watch(timbraStateProvider);
-  return deriveShiftState(all);
+  return _pipelineShiftState(ref, all) ?? deriveShiftState(all);
 });
 
 // ── Computed total (minutes worked today, excluding pauses) ───────────────────

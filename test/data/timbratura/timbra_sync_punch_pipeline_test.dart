@@ -3,8 +3,10 @@
 // punch event, the server's per-event outcome decides what happens to it.
 
 import 'package:dio/dio.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/timbratura/punch_snapshot.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
@@ -62,6 +64,9 @@ class _Api extends WorklogApiClient {
   final Map<String, PunchEventResultDto> answers = {};
   Object? failWith;
 
+  /// The `state` the server answers with, when a test wants one.
+  PunchStateDto? state;
+
   @override
   Future<PunchBatchResultDto> applyPunches(List<PunchEventDto> events) async {
     if (failWith != null) throw failWith!;
@@ -72,6 +77,7 @@ class _Api extends WorklogApiClient {
           answers[e.clientEventId] ??
               PunchEventResultDto(clientEventId: e.clientEventId, outcome: 'Applied'),
       ],
+      state: state,
     );
   }
 
@@ -105,12 +111,19 @@ DioException _http(int status) => DioException(
 
 final _t = DateTime.utc(2026, 11, 19, 6);
 
-TimbraSyncService _svc(_Repo repo, _Api api, {bool pipeline = true, List<String>? notices}) =>
+TimbraSyncService _svc(
+  _Repo repo,
+  _Api api, {
+  bool pipeline = true,
+  List<String>? notices,
+  void Function(PunchSnapshot)? onPunchState,
+}) =>
     TimbraSyncService(
       repo: repo,
       apiClient: api,
       punchPipelineEnabled: () async => pipeline,
       onNotice: notices?.add,
+      onPunchState: onPunchState,
       clock: () => DateTime.utc(2026, 11, 19, 18),
     );
 
@@ -278,6 +291,67 @@ void main() {
       };
       expect(texts.values.toSet().length, 5);
       expect(punchRejectionMessage('something_new'), punchRejectionMessage(null));
+    });
+  });
+
+  group('the server state each answer carries', () {
+    test('every answer hands the phone the server state to show', () async {
+      final repo = _Repo([_ws('a', 'ingresso', _t)]);
+      final api = _Api()..state = const PunchStateDto(status: 'Working');
+      PunchSnapshot? shown;
+
+      await _svc(repo, api, onPunchState: (s) => shown = s).syncNow();
+
+      expect(shown?.status, PunchStatus.working);
+    });
+
+    test('the notice for a refused tap says what the server holds and since when', () async {
+      final breakSince = DateTime.utc(2026, 11, 22, 12, 5);
+      final repo = _Repo([_ws('b', 'ingresso', _t)]);
+      final api = _Api()
+        ..state = PunchStateDto(status: 'OnBreak', breakStartedAtUtc: breakSince)
+        ..answers['b'] = const PunchEventResultDto(
+          clientEventId: 'b',
+          outcome: 'Rejected',
+          reason: 'on_break',
+        );
+      final notices = <String>[];
+
+      await _svc(repo, api, notices: notices).syncNow();
+
+      expect(notices, hasLength(1));
+      expect(notices.single, contains(DateFormat('HH:mm').format(breakSince.toLocal())));
+      expect(notices.single, contains('in pausa dalle'));
+    });
+  });
+
+  group('punchRejectionMessage with the server state', () {
+    test('on_break names the break start; superseded names the newer event', () {
+      final t = DateTime.utc(2026, 11, 22, 12, 5);
+      final hhmm = DateFormat('HH:mm').format(t.toLocal());
+
+      expect(
+        punchRejectionMessage(
+          'on_break',
+          snapshot: PunchSnapshot(status: PunchStatus.onBreak, breakStartedAtUtc: t),
+        ),
+        contains('in pausa dalle $hhmm'),
+      );
+      expect(
+        punchRejectionMessage(
+          'superseded',
+          snapshot: PunchSnapshot(status: PunchStatus.working, headAtUtc: t),
+        ),
+        contains('delle $hhmm'),
+      );
+    });
+
+    test('without the state, or with a state that has no time, the plain text is used', () {
+      expect(punchRejectionMessage('on_break', snapshot: null), punchRejectionMessage('on_break'));
+      expect(
+        punchRejectionMessage('on_break', snapshot: const PunchSnapshot(status: PunchStatus.idle)),
+        punchRejectionMessage('on_break'),
+      );
     });
   });
 }

@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/time/business_time.dart';
 import '../../core/time/work_time.dart';
 import '../api/dio_client.dart';
+import 'punch_snapshot.dart';
 
 // ── Request DTO ───────────────────────────────────────────────────────────────
 
@@ -119,16 +120,33 @@ class PunchEventResultDto {
 
 /// The server's state after the batch: `Idle` | `Working` | `OnBreak`.
 class PunchStateDto {
-  const PunchStateDto({required this.status, this.shiftStartedAtUtc, this.breakStartedAtUtc});
+  const PunchStateDto({
+    required this.status,
+    this.shiftStartedAtUtc,
+    this.breakStartedAtUtc,
+    this.headAtUtc,
+  });
 
   final String status;
   final DateTime? shiftStartedAtUtc;
   final DateTime? breakStartedAtUtc;
 
+  /// The instant of the newest event on the server's timeline; a tap older than this is superseded.
+  final DateTime? headAtUtc;
+
   factory PunchStateDto.fromJson(Map<String, dynamic> j) => PunchStateDto(
     status: j['status'] as String,
     shiftStartedAtUtc: DateTime.tryParse(j['shiftStartedAtUtc'] as String? ?? '')?.toUtc(),
     breakStartedAtUtc: DateTime.tryParse(j['breakStartedAtUtc'] as String? ?? '')?.toUtc(),
+    headAtUtc: DateTime.tryParse(j['headAtUtc'] as String? ?? '')?.toUtc(),
+  );
+
+  /// What the phone remembers and projects (see `projectPunchState`).
+  PunchSnapshot toSnapshot() => PunchSnapshot(
+    status: PunchStatus.parse(status),
+    shiftStartedAtUtc: shiftStartedAtUtc,
+    breakStartedAtUtc: breakStartedAtUtc,
+    headAtUtc: headAtUtc,
   );
 }
 
@@ -601,6 +619,15 @@ class WorklogApiClient {
     final data = response.data;
     if (data == null) throw StateError('Risposta vuota da applyPunches');
     return PunchBatchResultDto.fromJson(data);
+  }
+
+  /// GET /api/worklog/state — the caller's shift as the server holds it (EPIC 29). The phone replaces
+  /// its snapshot with this instead of correcting its own log with invented events.
+  Future<PunchStateDto> fetchPunchState() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/worklog/state');
+    final data = response.data;
+    if (data == null) throw StateError('Risposta vuota da /worklog/state');
+    return PunchStateDto.fromJson(data);
   }
 
   /// GET /api/worklog/mobile/today
