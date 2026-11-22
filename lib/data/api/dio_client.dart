@@ -2,10 +2,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config/app_info_provider.dart';
 import '../../core/config/env.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/i_auth_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
+import 'app_version_interceptor.dart';
 
 // ── Dio provider ───────────────────────────────────────────────────────────
 
@@ -41,6 +43,14 @@ final dioProvider = Provider<Dio>((ref) {
   interceptor.onForcedSignOut = () =>
       ref.read(sessionEnderProvider).endForced();
   dio.interceptors.add(interceptor);
+
+  // Tell the server which build is calling (X-App-Version). Observation only: the version comes
+  // from the cached PackageInfo read, and a failed read sends the request without it.
+  dio.interceptors.add(
+    AppVersionInterceptor(
+      () async => (await ref.read(appInfoProvider.future)).displayVersion,
+    ),
+  );
 
   // What the network actually did, in debug builds only.
   //
