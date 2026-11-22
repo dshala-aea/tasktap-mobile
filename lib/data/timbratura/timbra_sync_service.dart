@@ -29,6 +29,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../features/timbra/timbra_providers.dart' show workSessionRepositoryProvider;
 import '../../presentation/providers/clock_disagreement_provider.dart';
@@ -39,6 +40,8 @@ import '../api/dio_client.dart';
 import '../local/app_database.dart' show WorkSession;
 import '../worklogs/active_tracker_api_client.dart';
 import 'punch_pipeline_flag.dart';
+import 'punch_snapshot.dart';
+import 'punch_snapshot_providers.dart';
 import 'remote_shift.dart';
 import 'timbra_notice.dart';
 import 'timbra_session_assembler.dart';
@@ -69,24 +72,39 @@ final Provider<TimbraSyncService> timbraSyncServiceProvider = Provider<TimbraSyn
     onClockDisagreement: (seconds) =>
         ref.read(timbraClockDisagreementProvider.notifier).record(seconds),
     punchPipelineEnabled: ref.read(punchPipelineEnabledReaderProvider),
+    onPunchState: (snapshot) => ref.read(punchSnapshotProvider.notifier).replace(snapshot),
   );
 });
 
 /// What the technician is told when the server refuses one of their taps (unified pipeline). Reason codes
 /// are the server's stable ones; anything unknown gets the generic text.
-String punchRejectionMessage(String? reason) => switch (reason) {
-  'superseded' =>
-    'Una timbratura non è stata registrata: sul server c\'è già un evento più recente. '
-        'Se serve, avvisa l\'ufficio.',
-  'not_clocked_in' => 'Una timbratura non è stata registrata: sul server non risultavi in servizio.',
-  'on_break' => 'Una timbratura non è stata registrata: sul server risultavi in pausa.',
-  'too_old' =>
-    'Una timbratura non è stata registrata: è più vecchia di 3 giorni. Avvisa l\'ufficio.',
-  'in_future' =>
-    'Una timbratura non è stata registrata: controlla data e ora del telefono.',
-  'payroll_period_locked' => payrollLockedMessage,
-  _ => serverErrorMessage,
-};
+///
+/// With the server's [snapshot] the text says WHAT the server holds and since when ("risultavi in pausa
+/// dalle 12:05"), so the technician can tell what happened without asking the office.
+String punchRejectionMessage(String? reason, {PunchSnapshot? snapshot}) {
+  String at(DateTime utc) => DateFormat('HH:mm').format(utc.toLocal());
+  final breakSince = snapshot?.status == PunchStatus.onBreak ? snapshot?.breakStartedAtUtc : null;
+  final head = snapshot?.headAtUtc;
+
+  return switch (reason) {
+    'superseded' when head != null =>
+      'Una timbratura non è stata registrata: sul server c\'è già un evento più recente, delle '
+          '${at(head)}. Se serve, avvisa l\'ufficio.',
+    'superseded' =>
+      'Una timbratura non è stata registrata: sul server c\'è già un evento più recente. '
+          'Se serve, avvisa l\'ufficio.',
+    'not_clocked_in' =>
+      'Una timbratura non è stata registrata: sul server non risultavi in servizio.',
+    'on_break' when breakSince != null =>
+      'Una timbratura non è stata registrata: sul server risultavi in pausa dalle ${at(breakSince)}.',
+    'on_break' => 'Una timbratura non è stata registrata: sul server risultavi in pausa.',
+    'too_old' =>
+      'Una timbratura non è stata registrata: è più vecchia di 3 giorni. Avvisa l\'ufficio.',
+    'in_future' => 'Una timbratura non è stata registrata: controlla data e ora del telefono.',
+    'payroll_period_locked' => payrollLockedMessage,
+    _ => serverErrorMessage,
+  };
+}
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
@@ -101,7 +119,9 @@ class TimbraSyncService {
     DateTime Function()? clock,
     BusinessTime? businessTime,
     Future<bool> Function()? punchPipelineEnabled,
+    void Function(PunchSnapshot snapshot)? onPunchState,
   }) : _punchPipelineEnabled = punchPipelineEnabled,
+       _onPunchState = onPunchState,
        _repo = repo,
        _apiClient = apiClient,
        _fetchActive = fetchActive,
@@ -117,6 +137,10 @@ class TimbraSyncService {
   /// Whether this tenant's taps go through the unified punch pipeline (EPIC 29). Read at every sync, so a
   /// tenant switched over (or back) is followed without a restart. Null = never (legacy interval batch).
   final Future<bool> Function()? _punchPipelineEnabled;
+
+  /// The server's `state` from each answer of the unified pipeline: the phone replaces its snapshot
+  /// with it and shows that (plus the taps still unanswered), instead of correcting its log.
+  final void Function(PunchSnapshot snapshot)? _onPunchState;
   final Future<List<ActiveTracker>> Function()? _fetchActive;
   final void Function()? _onRemoteCommandsApplied;
   final void Function(String message)? _onNotice;
@@ -511,6 +535,7 @@ class TimbraSyncService {
 
       _batchFailures = 0;
       _batchRetryAt = null;
+      if (result.state != null) _onPunchState?.call(result.state!.toSnapshot());
       final byId = {for (final r in result.results) r.clientEventId: r};
       final done = <String>[];
       for (final s in chunk) {
@@ -525,7 +550,7 @@ class TimbraSyncService {
           continue;
         }
         await _repo.markSyncFailed(s.id);
-        _noticeRejectedPunch(r.reason);
+        _noticeRejectedPunch(r.reason, result.state?.toSnapshot());
         CrashReporter.instance.addBreadcrumb(
           'timbra sync (pipeline): ${s.eventType} rejected: ${r.reason ?? '-'}',
           category: 'sync',
@@ -540,10 +565,10 @@ class TimbraSyncService {
   static const _punchBatchSize = 100;
 
   /// One notice per reason per app run; the data itself stays on the device for support.
-  void _noticeRejectedPunch(String? reason) {
+  void _noticeRejectedPunch(String? reason, PunchSnapshot? snapshot) {
     final kind = 'punch_${reason ?? 'unknown'}';
     if (!_noticeKinds.add(kind)) return;
-    _onNotice?.call(punchRejectionMessage(reason));
+    _onNotice?.call(punchRejectionMessage(reason, snapshot: snapshot));
   }
 
   // ── Shifts started on another device ────────────────────────────────────────
