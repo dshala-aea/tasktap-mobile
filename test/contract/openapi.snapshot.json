@@ -27584,6 +27584,16 @@
                 "$ref": "#/components/schemas/GridLayoutDto"
               }
             ]
+          },
+          "tables": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TablesOptionsDto"
+              }
+            ]
           }
         },
         "description": "The Classic template\u0027s config, as exposed over the wire (GET response / PUT body)."
@@ -41901,6 +41911,64 @@
         },
         "description": "One table binding, as exposed over the wire. \u0060Cells\u0060 is the grid written out\n    row by row: each row lists the PDF field names of its slots, left to right, and\n    \u0060SlotProperties\u0060 says what one item contributes to each slot. Overflow defaults to\n    \u0022FixedRows\u0022 (the only value this build implements). \u0060SlotFormats\u0060 is keyed by slot property\n    and accepts prefix and suffix \u2014 plus, on a property listed in the collection\u0027s\n    \u0060HourProperties\u0060, the \u0060\u0022HoursMinutes\u0022\u0060 style."
       },
+      "TableColumnRefDto": {
+        "required": [
+          "key"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "labelOverride": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "width": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "align": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One table column: catalogue key, optional header wording, 1-12 weight, \u0060Left|Center|Right\u0060 alignment."
+      },
+      "TableConfigDto": {
+        "required": [
+          "columns"
+        ],
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TableColumnRefDto"
+            }
+          },
+          "rowDetail": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FieldRefDto"
+              }
+            ]
+          }
+        },
+        "description": "One table\u0027s ordered columns and optional row-detail line, as exposed over the wire."
+      },
       "TableOptionsDto": {
         "required": [
           "columns"
@@ -41915,6 +41983,32 @@
           }
         },
         "description": "Which materiali columns print, and in what order, as exposed over the wire."
+      },
+      "TablesOptionsDto": {
+        "type": "object",
+        "properties": {
+          "staff": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TableConfigDto"
+              }
+            ]
+          },
+          "materiali": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TableConfigDto"
+              }
+            ]
+          }
+        },
+        "description": "The staff and materiali table configuration, as exposed over the wire."
       },
       "TemplateAssignmentDto": {
         "required": [

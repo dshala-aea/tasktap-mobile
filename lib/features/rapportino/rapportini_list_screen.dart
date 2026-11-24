@@ -309,7 +309,7 @@ class _RapportiniListBody extends ConsumerWidget {
           : ListSummaryData(
               left:
                   '${filtered.length} '
-                  '${filtered.length == 1 ? 'rapportino' : 'rapportini'}',
+                  '${filtered.length == 1 ? 'rapporto' : 'rapporti'}',
               right: '$daInviareCount da inviare',
             ),
       state: state,
