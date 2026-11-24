@@ -7,7 +7,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
@@ -157,7 +156,7 @@ class _TrasfertaRowState extends ConsumerState<_TrasfertaRow> {
     final title = '$day · dalle ${item.startTime} · ${_hoursLabel(item.hours)}';
 
     return ListRow(
-      leading: const RowIconTile(icon: LucideIcons.mapPin, color: AppColors.Y),
+      leading: const RowIconTile(icon: LucideIcons.mapPin),
       title: title,
       subtitle: reason == null || reason.isEmpty ? null : reason,
       meta: item.cancellable

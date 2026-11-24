@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../../data/sync/sync_freshness_provider.dart';
@@ -210,10 +209,10 @@ class _AssignmentOption extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppTappable(
       onTap: onTap,
-      color: isSelected ? AppColors.Y.withValues(alpha: 0.12) : context.colors.surface,
+      color: isSelected ? context.colors.accent.withValues(alpha: 0.12) : context.colors.surface,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-        color: isSelected ? AppColors.Y : context.colors.borderStrong,
+        color: isSelected ? context.colors.accent : context.colors.borderStrong,
         width: isSelected ? 2 : 1,
       ),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
@@ -222,7 +221,7 @@ class _AssignmentOption extends StatelessWidget {
           Icon(
             isSelected ? LucideIcons.circleDot : LucideIcons.circle,
             size: 20,
-            color: isSelected ? AppColors.Y : context.colors.inkMuted,
+            color: isSelected ? context.colors.accentInk : context.colors.inkMuted,
           ),
           const SizedBox(width: 12),
           Expanded(
