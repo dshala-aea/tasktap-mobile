@@ -4,7 +4,6 @@ import '../../theme/app_palette.dart';
 import '../../theme/app_rack.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_text_styles.dart';
-import '../../theme/app_colors.dart';
 import '../../theme/status_colors.dart';
 import '../app_card.dart';
 import '../status_stamp.dart';
@@ -459,7 +458,7 @@ class DetailHeroButton extends StatelessWidget {
     final enabled = onPressed != null;
 
     final bg = switch (variant) {
-      DetailHeroButtonVariant.primary => AppColors.Y,
+      DetailHeroButtonVariant.primary => colors.accent,
       DetailHeroButtonVariant.secondary => colors.bg3,
       DetailHeroButtonVariant.ghost => Colors.transparent,
     };

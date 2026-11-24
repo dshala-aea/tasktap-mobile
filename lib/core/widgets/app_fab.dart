@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 
 /// Floating action button — 56 px circle, flat stamp-red fill, white icon.
 ///
@@ -42,14 +42,14 @@ class AppFab extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppColors.Y,
+              color: context.colors.accent,
               // A true circle, not a 12px-cornered square — the doc comment above already
               // promised one; AppRack.freeShape (the app's general card-corner radius) never
               // delivered it at this size.
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.Y.withAlpha(90),
+                  color: context.colors.accent.withAlpha(90),
                   offset: const Offset(0, 4),
                   blurRadius: 16,
                 ),

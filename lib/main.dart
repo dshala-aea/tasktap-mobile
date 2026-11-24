@@ -26,6 +26,7 @@ import 'core/notifications/push_reporting.dart';
 import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/tenant_accent_provider.dart';
 import 'core/widgets/account_deactivated_screen.dart';
 import 'core/widgets/app_toast.dart' show showAppToast;
 import 'core/widgets/startup_watchdog.dart';
@@ -332,6 +333,8 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       impostazioniProvider.select((s) => s.temaScuro),
     );
 
+    final accent = ref.watch(tenantAccentProvider);
+
     final biometricLock = ref.watch(
       impostazioniProvider.select((s) => s.autenticazioneBiometrica),
     );
@@ -339,8 +342,8 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     return MaterialApp.router(
       title: 'TaskTap',
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
-      darkTheme: buildAppTheme(brightness: Brightness.dark),
+      theme: buildAppTheme(accent: accent),
+      darkTheme: buildAppTheme(brightness: Brightness.dark, accent: accent),
       themeMode: darkTheme ? ThemeMode.dark : ThemeMode.light,
       routerConfig: _router,
       // Inside MaterialApp via `builder`, not around it: the lock needs the theme and the

@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_freshness_provider.dart';
@@ -254,7 +253,7 @@ class _FocusCard extends ConsumerWidget {
     // Da fare, the one tier that actually asks the technician to do something now. Conflating the
     // two would spend the accent on the ordinary state of most of a shift, the same reasoning
     // LiveDot exists for.
-    final badgeColor = tier == _Tier.live ? c.green : AppColors.Y;
+    final badgeColor = tier == _Tier.live ? c.green : c.accentInk;
     final ticketId = schedule.ticketId;
 
     return Padding(
@@ -320,7 +319,7 @@ class _FocusCard extends ConsumerWidget {
                   ),
                 ),
                 const Spacer(),
-                // Flat AppColors.Y for every tier, live included — was a per-tier gradient
+                // Flat accent for every tier, live included — was a per-tier gradient
                 // override (green for live); AppButton's 5 named variants don't carry a
                 // per-instance colour override, and the tier badge just above already carries
                 // the live/green vs. other/accent distinction ("a status is never colour alone",

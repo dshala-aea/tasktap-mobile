@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
@@ -219,7 +218,7 @@ class _SmartWorkingRowState extends ConsumerState<_SmartWorkingRow> {
     final end = DateFormat('d MMM', 'it').format(item.endDate);
 
     return ListRow(
-      leading: const RowIconTile(icon: LucideIcons.laptop, color: AppColors.Y),
+      leading: const RowIconTile(icon: LucideIcons.laptop),
       title: '$start – $end',
       subtitle: reason == null || reason.isEmpty ? null : reason,
       meta: _cancellable

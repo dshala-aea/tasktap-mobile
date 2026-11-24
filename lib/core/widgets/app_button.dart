@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -164,7 +163,7 @@ class AppButton extends StatelessWidget {
   /// ("no glassy gradients"). [primary] is now a flat [AppColors.Y] fill, matching every other
   /// variant's flat-fill treatment.
   Color _bg(BuildContext context) => switch (variant) {
-    AppButtonVariant.primary => AppColors.Y,
+    AppButtonVariant.primary => context.colors.accent,
     AppButtonVariant.secondary => context.colors.bg3,
     AppButtonVariant.dark => context.colors.surfaceInverse,
     AppButtonVariant.ghost => Colors.transparent,

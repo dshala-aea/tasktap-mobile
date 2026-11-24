@@ -1,7 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
@@ -49,7 +48,7 @@ class AppCompartmentTile extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 20, color: AppColors.Y),
+                  Icon(icon, size: 20, color: context.colors.accentInk),
                   const SizedBox(height: 8),
                   Text(
                     label,

@@ -444,7 +444,7 @@ class _FirmaDialogState extends State<_FirmaDialog> {
                     if (context.mounted) Navigator.pop(context, bytes);
                   },
                   style: TextButton.styleFrom(
-                    backgroundColor: AppColors.Y,
+                    backgroundColor: context.colors.accent,
                     foregroundColor: context.colors.brandOn,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),

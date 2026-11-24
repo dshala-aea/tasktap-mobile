@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_vetro_palette.dart';
@@ -198,8 +197,8 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
           icon: LucideIcons.xCircle,
         ),
         ToastTone.info => (
-          accent: AppColors.Y,
-          accentBg: AppColors.Y.withAlpha(31),
+          accent: context.colors.accentInk,
+          accentBg: context.colors.accent.withAlpha(31),
           icon: LucideIcons.alertCircle,
         ),
       };

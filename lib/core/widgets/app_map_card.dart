@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
@@ -31,9 +30,11 @@ class AppMapCard extends StatelessWidget {
               borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
               border: Border(bottom: BorderSide(color: context.colors.borderLight)),
             ),
-            child: const SizedBox(
+            child: SizedBox(
               height: 84,
-              child: Center(child: Icon(LucideIcons.mapPin, size: 28, color: AppColors.Y)),
+              child: Center(
+                child: Icon(LucideIcons.mapPin, size: 28, color: context.colors.accentInk),
+              ),
             ),
           ),
           Padding(
@@ -72,7 +73,7 @@ class _NavigaButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.Y,
+      color: context.colors.accent,
       borderRadius: AppRack.insetShape,
       child: InkWell(
         borderRadius: AppRack.insetShape,

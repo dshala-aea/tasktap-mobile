@@ -14,7 +14,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
@@ -136,14 +135,14 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
                           checked: isSelected,
                           child: AppCard.pressable(
                             onTap: () => _toggle(a.userId),
-                            backgroundColor: isSelected ? AppColors.Y.withAlpha(31) : null,
-                            borderColor: isSelected ? AppColors.Y : null,
+                            backgroundColor: isSelected ? ctx.colors.accent.withAlpha(31) : null,
+                            borderColor: isSelected ? ctx.colors.accent : null,
                             child: Row(
                               children: [
                                 Icon(
                                   isSelected ? LucideIcons.checkCircle2 : LucideIcons.square,
                                   size: 20,
-                                  color: isSelected ? AppColors.Y : ctx.colors.inkMuted,
+                                  color: isSelected ? ctx.colors.accentInk : ctx.colors.inkMuted,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(

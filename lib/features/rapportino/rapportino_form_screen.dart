@@ -9,7 +9,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/location/location_service.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/widgets/app_compartment_tile.dart';
 import '../../data/reports/ticket_controls_cache_repository.dart';
@@ -199,13 +198,16 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                         key: const ValueKey('saving'),
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: context.colors.accent,
+                        ),
                       )
                     : Icon(
                         LucideIcons.cloud,
                         key: const ValueKey('saved'),
                         size: 20,
-                        color: AppColors.Y,
+                        color: context.colors.accentInk,
                       ),
               ),
             ),
@@ -362,10 +364,10 @@ class _CompletionCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           decoration: BoxDecoration(
             borderRadius: AppRack.freeShape,
-            color: AppColors.Y,
+            color: context.colors.accent,
             boxShadow: [
               BoxShadow(
-                color: AppColors.Y.withAlpha(90),
+                color: context.colors.accent.withAlpha(90),
                 blurRadius: 24,
                 offset: const Offset(0, 12),
               ),

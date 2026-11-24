@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/accent_scheme.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
 
@@ -389,5 +390,73 @@ void main() {
           'is fixed-dark in both themes, the constant is right — add its token to allowedTokens '
           'and say why at the call site.',
     );
+  });
+
+  group('AppPalette accent group', () {
+    test('light and dark default to stamp red', () {
+      for (final p in [AppPalette.light, AppPalette.dark]) {
+        expect(p.accent, AppColors.Y);
+        expect(p.accentDark, AppColors.YDark);
+        expect(p.accentSoft, AppColors.YSoft);
+      }
+    });
+
+    test('copyWith replaces accent fields', () {
+      const x = Color(0xFF123456);
+      expect(AppPalette.light.copyWith(accent: x).accent, x);
+      expect(AppPalette.light.copyWith(accentDark: x).accentDark, x);
+      expect(AppPalette.light.copyWith(accentSoft: x).accentSoft, x);
+    });
+
+    test('lerp returns the endpoints for the accent fields', () {
+      final a = AppPalette.light.copyWith(
+        accent: const Color(0xFF111111),
+        accentDark: const Color(0xFF222222),
+        accentSoft: const Color(0x33333333),
+      );
+      final b = AppPalette.dark.copyWith(
+        accent: const Color(0xFFAAAAAA),
+        accentDark: const Color(0xFFBBBBBB),
+        accentSoft: const Color(0x33CCCCCC),
+      );
+      final l0 = a.lerp(b, 0);
+      final l1 = a.lerp(b, 1);
+      expect(l0.accent, a.accent);
+      expect(l0.accentDark, a.accentDark);
+      expect(l0.accentSoft, a.accentSoft);
+      expect(l1.accent, b.accent);
+      expect(l1.accentDark, b.accentDark);
+      expect(l1.accentSoft, b.accentSoft);
+      expect(a.lerp(null, 0.5), same(a));
+    });
+
+    test('withAccent(stampRed) equals the base palette in both brightnesses', () {
+      void check(AppPalette r, AppPalette base) {
+        expect(r.accent, base.accent);
+        expect(r.accentDark, base.accentDark);
+        expect(r.accentSoft, base.accentSoft);
+        expect(r.brandOn, base.brandOn);
+        expect(r.accentInk, base.accentInk);
+      }
+
+      check(AppPalette.dark.withAccent(AccentScheme.stampRed, Brightness.dark), AppPalette.dark);
+      check(AppPalette.light.withAccent(AccentScheme.stampRed, Brightness.light), AppPalette.light);
+    });
+
+    test('buildAppTheme dark with stampRed keeps accentDark == AppColors.YDark', () {
+      final pal = buildAppTheme(brightness: Brightness.dark, accent: AccentScheme.stampRed)
+          .extension<AppPalette>()!;
+      expect(pal.accentDark, AppColors.YDark);
+    });
+
+    test('stamp red round trip leaves the light palette unchanged', () {
+      final r = AppPalette.light.withAccent(AccentScheme.stampRed, Brightness.light);
+      const l = AppPalette.light;
+      expect(r.accent, l.accent);
+      expect(r.accentDark, l.accentDark);
+      expect(r.accentSoft, l.accentSoft);
+      expect(r.brandOn, l.brandOn);
+      expect(r.accentInk, l.accentInk);
+    });
   });
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'app_tappable.dart';
 
-import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -247,7 +246,7 @@ class _AppTabsState extends State<AppTabs> {
                 ),
                 border: Border(
                   bottom: BorderSide(
-                    color: active ? AppColors.Y : Colors.transparent,
+                    color: active ? context.colors.accent : Colors.transparent,
                     width: 2,
                   ),
                 ),
@@ -270,7 +269,7 @@ class _AppTabsState extends State<AppTabs> {
                       DecoratedBox(
                         decoration: BoxDecoration(
                           color: active
-                              ? AppColors.Y.withAlpha(31)
+                              ? context.colors.accent.withAlpha(31)
                               : context.colors.bg3,
                           borderRadius: BorderRadius.circular(9),
                         ),

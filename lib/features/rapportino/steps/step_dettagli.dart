@@ -8,7 +8,6 @@ import '../../../core/location/location_service.dart';
 import '../../../core/widgets/geo_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 
-import '../../../core/theme/app_colors.dart';
 // Uses StepLabel (the padding-free sibling of SectionTitle) — these headings sit inside cards
 // that already carry their own padding.
 import '../../../data/reports/draft_report_repository.dart';
@@ -434,7 +433,7 @@ class _LinkedChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(LucideIcons.link, size: 14, color: AppColors.Y),
+        Icon(LucideIcons.link, size: 14, color: context.colors.accentInk),
         const SizedBox(width: 6),
         Text('$label · ', style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
         Expanded(

@@ -8,7 +8,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/time/business_time.dart';
 import '../../../core/time/business_time_providers.dart';
 import '../../../core/time/work_time.dart' show formatTimeSpan, parseTimeSpan;
@@ -753,9 +752,9 @@ class _WorklogSuggestionChip extends StatelessWidget {
 
     return AppTappable(
       onTap: onApply,
-      color: AppColors.Y.withAlpha(31),
+      color: context.colors.accent.withAlpha(31),
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: AppColors.Y),
+      border: Border.all(color: context.colors.accent),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -840,9 +839,9 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
       label: 'Timer in corso $label, tocca per fermare',
       child: AppTappable(
         onTap: widget.onStop,
-        color: AppColors.Y.withAlpha(31),
+        color: context.colors.accent.withAlpha(31),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.Y),
+        border: Border.all(color: context.colors.accent),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: ExcludeSemantics(
           // The tappable's own Semantics above already carries the label + liveRegion; excluding
@@ -986,9 +985,13 @@ class _TotalOreCard extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         borderRadius: AppRack.freeShape,
-        color: AppColors.Y,
+        color: context.colors.accent,
         boxShadow: [
-          BoxShadow(color: AppColors.Y.withAlpha(90), blurRadius: 24, offset: const Offset(0, 12)),
+          BoxShadow(
+            color: context.colors.accent.withAlpha(90),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
         ],
       ),
       child: Row(

@@ -1373,7 +1373,7 @@ class _SigDialogState extends State<_SigDialog> {
                   // in line instead of being the one raw-text exception that actually reaches a
                   // flipping AppBar background.
                   style: TextButton.styleFrom(
-                    backgroundColor: AppColors.Y,
+                    backgroundColor: context.colors.accent,
                     foregroundColor: context.colors.brandOn,
                     shape: RoundedRectangleBorder(borderRadius: AppRack.insetShape),
                   ),

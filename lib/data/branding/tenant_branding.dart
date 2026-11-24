@@ -6,27 +6,33 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../presentation/providers/auth_providers.dart';
 import '../api/dio_client.dart';
 
 /// The tenant identity the app shows: logo and company name from `GET /api/branding`.
 ///
-/// The primary colour is deliberately not read here: `AppColors.Y` is hardcoded across the app, so
-/// a per-tenant colour needs its own pass over those call sites (see the web shell for the colour
-/// side of this feature).
+/// The primary colour IS read here (raw, trimmed hex); see `AccentScheme` for how it is validated
+/// and turned into the app accent.
 class TenantBranding {
-  const TenantBranding({this.logoUrl, this.companyName});
+  const TenantBranding({this.logoUrl, this.companyName, this.primaryColor});
 
   final String? logoUrl;
   final String? companyName;
+  final String? primaryColor;
 
-  bool get isEmpty => logoUrl == null && companyName == null;
+  bool get isEmpty => logoUrl == null && companyName == null && primaryColor == null;
 
   factory TenantBranding.fromJson(Map<String, dynamic> json) => TenantBranding(
     logoUrl: _clean(json['logoUrl']),
     companyName: _clean(json['companyName']),
+    primaryColor: _clean(json['primaryColor']),
   );
 
-  Map<String, dynamic> toJson() => {'logoUrl': logoUrl, 'companyName': companyName};
+  Map<String, dynamic> toJson() => {
+    'logoUrl': logoUrl,
+    'companyName': companyName,
+    'primaryColor': primaryColor,
+  };
 
   static String? _clean(Object? v) {
     if (v is! String) return null;
@@ -79,7 +85,16 @@ class TenantBrandingRepository {
 /// Cached branding first (so the logo is there offline and on a cold start), then the fresh one.
 /// The cache lives in SharedPreferences, which the session ender clears on sign-out, so one
 /// tenant's logo never shows for the next user.
+///
+/// Keyed on the signed-in user id: with nobody signed in it yields null and touches neither the
+/// cache nor the API, and a login/logout rebuilds it, so one tenant's colour and logo never carry
+/// over to the next session and a new user gets their own branding without a restart.
 final tenantBrandingProvider = StreamProvider<TenantBranding?>((ref) async* {
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.id));
+  if (uid == null) {
+    yield null;
+    return;
+  }
   TenantBrandingRepository repo;
   try {
     repo = TenantBrandingRepository(ref.watch(dioProvider));

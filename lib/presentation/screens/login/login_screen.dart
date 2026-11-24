@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/router/app_router.dart' show AppRoutes;
 import '../../../core/security/passkey_support.dart';
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
@@ -402,7 +401,7 @@ class _TaskTapLogo extends StatelessWidget {
             vertical: AppSpacing.sm,
           ),
           decoration: BoxDecoration(
-            color: AppColors.Y,
+            color: context.colors.accent,
             borderRadius: BorderRadius.circular(AppSpacing.sm),
           ),
           child: Text(

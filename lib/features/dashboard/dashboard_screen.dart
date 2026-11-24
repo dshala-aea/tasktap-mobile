@@ -264,7 +264,7 @@ class _ClockInPrompt extends ConsumerWidget {
     if (withheld) {
       return AppCard(
         padding: EdgeInsets.zero,
-        backgroundColor: AppColors.Y,
+        backgroundColor: context.colors.accent,
         onTap: () => context.push(AppRoutes.timbraQr),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.base),
@@ -298,14 +298,14 @@ class _ClockInPrompt extends ConsumerWidget {
       );
     }
 
-    // A CTA, not a passive readout — flat AppColors.Y fill + white ink, same primary-action
+    // A CTA, not a passive readout — flat accent fill + white ink, same primary-action
     // language AppButton's own primary variant already uses (this replaces the old VetroGlass
     // panel, which only read as an action via its own onTap; AppCard's onTap does that job here
-    // instead of a hand-rolled Material/InkWell). AppColors.Y as a raw constant is the sanctioned
-    // exception (see the batch's own colour rule) — it's this app's one theme-invariant accent.
+    // instead of a hand-rolled Material/InkWell). The accent comes from the tenant palette via
+    // context.colors.accent; the ground is fixed, so accent rather than accentInk.
     return AppCard(
       padding: EdgeInsets.zero,
-      backgroundColor: AppColors.Y,
+      backgroundColor: context.colors.accent,
       onTap: busy ? null : () => _punchIn(context, ref),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.base),

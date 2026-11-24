@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_rack.dart';
 
 /// A list row's leading icon — an accent-chip cut into the card (12%-alpha fill, solid-accent
@@ -51,18 +51,20 @@ class RowIconTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedColor = color ?? AppColors.Y;
+    final colors = context.colors;
+    final fillColor = color ?? colors.accent;
+    final iconColor = color ?? colors.accentInk;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: resolvedColor.withAlpha(31),
+        color: fillColor.withAlpha(31),
         shape: circle ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: circle
             ? null
             : BorderRadius.circular(radius ?? AppRack.insetRadius),
       ),
-      child: child ?? Icon(icon, size: iconSize, color: resolvedColor),
+      child: child ?? Icon(icon, size: iconSize, color: iconColor),
     );
   }
 }

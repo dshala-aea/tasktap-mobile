@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
@@ -50,8 +49,8 @@ class EmptyState extends StatelessWidget {
           child: VetroStateCard(
             iconBadge: VetroStateIconBadge(
               icon: icon,
-              tint: AppColors.Y,
-              tintBg: AppColors.Y.withAlpha(31),
+              tint: c.accentInk,
+              tintBg: c.accent.withAlpha(31),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -226,8 +225,8 @@ class CompactEmptyState extends StatelessWidget {
                 if (icon != null) ...[
                   VetroStateIconBadge(
                     icon: icon!,
-                    tint: AppColors.Y,
-                    tintBg: AppColors.Y.withAlpha(31),
+                    tint: c.accentInk,
+                    tintBg: c.accent.withAlpha(31),
                     size: 36,
                     iconSize: 18,
                   ),
