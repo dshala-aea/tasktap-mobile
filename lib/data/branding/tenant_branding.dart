@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../presentation/providers/auth_providers.dart';
 import '../api/dio_client.dart';
 
 /// The tenant identity the app shows: logo and company name from `GET /api/branding`.
@@ -84,7 +85,16 @@ class TenantBrandingRepository {
 /// Cached branding first (so the logo is there offline and on a cold start), then the fresh one.
 /// The cache lives in SharedPreferences, which the session ender clears on sign-out, so one
 /// tenant's logo never shows for the next user.
+///
+/// Keyed on the signed-in user id: with nobody signed in it yields null and touches neither the
+/// cache nor the API, and a login/logout rebuilds it, so one tenant's colour and logo never carry
+/// over to the next session and a new user gets their own branding without a restart.
 final tenantBrandingProvider = StreamProvider<TenantBranding?>((ref) async* {
+  final uid = ref.watch(authStateProvider.select((a) => a.value?.id));
+  if (uid == null) {
+    yield null;
+    return;
+  }
   TenantBrandingRepository repo;
   try {
     repo = TenantBrandingRepository(ref.watch(dioProvider));
