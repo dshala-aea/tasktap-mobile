@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -64,7 +63,7 @@ class ListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final stripeColor = strapped
-        ? AppColors.Y
+        ? c.accent
         : (ledgeColor ?? Colors.transparent);
 
     return InkWell(

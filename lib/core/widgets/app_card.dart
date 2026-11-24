@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
@@ -60,7 +59,7 @@ class AppCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = strapped
-        ? AppColors.Y
+        ? context.colors.accent
         : (borderColor ?? context.colors.borderLight);
     final content = Padding(padding: padding ?? _defaultPadding, child: child);
 

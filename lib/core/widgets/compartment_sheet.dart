@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_spacing.dart';
 import 'screen_header.dart';
@@ -122,7 +121,7 @@ class SheetHandle extends StatelessWidget {
         width: 36,
         height: 4,
         decoration: BoxDecoration(
-          color: AppColors.Y.withAlpha(60),
+          color: context.colors.accent.withAlpha(60),
           borderRadius: BorderRadius.circular(2),
         ),
       ),

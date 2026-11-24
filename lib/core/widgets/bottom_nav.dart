@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
 
@@ -437,7 +436,7 @@ class _NavTab extends StatelessWidget {
                   vertical: active ? AppSpacing.sm : AppSpacing.md,
                 ),
           decoration: BoxDecoration(
-            color: active ? AppColors.Y : null,
+            color: active ? context.colors.accent : null,
             borderRadius: BorderRadius.circular(12),
           ),
           // THE REAL BUG (a prior fix here swapped Container's `alignment:` param for this

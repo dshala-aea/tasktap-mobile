@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -42,7 +41,7 @@ class QuickAction extends StatelessWidget {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: AppColors.Y,
+                  color: context.colors.accent,
                   shape: BoxShape.circle,
                   // No shadow, same rule as AppButton: a static in-flow control, not an overlay,
                   // and a soft shadow is invisible outdoors — see app_button.dart's _shadows().

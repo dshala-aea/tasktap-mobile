@@ -36,7 +36,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../location/geocoding_service.dart' show GeocodedPoint;
-import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
@@ -164,7 +163,7 @@ class _EmbeddedMapState extends State<_EmbeddedMap> {
                           point: center,
                           width: 36,
                           height: 36,
-                          child: const Icon(LucideIcons.mapPin, color: AppColors.Y, size: 36),
+                          child: Icon(LucideIcons.mapPin, color: context.colors.accentInk, size: 36),
                         ),
                       ],
                     ),
