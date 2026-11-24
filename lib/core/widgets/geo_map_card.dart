@@ -163,7 +163,11 @@ class _EmbeddedMapState extends State<_EmbeddedMap> {
                           point: center,
                           width: 36,
                           height: 36,
-                          child: Icon(LucideIcons.mapPin, color: context.colors.accentInk, size: 36),
+                          child: Icon(
+                            LucideIcons.mapPin,
+                            color: context.colors.accentInk,
+                            size: 36,
+                          ),
                         ),
                       ],
                     ),

@@ -50,7 +50,7 @@ class EmptyState extends StatelessWidget {
             iconBadge: VetroStateIconBadge(
               icon: icon,
               tint: c.accentInk,
-              tintBg: c.accentSoft,
+              tintBg: c.accent.withAlpha(31),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -226,7 +226,7 @@ class CompactEmptyState extends StatelessWidget {
                   VetroStateIconBadge(
                     icon: icon!,
                     tint: c.accentInk,
-                    tintBg: c.accentSoft,
+                    tintBg: c.accent.withAlpha(31),
                     size: 36,
                     iconSize: 18,
                   ),

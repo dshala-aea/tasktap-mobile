@@ -299,7 +299,7 @@ class _LockScreen extends StatelessWidget {
                 ? Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.fingerprint, size: 40, color: context.colors.accentInk),
+                      Icon(LucideIcons.fingerprint, size: 40, color: context.colors.accent),
                       const SizedBox(height: 20),
                       const Text(
                         'TaskTap è bloccato',
@@ -335,7 +335,7 @@ class _LockScreen extends StatelessWidget {
                       ),
                     ],
                   )
-                : Icon(LucideIcons.fingerprint, size: 40, color: context.colors.accentInk),
+                : Icon(LucideIcons.fingerprint, size: 40, color: context.colors.accent),
           ),
         ),
       ),

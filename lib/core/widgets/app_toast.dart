@@ -198,7 +198,7 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
         ),
         ToastTone.info => (
           accent: context.colors.accentInk,
-          accentBg: context.colors.accentSoft,
+          accentBg: context.colors.accent.withAlpha(31),
           icon: LucideIcons.alertCircle,
         ),
       };
