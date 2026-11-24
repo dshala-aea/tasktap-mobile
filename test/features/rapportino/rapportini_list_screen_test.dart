@@ -598,7 +598,7 @@ void main() {
         'Respinti',
         'Annullati',
       ]);
-      expect(find.text('6 RAPPORTINI'), findsOneWidget);
+      expect(find.text('6 RAPPORTI'), findsOneWidget);
       expect(find.text('1 DA INVIARE'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -621,7 +621,7 @@ void main() {
       await tester.tap(_quickChip('In revisione'));
       await tester.pumpAndSettle();
 
-      expect(find.text('1 RAPPORTINO'), findsOneWidget);
+      expect(find.text('1 RAPPORTO'), findsOneWidget);
       expect(find.text('0 DA INVIARE'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());

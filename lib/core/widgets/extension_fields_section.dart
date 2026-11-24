@@ -364,7 +364,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
                   )
                 else if (_local)
                   Text(
-                    'Salvati su questo dispositivo e inviati con il rapportino.',
+                    'Salvati su questo dispositivo e inviati con il rapporto di intervento.',
                     style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
                   )
                 else
