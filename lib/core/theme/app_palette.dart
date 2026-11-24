@@ -360,6 +360,10 @@ class AppPalette extends ThemeExtension<AppPalette> {
   /// (`fillOnDark`, >= 3:1 on the dark ground), its darker variant at HSL lightness x 0.85, a
   /// 0x33-alpha tint, and the dark ink/`brandOn`.
   AppPalette withAccent(AccentScheme s, Brightness brightness) {
+    // The app always passes an accent (stamp red when the tenant has none). Returning `this`
+    // keeps that default exactly AppPalette.light/dark, instead of re-deriving values such as the
+    // dark `accentDark` (HSL x 0.85 would drift from AppColors.YDark).
+    if (s == AccentScheme.stampRed) return this;
     if (brightness == Brightness.dark) {
       final hsl = HSLColor.fromColor(s.fillOnDark);
       return copyWith(

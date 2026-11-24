@@ -430,6 +430,25 @@ void main() {
       expect(a.lerp(null, 0.5), same(a));
     });
 
+    test('withAccent(stampRed) equals the base palette in both brightnesses', () {
+      void check(AppPalette r, AppPalette base) {
+        expect(r.accent, base.accent);
+        expect(r.accentDark, base.accentDark);
+        expect(r.accentSoft, base.accentSoft);
+        expect(r.brandOn, base.brandOn);
+        expect(r.accentInk, base.accentInk);
+      }
+
+      check(AppPalette.dark.withAccent(AccentScheme.stampRed, Brightness.dark), AppPalette.dark);
+      check(AppPalette.light.withAccent(AccentScheme.stampRed, Brightness.light), AppPalette.light);
+    });
+
+    test('buildAppTheme dark with stampRed keeps accentDark == AppColors.YDark', () {
+      final pal = buildAppTheme(brightness: Brightness.dark, accent: AccentScheme.stampRed)
+          .extension<AppPalette>()!;
+      expect(pal.accentDark, AppColors.YDark);
+    });
+
     test('stamp red round trip leaves the light palette unchanged', () {
       final r = AppPalette.light.withAccent(AccentScheme.stampRed, Brightness.light);
       const l = AppPalette.light;
