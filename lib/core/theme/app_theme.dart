@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'app_colors.dart';
+import 'accent_scheme.dart';
 import 'app_palette.dart';
 import 'app_rack.dart';
 import 'app_spacing.dart';
@@ -10,17 +10,21 @@ import 'app_vetro_palette.dart';
 
 /// Builds the TaskTap [ThemeData] for one [Brightness].
 ///
-/// Brand accent Y (safety orange, `#FF5A1F`) is primary in both themes — it is the brand, and it
-/// reads on either ground. Everything else comes from [AppPalette], which is also attached as a
+/// The accent is stamp red (`AppColors.Y`) by default, or the tenant's brand colour when [accent]
+/// is given (see [AppPalette.withAccent]); it is primary in both themes. Everything else comes from [AppPalette], which is also attached as a
 /// theme extension so
 /// widgets can reach tokens the Material [ColorScheme] has no slot for (four background steps,
 /// three border weights, the card shadow).
 ///
 /// Typography: Sora (display / titles) + Manrope (body / labels). The text styles carry no colour
 /// of their own; it is applied here, once, from the palette's ink.
-ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
+ThemeData buildAppTheme({
+  Brightness brightness = Brightness.light,
+  AccentScheme? accent,
+}) {
   final isDark = brightness == Brightness.dark;
-  final p = isDark ? AppPalette.dark : AppPalette.light;
+  final base = isDark ? AppPalette.dark : AppPalette.light;
+  final p = accent == null ? base : base.withAccent(accent, brightness);
   // Il Documento's AppPalette.shadow is empty (DESIGN.md bans shadows outright — "no floating
   // cards... draw a line, not a box"), so `.first` would throw here without the empty-list
   // fallback. `Colors.transparent` is not a behavior-preserving stand-in for the three call sites
@@ -41,9 +45,9 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
 
   final colorScheme = ColorScheme(
     brightness: brightness,
-    primary: AppColors.Y,
+    primary: p.accent,
     onPrimary: p.brandOn,
-    primaryContainer: AppColors.YSoft,
+    primaryContainer: p.accentSoft,
     onPrimaryContainer: p.ink,
     secondary: p.ink,
     onSecondary: p.inkInverse,
@@ -67,7 +71,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     scrim: Color(0x80000000),
     inverseSurface: p.surfaceInverse,
     onInverseSurface: p.inkInverse,
-    inversePrimary: AppColors.Y,
+    inversePrimary: p.accent,
   );
 
   // The styles carry no colour of their own (see AppTextStyles), so it is applied here in one
@@ -112,7 +116,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     // ── Bottom Navigation Bar ──────────────────────────────────────────────
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: p.surface,
-      indicatorColor: AppColors.Y,
+      indicatorColor: p.accent,
       indicatorShape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
       ),
@@ -157,7 +161,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     // ── Elevated Button ────────────────────────────────────────────────────
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.Y,
+        backgroundColor: p.accent,
         foregroundColor: p.brandOn,
         elevation: 0,
         padding: const EdgeInsets.symmetric(
@@ -234,7 +238,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: const BorderSide(color: AppColors.Y, width: 2),
+        borderSide: BorderSide(color: p.accent, width: 2),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
@@ -256,7 +260,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     // ── Chip ───────────────────────────────────────────────────────────────
     chipTheme: ChipThemeData(
       backgroundColor: p.bg3,
-      selectedColor: AppColors.Y,
+      selectedColor: p.accent,
       labelStyle: AppTextStyles.labelMedium.copyWith(color: p.ink),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.sm),
@@ -270,7 +274,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
 
     // ── FAB ────────────────────────────────────────────────────────────────
     floatingActionButtonTheme: FloatingActionButtonThemeData(
-      backgroundColor: AppColors.Y,
+      backgroundColor: p.accent,
       foregroundColor: p.brandOn,
       elevation: 2,
     ),

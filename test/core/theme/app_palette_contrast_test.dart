@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/accent_scheme.dart';
 
 double _linearize(double v) => v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4).toDouble();
 
@@ -62,5 +63,20 @@ void main() {
       expect(AppPalette.dark.shadow, isEmpty);
       expect(AppPalette.dark.shadowInset, isEmpty);
     });
+  });
+
+  group('tenant accent contrast', () {
+    for (final hex in ['#1565C0', '#000000']) {
+      test('dark palette for $hex keeps ink >= 4.5, fill >= 3.0 on bg2, best brandOn', () {
+        final s = AccentScheme.fromHex(hex)!;
+        final d = AppPalette.dark.withAccent(s, Brightness.dark);
+        expect(_contrast(d.accentInk, d.bg2), greaterThanOrEqualTo(4.5));
+        expect(_contrast(d.accent, d.bg2), greaterThanOrEqualTo(3.0));
+        const light = Color(0xFFFBF9F4);
+        const darkInk = Color(0xFF1E1F24);
+        final best = _contrast(light, d.accent) >= _contrast(darkInk, d.accent) ? light : darkInk;
+        expect(d.brandOn, best);
+      });
+    }
   });
 }

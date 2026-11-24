@@ -1,6 +1,9 @@
 // ignore_for_file: constant_identifier_names
 import 'package:flutter/material.dart';
 
+import 'accent_scheme.dart';
+import 'app_colors.dart';
+
 /// The colour tokens, resolved per theme.
 ///
 /// [AppColors] still holds the raw values and the ones that do not flip (brand accent, the status
@@ -51,6 +54,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.brandOn,
     required this.labelCard,
     required this.accentInk,
+    required this.accent,
+    required this.accentDark,
+    required this.accentSoft,
   });
 
   // ── Ink: what text and icons are written in ───────────────────────────────
@@ -162,6 +168,16 @@ class AppPalette extends ThemeExtension<AppPalette> {
   /// dark-mode lightening reads as the same ink family, not a second accent.
   final Color accentInk;
 
+  /// The accent as a *fill* (primary buttons, FAB, indicators). Stamp red unless a tenant colour
+  /// is applied via [withAccent]. Text/icons on top of it use [brandOn].
+  final Color accent;
+
+  /// [accent] darkened for pressed/gradient-adjacent states.
+  final Color accentDark;
+
+  /// [accent] as a translucent tint (alpha 0x33).
+  final Color accentSoft;
+
   // ── Instances ─────────────────────────────────────────────────────────────
 
   /// The light palette. Il Documento's paper-and-ink world (see DESIGN.md).
@@ -208,6 +224,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
     brandOn: Color(0xFFFBF9F4),
     labelCard: Color(0xFFFBF9F4),
     accentInk: Color(0xFFC03221),
+    accent: AppColors.Y,
+    accentDark: AppColors.YDark,
+    accentSoft: AppColors.YSoft,
   );
 
   /// The dark palette.
@@ -263,6 +282,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
     brandOn: Color(0xFFFBF9F4),
     labelCard: Color(0xFF1E1F24),
     accentInk: Color(0xFFF0736E),
+    accent: AppColors.Y,
+    accentDark: AppColors.YDark,
+    accentSoft: AppColors.YSoft,
   );
 
   @override
@@ -294,6 +316,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? brandOn,
     Color? labelCard,
     Color? accentInk,
+    Color? accent,
+    Color? accentDark,
+    Color? accentSoft,
   }) {
     return AppPalette(
       ink: ink ?? this.ink,
@@ -323,6 +348,34 @@ class AppPalette extends ThemeExtension<AppPalette> {
       brandOn: brandOn ?? this.brandOn,
       labelCard: labelCard ?? this.labelCard,
       accentInk: accentInk ?? this.accentInk,
+      accent: accent ?? this.accent,
+      accentDark: accentDark ?? this.accentDark,
+      accentSoft: accentSoft ?? this.accentSoft,
+    );
+  }
+
+  /// This palette with the tenant accent applied for [brightness].
+  ///
+  /// Light uses the scheme's fill group, ink and `brandOn`; dark uses the lifted fill
+  /// (`fillOnDark`, >= 3:1 on the dark ground), its darker variant at HSL lightness x 0.85, a
+  /// 0x33-alpha tint, and the dark ink/`brandOn`.
+  AppPalette withAccent(AccentScheme s, Brightness brightness) {
+    if (brightness == Brightness.dark) {
+      final hsl = HSLColor.fromColor(s.fillOnDark);
+      return copyWith(
+        accent: s.fillOnDark,
+        accentDark: hsl.withLightness(hsl.lightness * 0.85).toColor(),
+        accentSoft: s.fillOnDark.withAlpha(0x33),
+        brandOn: s.brandOnDark,
+        accentInk: s.inkDark,
+      );
+    }
+    return copyWith(
+      accent: s.fill,
+      accentDark: s.fillDark,
+      accentSoft: s.fillSoft,
+      brandOn: s.brandOn,
+      accentInk: s.inkLight,
     );
   }
 
@@ -361,6 +414,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
       brandOn: c(brandOn, other.brandOn),
       labelCard: c(labelCard, other.labelCard),
       accentInk: c(accentInk, other.accentInk),
+      accent: c(accent, other.accent),
+      accentDark: c(accentDark, other.accentDark),
+      accentSoft: c(accentSoft, other.accentSoft),
     );
   }
 }

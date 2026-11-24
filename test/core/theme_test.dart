@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/accent_scheme.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
 import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
@@ -276,6 +277,35 @@ void main() {
 
     test('SH_INSET shadow list is non-empty', () {
       expect(AppColors.SH_INSET, isNotEmpty);
+    });
+  });
+
+  group('buildAppTheme tenant accent', () {
+    final scheme = AccentScheme.fromHex('#1565C0')!;
+
+    for (final b in [Brightness.light, Brightness.dark]) {
+      testWidgets('no accent keeps stamp red ($b)', (tester) async {
+        final theme = buildAppTheme(brightness: b);
+        expect(theme.colorScheme.primary, equals(AppColors.Y));
+        expect(theme.colorScheme.primaryContainer, equals(AppColors.YSoft));
+        expect(theme.colorScheme.inversePrimary, equals(AppColors.Y));
+      });
+    }
+
+    testWidgets('light accent drives primary and the palette extension', (tester) async {
+      final theme = buildAppTheme(accent: scheme);
+      expect(theme.colorScheme.primary, equals(const Color(0xFF1565C0)));
+      final pal = theme.extension<AppPalette>()!;
+      expect(pal.accent, equals(scheme.fill));
+      expect(pal.brandOn, equals(scheme.brandOn));
+    });
+
+    testWidgets('dark accent uses the lifted fill and brandOnDark', (tester) async {
+      final theme = buildAppTheme(brightness: Brightness.dark, accent: scheme);
+      final pal = theme.extension<AppPalette>()!;
+      expect(pal.accent, equals(scheme.fillOnDark));
+      expect(theme.colorScheme.primary, equals(scheme.fillOnDark));
+      expect(pal.brandOn, equals(scheme.brandOnDark));
     });
   });
 }
