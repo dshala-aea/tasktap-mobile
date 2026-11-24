@@ -59,7 +59,7 @@ AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 /// file to make it obvious which provider a given assertion is really reading.
 const _testInternalUserId = 'internal-guid-1';
 
-Future<void> _seedDraft(AppDatabase db, String reportId) async {
+Future<void> _seedDraft(AppDatabase db, String reportId, {String? details}) async {
   await db
       .into(db.draftReports)
       .insert(
@@ -68,6 +68,7 @@ Future<void> _seedDraft(AppDatabase db, String reportId) async {
           tenantId: 'tenant-1',
           createdAt: DateTime.utc(2026, 6, 22),
           title: 'Test draft',
+          details: Value(details),
           insertedUserId: 'user-1',
           locationId: '',
           isLocalOnly: const Value(true),
@@ -206,6 +207,39 @@ void main() {
       await _openTile(tester, 'Materiali');
 
       expect(find.text('Aggiungi materiale'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgetsNoSemantics('Dettagli does not count as done when only the pre-filled title exists', (tester) async {
+      await _seedDraft(db, reportId);
+      await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
+      await tester.pumpAndSettle();
+
+      expect(find.text('0 di 4'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgetsNoSemantics('Dettagli counts as done once details text is written', (tester) async {
+      await _seedDraft(db, reportId, details: 'Sostituito il filtro');
+      await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 di 4'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgetsNoSemantics('whitespace-only details does not count as done', (tester) async {
+      await _seedDraft(db, reportId, details: '   \n ');
+      await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
+      await tester.pumpAndSettle();
+
+      expect(find.text('0 di 4'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

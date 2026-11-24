@@ -54,8 +54,8 @@ import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 // GPS auto-capture is a third, independent one-shot concern, deliberately NOT piggybacked on the
 // Dettagli auto-open above. Every real draft-creation entry point (ticket detail's "Crea
 // rapportino", the rapportini list's "Nuovo rapportino", create_draft.dart's
-// createCantiereReportDraft) pre-fills a non-empty title, so dettagliDone is already true on first
-// build and the Dettagli auto-open never fires — which used to mean GPS, wired into
+// createCantiereReportDraft) pre-fills a non-empty title, so the title-empty gate on the Dettagli
+// auto-open is already false on first build and it never fires — which used to mean GPS, wired into
 // StepDettagli.initState, never fired either unless the technician manually tapped an already-
 // checkmarked Dettagli tile. Firing it here instead, gated only by the same preconditions
 // captureGpsSilently's callers already use (preference on, no coordinate yet), makes it reachable
@@ -114,7 +114,9 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     final editorState = ref.watch(reportEditorProvider(reportId));
     final subtitle = editorState.title.isEmpty ? null : editorState.title;
 
-    final dettagliDone = editorState.title.isNotEmpty;
+    // Title alone doesn't count: every draft-creation path pre-fills it, so the tile would read
+    // "done" before the technician wrote anything. Done means real details text exists.
+    final dettagliDone = editorState.title.isNotEmpty && editorState.details.trim().isNotEmpty;
     final oreDone = editorState.staffRows.isNotEmpty;
     final materialiDone = editorState.materialeRows.isNotEmpty || editorState.materialiNotRequired;
 
@@ -145,9 +147,9 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     final controlliDone = ticketLevelDone && assetMissing == 0;
 
     // Once per screen lifetime, after the first frame (a BuildContext for showModalBottomSheet
-    // isn't valid mid-build) — and only for a draft with nothing in Dettagli yet, so reopening an
+    // isn't valid mid-build) — and only for a draft with no title yet, so reopening an
     // already-detailed report to check Materiali doesn't get interrupted by an unwanted sheet.
-    if (!_hasAutoOpenedDettagli && !editorState.isLoading && !dettagliDone) {
+    if (!_hasAutoOpenedDettagli && !editorState.isLoading && editorState.title.isEmpty) {
       _hasAutoOpenedDettagli = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;
