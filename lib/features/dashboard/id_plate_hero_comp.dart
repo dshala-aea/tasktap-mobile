@@ -12,9 +12,9 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// A flat "ID plate" band: `AppColors.Y`, no shadow, no gradient, no blur — the treatment
 /// on-device testing originally approved for cantiere safety-signage legibility, and what this
 /// hero returns to now that the Vetro glass/gradient detour (module-by-module, see this app's own
-/// nav-restructure history) has reached Dashboard's turn. `AppColors.Y` is used directly rather
-/// than through `context.colors`: it's the one theme-invariant brand accent, same status as every
-/// other flat `AppColors.Y` fill in the app (`AppButton.primary`, `AppFab`, the active bottom-nav
+/// nav-restructure history) has reached Dashboard's turn. The accent comes from the tenant
+/// palette via `context.colors.accent`: a fixed-ground fill, same status as every
+/// other flat accent fill in the app (`AppButton.primary`, `AppFab`, the active bottom-nav
 /// tab).
 class IdPlateHeroComp extends StatelessWidget {
   const IdPlateHeroComp({

@@ -906,7 +906,8 @@ class _PunchDeck extends StatelessWidget {
 /// none), no shadow: Il Documento is paper and ink, and the glow this control used to carry was the
 /// one piece of glass on the screen.
 ///
-/// `AppColors.Y` for "starting" and `AppColors.stopDark` for "ending" are theme-invariant on
+/// The tenant accent (`context.colors.accent`) for "starting" and `AppColors.stopDark` for
+/// "ending" sit on a fixed ground (accent rather than `accentInk`) on
 /// purpose: white text/icon on top of them has to stay legible under BOTH themes, and the flipping
 /// `red`/`redSoft` pair is tuned to invert (`redSoft` goes near-white in light mode, `red` goes a
 /// light salmon in dark mode) — either one under fixed white text fails contrast in one theme or
