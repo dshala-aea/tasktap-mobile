@@ -10,23 +10,28 @@ import '../api/dio_client.dart';
 
 /// The tenant identity the app shows: logo and company name from `GET /api/branding`.
 ///
-/// The primary colour is deliberately not read here: `AppColors.Y` is hardcoded across the app, so
-/// a per-tenant colour needs its own pass over those call sites (see the web shell for the colour
-/// side of this feature).
+/// The primary colour IS read here (raw, trimmed hex); see `AccentScheme` for how it is validated
+/// and turned into the app accent.
 class TenantBranding {
-  const TenantBranding({this.logoUrl, this.companyName});
+  const TenantBranding({this.logoUrl, this.companyName, this.primaryColor});
 
   final String? logoUrl;
   final String? companyName;
+  final String? primaryColor;
 
-  bool get isEmpty => logoUrl == null && companyName == null;
+  bool get isEmpty => logoUrl == null && companyName == null && primaryColor == null;
 
   factory TenantBranding.fromJson(Map<String, dynamic> json) => TenantBranding(
     logoUrl: _clean(json['logoUrl']),
     companyName: _clean(json['companyName']),
+    primaryColor: _clean(json['primaryColor']),
   );
 
-  Map<String, dynamic> toJson() => {'logoUrl': logoUrl, 'companyName': companyName};
+  Map<String, dynamic> toJson() => {
+    'logoUrl': logoUrl,
+    'companyName': companyName,
+    'primaryColor': primaryColor,
+  };
 
   static String? _clean(Object? v) {
     if (v is! String) return null;

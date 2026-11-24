@@ -37,6 +37,29 @@ void main() {
     });
   });
 
+  group('TenantBranding.primaryColor', () {
+    test('keeps the colour and trims it', () {
+      final b = TenantBranding.fromJson({'logoUrl': 'x', 'primaryColor': ' #C03221 '});
+      expect(b.primaryColor, '#C03221');
+    });
+
+    test('is null when absent, blank or not a string', () {
+      expect(TenantBranding.fromJson({'logoUrl': 'x'}).primaryColor, isNull);
+      expect(TenantBranding.fromJson({'primaryColor': '   '}).primaryColor, isNull);
+      expect(TenantBranding.fromJson({'primaryColor': 5}).primaryColor, isNull);
+    });
+
+    test('toJson round trips', () {
+      final b = TenantBranding.fromJson({'logoUrl': 'x', 'primaryColor': '#C03221'});
+      expect(TenantBranding.fromJson(b.toJson()).primaryColor, '#C03221');
+      expect(b.toJson()['primaryColor'], '#C03221');
+    });
+
+    test('a colour alone makes the branding non-empty', () {
+      expect(const TenantBranding(primaryColor: '#C03221').isEmpty, isFalse);
+    });
+  });
+
   group('TenantBranding.isLoadableUrl', () {
     test('accepts absolute http and https URLs only', () {
       expect(TenantBranding.isLoadableUrl('https://cdn.test/a.png'), isTrue);
@@ -65,6 +88,15 @@ void main() {
       final failing = TenantBrandingRepository(_dio(500, '{"title":"boom"}'));
       expect(await failing.fetch(), isNull);
       expect((await failing.readCached())?.companyName, 'Acme');
+    });
+
+    test('readCached parses an old cache entry without a colour', () async {
+      SharedPreferences.setMockInitialValues({
+        'tenant_branding_v1': '{"logoUrl":null,"companyName":"Acme"}',
+      });
+      final cached = await TenantBrandingRepository(_dio(500, '{}')).readCached();
+      expect(cached?.companyName, 'Acme');
+      expect(cached?.primaryColor, isNull);
     });
 
     test('readCached is null when nothing was stored', () async {
