@@ -5,7 +5,6 @@ import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -53,7 +52,7 @@ class ProfiloScreen extends ConsumerWidget {
                           // Avatar
                           CircleAvatar(
                             radius: 28,
-                            backgroundColor: AppColors.Y,
+                            backgroundColor: context.colors.accent,
                             child: Text(
                               _initials(user.displayName ?? user.email),
                               style: AppTextStyles.titleLarge.copyWith(

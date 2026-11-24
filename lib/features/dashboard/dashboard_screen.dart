@@ -264,7 +264,7 @@ class _ClockInPrompt extends ConsumerWidget {
     if (withheld) {
       return AppCard(
         padding: EdgeInsets.zero,
-        backgroundColor: AppColors.Y,
+        backgroundColor: context.colors.accent,
         onTap: () => context.push(AppRoutes.timbraQr),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.base),
@@ -305,7 +305,7 @@ class _ClockInPrompt extends ConsumerWidget {
     // exception (see the batch's own colour rule) — it's this app's one theme-invariant accent.
     return AppCard(
       padding: EdgeInsets.zero,
-      backgroundColor: AppColors.Y,
+      backgroundColor: context.colors.accent,
       onTap: busy ? null : () => _punchIn(context, ref),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.base),

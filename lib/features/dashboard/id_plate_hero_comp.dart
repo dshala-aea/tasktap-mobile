@@ -59,7 +59,7 @@ class IdPlateHeroComp extends StatelessWidget {
     ).format(DateTime.now()).toUpperCase();
 
     return DecoratedBox(
-      decoration: const BoxDecoration(color: AppColors.Y),
+      decoration: BoxDecoration(color: context.colors.accent),
       child: SafeArea(
         bottom: false,
         child: Padding(

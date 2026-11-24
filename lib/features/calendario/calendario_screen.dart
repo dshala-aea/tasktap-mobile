@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'calendario_providers.dart';
@@ -383,9 +382,9 @@ class _WeekDayScroller extends ConsumerWidget {
                       height: 32,
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppColors.Y
+                            ? context.colors.accent
                             : isToday
-                            ? AppColors.Y.withAlpha(31)
+                            ? context.colors.accent.withAlpha(31)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -421,7 +420,7 @@ class _WeekDayScroller extends ConsumerWidget {
                         height: 5,
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? AppColors.Y
+                              ? context.colors.accent
                               : context.colors.amber,
                           shape: BoxShape.circle,
                         ),

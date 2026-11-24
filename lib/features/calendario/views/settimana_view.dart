@@ -11,7 +11,6 @@ import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
 
-import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -76,7 +75,7 @@ class SettimanaView extends ConsumerWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   child: AppTappable(
                     onTap: () => onDayTap?.call(day),
-                    color: isToday ? AppColors.Y : Colors.transparent,
+                    color: isToday ? context.colors.accent : Colors.transparent,
                     borderRadius: AppRack.insetShape,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,

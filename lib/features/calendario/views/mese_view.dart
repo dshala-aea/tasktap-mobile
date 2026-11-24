@@ -9,7 +9,6 @@ import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
 
-import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -139,13 +138,13 @@ class MeseView extends ConsumerWidget {
                           child: AppTappable(
                             onTap: () => onDayTap?.call(day),
                             color: isSelected
-                                ? AppColors.Y
+                                ? context.colors.accent
                                 : isToday
-                                ? AppColors.Y.withAlpha(31)
+                                ? context.colors.accent.withAlpha(31)
                                 : Colors.transparent,
                             borderRadius: AppRack.insetShape,
                             border: isToday && !isSelected
-                                ? Border.all(color: AppColors.Y, width: 1.5)
+                                ? Border.all(color: context.colors.accent, width: 1.5)
                                 : null,
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,

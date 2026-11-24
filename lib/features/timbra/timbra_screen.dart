@@ -946,7 +946,7 @@ class _PunchKeyState extends State<_PunchKey> {
     final blocked = widget.guard.blocked;
     final enabled = !widget.isLoading && !blocked;
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    final fillColor = isOnShift ? AppColors.stopDark : AppColors.Y;
+    final fillColor = isOnShift ? AppColors.stopDark : context.colors.accent;
 
     // Dimmed and inert rather than hidden: a button that disappears leaves the user with no idea
     // what happened, and the reason is in the banner above.

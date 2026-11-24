@@ -42,7 +42,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_vetro_palette.dart';
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart';
@@ -1412,8 +1411,8 @@ class _ChiTimbraPill extends StatelessWidget {
     return Expanded(
       child: AppTappable(
         onTap: onTap,
-        color: selected ? AppColors.Y.withAlpha(31) : Colors.transparent,
-        border: Border.all(color: selected ? AppColors.Y : context.colors.borderLight),
+        color: selected ? context.colors.accent.withAlpha(31) : Colors.transparent,
+        border: Border.all(color: selected ? context.colors.accent : context.colors.borderLight),
         borderRadius: AppRack.insetShape,
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: AppSpacing.xs),
         child: Text(
