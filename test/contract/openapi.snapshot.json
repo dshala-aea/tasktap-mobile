@@ -38323,11 +38323,13 @@
             "description": "Recipient email addresses. Takes priority over string? SendReportEmailRequest.Email when non-empty."
           },
           "message": {
+            "maxLength": 5000,
+            "minLength": 0,
             "type": [
               "null",
               "string"
             ],
-            "description": "Additional message."
+            "description": "Additional message (max 5,000 characters, 50 non-blank lines; sent as escaped paragraphs)."
           }
         },
         "description": "Request model for sending report email."
@@ -38514,7 +38516,7 @@
             "type": "string"
           }
         },
-        "description": "Request body for Task\u0026lt;IActionResult\u0026gt; SmtpController.Test(SmtpTestRequest request, CancellationToken ct) \u2014 the address to send the test\n    email to."
+        "description": "Request body for Task\u0026lt;IActionResult\u0026gt; SmtpController.Test(SmtpTestRequest request, SmtpTestMailBuilder testMail, CancellationToken ct) \u2014 the address to send the test\n    email to."
       },
       "Squadra": {
         "type": "object",
