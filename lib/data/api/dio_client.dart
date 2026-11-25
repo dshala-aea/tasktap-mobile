@@ -122,6 +122,9 @@ final dioProvider = Provider<Dio>((ref) {
 class AuthInterceptor extends Interceptor {
   AuthInterceptor({required this.dio, required this.authRepo});
 
+  /// `RequestOptions.extra` key marking a request as anonymous (no bearer, no refresh on 401).
+  static const noAuthExtra = noAuthExtraKey;
+
   final Dio dio;
   final IAuthRepository authRepo;
 
@@ -133,6 +136,9 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    // Requests marked `extra: {'noAuth': true}` (the anonymous version-policy probe) never carry
+    // the bearer token.
+    if (options.extra[noAuthExtra] == true) return handler.next(options);
     final user = authRepo.currentUser;
     if (user != null) {
       options.headers['Authorization'] = 'Bearer ${user.accessToken}';
@@ -146,6 +152,10 @@ class AuthInterceptor extends Interceptor {
     ErrorInterceptorHandler handler,
   ) async {
     final response = err.response;
+
+    // An anonymous request cannot say anything about the session: a 401 on it must never refresh
+    // the token or end the session.
+    if (err.requestOptions.extra[noAuthExtra] == true) return handler.next(err);
 
     // Only handle 401 Unauthorized — and only once (not on retry).
     if (response?.statusCode == 401 &&

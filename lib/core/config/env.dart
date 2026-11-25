@@ -45,11 +45,11 @@ abstract final class Env {
     defaultValue: 'com.advantedge.tasktap.tasktapmobile://callback',
   );
 
-  /// Extra host suffixes (comma-separated, e.g. `id.example.com,example.org`) a server-provided
-  /// OIDC issuer may live under, on top of the compiled allow-list and the compile-time issuer's own
-  /// host. See `issuer_allowlist.dart`.
-  static const String oidcIssuerAllowedSuffixes = String.fromEnvironment(
-    'OIDC_ISSUER_ALLOWED_SUFFIXES',
+  /// Extra EXACT hosts (comma-separated, e.g. `id.example.com,idp.example.org`) a server-provided
+  /// OIDC issuer may use, on top of the compiled list and the compile-time issuer's own host. No
+  /// subdomain matching. See `issuer_allowlist.dart`.
+  static const String oidcIssuerAllowedHosts = String.fromEnvironment(
+    'OIDC_ISSUER_ALLOWED_HOSTS',
     defaultValue: '',
   );
 

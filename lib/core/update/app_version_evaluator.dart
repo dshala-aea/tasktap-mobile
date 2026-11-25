@@ -23,8 +23,9 @@ abstract final class AppVersionEvaluator {
   static const _maxLength = 64;
 
   // ASCII digits only ([0-9], not \d) and `$` anchors at the very end: no full-width digits, no
-  // trailing newline, no pre-release suffix.
-  static final _pattern = RegExp(r'^([0-9]{1,9})\.([0-9]{1,9})\.([0-9]{1,9})(?:\+([0-9]{1,9}))?$');
+  // trailing newline, no pre-release suffix. The build group allows 10 digits: Android release
+  // builds use `--build-number=$(date +%s)` (epoch seconds, ~1.8e9). Dart ints are 64-bit.
+  static final _pattern = RegExp(r'^([0-9]{1,9})\.([0-9]{1,9})\.([0-9]{1,9})(?:\+([0-9]{1,10}))?$');
 
   static ParsedVersion? tryParse(String? v) {
     if (v == null || v.isEmpty || v.length > _maxLength) return null;

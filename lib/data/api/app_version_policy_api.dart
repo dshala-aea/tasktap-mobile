@@ -1,6 +1,8 @@
 // dart format width=100
 import 'package:dio/dio.dart';
 
+import 'app_version_interceptor.dart' show noAuthExtraKey;
+
 /// The non-secret OIDC settings the policy endpoint carries (`auth` block). Every field is
 /// nullable and unvalidated here: `AuthConfigSource` decides whether the block is usable.
 class ServerAuthConfig {
@@ -83,7 +85,14 @@ class AppVersionPolicyApi {
       '/api/app/version-policy',
       queryParameters: {'platform': platform},
       // Launch/resume refresh: fail fast, it is background work and the cache covers a miss.
+      // Anonymous: no bearer token is sent, and a 401 here must not refresh or end the session
+      // (`AuthInterceptor` skips requests carrying the noAuth extra). No redirects are followed,
+      // and only a 200 counts. The version/platform headers and the gate interceptor still apply.
       options: Options(
+        extra: {noAuthExtraKey: true},
+        followRedirects: false,
+        maxRedirects: 0,
+        validateStatus: (status) => status == 200,
         sendTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 10),
       ),

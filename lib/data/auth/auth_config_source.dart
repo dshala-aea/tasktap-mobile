@@ -4,7 +4,7 @@ import '../../core/config/issuer_allowlist.dart';
 import '../../core/update/app_version_policy_repository.dart';
 import '../api/app_version_policy_api.dart';
 
-export '../../core/config/issuer_allowlist.dart' show kAllowedIssuerHostSuffixes;
+export '../../core/config/issuer_allowlist.dart' show kAllowedIssuerHosts;
 
 /// The OIDC settings one sign-in / refresh runs against. Non-secret by construction: a public
 /// (PKCE) client has no secret, and nothing here is ever a token.
@@ -43,8 +43,8 @@ class AuthConfig {
 ///
 /// Rules:
 /// - issuer must pass `validatedIssuer` (https, default port, no user-info/query/fragment, no IP
-///   literal, host under the COMPILED allow-list [kAllowedIssuerHostSuffixes] + optional
-///   `OIDC_ISSUER_ALLOWED_SUFFIXES` + the compile-time issuer's host: a poisoned policy cannot
+///   literal, host under the COMPILED allow-list [kAllowedIssuerHosts] + optional
+///   `OIDC_ISSUER_ALLOWED_HOSTS` + the compile-time issuer's host: a poisoned policy cannot
 ///   redirect sign-in to another host), and clientId must be non-empty; otherwise the WHOLE block is ignored (issuer and client id are
 ///   never mixed between the server and the dart-defines).
 /// - redirectUri: the native redirect scheme is registered at build time (AndroidManifest
@@ -56,8 +56,8 @@ class AuthConfigSource {
     Future<AppVersionPolicy?> Function()? readPolicy,
     this.compileTime = AuthConfig.compileTime,
     this.readTimeout = const Duration(seconds: 2),
-    List<String>? extraSuffixes,
-  }) : _extraSuffixes = extraSuffixes,
+    List<String>? extraHosts,
+  }) : _extraHosts = extraHosts,
        _readPolicy = readPolicy ?? AppVersionPolicyStore().readPolicy {
     _current = compileTime;
   }
@@ -65,7 +65,7 @@ class AuthConfigSource {
   /// The dart-define values, used when the server config is absent or invalid.
   final AuthConfig compileTime;
   final Future<AppVersionPolicy?> Function() _readPolicy;
-  final List<String>? _extraSuffixes;
+  final List<String>? _extraHosts;
 
   /// A cache read slower than this counts as "no cache" (a stuck store must not block sign-in).
   final Duration readTimeout;
@@ -95,7 +95,7 @@ class AuthConfigSource {
     final issuer = validatedIssuer(
       server.issuer,
       compileTimeIssuer: compileTime.issuer,
-      extraSuffixes: _extraSuffixes,
+      extraHosts: _extraHosts,
     );
     final clientId = server.clientId?.trim() ?? '';
     if (issuer == null || clientId.isEmpty) return compileTime;

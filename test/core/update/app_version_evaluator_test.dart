@@ -41,6 +41,17 @@ void main() {
       });
     }
 
+    test('Android epoch-second build numbers (10 digits) are judged', () {
+      const v = AppVersionVerdict.values;
+      expect(AppVersionEvaluator.evaluate('1.0.11+1795000000', '1.0.12', null), v[2]);
+      expect(AppVersionEvaluator.evaluate('1.0.12+1795000000', '1.0.12', null), v[0]);
+      expect(AppVersionEvaluator.evaluate('1.0.12+1795000000', '1.0.12+1795000001', null), v[2]);
+      expect(AppVersionEvaluator.evaluate('1.0.12+1795000001', '1.0.12+1795000000', null), v[0]);
+      // 11 digits: unparseable, fail open.
+      expect(AppVersionEvaluator.evaluate('1.0.0+17950000000', '9.0.0', null), v[0]);
+      expect(AppVersionEvaluator.tryParse('1.0.0+4000000000')!.build, 4000000000);
+    });
+
     test('tryParse reads X.Y.Z and X.Y.Z+N', () {
       final a = AppVersionEvaluator.tryParse('1.0.11+42')!;
       expect((a.major, a.minor, a.patch, a.build), (1, 0, 11, 42));
@@ -79,6 +90,32 @@ void main() {
         resolveStoreUri(policyUrl: 'https://apps.apple.com/it/app/tasktap/id1', isIos: true),
         Uri.parse('https://apps.apple.com/it/app/tasktap/id1'),
       );
+    });
+
+    test('only official store hosts are accepted, case-insensitively', () {
+      for (final good in [
+        'https://apps.apple.com/it/app/x/id1',
+        'https://itunes.apple.com/app/id1',
+        'https://play.google.com/store/apps/details?id=a',
+        'https://PLAY.Google.com/store',
+      ]) {
+        expect(resolveStoreUri(policyUrl: good, isIos: true), Uri.parse(good), reason: good);
+      }
+      for (final bad in [
+        'https://apps.apple.com.evil.example',
+        'https://play.google.com@evil.example',
+        'https://user@apps.apple.com/x',
+        'https://evil.example/app',
+        'https://evilapps.apple.com',
+        'http://apps.apple.com/x',
+        'market://details?id=x',
+      ]) {
+        expect(
+          resolveStoreUri(policyUrl: bad, isIos: true),
+          Uri.parse('https://apps.apple.com/'),
+          reason: bad,
+        );
+      }
     });
 
     test('non-https or blank policy url falls back', () {

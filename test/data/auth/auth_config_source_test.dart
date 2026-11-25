@@ -72,7 +72,7 @@ void main() {
     Future<AuthConfig> load(String issuer, {List<String>? extra, AuthConfig? defines}) =>
         AuthConfigSource(
           compileTime: defines ?? _defines,
-          extraSuffixes: extra,
+          extraHosts: extra,
           readPolicy: () async =>
               AppVersionPolicy(auth: ServerAuthConfig(issuer: issuer, clientId: 'c')),
         ).load();
@@ -83,6 +83,9 @@ void main() {
       'https://advantedgeautomation.com.evil.example',
       'https://notadvantedgeautomation.com',
       'https://id.advantedgeautomation.com:8443',
+      'https://evil.advantedgeautomation.com',
+      'https://x.tasktap.it',
+      'https://tasktap.it',
       'https://127.0.0.1',
       'https://[::1]',
     ]) {
@@ -95,12 +98,10 @@ void main() {
 
     for (final good in [
       'https://id.advantedgeautomation.com',
-      'https://advantedgeautomation.com',
       'https://auth.tasktap.it',
       'https://ID.AdvantEdgeAutomation.COM',
       'https://id.advantedgeautomation.com:443',
       'https://define.test',
-      'https://sub.define.test',
     ]) {
       test('accepts $good', () async {
         final cfg = await load(good);
@@ -110,14 +111,16 @@ void main() {
     }
 
     test('the host is lowercased in the resolved issuer', () async {
-      expect((await load('https://ID.TaskTap.IT/')).issuer, 'https://id.tasktap.it');
+      expect((await load('https://AUTH.TaskTap.IT/')).issuer, 'https://auth.tasktap.it');
     });
 
-    test('the OIDC_ISSUER_ALLOWED_SUFFIXES list extends the allow-list', () async {
-      expect((await load('https://idp.partner.example', extra: ['partner.example'])).fromServer,
+    test('the OIDC_ISSUER_ALLOWED_HOSTS list adds EXACT hosts only', () async {
+      expect((await load('https://idp.partner.example', extra: ['idp.partner.example'])).fromServer,
           isTrue);
+      expect((await load('https://x.idp.partner.example', extra: ['idp.partner.example'])).fromServer,
+          isFalse);
       expect((await load('https://idp.partner.example')).fromServer, isFalse);
-      expect(parseIssuerSuffixes(' A.Example, ,.b.example ,'), ['a.example', 'b.example']);
+      expect(parseIssuerHosts(' A.Example, ,b.example ,'), ['a.example', 'b.example']);
     });
 
     test('a previously cached bad block is ignored on read', () async {

@@ -4,6 +4,11 @@ import 'package:dio/dio.dart';
 
 import '../../core/update/update_required_state.dart';
 
+/// `RequestOptions.extra` key marking a request as anonymous: `AuthInterceptor` neither attaches the
+/// bearer token nor reacts to a 401 on it. (Lives here, not in dio_client.dart, so the policy API can
+/// use it without importing the provider graph.)
+const noAuthExtraKey = 'noAuth';
+
 /// Header the API reads to learn which app build is calling it.
 const appVersionHeader = 'X-App-Version';
 

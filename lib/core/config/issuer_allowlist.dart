@@ -1,28 +1,28 @@
 // dart format width=100
 import 'env.dart';
 
-/// Hosts (and their subdomains) a server-provided OIDC issuer may live under. Compiled in on
+/// The IdP hosts a server-provided OIDC issuer may use: EXACT hosts, no subdomain matching (a
+/// dangling record on some other subdomain must not be able to receive sign-in). Compiled in on
 /// purpose: the policy endpoint is reachable by anyone on the path to the API host, so a policy
 /// alone must never be able to point sign-in (and the refresh token) at an arbitrary host.
-const kAllowedIssuerHostSuffixes = ['advantedgeautomation.com', 'tasktap.it'];
+const kAllowedIssuerHosts = ['auth.tasktap.it', 'id.advantedgeautomation.com'];
 
-/// Parses a comma-separated suffix list (the `OIDC_ISSUER_ALLOWED_SUFFIXES` dart-define):
-/// trimmed, lowercased, empties and leading dots dropped.
-List<String> parseIssuerSuffixes(String raw) => [
+/// Parses a comma-separated host list (the `OIDC_ISSUER_ALLOWED_HOSTS` dart-define): trimmed,
+/// lowercased, empties dropped.
+List<String> parseIssuerHosts(String raw) => [
   for (final part in raw.split(','))
-    if (part.trim().replaceFirst(RegExp(r'^\.+'), '').isNotEmpty)
-      part.trim().replaceFirst(RegExp(r'^\.+'), '').toLowerCase(),
+    if (part.trim().isNotEmpty) part.trim().toLowerCase(),
 ];
 
 /// The issuer to use (trimmed, lowercase host, no trailing slash), or null when [raw] is not an
 /// acceptable server-provided issuer: https only, default port only, no user-info/query/fragment,
-/// no IP literal, and a host that equals an allowed entry or is a subdomain of one (`.` boundary:
-/// `eviladvantedgeautomation.com` fails). Allowed = [kAllowedIssuerHostSuffixes] + [extraSuffixes]
-/// + the host of [compileTimeIssuer].
+/// no IP literal, and a lowercased host EXACTLY equal to an allowed host. Allowed =
+/// [kAllowedIssuerHosts] + [extraHosts] (default: the `OIDC_ISSUER_ALLOWED_HOSTS` define) + the
+/// host of [compileTimeIssuer].
 String? validatedIssuer(
   String? raw, {
   required String compileTimeIssuer,
-  List<String>? extraSuffixes,
+  List<String>? extraHosts,
 }) {
   final text = raw?.trim() ?? '';
   if (text.isEmpty) return null;
@@ -36,14 +36,13 @@ String? validatedIssuer(
   if (host.contains(':') || RegExp(r'^[0-9.]+$').hasMatch(host)) return null;
 
   final allowed = <String>[
-    ...kAllowedIssuerHostSuffixes,
-    ...(extraSuffixes ?? parseIssuerSuffixes(Env.oidcIssuerAllowedSuffixes)),
+    ...kAllowedIssuerHosts,
+    ...(extraHosts ?? parseIssuerHosts(Env.oidcIssuerAllowedHosts)),
   ];
   final compiledHost = Uri.tryParse(compileTimeIssuer.trim())?.host.toLowerCase() ?? '';
   if (compiledHost.isNotEmpty) allowed.add(compiledHost);
 
-  final ok = allowed.any((e) => host == e || host.endsWith('.$e'));
-  if (!ok) return null;
+  if (!allowed.contains(host)) return null;
   return normalizeIssuerString(text);
 }
 
