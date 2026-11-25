@@ -273,6 +273,49 @@ void main() {
     expect(pending.single.syncError, isNotEmpty);
   });
 
+  test('a 426 keeps the rows pending and unmarked, tells the app, and stops sending until a '
+      'manual sync', () async {
+    await repo.start(ticketId: 't1', userId: 'u1');
+    var updateRequired = true;
+    var requests = 0;
+    adapter = _Adapter((options) async {
+      requests++;
+      if (!updateRequired) return _echoAll(options);
+      return ResponseBody.fromString(
+        jsonEncode({'code': 'app_update_required'}),
+        426,
+        headers: _json,
+      );
+    });
+    var told = 0;
+    final svc = TicketTimerSyncService(
+      repo: repo,
+      apiClient: TicketTimerApiClient(Dio()..httpClientAdapter = adapter),
+      businessTime: BusinessTime.fallback(),
+      clock: () => now,
+      onUpdateRequired: () => told++,
+    );
+
+    await svc.syncNow();
+
+    expect(told, 1);
+    expect(requests, 1);
+    final pending = await repo.pending();
+    expect(pending, hasLength(1), reason: 'hours are never discarded');
+    expect(pending.single.syncError, isNull, reason: 'a 426 refuses the build, not the hours');
+
+    // Latched: an automatic run does not even reach the network.
+    updateRequired = false;
+    await svc.syncNow();
+    expect(requests, 1);
+    expect(await repo.pending(), hasLength(1));
+
+    // A manual sync releases the latch and the hours go through.
+    await svc.syncNow(manual: true);
+    expect(requests, 2);
+    expect(await repo.pending(), isEmpty);
+  });
+
   test('a manual sync retries the rows a refusal held', () async {
     await repo.start(ticketId: 't1', userId: 'u1');
     adapter = _Adapter(

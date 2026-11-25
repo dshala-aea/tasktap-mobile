@@ -281,6 +281,38 @@ void main() {
       await _svc(_Repo([]), api).syncNow();
       expect(api.punchCalls, isEmpty);
     });
+
+    test('a 426 keeps every tap pending (not retired, no notice) and holds sending until a '
+        'manual sync', () async {
+      final repo = _Repo([_ws('a', 'ingresso', _t), _ws('b', 'fine', _t.add(const Duration(hours: 8)))]);
+      final api = _Api()..failWith = _http(426);
+      final notices = <String>[];
+      var told = 0;
+      final svc = TimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        punchPipelineEnabled: () async => true,
+        onNotice: notices.add,
+        clock: () => DateTime.utc(2026, 11, 19, 18),
+        onUpdateRequired: () => told++,
+      );
+
+      await svc.syncNow();
+
+      expect(told, 1);
+      expect(repo.failed, isEmpty, reason: 'a 426 is not a refusal of the taps');
+      expect(repo.synced, isEmpty);
+      expect(notices, isEmpty);
+
+      // Latched: the server would answer fine now, but an automatic run does not even ask.
+      api.failWith = null;
+      await svc.syncNow();
+      expect(api.punchCalls, isEmpty);
+
+      await svc.syncNow(manual: true);
+      expect(api.punchCalls.single.map((e) => e.clientEventId), ['a', 'b']);
+      expect(repo.synced, ['a', 'b']);
+    });
   });
 
   group('punchRejectionMessage', () {

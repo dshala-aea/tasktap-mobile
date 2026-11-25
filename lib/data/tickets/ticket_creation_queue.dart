@@ -2,6 +2,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../../core/time/business_time.dart' show parseDateOnly;
+import '../../core/update/update_required_state.dart';
 import '../../core/utils/error_message.dart';
 import '../../features/ticket/ticket_api_client.dart';
 import '../api/problem_details.dart';
@@ -50,7 +51,13 @@ class TicketCreationQueue {
     required PendingTicketRepository repo,
     required TicketApiClient apiClient,
     void Function()? onSubmitted,
-  }) : _repo = repo,
+    void Function()? onUpdateRequired,
+    bool Function()? isUpdateRequired,
+  }) : _updateLatch = UpdateRequiredLatch(
+         markRequired: onUpdateRequired,
+         isRequired: isUpdateRequired,
+       ),
+       _repo = repo,
        _apiClient = apiClient,
        _onSubmitted = onSubmitted;
 
@@ -64,6 +71,10 @@ class TicketCreationQueue {
   final void Function()? _onSubmitted;
 
   bool _running = false;
+
+  /// Trips on a 426 (this build is below the minimum): the row goes back to `pendingSync` and the
+  /// sweeps stop until restart, the app-wide state clearing, or a manual [retry].
+  final UpdateRequiredLatch _updateLatch;
 
   /// The request fields whose rejection this client can actually repair — both re-pickable in the
   /// wizard and writable back to the queue row. Not in this set means the row waits for nothing: it
@@ -237,6 +248,7 @@ class TicketCreationQueue {
   /// row has no flag left, so it comes back through here like any other.
   Future<void> processAll() async {
     if (_running) return;
+    if (_updateLatch.blocked) return; // a 426 already answered: every send would be refused
     _running = true;
     try {
       final pending = [
@@ -245,6 +257,7 @@ class TicketCreationQueue {
       ];
       for (final t in pending) {
         await _attempt(t.id);
+        if (_updateLatch.blocked) break;
       }
     } finally {
       _running = false;
@@ -254,7 +267,10 @@ class TicketCreationQueue {
   /// Explicit, user-initiated retry — the "Riprova" button. Same call as the
   /// automatic path; it exists so a technician who does not want to wait for
   /// the next reconnect can push a ticket through now.
-  Future<TicketCreationOutcome> retry(String id) => _attempt(id);
+  Future<TicketCreationOutcome> retry(String id) {
+    _updateLatch.release();
+    return _attempt(id);
+  }
 
   Future<TicketCreationOutcome> _attempt(String id) async {
     final t = await _repo.getById(id);
@@ -295,6 +311,13 @@ class TicketCreationQueue {
       _onSubmitted?.call();
       return TicketCreationOutcome.submitted(id, serverId);
     } catch (e) {
+      // A 426 refuses this BUILD, not the ticket: it goes back to waiting (`pendingSync`, no error
+      // text, `repairableField` untouched) rather than `failed`. The create carries `clientId`, so
+      // sending it again once the app is updated is safe.
+      if (_updateLatch.trip(e)) {
+        await _repo.updateState(id: id, state: PendingTicketState.pendingSync, clearError: true);
+        return TicketCreationOutcome.queuedOffline(id);
+      }
       // NEVER delete on failure — keep the ticket for a manual retry.
       //
       // The stored string is rendered verbatim on the ticket list ("Invio non riuscito: …"), so it

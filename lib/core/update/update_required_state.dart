@@ -84,3 +84,44 @@ bool isUpdateRequiredResponse(Response<dynamic>? response) {
 /// bad", so the item must stay queued with no attempt consumed.
 bool isUpdateRequiredError(Object? error) =>
     error is DioException && isUpdateRequiredResponse(error.response);
+
+/// Per-queue latch for the update-required answer.
+///
+/// An offline queue that gets a 426 must keep every item exactly as it was (no attempt spent, no
+/// `failed` state, no error text, nothing deleted) and must stop sending until the app restarts
+/// or the app-wide state clears: every further attempt would be refused the same way. The queue
+/// calls [trip] from its catch block and checks [blocked] before sending.
+///
+/// [markRequired] tells the app-wide state (a call that bypassed the Dio interceptor would not
+/// have); [isRequired] lets the latch release itself when that state clears. Both are optional so a
+/// queue built without them (tests) still latches for the life of the instance.
+class UpdateRequiredLatch {
+  UpdateRequiredLatch({void Function()? markRequired, bool Function()? isRequired})
+    : _markRequired = markRequired,
+      _isRequired = isRequired;
+
+  final void Function()? _markRequired;
+  final bool Function()? _isRequired;
+  bool _tripped = false;
+
+  /// True while this queue must not send. Releases itself once the app-wide state has cleared.
+  bool get blocked {
+    if (!_tripped) return false;
+    final isRequired = _isRequired;
+    if (isRequired != null && !isRequired()) _tripped = false;
+    return _tripped;
+  }
+
+  /// Latches and returns true when [error] is the update-required answer; false (and no effect)
+  /// for anything else, so it can sit first in a catch block as an early branch.
+  bool trip(Object? error) {
+    if (!isUpdateRequiredError(error)) return false;
+    _tripped = true;
+    _markRequired?.call();
+    return true;
+  }
+
+  /// Lets the next attempt through (a manual retry / manual sync): if the server still refuses, the
+  /// attempt trips the latch again at no cost.
+  void release() => _tripped = false;
+}

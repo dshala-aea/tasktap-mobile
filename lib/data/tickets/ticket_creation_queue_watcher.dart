@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/update/update_required_state.dart';
 import '../../features/ticket/ticket_api_client.dart';
 import '../sync/connectivity_provider.dart';
 import '../sync/sync_service.dart';
@@ -34,6 +35,8 @@ final ticketCreationQueueProvider = Provider<TicketCreationQueue>((ref) {
     repo: repo,
     apiClient: apiClient,
     onSubmitted: () => ref.read(syncProvider.notifier).performSync(),
+    onUpdateRequired: () => ref.read(updateRequiredProvider.notifier).markRequired(),
+    isUpdateRequired: () => ref.read(updateRequiredProvider),
   );
 });
 

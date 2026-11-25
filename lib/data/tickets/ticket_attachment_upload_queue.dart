@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:uuid/uuid.dart';
 
+import '../../core/update/update_required_state.dart';
 import '../../core/utils/error_message.dart';
 import '../../features/ticket/ticket_detail_api_client.dart';
 import 'pending_ticket_attachment_repository.dart';
@@ -34,7 +35,13 @@ class TicketAttachmentUploadQueue {
     required PendingTicketAttachmentRepository repo,
     required TicketDetailApiClient apiClient,
     void Function(String ticketId)? onUploaded,
-  }) : _repo = repo,
+    void Function()? onUpdateRequired,
+    bool Function()? isUpdateRequired,
+  }) : _updateLatch = UpdateRequiredLatch(
+         markRequired: onUpdateRequired,
+         isRequired: isUpdateRequired,
+       ),
+       _repo = repo,
        _apiClient = apiClient,
        _onUploaded = onUploaded;
 
@@ -47,6 +54,10 @@ class TicketAttachmentUploadQueue {
   final void Function(String ticketId)? _onUploaded;
 
   bool _running = false;
+
+  /// Trips on a 426 (this build is below the minimum): the row goes back to `pendingSync` and the
+  /// sweeps stop until restart, the app-wide state clearing, or a manual [retry].
+  final UpdateRequiredLatch _updateLatch;
 
   /// Persist the attachment locally, then — only if [isOnline] — attempt to send it immediately.
   /// When offline, the row is left in `pendingSync` for [processAll] to pick up on reconnect.
@@ -105,11 +116,13 @@ class TicketAttachmentUploadQueue {
   /// the class doc comment for why `failed` is excluded. Called on reconnect and on app start.
   Future<void> processAll() async {
     if (_running) return;
+    if (_updateLatch.blocked) return; // a 426 already answered: every send would be refused
     _running = true;
     try {
       final pending = await _repo.getByState(PendingTicketAttachmentState.pendingSync);
       for (final a in pending) {
         await _attempt(a.id);
+        if (_updateLatch.blocked) break;
       }
     } finally {
       _running = false;
@@ -117,7 +130,10 @@ class TicketAttachmentUploadQueue {
   }
 
   /// Explicit, user-initiated retry — the "Riprova" action on a failed row.
-  Future<TicketAttachmentUploadOutcome> retry(String id) => _attempt(id);
+  Future<TicketAttachmentUploadOutcome> retry(String id) {
+    _updateLatch.release();
+    return _attempt(id);
+  }
 
   Future<TicketAttachmentUploadOutcome> _attempt(String id) async {
     final a = await _repo.getById(id);
@@ -147,7 +163,9 @@ class TicketAttachmentUploadQueue {
       // of reporting a server rejection that never happened. Narrower than "no response" on
       // purpose — a send/receive timeout may be an upload the server already stored, and with no
       // idempotency key on this endpoint that row has to stay a manual retry.
-      if (neverReachedServer(e)) {
+      // A 426 is answered by the version gate before the upload is processed, so the file was not
+      // stored: the same "never reached the server" outcome, safe to resend after the update.
+      if (_updateLatch.trip(e) || neverReachedServer(e)) {
         await _repo.updateState(
           id: id,
           state: PendingTicketAttachmentState.pendingSync,

@@ -2,6 +2,7 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/update/update_required_state.dart';
 import '../api/dio_client.dart';
 import '../reports/customer_copy_recipient_store.dart';
 import '../reports/report_submit_api_client.dart';
@@ -46,6 +47,10 @@ final realSubmissionQueueProvider = Provider<SubmissionQueue>((ref) {
     // The customer's copy (ClickUp 12493t4wxvm): the address the technician confirmed at Riepilogo.
     customerCopyRecipient: (reportId) =>
         ref.read(customerCopyRecipientStoreProvider).recipientForSubmit(reportId),
+    // A 426 means this build is below the minimum: record it app-wide and let the queue hold its
+    // rows until the state clears (see UpdateRequiredLatch).
+    onUpdateRequired: () => ref.read(updateRequiredProvider.notifier).markRequired(),
+    isUpdateRequired: () => ref.read(updateRequiredProvider),
   );
 });
 

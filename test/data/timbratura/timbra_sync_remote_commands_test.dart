@@ -588,6 +588,64 @@ void main() {
       expect(notices, isEmpty);
     });
   });
+
+  group('a 426 (build below the minimum) is not a refusal of the taps', () {
+    test('batch: events stay pending and unmarked, no notice, sending stops until a manual '
+        'sync', () async {
+      final repo = _Repo([_cmd('i', 'ingresso', _ago(10)), _cmd('f', 'fine', _ago(5))]);
+      final failing = _FailingBatchApi(_problem(426, 'app_update_required'));
+      var told = 0;
+      final s = TimbraSyncService(
+        repo: repo,
+        apiClient: failing,
+        onRemoteCommandsApplied: () => applied++,
+        onNotice: notices.add,
+        clock: () => clock,
+        onUpdateRequired: () => told++,
+      );
+
+      await s.syncNow();
+      await s.syncNow();
+      await s.syncNow();
+
+      expect(told, 1);
+      expect(failing.batchCalls, 1, reason: 'latched after the first 426: no tight loop');
+      expect(repo.isPending('i') && repo.isPending('f'), isTrue);
+      expect(repo.sessions.map((e) => e.notes), [null, null], reason: 'nothing retired');
+      expect(notices, isEmpty);
+      expect(applied, 0);
+
+      await s.syncNow(manual: true);
+      expect(failing.batchCalls, 2, reason: 'a manual sync tries again');
+      expect(repo.isPending('i') && repo.isPending('f'), isTrue);
+    });
+
+    test('remote command: the tap stays queued (not retired), and the run stops', () async {
+      api.error = _problem(426, 'app_update_required');
+      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(2))]);
+      var told = 0;
+      final s = TimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        onRemoteCommandsApplied: () => applied++,
+        onNotice: notices.add,
+        clock: () => clock,
+        fetchActive: () async => active ?? (throw _offline),
+        onUpdateRequired: () => told++,
+      );
+
+      await s.syncNow();
+      await s.syncNow();
+
+      expect(told, 1);
+      expect(api.calls, ['end'], reason: 'sent once; the latch holds the second run back');
+      expect(repo.isPending('f'), isTrue, reason: 'a 426 must not retire the Fine tap');
+      expect(repo.sessions.map((e) => e.notes), [reconciledOrphanMarker, null]);
+      expect(applied, 0);
+      expect(notices, isEmpty);
+      expect(api.batches, isEmpty);
+    });
+  });
 }
 
 class _FailingBatchApi extends WorklogApiClient {
