@@ -376,12 +376,14 @@ void main() {
 
       await queue.processAll(force: true);
 
+      // mocktail does not recount invocations an earlier verify already matched, so this sees
+      // only the forced attempt: exactly one new call reached the API (2 in total).
       verify(
         () => api.submitReport(
           request: any(named: 'request'),
           idempotencyKey: any(named: 'idempotencyKey'),
         ),
-      ).called(2);
+      ).called(1);
       expect((await repo.getDraft(_reportId))!.submissionState, 'readyToSubmit');
     });
 
