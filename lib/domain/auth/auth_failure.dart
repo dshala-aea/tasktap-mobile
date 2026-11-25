@@ -6,47 +6,10 @@ sealed class AuthFailure {
   const AuthFailure();
 }
 
-/// Email/password credentials are wrong.
-class InvalidCredentials extends AuthFailure {
-  const InvalidCredentials();
-}
-
-/// The account needs a verification factor beyond password (MFA, passkey) that the native
-/// login form doesn't support yet — see `ZitadelAuthRepository.signInWithPassword`'s own doc
-/// comment. Callers fall back to the browser flow automatically; this type exists mainly so the
-/// fallback has something typed to switch on, not because it's normally shown as an error.
-class AdditionalFactorRequired extends AuthFailure {
-  const AdditionalFactorRequired();
-}
-
-/// The account has no passkey, or this device holds no credential for it.
-///
-/// The same case covers both so the copy cannot tell the user which one it is.
-class PasskeyNotRegistered extends AuthFailure {
-  const PasskeyNotRegistered();
-}
-
-/// This device or OS cannot use passkeys.
-class PasskeyUnavailable extends AuthFailure {
-  const PasskeyUnavailable();
-}
-
-/// The user dismissed the passkey sheet. Never rendered as an error.
-class PasskeyCancelled extends AuthFailure {
-  const PasskeyCancelled();
-}
-
-/// The server refused to enrol this passkey.
-class PasskeyRegistrationFailed extends AuthFailure {
-  const PasskeyRegistrationFailed();
-}
-
-/// ZITADEL rejected the passkey assertion.
-///
-/// Deliberately not retried automatically (ruling R18): the copy offers a retry the user
-/// controls, rather than a second biometric prompt they did not ask for.
-class PasskeyVerificationFailed extends AuthFailure {
-  const PasskeyVerificationFailed();
+/// The user closed the browser sign-in without finishing. Not an error: the screen answers with a
+/// calm "try again whenever you like" and nothing is lost.
+class SignInCancelled extends AuthFailure {
+  const SignInCancelled();
 }
 
 /// The identity provider is temporarily unreachable or misbehaving.
@@ -87,15 +50,8 @@ class UnknownAuthError extends AuthFailure {
 
 /// Maps an [AuthFailure] to a user-facing Italian string.
 String authFailureMessage(AuthFailure failure) => switch (failure) {
-  InvalidCredentials() =>
-    'Email o password errati. Controlla le credenziali e riprova.',
-  AdditionalFactorRequired() =>
-    'Serve una verifica aggiuntiva. Accedi dal browser per continuare.',
-  PasskeyNotRegistered() => 'Nessuna passkey disponibile. Accedi con la password; potrai attivarla dalle impostazioni dopo l\'accesso.',
-  PasskeyUnavailable() => 'Questo dispositivo non supporta le passkey.',
-  PasskeyCancelled() => '',
-  PasskeyRegistrationFailed() => 'Impossibile attivare la passkey. Riprova.',
-  PasskeyVerificationFailed() => 'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
+  SignInCancelled() =>
+      'Accesso annullato. Tocca Accedi quando vuoi riprovare.',
   ServiceUnavailable() =>
     'Servizio temporaneamente non disponibile. Riprova tra poco.',
   AccountDisabled() =>
@@ -103,7 +59,8 @@ String authFailureMessage(AuthFailure failure) => switch (failure) {
   EmailNotFound() => 'Nessun account trovato con questa email.',
   TooManyRequests() =>
     'Troppi tentativi. Attendi qualche minuto prima di riprovare.',
-  NetworkError() => 'Nessuna connessione. Controlla la rete e riprova.',
+  NetworkError() =>
+      'Nessuna connessione. Per accedere serve internet: controlla la rete e riprova.',
   SessionExpired() => 'La sessione è scaduta. Effettua nuovamente l\'accesso.',
   UnknownAuthError(:final message) =>
     'Si è verificato un errore imprevisto. ($message)',

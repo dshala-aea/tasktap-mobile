@@ -1198,8 +1198,6 @@ void main() {
           'spoken replies (api #277): newer than the snapshot copy here',
       'POST /api/access-requests':
           'newer than the snapshot copy here',
-      'POST /api/mobileauth/methods':
-          'newer than the snapshot copy here',
       // Optional `occurredAtUtc`, sent only when a queued tap is replayed; a live tap sends no
       // body at all. Promote both to a real case once the snapshot here is refreshed from a
       // merged backend — it predates BreakPunchRequest, so there is nothing to compare against

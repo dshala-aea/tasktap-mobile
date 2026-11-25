@@ -3,7 +3,7 @@ import 'auth_user.dart';
 
 /// Auth-method abstraction — the PIN/QR seam.
 ///
-/// All auth flows (email/password TODAY; PIN / QR code FUTURE) implement
+/// All auth flows (system-browser OIDC TODAY; PIN / QR code FUTURE) implement
 /// this interface. Riverpod providers and the presentation layer only depend
 /// on this type, making provider swaps zero-cost.
 ///
@@ -22,32 +22,16 @@ abstract interface class IAuthRepository {
 
   // ── Auth actions ───────────────────────────────────────────────────────
 
-  /// Start the interactive sign-in flow (OIDC: opens the system browser for
-  /// Authorization Code + PKCE). Credentials are entered at the identity
-  /// provider, never in-app.
+  /// The one interactive sign-in: the system browser (OIDC Authorization Code + PKCE, non-ephemeral
+  /// so the identity service's own browser session is reused). Credentials are entered at the
+  /// identity provider, never in-app.
   ///
-  /// Returns the signed-in [AuthUser] on success, or an [AuthFailure] on any
-  /// error (network, cancelled, …).
-  Future<({AuthUser? user, AuthFailure? failure})> signIn();
-
-  /// Native in-app password sign-in — submits credentials directly instead of opening the
-  /// system browser. See `ZitadelAuthRepository.signInWithPassword`'s own doc comment for the
-  /// full flow and its fallback triggers.
+  /// [loginHint] (the last used email, when known) pre-fills the identity provider's login page.
   ///
-  /// Returns the signed-in [AuthUser] on success. On failure, [AuthFailure] is
-  /// [AdditionalFactorRequired] when the caller should fall back to [signIn] (the account needs
-  /// more than a password), or any other [AuthFailure] when it should not (wrong credentials,
-  /// network error, unexpected upstream error).
-  Future<({AuthUser? user, AuthFailure? failure})> signInWithPassword(
-    String loginName,
-    String password,
-  );
-
-  /// Native passkey sign-in (opt-in). Returns the signed-in [AuthUser] on success,
-  /// or an [AuthFailure] on any error (use browser fallback as last resort).
-  Future<({AuthUser? user, AuthFailure? failure})> signInWithPasskey(
-    String loginName,
-  );
+  /// Returns the signed-in [AuthUser] on success, or an [AuthFailure] on any error. Cancelling,
+  /// being offline or any other failure is non-destructive: no stored session, cached identity or
+  /// queued work is touched.
+  Future<({AuthUser? user, AuthFailure? failure})> signIn({String? loginHint});
 
   /// Silently refresh the session using the stored refresh token.
   ///

@@ -84,19 +84,8 @@ class _FakeAuth implements IAuthRepository {
   Stream<AuthUser?> get authStateChanges => const Stream.empty();
 
   @override
-  Future<({AuthFailure? failure, AuthUser? user})> signIn() async =>
+  Future<({AuthFailure? failure, AuthUser? user})> signIn({String? loginHint}) async =>
       (user: null, failure: null);
-
-  @override
-  Future<({AuthFailure? failure, AuthUser? user})> signInWithPassword(
-    String loginName,
-    String password,
-  ) async => (user: null, failure: null);
-
-  @override
-  Future<({AuthFailure? failure, AuthUser? user})> signInWithPasskey(
-    String loginName,
-  ) async => (user: null, failure: null);
 
   @override
   Future<void> signOut() async {}

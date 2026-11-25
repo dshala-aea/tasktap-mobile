@@ -3,10 +3,11 @@ import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 
 void main() {
   group('authFailureMessage — Italian error strings', () {
-    test('InvalidCredentials returns email/password message', () {
-      const failure = InvalidCredentials();
-      final msg = authFailureMessage(failure);
-      expect(msg, contains('Email o password errati'));
+    test('SignInCancelled is calm and tells the user how to retry', () {
+      expect(
+        authFailureMessage(const SignInCancelled()),
+        'Accesso annullato. Tocca Accedi quando vuoi riprovare.',
+      );
     });
 
     test('AccountDisabled returns disabled message', () {
@@ -45,31 +46,6 @@ void main() {
       expect(msg, contains('boom'));
     });
 
-    test('AdditionalFactorRequired returns a verification-needed message', () {
-      expect(
-        authFailureMessage(const AdditionalFactorRequired()),
-        'Serve una verifica aggiuntiva. Accedi dal browser per continuare.',
-      );
-    });
-
-    test('passkey messages are the exact Italian copy', () {
-      expect(
-        authFailureMessage(const PasskeyNotRegistered()),
-        'Nessuna passkey disponibile. Accedi con la password; potrai attivarla dalle impostazioni dopo l\'accesso.',
-      );
-      expect(
-        authFailureMessage(const PasskeyUnavailable()),
-        'Questo dispositivo non supporta le passkey.',
-      );
-    });
-
-    test('PasskeyVerificationFailed uses the exact retry copy', () {
-      expect(
-        authFailureMessage(const PasskeyVerificationFailed()),
-        'Non è stato possibile verificare la passkey. Riprova o accedi con la password.',
-      );
-    });
-
     test('ServiceUnavailable uses the exact temporary-outage copy', () {
       expect(
         authFailureMessage(const ServiceUnavailable()),
@@ -77,23 +53,15 @@ void main() {
       );
     });
 
-    test('PasskeyCancelled is a silent no-op', () {
-      expect(authFailureMessage(const PasskeyCancelled()), isEmpty);
-    });
-
     test('all failure types return non-empty Italian strings', () {
       final failures = <AuthFailure>[
-        const InvalidCredentials(),
+        const SignInCancelled(),
         const AccountDisabled(),
         const EmailNotFound(),
         const TooManyRequests(),
         const NetworkError(),
         const SessionExpired(),
         const UnknownAuthError('test'),
-        const PasskeyNotRegistered(),
-        const PasskeyUnavailable(),
-        const PasskeyRegistrationFailed(),
-        const PasskeyVerificationFailed(),
         const ServiceUnavailable(),
       ];
       for (final f in failures) {

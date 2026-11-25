@@ -48,17 +48,7 @@ class _DeadSessionRepo implements IAuthRepository {
   Stream<AuthUser?> get authStateChanges => const Stream<AuthUser?>.empty();
 
   @override
-  Future<({AuthUser? user, AuthFailure? failure})> signIn() async =>
-      (user: null, failure: const UnknownAuthError('unused'));
-
-  @override
-  Future<({AuthUser? user, AuthFailure? failure})> signInWithPassword(
-    String loginName,
-    String password,
-  ) async => (user: null, failure: const UnknownAuthError('unused'));
-
-  @override
-  Future<({AuthUser? user, AuthFailure? failure})> signInWithPasskey(String loginName) async =>
+  Future<({AuthUser? user, AuthFailure? failure})> signIn({String? loginHint}) async =>
       (user: null, failure: const UnknownAuthError('unused'));
 
   @override

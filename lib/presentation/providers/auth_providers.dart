@@ -83,6 +83,10 @@ final internalUserIdProvider = FutureProvider<String?>((ref) async {
 
 // ── Login state notifier ───────────────────────────────────────────────────
 
+/// Last email used to sign in on this device; sent as the OIDC `login_hint`. A plain preference,
+/// never a token. (Same key the login screen used to prefill its email field.)
+const lastLoginEmailPrefsKey = 'login.last_email';
+
 /// State for the login screen.
 class LoginState {
   const LoginState({this.isLoading = false, this.failure});
@@ -108,58 +112,52 @@ class LoginNotifier extends StateNotifier<LoginState> {
   final IAuthRepository _repo;
   final Ref _ref;
 
+  /// The one sign-in: the system browser at the identity service. [loginHint] comes from the last
+  /// used email, kept in the same plain preference the login screen has always used (an editable
+  /// convenience, never a token).
   Future<void> signIn() async {
     state = const LoginState(isLoading: true);
-    final result = await _repo.signIn();
+    final hint = await _readLastEmail();
+    final result = hint == null
+        ? await _repo.signIn()
+        : await _repo.signIn(loginHint: hint);
+    final user = result.user;
+    // A successful sign-in lets the router tear the login screen (and this autoDispose notifier)
+    // down before we get here; writing `state` then would throw.
+    if (!mounted) {
+      if (user != null) await _rememberEmail(user.email);
+      return;
+    }
     if (result.failure != null) {
+      // Cancelled / offline / failed: the stored session, the cached identity and the queues were
+      // not touched by the repository; the screen just shows a calm message.
       state = LoginState(failure: result.failure);
     } else {
       // Success — authStateProvider stream emits and router redirects.
-      state = const LoginState();
+      if (user != null) await _rememberEmail(user.email);
+      if (mounted) state = const LoginState();
     }
   }
 
-  Future<void> signInWithPassword(String loginName, String password) async {
-    state = const LoginState(isLoading: true);
-    final result = await _repo.signInWithPassword(loginName, password);
-
-    if (result.failure is AdditionalFactorRequired) {
-      // The account needs more than a password — fall back to the browser flow, which can
-      // satisfy MFA/passkey/whatever Zitadel's hosted UI supports. No error shown; this is a
-      // transition, not a failure the technician needs to see or act on.
-      await signIn();
-      return;
-    }
-
-    if (result.failure != null) {
-      state = LoginState(failure: result.failure);
-    } else {
-      state = const LoginState();
+  Future<String?> _readLastEmail() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final email = prefs.getString(lastLoginEmailPrefsKey)?.trim();
+      return (email == null || email.isEmpty) ? null : email;
+    } catch (_) {
+      // A preference that cannot be read is not worth blocking sign-in over.
+      return null;
     }
   }
 
-  Future<void> signInWithPasskey(String loginName) async {
-    state = const LoginState(isLoading: true);
-    final result = await _repo.signInWithPasskey(loginName);
-
-    if (result.failure is AdditionalFactorRequired) {
-      // Same fallback as the password path: the account needs a factor this native flow cannot
-      // submit. The browser can satisfy whatever Zitadel's hosted UI supports, so hand off
-      // silently instead of showing an error.
-      await signIn();
-      return;
-    }
-
-    if (result.failure is PasskeyCancelled) {
-      // Dismissing the OS passkey sheet is a deliberate no-op, not an error: clear the spinner
-      // and show nothing.
-      state = const LoginState();
-      return;
-    }
-    if (result.failure != null) {
-      state = LoginState(failure: result.failure);
-    } else {
-      state = const LoginState();
+  Future<void> _rememberEmail(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(lastLoginEmailPrefsKey, trimmed);
+    } catch (_) {
+      // The convenience of a prefill must never fail a sign-in.
     }
   }
 
