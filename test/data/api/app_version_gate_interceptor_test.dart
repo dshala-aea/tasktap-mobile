@@ -18,9 +18,9 @@ class _Server extends Interceptor {
     if (fail != null) {
       handler.reject(fail!(options), true);
     } else if (reply != null) {
-      handler.resolve(reply!(options));
+      handler.resolve(reply!(options), true);
     } else {
-      handler.resolve(Response(requestOptions: options, statusCode: 200));
+      handler.resolve(Response(requestOptions: options, statusCode: 200), true);
     }
   }
 }
