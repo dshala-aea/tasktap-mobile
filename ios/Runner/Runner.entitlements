@@ -7,6 +7,7 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>webcredentials:auth.tasktap.it</string>
+		<string>webcredentials:id.advantedgeautomation.com</string>
 	</array>
 </dict>
 </plist>

@@ -2,7 +2,7 @@ name: tasktap_mobile
 description: "TaskTap mobile app for field technicians — offline-first rapportino creation."
 publish_to: 'none'
 
-version: 1.0.11+11
+version: 1.0.12+12
 
 environment:
   sdk: ^3.13.0
