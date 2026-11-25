@@ -45,6 +45,14 @@ abstract final class Env {
     defaultValue: 'com.advantedge.tasktap.tasktapmobile://callback',
   );
 
+  /// Extra host suffixes (comma-separated, e.g. `id.example.com,example.org`) a server-provided
+  /// OIDC issuer may live under, on top of the compiled allow-list and the compile-time issuer's own
+  /// host. See `issuer_allowlist.dart`.
+  static const String oidcIssuerAllowedSuffixes = String.fromEnvironment(
+    'OIDC_ISSUER_ALLOWED_SUFFIXES',
+    defaultValue: '',
+  );
+
   /// TaskTap backend REST API base URL — e.g. https://api.tasktap.io
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',

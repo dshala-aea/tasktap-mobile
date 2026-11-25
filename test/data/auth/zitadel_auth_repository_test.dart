@@ -902,7 +902,7 @@ void main() {
     );
 
     const newServer = ServerAuthConfig(
-      issuer: 'https://id.new.test',
+      issuer: 'https://id.advantedgeautomation.com',
       clientId: 'client-new',
       redirectUri: 'app.tasktap://callback',
     );
@@ -963,15 +963,15 @@ void main() {
       expect(result.user, isNotNull);
       final req = verify(() => appAuth.authorizeAndExchangeCode(captureAny())).captured.single
           as AuthorizationTokenRequest;
-      expect(req.issuer, 'https://id.new.test');
+      expect(req.issuer, 'https://id.advantedgeautomation.com');
       expect(req.clientId, 'client-new');
-      expect(store[issuerKey], 'https://id.new.test');
+      expect(store[issuerKey], 'https://id.advantedgeautomation.com');
       expect(store[_refreshTokenKey], 'refresh-new');
     });
 
     test('refresh uses the server config when the stored session was minted by that issuer',
         () async {
-      store[issuerKey] = 'https://id.new.test';
+      store[issuerKey] = 'https://id.advantedgeautomation.com';
       when(() => appAuth.token(any())).thenAnswer(
         (_) async => TokenResponse(
           'access-2',
@@ -988,7 +988,7 @@ void main() {
 
       expect(result.user, isNotNull);
       final req = verify(() => appAuth.token(captureAny())).captured.single as TokenRequest;
-      expect(req.issuer, 'https://id.new.test');
+      expect(req.issuer, 'https://id.advantedgeautomation.com');
       expect(req.clientId, 'client-new');
     });
 
@@ -1034,16 +1034,36 @@ void main() {
       verifyNever(() => appAuth.token(any()));
     });
 
-    test('changed issuer on cold start (online): signed out, token wiped, issuer key dropped',
+    test('changed issuer on cold start keeps the cached session and never probes or refreshes',
         () async {
       store[issuerKey] = 'https://old.test';
+      final dio = reachableDio(reachable: true);
 
-      final repo = repoWith(newServer, dio: reachableDio(reachable: true), restore: true);
+      final repo = repoWith(newServer, dio: dio, restore: true);
       await settle();
 
-      expect(repo.currentUser, isNull);
+      expect(repo.currentUser, isNotNull);
+      expect(repo.currentUser!.id, 'u1');
+      expect(store[_refreshTokenKey], 'rt-1');
+      verifyNever(() => appAuth.token(any()));
+      verifyNever(() => dio.get<void>(any(), options: any(named: 'options')));
+
+      // The next refresh (reconnect / 401) probes the new issuer and decides.
+      final result = await repo.refreshSession();
+      expect(result.failure, isA<SessionExpired>());
+    });
+
+    test('changed issuer: sign-out does not send the old token to a revoke endpoint', () async {
+      store[issuerKey] = 'https://old.test';
+      final dio = MockDio();
+      final repo = repoWith(newServer, dio: dio, restore: true);
+      await settle();
+      await repo.signOut();
+
+      verifyNever(
+        () => dio.post<void>(any(), data: any(named: 'data'), options: any(named: 'options')),
+      );
       expect(store.containsKey(_refreshTokenKey), isFalse);
-      expect(store.containsKey(issuerKey), isFalse);
     });
 
     test('changed issuer while OFFLINE never signs the user out and keeps the token', () async {
@@ -1059,14 +1079,14 @@ void main() {
     });
 
     test('an offline refresh error is a NetworkError and keeps the session', () async {
-      store[issuerKey] = 'https://id.new.test';
+      store[issuerKey] = 'https://id.advantedgeautomation.com';
       when(() => appAuth.token(any())).thenThrow(Exception('SocketException: Failed host lookup'));
 
       final result = await repoWith(newServer).refreshSession();
 
       expect(result.failure, isA<NetworkError>());
       expect(store[_refreshTokenKey], 'rt-1');
-      expect(store[issuerKey], 'https://id.new.test');
+      expect(store[issuerKey], 'https://id.advantedgeautomation.com');
     });
 
     test('signOut also drops the stored issuer', () async {

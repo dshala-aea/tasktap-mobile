@@ -548,16 +548,12 @@ class ZitadelAuthRepository implements IAuthRepository {
     if (refreshToken == null || refreshToken.isEmpty) return;
 
     try {
-      // Revoke where the token was minted: the stored issuer, else (a session stored before the
-      // issuer was persisted) the compile-time one.
+      // Only revoke at the issuer (and with the client id) that minted the token. After an issuer
+      // move the stored token belongs to another issuer: skip rather than send it, with a client id
+      // from the new config, to the wrong place.
       final cfg = await _configSource.load();
-      String? storedIssuer;
-      try {
-        storedIssuer = await _storage.read(key: _issuerKey).timeout(_storageTimeout);
-      } catch (_) {}
-      final issuer = (storedIssuer == null || storedIssuer.isEmpty)
-          ? _configSource.compileTime.issuer
-          : storedIssuer;
+      if (await _issuerMismatch(cfg)) return;
+      final issuer = cfg.issuer;
       await _revocationHttpClient.post<void>(
         '$issuer/oauth/v2/revoke',
         data: <String, dynamic>{
@@ -661,10 +657,21 @@ class ZitadelAuthRepository implements IAuthRepository {
       return;
     }
 
-    final result = await refreshSession().timeout(
-      _refreshTimeout,
-      onTimeout: () => (user: null, failure: const NetworkError()),
-    );
+    // Issuer moved (server config): do NOT probe or decide here, that would hold the splash for
+    // several seconds. Keep the cached identity exactly as for an unreachable provider; the next
+    // refresh (reconnect watcher / 401 path) probes the new issuer and, if it answers, returns
+    // SessionExpired. The stored token is never presented to the wrong issuer meanwhile
+    // (`_doRefreshSession` checks again).
+    final cfg = await _configSource.load();
+    final ({AuthUser? user, AuthFailure? failure}) result;
+    if (await _issuerMismatch(cfg)) {
+      result = (user: null, failure: const NetworkError());
+    } else {
+      result = await refreshSession().timeout(
+        _refreshTimeout,
+        onTimeout: () => (user: null, failure: const NetworkError()),
+      );
+    }
     if (result.user != null) {
       // refreshSession() already persisted + emitted the fresh session.
       return;
@@ -703,7 +710,9 @@ class ZitadelAuthRepository implements IAuthRepository {
     _emit(null);
   }
 
-  /// Stores the refresh token together with the issuer that minted it.
+  /// Stores the refresh token together with the issuer that minted it. The two writes are not
+  /// atomic; that fails closed: a crash between them leaves the old (or no) issuer next to the new
+  /// token, which at worst reads as a mismatch and asks the user to sign in again.
   Future<void> _persistRefreshToken(String? refreshToken, String issuer) async {
     if (refreshToken != null && refreshToken.isNotEmpty) {
       await _storage.write(key: _refreshTokenKey, value: refreshToken);

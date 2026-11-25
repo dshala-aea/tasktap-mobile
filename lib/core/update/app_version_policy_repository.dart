@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/api/app_version_policy_api.dart';
+import '../config/env.dart';
+import '../config/issuer_allowlist.dart';
 import 'app_version_evaluator.dart';
 
 /// The installed build judged against the last known policy.
@@ -112,11 +114,27 @@ class AppVersionPolicyRepository {
   Future<AppVersionRefresh> refresh() async {
     try {
       final policy = await fetchPolicy(platform);
-      await store.writePolicy(policy);
-      return (status: await _statusFor(policy), fresh: true);
+      final safe = withAllowedAuth(policy);
+      await store.writePolicy(safe);
+      return (status: await _statusFor(safe), fresh: true);
     } catch (_) {
       return (status: await loadCached(), fresh: false);
     }
+  }
+
+  /// [policy] with its `auth` block dropped unless the issuer passes the compiled host allow-list
+  /// (`validatedIssuer`): a bad block is never cached, so a poisoned response cannot persist.
+  static AppVersionPolicy withAllowedAuth(AppVersionPolicy policy) {
+    final auth = policy.auth;
+    if (auth == null) return policy;
+    final ok = validatedIssuer(auth.issuer, compileTimeIssuer: Env.oidcIssuer) != null;
+    if (ok) return policy;
+    return AppVersionPolicy(
+      minimumVersion: policy.minimumVersion,
+      recommendedVersion: policy.recommendedVersion,
+      storeUrl: policy.storeUrl,
+      message: policy.message,
+    );
   }
 
   /// Hides the "update available" banner for [dismissFor] (7 days) for this build and policy.

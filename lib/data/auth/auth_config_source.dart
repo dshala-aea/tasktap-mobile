@@ -1,7 +1,10 @@
 // dart format width=100
 import '../../core/config/env.dart';
+import '../../core/config/issuer_allowlist.dart';
 import '../../core/update/app_version_policy_repository.dart';
 import '../api/app_version_policy_api.dart';
+
+export '../../core/config/issuer_allowlist.dart' show kAllowedIssuerHostSuffixes;
 
 /// The OIDC settings one sign-in / refresh runs against. Non-secret by construction: a public
 /// (PKCE) client has no secret, and nothing here is ever a token.
@@ -27,14 +30,8 @@ class AuthConfig {
   /// True when issuer and client id came from the cached server policy.
   final bool fromServer;
 
-  /// Issuer in the form used to compare two issuers (trimmed, no trailing slashes).
-  static String normalizeIssuer(String issuer) {
-    var t = issuer.trim();
-    while (t.endsWith('/')) {
-      t = t.substring(0, t.length - 1);
-    }
-    return t;
-  }
+  /// Issuer in the form used to compare two issuers (trimmed, lowercase host, no trailing slashes).
+  static String normalizeIssuer(String issuer) => normalizeIssuerString(issuer);
 }
 
 /// Where the app gets its OIDC issuer / client id / redirect URI from.
@@ -45,8 +42,10 @@ class AuthConfig {
 /// policy (or fetched a malformed one) behaves exactly as before.
 ///
 /// Rules:
-/// - issuer must be an absolute `https` URL with a host, no user-info, query or fragment, and
-///   clientId must be non-empty; otherwise the WHOLE block is ignored (issuer and client id are
+/// - issuer must pass `validatedIssuer` (https, default port, no user-info/query/fragment, no IP
+///   literal, host under the COMPILED allow-list [kAllowedIssuerHostSuffixes] + optional
+///   `OIDC_ISSUER_ALLOWED_SUFFIXES` + the compile-time issuer's host: a poisoned policy cannot
+///   redirect sign-in to another host), and clientId must be non-empty; otherwise the WHOLE block is ignored (issuer and client id are
 ///   never mixed between the server and the dart-defines).
 /// - redirectUri: the native redirect scheme is registered at build time (AndroidManifest
 ///   `appAuthRedirectScheme`, Info.plist `CFBundleURLSchemes`), so a server-provided redirectUri is
@@ -57,13 +56,16 @@ class AuthConfigSource {
     Future<AppVersionPolicy?> Function()? readPolicy,
     this.compileTime = AuthConfig.compileTime,
     this.readTimeout = const Duration(seconds: 2),
-  }) : _readPolicy = readPolicy ?? AppVersionPolicyStore().readPolicy {
+    List<String>? extraSuffixes,
+  }) : _extraSuffixes = extraSuffixes,
+       _readPolicy = readPolicy ?? AppVersionPolicyStore().readPolicy {
     _current = compileTime;
   }
 
   /// The dart-define values, used when the server config is absent or invalid.
   final AuthConfig compileTime;
   final Future<AppVersionPolicy?> Function() _readPolicy;
+  final List<String>? _extraSuffixes;
 
   /// A cache read slower than this counts as "no cache" (a stuck store must not block sign-in).
   final Duration readTimeout;
@@ -88,7 +90,13 @@ class AuthConfigSource {
   /// Pure resolution of a server block against the dart-defines. Exposed for tests.
   AuthConfig resolve(ServerAuthConfig? server) {
     if (server == null) return compileTime;
-    final issuer = _validIssuer(server.issuer);
+    // Applied on every read as well as before caching: a block cached by an older build, or
+    // tampered with on disk, is still checked.
+    final issuer = validatedIssuer(
+      server.issuer,
+      compileTimeIssuer: compileTime.issuer,
+      extraSuffixes: _extraSuffixes,
+    );
     final clientId = server.clientId?.trim() ?? '';
     if (issuer == null || clientId.isEmpty) return compileTime;
     return AuthConfig(
@@ -106,16 +114,5 @@ class AuthConfigSource {
     final compiledScheme = Uri.tryParse(compileTime.redirectUri)?.scheme.toLowerCase() ?? '';
     if (serverScheme.isNotEmpty && serverScheme == compiledScheme) return candidate;
     return compileTime.redirectUri;
-  }
-
-  static String? _validIssuer(String? raw) {
-    final text = raw?.trim() ?? '';
-    if (text.isEmpty) return null;
-    final uri = Uri.tryParse(text);
-    if (uri == null || !uri.isAbsolute) return null;
-    if (uri.scheme.toLowerCase() != 'https') return null;
-    if (uri.host.isEmpty || uri.userInfo.isNotEmpty) return null;
-    if (uri.hasQuery || uri.hasFragment) return null;
-    return AuthConfig.normalizeIssuer(text);
   }
 }
