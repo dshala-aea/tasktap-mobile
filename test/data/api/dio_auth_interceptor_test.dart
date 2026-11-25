@@ -506,6 +506,95 @@ void main() {
     });
   });
 
+  group('onRequest — proactive refresh backoff (identity provider unreachable)', () {
+    AuthUser stale() => AuthUser(
+      id: 'u1',
+      email: 'tech@tasktap.io',
+      accessToken: 'stale-token',
+      refreshToken: 'refresh',
+      expiresAt: DateTime.now().toUtc().subtract(const Duration(minutes: 5)),
+    );
+
+    Future<void> send(AuthInterceptor i) async {
+      final done = Completer<void>();
+      final handler = MockRequestInterceptorHandler();
+      when(() => handler.next(any())).thenAnswer((_) => done.complete());
+      i.onRequest(RequestOptions(path: '/api/sync'), handler);
+      await done.future.timeout(const Duration(seconds: 2));
+    }
+
+    test('after a NetworkError the next request within 45 s skips the refresh; after it, retries',
+        () async {
+      var now = DateTime.utc(2026, 11, 25, 10);
+      when(() => repo.currentUser).thenReturn(stale());
+      when(
+        () => repo.refreshSession(),
+      ).thenAnswer((_) async => (user: null, failure: const NetworkError()));
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => true, clock: () => now);
+
+      await send(i);
+      verify(() => repo.refreshSession()).called(1);
+      clearInteractions(repo);
+
+      now = now.add(const Duration(seconds: 30));
+      await send(i);
+      verifyNever(() => repo.refreshSession()); // inside the window: no refresh storm
+
+      now = now.add(const Duration(seconds: 20)); // 50 s after the failure
+      await send(i);
+      verify(() => repo.refreshSession()).called(1);
+    });
+
+    test('UnknownAuthError backs off too; a success clears the backoff', () async {
+      var now = DateTime.utc(2026, 11, 25, 10);
+      when(() => repo.currentUser).thenReturn(stale());
+      when(
+        () => repo.refreshSession(),
+      ).thenAnswer((_) async => (user: null, failure: const UnknownAuthError('x')));
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => true, clock: () => now);
+      await send(i);
+      await send(i);
+      verify(() => repo.refreshSession()).called(1);
+      clearInteractions(repo);
+
+      now = now.add(const Duration(seconds: 46));
+      when(() => repo.refreshSession()).thenAnswer(
+        (_) async => (user: _fakeUser(token: 'fresh'), failure: null),
+      );
+      await send(i); // refreshes, succeeds, clears
+      await send(i); // still stale per the mock user: refreshes again (no backoff after success)
+      verify(() => repo.refreshSession()).called(2);
+    });
+
+    test('SessionExpired does not back off (the 401 path owns the forced end)', () async {
+      when(() => repo.currentUser).thenReturn(stale());
+      when(
+        () => repo.refreshSession(),
+      ).thenAnswer((_) async => (user: null, failure: const SessionExpired()));
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => true);
+      await send(i);
+      await send(i);
+      verify(() => repo.refreshSession()).called(2);
+    });
+  });
+
+  group('onError — refresh that throws', () {
+    test('the original 401 is propagated, no sign-out, no forced end', () async {
+      when(() => repo.currentUser).thenReturn(_fakeUser());
+      when(() => repo.refreshSession()).thenThrow(StateError('keychain unavailable'));
+      var ended = 0;
+      interceptor.onForcedSignOut = () async => ended++;
+      final err = _make401(RequestOptions(path: '/api/data'));
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(err, handler);
+
+      verify(() => handler.next(err)).called(1);
+      verifyNever(() => repo.signOut());
+      expect(ended, 0);
+    });
+  });
+
   // ── what the 401 path does after the proactive step ────────────────────
 
   group('onError — after a failed proactive refresh', () {

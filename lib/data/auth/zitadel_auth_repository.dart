@@ -91,6 +91,16 @@ class ZitadelAuthRepository implements IAuthRepository {
           externalUserAgent: ExternalUserAgent.asWebAuthenticationSession,
         ),
       );
+      // No refresh token (offline_access not granted, a malformed answer): the session could not
+      // outlive this process, and `_persistRefreshToken` skips an empty value, which would leave the
+      // PREVIOUS account's stored token paired with the new identity. Fail before anything is written.
+      final issuedRefresh = result.refreshToken;
+      if (issuedRefresh == null || issuedRefresh.isEmpty) {
+        return (
+          user: null,
+          failure: const UnknownAuthError('accesso non riuscito, riprova'),
+        );
+      }
       final user = _fromTokens(
         accessToken: result.accessToken,
         refreshToken: result.refreshToken,

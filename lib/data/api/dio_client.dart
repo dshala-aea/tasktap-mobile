@@ -135,7 +135,19 @@ class AuthInterceptor extends Interceptor {
     required this.authRepo,
     this.isOnline,
     this.preflightMargin = const Duration(seconds: 60),
-  });
+    this.preflightBackoff = const Duration(seconds: 45),
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  final DateTime Function() _clock;
+
+  /// After a proactive refresh failed for a reason that is not a dead token (identity provider
+  /// unreachable behind a captive portal, 5xx, malformed answer) the proactive step is skipped for
+  /// this long, so a flush of many calls does not queue up one slow refresh attempt per request.
+  /// The normal 401 path still decides meanwhile.
+  final Duration preflightBackoff;
+
+  DateTime? _preflightBlockedUntil;
 
   /// `RequestOptions.extra` key marking a request as anonymous (no bearer, no refresh on 401).
   static const noAuthExtra = noAuthExtraKey;
@@ -197,7 +209,10 @@ class AuthInterceptor extends Interceptor {
     if (user.refreshToken.isEmpty) return false;
     final online = isOnline;
     if (online == null) return false;
-    final soon = DateTime.now().toUtc().add(preflightMargin);
+    final now = _clock().toUtc();
+    final blocked = _preflightBlockedUntil;
+    if (blocked != null && now.isBefore(blocked)) return false;
+    final soon = now.add(preflightMargin);
     final stale = user.accessToken.isEmpty || user.expiresAt.isBefore(soon);
     // Checked last: the connectivity read is only needed when the token is actually stale.
     return stale && online();
@@ -209,8 +224,16 @@ class AuthInterceptor extends Interceptor {
       // Concurrent requests coalesce onto ONE token exchange inside the repository
       // (single-flight), so a flush of many calls costs one refresh.
       final result = await authRepo.refreshSession();
-      if (result.user == null && result.failure != null) {
-        options.extra[_preflightFailureExtra] = result.failure;
+      final failure = result.failure;
+      if (result.user == null && failure != null) {
+        options.extra[_preflightFailureExtra] = failure;
+        // Back off only for "not a verdict on the token". SessionExpired is handled by the 401
+        // that follows (forced end); success reopens the proactive step.
+        _preflightBlockedUntil = failure is SessionExpired
+            ? null
+            : _clock().toUtc().add(preflightBackoff);
+      } else if (result.user != null) {
+        _preflightBlockedUntil = null;
       }
     } catch (_) {
       // A refresh that throws is no reason to fail the request here: it goes out as it would
@@ -234,7 +257,14 @@ class AuthInterceptor extends Interceptor {
     // Only handle 401 Unauthorized — and only once (not on retry).
     if (response?.statusCode == 401 &&
         err.requestOptions.extra['_retried'] != true) {
-      final refreshResult = await _refreshForRetry(err.requestOptions);
+      final ({AuthUser? user, AuthFailure? failure}) refreshResult;
+      try {
+        refreshResult = await _refreshForRetry(err.requestOptions);
+      } catch (_) {
+        // A storage/keychain exception from the refresh must not replace the original 401, and is
+        // no proof the session is dead: the call fails as it would have, the session is kept.
+        return handler.next(err);
+      }
 
       if (refreshResult.user != null) {
         // Token refreshed — retry the original request.

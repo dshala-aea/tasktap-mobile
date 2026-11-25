@@ -145,6 +145,8 @@ void main() {
     test('initial state is not loading, no failure', () {
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
@@ -157,6 +159,8 @@ void main() {
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
@@ -172,6 +176,8 @@ void main() {
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
@@ -189,6 +195,8 @@ void main() {
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
@@ -200,6 +208,8 @@ void main() {
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
@@ -213,6 +223,8 @@ void main() {
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
@@ -227,6 +239,8 @@ void main() {
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
@@ -240,6 +254,8 @@ void main() {
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
@@ -256,6 +272,8 @@ void main() {
       addTearDown(db.close);
       final container = _makeContainer(repo, db: db);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signOut();
 
@@ -289,6 +307,8 @@ void main() {
 
         final container = _makeContainer(repo, db: db);
         addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
         await container.read(loginProvider.notifier).signOut();
 
@@ -304,6 +324,8 @@ void main() {
       addTearDown(db.close);
       final container = _makeContainer(repo, db: db);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(businessZoneIdProvider.notifier).set('Asia/Tokyo');
       expect(container.read(businessZoneIdProvider), 'Asia/Tokyo');
@@ -333,6 +355,8 @@ void main() {
       addTearDown(db.close);
       final container = _makeContainer(repo, db: db);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signOut();
 

@@ -625,6 +625,31 @@ void main() {
         expectStorageUntouched();
       });
 
+      test('an EMPTY refresh token is a failure and leaves the previous account untouched', () async {
+        for (final empty in <String?>['', null]) {
+          when(() => appAuth.authorizeAndExchangeCode(any())).thenAnswer(
+            (_) async => AuthorizationTokenResponse(
+              'access-1',
+              empty,
+              DateTime.now().toUtc().add(const Duration(hours: 1)),
+              _fakeIdToken(sub: 'other', email: 'other@tasktap.io'),
+              'Bearer',
+              null,
+              null,
+              null,
+            ),
+          );
+          final repo = ZitadelAuthRepository(appAuth: appAuth, storage: storage, restore: false);
+
+          final result = await repo.signIn();
+
+          expect(result.user, isNull);
+          expect(result.failure, isA<UnknownAuthError>());
+          expect(repo.currentUser, isNull);
+          expectStorageUntouched();
+        }
+      });
+
       test('a response without tokens is a failure and writes nothing', () async {
         when(() => appAuth.authorizeAndExchangeCode(any())).thenAnswer(
           (_) async => AuthorizationTokenResponse(null, null, null, null, null, null, null, null),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -74,6 +76,34 @@ class _Auth implements IAuthRepository {
   Future<void> signOut() async {}
 }
 
+/// A session restore that lands after the cold start gave up waiting.
+class _LateAuth implements IAuthRepository {
+  final _controller = StreamController<AuthUser?>.broadcast();
+  AuthUser? user;
+
+  void restore() {
+    user = _user;
+    _controller.add(_user);
+  }
+
+  @override
+  AuthUser? get currentUser => user;
+
+  @override
+  Stream<AuthUser?> get authStateChanges => _controller.stream;
+
+  @override
+  Future<({AuthFailure? failure, AuthUser? user})> refreshSession() async =>
+      (user: null, failure: null);
+
+  @override
+  Future<({AuthFailure? failure, AuthUser? user})> signIn({String? loginHint}) async =>
+      (user: null, failure: null);
+
+  @override
+  Future<void> signOut() async {}
+}
+
 Future<void> _lifecycle(WidgetTester tester, AppLifecycleState state) async {
   await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
     'flutter/lifecycle',
@@ -96,9 +126,12 @@ void main() {
     required _Bio bio,
     _Auth? auth,
     bool atBuilder = false,
+    IAuthRepository? repo,
+    Duration? sessionWait,
   }) async {
     Widget lock(Widget child) => BiometricLock(
       enabled: true,
+      sessionWait: sessionWait ?? const Duration(seconds: 30),
       store: store,
       clock: () => now,
       child: child,
@@ -108,7 +141,7 @@ void main() {
         retry: (_, _) => null,
         overrides: [
           biometricServiceProvider.overrideWithValue(bio),
-          authRepositoryProvider.overrideWithValue(auth ?? _Auth()),
+          authRepositoryProvider.overrideWithValue(repo ?? auth ?? _Auth()),
         ],
         child: atBuilder
             // Above the Navigator, exactly like main.dart: no Overlay, no Scaffold, no Material.
@@ -236,5 +269,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('Sblocca'), findsNothing);
+  });
+
+  testWidgets('a session restore that lands AFTER the cold-start wait still arms the lock', (
+    tester,
+  ) async {
+    final bio = _Bio(succeeds: false);
+    final lateAuth = _LateAuth();
+    addTearDown(lateAuth._controller.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        retry: (_, _) => null,
+        overrides: [
+          biometricServiceProvider.overrideWithValue(bio),
+          authRepositoryProvider.overrideWithValue(lateAuth),
+        ],
+        child: MaterialApp(
+          home: BiometricLock(
+            enabled: true,
+            store: store,
+            clock: () => now,
+            sessionWait: const Duration(milliseconds: 50),
+            child: const Scaffold(body: Text('dati riservati')),
+          ),
+        ),
+      ),
+    );
+    // The wait runs out with no session: nothing to protect yet, the cover lifts.
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpAndSettle();
+    expect(bio.prompts, 0);
+    expect(find.text('Sblocca'), findsNothing);
+
+    // The restore finally completes: the decision is re-run and the lock arms.
+    lateAuth.restore();
+    await tester.pumpAndSettle();
+    expect(bio.prompts, 1);
+    expect(find.text('Sblocca'), findsOneWidget);
   });
 }

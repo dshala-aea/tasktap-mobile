@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -29,7 +31,7 @@ const Duration _kSessionRefreshAfter = Duration(seconds: 60);
 
 /// How long a cold start waits for the stored session to be restored (or found absent) before it
 /// decides from what is known. The restore is bounded on its own side; this is only a backstop.
-const Duration _kSessionWait = Duration(seconds: 15);
+const Duration _kSessionWait = Duration(seconds: 30);
 
 const String _kLastUnlockKey = 'biometric_last_active_at';
 
@@ -108,6 +110,7 @@ class BiometricLock extends ConsumerStatefulWidget {
     this.grace = kBiometricGrace,
     this.store = const SecureLockActivityStore(),
     this.clock = DateTime.now,
+    this.sessionWait = _kSessionWait,
   });
 
   /// The Impostazioni setting. False means this widget is a pass-through.
@@ -124,6 +127,10 @@ class BiometricLock extends ConsumerStatefulWidget {
   /// The time source for the grace window. Injected in tests.
   final DateTime Function() clock;
 
+  /// How long the cold start waits for the stored session to be restored before deciding. Injected
+  /// in tests; a restore that lands later still arms the lock (see `_coldStartDecided`).
+  final Duration sessionWait;
+
   @override
   ConsumerState<BiometricLock> createState() => _BiometricLockState();
 }
@@ -137,6 +144,15 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
 
   bool _prompting = false;
   DateTime? _lastRefreshAt;
+
+  /// True once the cold-start decision (lock / grace / nothing to protect) was taken on a settled
+  /// answer. A decision cut short by [_kSessionWait] expiring with no session is NOT final: the
+  /// restore may still land, and when it does the decision is re-run (see the auth listener), so a
+  /// slow restore can never leave the app open without its lock.
+  bool _coldStartDecided = false;
+
+  /// Set by [_hasSession] when the bounded wait ran out with no session visible.
+  bool _sessionWaitTimedOut = false;
 
   /// Whether the device can currently prompt. Null until first checked; null is treated as
   /// "assume yes" for the cheap shield only, never for the prompt.
@@ -160,6 +176,16 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
     // the login screen is never held behind it.
     ref.listenManual(authStateProvider, (previous, next) {
       if (next is AsyncData<AuthUser?> && next.value == null) _release();
+      // The restore finished after the cold-start wait gave up (worst case ~22 s): decide now.
+      if (next is AsyncData<AuthUser?> &&
+          next.value != null &&
+          widget.enabled &&
+          !_coldStartDecided &&
+          !_locked &&
+          !_shielded) {
+        setState(() => _shielded = true);
+        unawaited(_resumeFromColdStart());
+      }
     });
   }
 
@@ -179,7 +205,9 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
 
   /// Local-only: a stored session exists and the device can still prompt.
   Future<bool> _lockApplies() async {
-    if (!await _hasSession()) return false;
+    final hasSession = await _hasSession();
+    // Riverpod 3 throws on `ref.read` after dispose, and the wait above can be long.
+    if (!mounted || !hasSession) return false;
     bool available;
     try {
       available = await ref.read(biometricServiceProvider).isAvailable();
@@ -195,11 +223,14 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
     if (repo.currentUser != null) return true;
     // Cold start: the stored session is restored asynchronously, so "no user yet" is not "no
     // session". Wait for the auth state to resolve, bounded.
+    _sessionWaitTimedOut = false;
     try {
-      final user = await ref.read(authStateProvider.future).timeout(_kSessionWait);
+      final user = await ref.read(authStateProvider.future).timeout(widget.sessionWait);
       return user != null || repo.currentUser != null;
     } catch (_) {
-      return repo.currentUser != null;
+      final has = repo.currentUser != null;
+      _sessionWaitTimedOut = !has;
+      return has;
     }
   }
 
@@ -271,6 +302,8 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
   Future<void> _resumeFromColdStart() async {
     final applies = await _lockApplies();
     if (!mounted) return;
+    // Final unless the wait merely ran out (see [_coldStartDecided]).
+    if (applies || !_sessionWaitTimedOut) _coldStartDecided = true;
     if (!applies) {
       _release();
       return;
@@ -290,7 +323,8 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
     // Resume is synchronous about the session (already restored by now) and re-checks enrolment,
     // which can change while the app is away.
     if (!_hasSessionNow || !await _lockApplies()) {
-      _release();
+      // While the cold-start decision is still pending the cover stays: the auth listener decides.
+      if (_coldStartDecided) _release();
       return;
     }
     if (await _withinGrace()) {
@@ -345,6 +379,8 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
         await _markActive();
         await _refreshSession(force: true);
       }
+    } catch (_) {
+      // The prompt itself failed (platform error): stay locked, the technician can tap again.
     } finally {
       _prompting = false;
     }
