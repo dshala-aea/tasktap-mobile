@@ -16,7 +16,7 @@
 // (`session_ender_test.dart`).
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -124,6 +124,47 @@ void main() {
     );
     expect(prefs.getString(tenantTimeZonePrefsKey), 'Asia/Tokyo');
     expect(repo.signOuts, 1, reason: 'the credentials themselves do go');
+  });
+
+  test('invalid_grant keeps an UNSENT queued row (a pending ticket) untouched', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    await db
+        .into(db.pendingTickets)
+        .insert(
+          PendingTicketsCompanion.insert(
+            id: 'pt-unsent',
+            createdAt: DateTime.utc(2026, 6, 1),
+            title: 'Creato offline',
+            customerId: 'cust-1',
+            locationId: 'loc-1',
+            statusId: 1,
+            typeId: 1,
+            state: const Value('pendingSync'),
+          ),
+        );
+    final repo = _DeadSessionRepo();
+    final container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [
+        authRepositoryProvider.overrideWithValue(repo),
+        appDatabaseProvider.overrideWithValue(db),
+      ],
+    );
+    addTearDown(container.dispose);
+    final interceptor = container
+        .read(dioProvider)
+        .interceptors
+        .whereType<AuthInterceptor>()
+        .single;
+
+    await interceptor.onError(_make401(), _MockErrorHandler());
+
+    final rows = await db.select(db.pendingTickets).get();
+    expect(rows, hasLength(1), reason: 'the unsent create must survive the forced end');
+    expect(rows.single.id, 'pt-unsent');
+    expect(rows.single.state, 'pendingSync');
+    expect(repo.signOuts, 1, reason: 'credentials dropped: the auth stream emits null and the router shows /login');
   });
 
   test('the owner marker is left for the next sign-in when the subject is readable', () async {

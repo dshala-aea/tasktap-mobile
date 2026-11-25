@@ -339,6 +339,278 @@ void main() {
       verify(() => handler.next(any())).called(1);
     });
   });
+
+  // ── proactive refresh before a request leaves (queue flush / sync) ─────
+
+  group('onRequest — proactive refresh of an expired token', () {
+    AuthUser userExpiringIn(Duration d, {String token = 'stale-token'}) => AuthUser(
+      id: 'u1',
+      email: 'tech@tasktap.io',
+      accessToken: token,
+      refreshToken: 'refresh',
+      expiresAt: DateTime.now().toUtc().add(d),
+    );
+
+    /// Runs onRequest and waits for the handler to be completed (the refresh is async).
+    Future<void> send(AuthInterceptor i, RequestOptions options) async {
+      final done = Completer<void>();
+      final handler = MockRequestInterceptorHandler();
+      when(() => handler.next(any())).thenAnswer((_) => done.complete());
+      i.onRequest(options, handler);
+      await done.future.timeout(const Duration(seconds: 2));
+    }
+
+    test('expired token + online: exactly one refresh, the call carries the NEW token', () async {
+      var current = userExpiringIn(const Duration(minutes: -5));
+      when(() => repo.currentUser).thenAnswer((_) => current);
+      when(() => repo.refreshSession()).thenAnswer((_) async {
+        current = userExpiringIn(const Duration(hours: 1), token: 'fresh-token');
+        return (user: current, failure: null);
+      });
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => true);
+      final options = RequestOptions(path: '/api/sync');
+
+      await send(i, options);
+
+      verify(() => repo.refreshSession()).called(1);
+      expect(options.headers['Authorization'], 'Bearer fresh-token');
+    });
+
+    test('a token expiring within 60 s is refreshed too; one with margin is not', () async {
+      var current = userExpiringIn(const Duration(seconds: 30));
+      when(() => repo.currentUser).thenAnswer((_) => current);
+      when(() => repo.refreshSession()).thenAnswer((_) async {
+        current = userExpiringIn(const Duration(hours: 1), token: 'fresh-token');
+        return (user: current, failure: null);
+      });
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => true);
+
+      await send(i, RequestOptions(path: '/api/a'));
+
+      // now fresh (1 h): no further refresh
+      final options = RequestOptions(path: '/api/b');
+      await send(i, options);
+
+      verify(() => repo.refreshSession()).called(1); // total across both requests
+      expect(options.headers['Authorization'], 'Bearer fresh-token');
+    });
+
+    test('the offline-restored session (empty access token) is refreshed once online', () async {
+      var current = AuthUser(
+        id: 'u1',
+        email: 'tech@tasktap.io',
+        accessToken: '',
+        refreshToken: 'refresh',
+        expiresAt: DateTime.now().toUtc(),
+      );
+      when(() => repo.currentUser).thenAnswer((_) => current);
+      when(() => repo.refreshSession()).thenAnswer((_) async {
+        current = userExpiringIn(const Duration(hours: 1), token: 'fresh-token');
+        return (user: current, failure: null);
+      });
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => true);
+      final options = RequestOptions(path: '/api/sync');
+
+      await send(i, options);
+
+      verify(() => repo.refreshSession()).called(1);
+      expect(options.headers['Authorization'], 'Bearer fresh-token');
+    });
+
+    test('offline: NO refresh attempt, nothing prompted, the request just goes out', () async {
+      when(() => repo.currentUser).thenReturn(userExpiringIn(const Duration(minutes: -5)));
+      var ended = false;
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => false)
+        ..onForcedSignOut = () async => ended = true;
+      final options = RequestOptions(path: '/api/sync');
+      final handler = MockRequestInterceptorHandler();
+
+      i.onRequest(options, handler);
+
+      verify(() => handler.next(options)).called(1); // synchronous: nothing awaited
+      verifyNever(() => repo.refreshSession());
+      verifyNever(() => repo.signOut());
+      expect(ended, isFalse);
+      expect(options.headers['Authorization'], 'Bearer stale-token');
+    });
+
+    test('connectivity unknown (no isOnline wired): behaviour unchanged, no refresh', () async {
+      when(() => repo.currentUser).thenReturn(userExpiringIn(const Duration(minutes: -5)));
+      final options = RequestOptions(path: '/api/sync');
+      final handler = MockRequestInterceptorHandler();
+
+      interceptor.onRequest(options, handler);
+
+      verify(() => handler.next(options)).called(1);
+      verifyNever(() => repo.refreshSession());
+    });
+
+    test('a failed proactive refresh does not hang the request nor end the session', () async {
+      when(() => repo.currentUser).thenReturn(userExpiringIn(const Duration(minutes: -5)));
+      when(
+        () => repo.refreshSession(),
+      ).thenAnswer((_) async => (user: null, failure: const NetworkError()));
+      var ended = false;
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => true)
+        ..onForcedSignOut = () async => ended = true;
+      final options = RequestOptions(path: '/api/sync');
+
+      await send(i, options);
+
+      expect(ended, isFalse);
+      expect(options.headers['Authorization'], 'Bearer stale-token');
+    });
+
+    test('a refresh that throws still lets the request go', () async {
+      when(() => repo.currentUser).thenReturn(userExpiringIn(const Duration(minutes: -5)));
+      when(() => repo.refreshSession()).thenThrow(StateError('boom'));
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => true);
+
+      await send(i, RequestOptions(path: '/api/sync')); // completes, does not time out
+    });
+
+    test('anonymous (noAuth) requests never trigger a refresh', () async {
+      when(() => repo.currentUser).thenReturn(userExpiringIn(const Duration(minutes: -5)));
+      final i = AuthInterceptor(dio: dio, authRepo: repo, isOnline: () => true);
+      final handler = MockRequestInterceptorHandler();
+
+      i.onRequest(RequestOptions(path: '/api/app/version-policy', extra: {'noAuth': true}), handler);
+
+      verifyNever(() => repo.refreshSession());
+    });
+
+    test('end to end: expired token, one refresh, ONE request on the wire, no 401 round trip',
+        () async {
+      var current = userExpiringIn(const Duration(minutes: -5));
+      when(() => repo.currentUser).thenAnswer((_) => current);
+      when(() => repo.refreshSession()).thenAnswer((_) async {
+        current = userExpiringIn(const Duration(hours: 1), token: 'fresh-token');
+        return (user: current, failure: null);
+      });
+      final wire = <RequestOptions>[];
+      final d = Dio(BaseOptions(baseUrl: 'http://localhost'))
+        ..httpClientAdapter = _StubAdapter(
+          onFetch: (o) {
+            wire.add(o);
+            return ResponseBody.fromString('{}', 200);
+          },
+        );
+      d.interceptors.add(AuthInterceptor(dio: d, authRepo: repo, isOnline: () => true));
+
+      final r1 = d.get<dynamic>('/api/a');
+      final r2 = d.get<dynamic>('/api/b');
+      await Future.wait([r1, r2]);
+
+      expect(wire, hasLength(2), reason: 'no request burned on a predictable 401');
+      expect(wire.every((o) => o.headers['Authorization'] == 'Bearer fresh-token'), isTrue);
+    });
+  });
+
+  // ── what the 401 path does after the proactive step ────────────────────
+
+  group('onError — after a failed proactive refresh', () {
+    RequestOptions failedPreflight(AuthFailure f) =>
+        RequestOptions(path: '/api/data', extra: {'_preflightRefreshFailure': f});
+
+    test('invalid_grant: forced end, WITHOUT redeeming the refresh token a second time', () async {
+      var ended = 0;
+      interceptor.onForcedSignOut = () async => ended++;
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(_make401(failedPreflight(const SessionExpired())), handler);
+
+      verifyNever(() => repo.refreshSession());
+      expect(ended, 1);
+      verify(() => handler.next(any())).called(1);
+    });
+
+    test('network error: session kept, the call fails (retryable), no second refresh', () async {
+      var ended = 0;
+      interceptor.onForcedSignOut = () async => ended++;
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(_make401(failedPreflight(const NetworkError())), handler);
+
+      verifyNever(() => repo.refreshSession());
+      verifyNever(() => repo.signOut());
+      expect(ended, 0);
+      verify(() => handler.next(any())).called(1);
+    });
+  });
+
+  // ── offline failures are not auth events ───────────────────────────────
+
+  group('onError — offline', () {
+    test('a connection error (no response) attempts no refresh and ends nothing', () async {
+      var ended = 0;
+      interceptor.onForcedSignOut = () async => ended++;
+      final options = RequestOptions(path: '/api/data');
+      final err = DioException(requestOptions: options, type: DioExceptionType.connectionError);
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(err, handler);
+
+      verifyNever(() => repo.refreshSession());
+      verifyNever(() => repo.signOut());
+      expect(ended, 0);
+      verify(() => handler.next(err)).called(1);
+    });
+  });
+
+  // ── concurrent 401s share one refresh ──────────────────────────────────
+
+  group('onError — concurrent 401s', () {
+    test('a 401 whose bearer was already replaced by another caller does not refresh again',
+        () async {
+      // Request A and B left with the old token; A's 401 refreshed the session; B's 401 arrives
+      // afterwards. B must retry with the current token, not redeem the refresh token again.
+      final fresh = _fakeUser(token: 'fresh-token');
+      when(() => repo.currentUser).thenReturn(fresh);
+      final fetched = <RequestOptions>[];
+      dio.httpClientAdapter = _StubAdapter(
+        onFetch: (o) {
+          fetched.add(o);
+          return ResponseBody.fromString('{}', 200);
+        },
+      );
+      final options = RequestOptions(
+        path: '/api/data',
+        baseUrl: 'http://localhost',
+        headers: {'Authorization': 'Bearer old-token'},
+      );
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(_make401(options), handler);
+
+      verifyNever(() => repo.refreshSession());
+      expect(fetched.single.headers['Authorization'], 'Bearer fresh-token');
+    });
+
+    test('two simultaneous 401s on the same stale token both end up on one repo refresh call',
+        () async {
+      // The repository coalesces overlapping calls (see zitadel_auth_repository_test single-flight);
+      // here the interceptor must not add a refresh of its own beyond one per request.
+      when(() => repo.currentUser).thenReturn(_fakeUser(token: 'old-token'));
+      when(() => repo.refreshSession()).thenAnswer((_) async {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        return (user: _fakeUser(token: 'fresh-token'), failure: null);
+      });
+      dio.httpClientAdapter = _StubAdapter(onFetch: (_) => ResponseBody.fromString('{}', 200));
+      RequestOptions req() => RequestOptions(
+        path: '/api/data',
+        baseUrl: 'http://localhost',
+        headers: {'Authorization': 'Bearer old-token'},
+      );
+
+      await Future.wait([
+        interceptor.onError(_make401(req()), MockErrorInterceptorHandler()),
+        interceptor.onError(_make401(req()), MockErrorInterceptorHandler()),
+      ]);
+
+      verify(() => repo.refreshSession()).called(2); // one per request; the repo makes it ONE exchange
+    });
+  });
+
 }
 
 // ── Stub HTTP adapter ─────────────────────────────────────────────────────

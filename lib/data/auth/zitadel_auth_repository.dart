@@ -191,7 +191,9 @@ class ZitadelAuthRepository implements IAuthRepository {
         expiry: result.accessTokenExpirationDateTime,
       );
       if (fresh == null) {
-        return (user: null, failure: const SessionExpired());
+        // A token response without an access token is a malformed answer, not the server rejecting
+        // the refresh token (`invalid_grant`): retryable, the session is kept.
+        return (user: null, failure: const UnknownAuthError('No access token returned'));
       }
       // A refresh response does not always carry an id_token, and the access token may be opaque:
       // the claims then decode to nothing and the user comes back with an EMPTY id. Keep the
@@ -623,9 +625,10 @@ class ZitadelAuthRepository implements IAuthRepository {
         msg.contains('host')) {
       return const NetworkError();
     }
-    if (msg.contains('invalid_grant') ||
-        msg.contains('refresh') ||
-        msg.contains('expired')) {
+    // Only the OAuth `invalid_grant` code means the refresh token is dead. Looser words ("refresh",
+    // "expired") are NOT evidence: "certificate has expired" or "failed to refresh" are transport
+    // or SDK trouble, and reading them as SessionExpired forced a sign-out on a retryable glitch.
+    if (msg.contains('invalid_grant')) {
       return const SessionExpired();
     }
     return UnknownAuthError(e.toString());

@@ -11,6 +11,7 @@
 // backed by a plain in-memory Map so read/write/delete round-trip like the
 // real thing.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -167,13 +168,15 @@ void main() {
       expect(store.containsKey(_cachedIdentityKey), isFalse);
     });
 
-    test('an expired/revoked session wipes the refresh token and signs out', () async {
+    test('loose "expired" text is NOT proof of a dead session: the session is kept', () async {
+      // Only the OAuth invalid_grant code ends a session. A TLS "certificate has expired" or an SDK
+      // "failed to refresh" is retryable trouble and must not bounce a technician to the login.
       when(() => appAuth.token(any())).thenThrow(Exception('token expired'));
 
       final repo = await restoredRepo();
 
-      expect(repo.currentUser, isNull);
-      expect(store.containsKey(_refreshTokenKey), isFalse);
+      expect(repo.currentUser, isNotNull);
+      expect(store[_refreshTokenKey], 'rt-cached');
     });
   });
 
@@ -378,6 +381,82 @@ void main() {
         reason: 'the single-flight guard must clear once a refresh settles, not permanently '
             'dedupe every future refresh',
       );
+    });
+  });
+
+  group('refreshSession — only invalid_grant is a dead session', () {
+    // The classification the interceptor's forced path hangs off: SessionExpired ends the session
+    // (keeping local data), every other failure keeps it and lets the one call fail retryably.
+    late ZitadelAuthRepository repo;
+
+    setUp(() {
+      repo = ZitadelAuthRepository(appAuth: appAuth, storage: storage, restore: false);
+      store[_refreshTokenKey] = 'rt-kept';
+      store[_cachedIdentityKey] = jsonEncode({'id': 'u1', 'email': 'tech@tasktap.io'});
+    });
+
+    test('a structured invalid_grant is SessionExpired', () async {
+      when(() => appAuth.token(any())).thenThrow(
+        FlutterAppAuthPlatformException(
+          code: 'token_failed',
+          message: 'Failed to get token',
+          platformErrorDetails: FlutterAppAuthPlatformErrorDetails(
+            type: '2',
+            code: '9',
+            error: 'invalid_grant',
+            errorDescription: null,
+          ),
+        ),
+      );
+
+      final result = await repo.refreshSession();
+
+      expect(result.failure, isA<SessionExpired>());
+    });
+
+    test('a network error is NetworkError and keeps the stored session', () async {
+      when(() => appAuth.token(any())).thenThrow(Exception('SocketException: Failed host lookup'));
+
+      final result = await repo.refreshSession();
+
+      expect(result.failure, isA<NetworkError>());
+      expect(store[_refreshTokenKey], 'rt-kept');
+      expect(store[_cachedIdentityKey], isNotNull);
+    });
+
+    test('"certificate has expired" / "failed to refresh" are NOT SessionExpired', () async {
+      when(() => appAuth.token(any())).thenThrow(Exception('certificate has expired'));
+      final tls = await repo.refreshSession();
+      expect(tls.failure, isNot(isA<SessionExpired>()));
+
+      when(() => appAuth.token(any())).thenThrow(Exception('failed to refresh the token'));
+      final sdk = await repo.refreshSession();
+      expect(sdk.failure, isNot(isA<SessionExpired>()));
+
+      expect(store[_refreshTokenKey], 'rt-kept');
+    });
+
+    test('a token response without an access token is retryable, not SessionExpired', () async {
+      when(() => appAuth.token(any())).thenAnswer(
+        (_) async => TokenResponse(null, null, null, null, null, null, null),
+      );
+
+      final result = await repo.refreshSession();
+
+      expect(result.user, isNull);
+      expect(result.failure, isA<UnknownAuthError>());
+      expect(store[_refreshTokenKey], 'rt-kept');
+    });
+
+    test('a hung native refresh is a NetworkError (the session is kept)', () async {
+      // Not exercised with a real 12 s wait: a TimeoutException from the call is what the bound
+      // produces, and it must read as unreachable, never as a dead token.
+      when(() => appAuth.token(any())).thenThrow(TimeoutException('hung'));
+
+      final result = await repo.refreshSession();
+
+      expect(result.failure, isA<NetworkError>());
+      expect(store[_refreshTokenKey], 'rt-kept');
     });
   });
 
