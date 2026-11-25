@@ -41,10 +41,21 @@ class _UpdateGateState extends ConsumerState<UpdateGate> with WidgetsBindingObse
     super.dispose();
   }
 
+  // Updated in build. While the blocking screen is up the back button must not pop the (hidden)
+  // routes underneath.
+  bool _blocked = false;
+
+  // WidgetsBindingObserver.didPopRoute runs before the Router's own back handling; returning true
+  // swallows the press. PopScope cannot do this here: the gate sits above the Navigator, so there
+  // is no ModalRoute. Observer ordering vs the Router's back dispatcher must be verified on a
+  // device; if it is not reliable the fallback is an accepted minor (a hidden-stack pop).
+  @override
+  Future<bool> didPopRoute() async => _blocked;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.read(appVersionStatusProvider.notifier).refresh();
+      ref.read(appVersionStatusProvider.notifier).refreshOnResume();
     }
   }
 
@@ -62,6 +73,7 @@ class _UpdateGateState extends ConsumerState<UpdateGate> with WidgetsBindingObse
     final pending = ref.watch(pendingSyncCountProvider.select((v) => v.value?.pending));
 
     final mode = updateGateMode(updateRequired: updateRequired, pending: pending);
+    _blocked = mode == UpdateGateMode.blocked;
 
     Widget? banner;
     if (mode == UpdateGateMode.syncFirst) {

@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rxdart/rxdart.dart';
 
+import '../timbratura/cantiere_session_repository.dart' show cantiereReconciledOrphanMarker;
 import '../timbratura/work_session_repository.dart' show reconciledOrphanMarker;
 import 'sync_service.dart' show appDatabaseProvider;
 
@@ -47,13 +48,27 @@ final pendingSyncCountProvider = StreamProvider<PendingSyncCount>((ref) {
           ))
           .watch();
 
-  return Rx.combineLatest5(
+  // Site punches (cantiere timbra), same rule: pending, minus the reconciler's display-only
+  // `reconciled_orphan` rows that are never uploaded.
+  //
+  // Voice recordings (file-based pending_voice) are intentionally NOT counted here: they are not a
+  // database queue and have no automatic flush, so counting them would hold the update gate open.
+  final cantierePunchesStream =
+      (db.select(db.cantierePunches)..where(
+            (p) =>
+                p.isPendingSync.equals(true) &
+                (p.notes.isNull() | p.notes.equals(cantiereReconciledOrphanMarker).not()),
+          ))
+          .watch();
+
+  return Rx.combineLatest6(
     reportsStream,
     ticketsStream,
     attachmentsStream,
     timersStream,
     workSessionsStream,
-    (reports, tickets, attachments, timers, workSessions) {
+    cantierePunchesStream,
+    (reports, tickets, attachments, timers, workSessions, cantierePunches) {
       var pending = 0;
       var failed = 0;
 
@@ -88,6 +103,7 @@ final pendingSyncCountProvider = StreamProvider<PendingSyncCount>((ref) {
       // Every row selected above is a pending personal punch (the reconciler's display-only
       // corrections are excluded in the query).
       pending += workSessions.length;
+      pending += cantierePunches.length;
 
       return (pending: pending, failed: failed);
     },

@@ -43,12 +43,17 @@ class UpdateAvailableBanner extends StatelessWidget {
                 fullWidth: false,
                 onPressed: onUpdate,
               ),
-              IconButton(
-                key: const Key('updateAvailableDismiss'),
-                tooltip: 'Nascondi per 7 giorni',
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                icon: Icon(LucideIcons.x, color: context.colors.ink),
-                onPressed: onDismiss,
+              // No tooltip: this banner lives above the Navigator (no Overlay ancestor).
+              Semantics(
+                label: 'Nascondi per 7 giorni',
+                button: true,
+                excludeSemantics: true,
+                child: IconButton(
+                  key: const Key('updateAvailableDismiss'),
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                  icon: Icon(LucideIcons.x, color: context.colors.ink),
+                  onPressed: onDismiss,
+                ),
               ),
             ],
           ),

@@ -207,5 +207,90 @@ void main() {
       await pumpEventQueue();
       expect(c2.read(appVersionStatusProvider).bannerDismissed, isTrue);
     });
+
+    group('resume throttle', () {
+      test('skips a resume refresh within 15 minutes, refetches after', () async {
+        var fetches = 0;
+        var now = DateTime.utc(2026, 11, 25, 9);
+        final repo = _repo(
+          fetch: (_) async {
+            fetches++;
+            return const AppVersionPolicy();
+          },
+        );
+        final c = ProviderContainer(
+          overrides: [
+            appVersionPolicyRepositoryProvider.overrideWithValue(repo),
+            appVersionClockProvider.overrideWithValue(() => now),
+          ],
+        );
+        addTearDown(c.dispose);
+        final notifier = c.read(appVersionStatusProvider.notifier);
+        await pumpEventQueue();
+        expect(fetches, 1); // launch
+
+        now = now.add(const Duration(minutes: 5));
+        await notifier.refreshOnResume();
+        expect(fetches, 1);
+
+        now = now.add(const Duration(minutes: 11)); // 16 min since launch
+        await notifier.refreshOnResume();
+        expect(fetches, 2);
+
+        now = now.add(const Duration(minutes: 1));
+        await notifier.refreshOnResume();
+        expect(fetches, 2);
+      });
+
+      test('a failed attempt also counts for the throttle', () async {
+        var fetches = 0;
+        var now = DateTime.utc(2026, 11, 25, 9);
+        final repo = _repo(
+          fetch: (_) async {
+            fetches++;
+            throw Exception('offline');
+          },
+        );
+        final c = ProviderContainer(
+          overrides: [
+            appVersionPolicyRepositoryProvider.overrideWithValue(repo),
+            appVersionClockProvider.overrideWithValue(() => now),
+          ],
+        );
+        addTearDown(c.dispose);
+        final notifier = c.read(appVersionStatusProvider.notifier);
+        await pumpEventQueue();
+        now = now.add(const Duration(minutes: 1));
+        await notifier.refreshOnResume();
+
+        expect(fetches, 1);
+      });
+
+      test('while an update is required every resume refetches (store return releases promptly)', () async {
+        var fetches = 0;
+        var now = DateTime.utc(2026, 11, 25, 9);
+        final repo = _repo(
+          fetch: (_) async {
+            fetches++;
+            return const AppVersionPolicy(minimumVersion: '1.0.12');
+          },
+        );
+        final c = ProviderContainer(
+          overrides: [
+            appVersionPolicyRepositoryProvider.overrideWithValue(repo),
+            appVersionClockProvider.overrideWithValue(() => now),
+          ],
+        );
+        addTearDown(c.dispose);
+        final notifier = c.read(appVersionStatusProvider.notifier);
+        await pumpEventQueue();
+        expect(c.read(updateRequiredProvider), isTrue);
+
+        now = now.add(const Duration(seconds: 30));
+        await notifier.refreshOnResume();
+
+        expect(fetches, 2);
+      });
+    });
   });
 }

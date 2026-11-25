@@ -11,6 +11,9 @@ import 'app_version_policy_repository.dart';
 import 'store_url.dart';
 import 'update_required_state.dart';
 
+/// Clock for the resume throttle; a provider so tests can drive it.
+final appVersionClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+
 final appVersionPolicyRepositoryProvider = Provider<AppVersionPolicyRepository>((ref) {
   final api = AppVersionPolicyApi(ref.watch(dioProvider));
   return AppVersionPolicyRepository(
@@ -27,8 +30,12 @@ final appVersionPolicyRepositoryProvider = Provider<AppVersionPolicyRepository>(
 /// refresh runs in the background. [refresh] is also called when the app returns to the foreground.
 /// Nothing here can block the app on a failed fetch.
 class AppVersionStatusNotifier extends Notifier<AppVersionStatus> {
+  /// Resume refreshes closer together than this are skipped (unless an update is required).
+  static const resumeThrottle = Duration(minutes: 15);
+
   bool _disposed = false;
   bool _refreshing = false;
+  DateTime? _lastAttempt;
 
   AppVersionPolicyRepository get _repo => ref.read(appVersionPolicyRepositoryProvider);
 
@@ -48,10 +55,22 @@ class AppVersionStatusNotifier extends Notifier<AppVersionStatus> {
     await refresh();
   }
 
+  /// Foreground refresh: skipped when the last attempt (successful or not) was under
+  /// [resumeThrottle] ago, except while an update is required: a user coming back from the store
+  /// must be released promptly.
+  Future<void> refreshOnResume() async {
+    final last = _lastAttempt;
+    final recent =
+        last != null && ref.read(appVersionClockProvider)().difference(last) < resumeThrottle;
+    if (recent && !ref.read(updateRequiredProvider)) return;
+    await refresh();
+  }
+
   /// Fetches the policy again (launch, resume). Never throws; a failure keeps the cached verdict.
   Future<void> refresh() async {
     if (_refreshing || _disposed) return;
     _refreshing = true;
+    _lastAttempt = ref.read(appVersionClockProvider)();
     try {
       final result = await _repo.refresh();
       if (_disposed) return;

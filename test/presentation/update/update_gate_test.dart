@@ -80,6 +80,17 @@ class _Harness {
   final List<Uri> launched;
   final List<Override> overrides;
 
+  /// The gate in `MaterialApp.builder`: above the Navigator, so there is no Overlay or ModalRoute
+  /// ancestor (a Tooltip or PopScope here would throw / be inert). This is how main.dart mounts it.
+  Widget appInBuilder() => ProviderScope(
+    retry: (_, _) => null,
+    overrides: overrides,
+    child: MaterialApp(
+      builder: (context, child) => UpdateGate(child: child ?? const SizedBox.shrink()),
+      home: const Center(child: Text('home')),
+    ),
+  );
+
   Widget app() => ProviderScope(
     retry: (_, _) => null,
     overrides: overrides,
@@ -256,6 +267,64 @@ void main() {
       expect(find.byKey(availableBannerKey), findsNothing);
       expect(find.byKey(pendingBannerKey), findsOneWidget);
     });
+  });
+
+  group('mounted above the Navigator (as in main.dart)', () {
+    Future<void> pumpBuilder(WidgetTester tester, _Harness h) async {
+      await tester.pumpWidget(h.appInBuilder());
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('blocking screen renders and opens the store', (tester) async {
+      final h = _Harness(status: _requiredStatus, isRequired: true, pending: _pending(0));
+      await pumpBuilder(tester, h);
+
+      expect(find.byKey(screenKey), findsOneWidget);
+      await tester.tap(find.byKey(const Key('updateRequiredButton')));
+      await tester.pump();
+      expect(h.launched, [_store]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('pending banner renders', (tester) async {
+      final h = _Harness(status: _requiredStatus, isRequired: true, pending: _pending(2));
+      await pumpBuilder(tester, h);
+
+      expect(find.byKey(pendingBannerKey), findsOneWidget);
+      expect(find.text('home'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('available banner renders, is labelled for screen readers, and dismisses', (
+      tester,
+    ) async {
+      final h = _Harness(status: _availableStatus, isAvailable: true);
+      await pumpBuilder(tester, h);
+
+      expect(find.byKey(availableBannerKey), findsOneWidget);
+      expect(find.bySemanticsLabel('Nascondi per 7 giorni'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('updateAvailableDismiss')));
+      await tester.pump();
+      expect(h.fake.dismissCalls, 1);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  testWidgets('back press is swallowed while the blocking screen is up', (tester) async {
+    final h = _Harness(status: _requiredStatus, isRequired: true, pending: _pending(0));
+    await _pump(tester, h);
+
+    final observer = tester.state(find.byType(UpdateGate)) as WidgetsBindingObserver;
+    expect(await observer.didPopRoute(), isTrue);
+  });
+
+  testWidgets('back press is not swallowed otherwise', (tester) async {
+    final h = _Harness(status: AppVersionStatus.none, pending: _pending(0));
+    await _pump(tester, h);
+
+    final observer = tester.state(find.byType(UpdateGate)) as WidgetsBindingObserver;
+    expect(await observer.didPopRoute(), isFalse);
   });
 
   testWidgets('returning to the foreground refreshes the policy', (tester) async {
