@@ -299,6 +299,9 @@ void main() {
     testWidgets('available banner renders, is labelled for screen readers, and dismisses', (
       tester,
     ) async {
+      // find.bySemanticsLabel needs the semantics tree, which is off by default in widget tests.
+      final handle = tester.ensureSemantics();
+      addTearDown(handle.dispose);
       final h = _Harness(status: _availableStatus, isAvailable: true);
       await pumpBuilder(tester, h);
 

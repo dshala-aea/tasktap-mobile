@@ -47,6 +47,7 @@ class UpdateAvailableBanner extends StatelessWidget {
               Semantics(
                 label: 'Nascondi per 7 giorni',
                 button: true,
+                container: true,
                 excludeSemantics: true,
                 child: IconButton(
                   key: const Key('updateAvailableDismiss'),
