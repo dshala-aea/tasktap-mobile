@@ -1,21 +1,57 @@
 // dart format width=100
 import 'package:dio/dio.dart';
 
+/// The non-secret OIDC settings the policy endpoint carries (`auth` block). Every field is
+/// nullable and unvalidated here: `AuthConfigSource` decides whether the block is usable.
+class ServerAuthConfig {
+  const ServerAuthConfig({this.issuer, this.clientId, this.redirectUri});
+
+  final String? issuer;
+  final String? clientId;
+  final String? redirectUri;
+
+  static ServerAuthConfig? fromJson(Object? json) {
+    if (json is! Map) return null;
+    return ServerAuthConfig(
+      issuer: AppVersionPolicy._text(json['issuer']),
+      clientId: AppVersionPolicy._text(json['clientId']),
+      redirectUri: AppVersionPolicy._text(json['redirectUri']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'issuer': issuer,
+    'clientId': clientId,
+    'redirectUri': redirectUri,
+  };
+}
+
 /// The version policy the API serves for one platform. Every field is nullable: no value means
 /// "no minimum" / "no recommendation" / "use the generic store page".
 class AppVersionPolicy {
-  const AppVersionPolicy({this.minimumVersion, this.recommendedVersion, this.storeUrl, this.message});
+  const AppVersionPolicy({
+    this.minimumVersion,
+    this.recommendedVersion,
+    this.storeUrl,
+    this.message,
+    this.auth,
+  });
 
   final String? minimumVersion;
   final String? recommendedVersion;
   final String? storeUrl;
   final String? message;
 
+  /// The server-provided OIDC settings; null when the response has none (or a cache written
+  /// before this field existed).
+  final ServerAuthConfig? auth;
+
   factory AppVersionPolicy.fromJson(Map<String, dynamic> json) => AppVersionPolicy(
     minimumVersion: _text(json['minimumVersion']),
     recommendedVersion: _text(json['recommendedVersion']),
     storeUrl: _text(json['storeUrl']),
     message: _text(json['message']),
+    auth: ServerAuthConfig.fromJson(json['auth']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -23,6 +59,7 @@ class AppVersionPolicy {
     'recommendedVersion': recommendedVersion,
     'storeUrl': storeUrl,
     'message': message,
+    'auth': auth?.toJson(),
   };
 
   static String? _text(Object? v) {
@@ -33,7 +70,7 @@ class AppVersionPolicy {
 }
 
 /// `GET /api/app/version-policy?platform=ios|android`. Anonymous: it is read before sign-in, so
-/// it must not depend on a session. (The `auth` block of the response is not read here.)
+/// it must not depend on a session. The `auth` block is kept on the model and cached with the policy.
 class AppVersionPolicyApi {
   AppVersionPolicyApi(this._dio);
 
