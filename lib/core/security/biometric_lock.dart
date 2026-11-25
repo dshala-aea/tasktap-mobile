@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../domain/auth/auth_user.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
@@ -25,6 +26,10 @@ const Duration kBiometricGrace = Duration(minutes: 5);
 
 /// Don't hammer the token endpoint on every glance at the screen.
 const Duration _kSessionRefreshAfter = Duration(seconds: 60);
+
+/// How long a cold start waits for the stored session to be restored (or found absent) before it
+/// decides from what is known. The restore is bounded on its own side; this is only a backstop.
+const Duration _kSessionWait = Duration(seconds: 15);
 
 const String _kLastUnlockKey = 'biometric_last_active_at';
 
@@ -85,6 +90,16 @@ class SecureLockActivityStore implements LockActivityStore {
 /// window the shield simply lifts. Cold start honours the same rule through a persisted
 /// timestamp, so force-quitting and reopening is not a way to be asked more often, and the app
 /// restarting itself in the background is not a way to be asked at all.
+///
+/// The lock only ever applies when it can be passed: it never shows without a signed-in session
+/// (login screen, after logout: there is nothing to protect) and never on a device that no longer
+/// has an enrolled biometric (the setting may outlive the enrolment; failing closed there would
+/// be a permanent lock-out). Both checks are local: no network is involved in deciding.
+///
+/// Z-order: this widget wraps [UpdateGate] in `main.dart`, so the lock sits above everything,
+/// including the update-required screen, which stays covered until the technician unlocks. That is
+/// deliberate: the lock is local and instant, the store button is one fingerprint away, and
+/// putting the gate above the lock would let an out-of-date build bypass the lock entirely.
 class BiometricLock extends ConsumerStatefulWidget {
   const BiometricLock({
     super.key,
@@ -92,6 +107,7 @@ class BiometricLock extends ConsumerStatefulWidget {
     required this.child,
     this.grace = kBiometricGrace,
     this.store = const SecureLockActivityStore(),
+    this.clock = DateTime.now,
   });
 
   /// The Impostazioni setting. False means this widget is a pass-through.
@@ -104,6 +120,9 @@ class BiometricLock extends ConsumerStatefulWidget {
 
   /// Where "last in use" is recorded. Injected in tests.
   final LockActivityStore store;
+
+  /// The time source for the grace window. Injected in tests.
+  final DateTime Function() clock;
 
   @override
   ConsumerState<BiometricLock> createState() => _BiometricLockState();
@@ -119,6 +138,12 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
   bool _prompting = false;
   DateTime? _lastRefreshAt;
 
+  /// Whether the device can currently prompt. Null until first checked; null is treated as
+  /// "assume yes" for the cheap shield only, never for the prompt.
+  bool? _available;
+
+  bool get _hasSessionNow => ref.read(authRepositoryProvider).currentUser != null;
+
   @override
   void initState() {
     super.initState();
@@ -126,8 +151,55 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
     if (widget.enabled) {
       // Cover first, decide after. Reading the timestamp is async, and an uncovered frame while
       // that happens would show the data the lock exists to hide.
-      _locked = true;
+      // A shield, not yet a lock: whether anything needs locking (session, enrolment) is decided
+      // after the first frame, and an uncovered frame in between is not acceptable.
+      _shielded = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _resumeFromColdStart());
+    }
+    // A session that ends (logout, forced sign-out) leaves nothing to protect: drop the cover so
+    // the login screen is never held behind it.
+    ref.listenManual(authStateProvider, (previous, next) {
+      if (next is AsyncData<AuthUser?> && next.value == null) _release();
+    });
+  }
+
+  /// Back button while the cover is up. The lock sits above the Navigator, so there is no
+  /// ModalRoute and PopScope is inert here; the observer is the only place a back press can be
+  /// swallowed before the Router pops the hidden stack.
+  @override
+  Future<bool> didPopRoute() async => widget.enabled && (_locked || _shielded);
+
+  void _release() {
+    if (!mounted || !(_locked || _shielded)) return;
+    setState(() {
+      _locked = false;
+      _shielded = false;
+    });
+  }
+
+  /// Local-only: a stored session exists and the device can still prompt.
+  Future<bool> _lockApplies() async {
+    if (!await _hasSession()) return false;
+    bool available;
+    try {
+      available = await ref.read(biometricServiceProvider).isAvailable();
+    } catch (_) {
+      available = false;
+    }
+    _available = available;
+    return available;
+  }
+
+  Future<bool> _hasSession() async {
+    final repo = ref.read(authRepositoryProvider);
+    if (repo.currentUser != null) return true;
+    // Cold start: the stored session is restored asynchronously, so "no user yet" is not "no
+    // session". Wait for the auth state to resolve, bounded.
+    try {
+      final user = await ref.read(authStateProvider.future).timeout(_kSessionWait);
+      return user != null || repo.currentUser != null;
+    } catch (_) {
+      return repo.currentUser != null;
     }
   }
 
@@ -167,6 +239,8 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
     // the biometric prompt itself. Covering for those is the right answer anyway: it is a cover,
     // not a prompt, and it lifts on its own the moment the app is back.
     if (!_prompting &&
+        _hasSessionNow &&
+        _available != false &&
         (state == AppLifecycleState.inactive ||
             state == AppLifecycleState.hidden ||
             state == AppLifecycleState.paused)) {
@@ -183,28 +257,42 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
   ///
   /// Written when the app goes to the background and again on every successful unlock, so the
   /// grace window measures time away rather than time since the last prompt.
-  Future<void> _markActive() => widget.store.markActive(DateTime.now());
+  Future<void> _markActive() => widget.store.markActive(widget.clock());
 
   Future<bool> _withinGrace() async {
     final last = await widget.store.lastActiveAt();
     if (last == null) return false;
-    final elapsed = DateTime.now().difference(last);
+    final elapsed = widget.clock().difference(last);
     // A negative elapsed means the clock moved backwards — treat that as expired rather than as
     // an unbounded grace period, because winding the clock back would otherwise open the app.
     return !elapsed.isNegative && elapsed < widget.grace;
   }
 
   Future<void> _resumeFromColdStart() async {
+    final applies = await _lockApplies();
+    if (!mounted) return;
+    if (!applies) {
+      _release();
+      return;
+    }
     if (await _withinGrace()) {
       if (!mounted) return;
-      setState(() => _locked = false);
+      _release();
       await _refreshSession(force: true);
       return;
     }
+    if (!mounted) return;
+    setState(() => _locked = true);
     await _prompt();
   }
 
   Future<void> _resumeFromBackground() async {
+    // Resume is synchronous about the session (already restored by now) and re-checks enrolment,
+    // which can change while the app is away.
+    if (!_hasSessionNow || !await _lockApplies()) {
+      _release();
+      return;
+    }
     if (await _withinGrace()) {
       if (!mounted) return;
       setState(() {
@@ -230,10 +318,10 @@ class _BiometricLockState extends ConsumerState<BiometricLock> with WidgetsBindi
   /// data is still readable, and `AuthInterceptor` and `AuthReconnectWatcher` both retry later.
   Future<void> _refreshSession({bool force = false}) async {
     final last = _lastRefreshAt;
-    if (!force && last != null && DateTime.now().difference(last) < _kSessionRefreshAfter) {
+    if (!force && last != null && widget.clock().difference(last) < _kSessionRefreshAfter) {
       return;
     }
-    _lastRefreshAt = DateTime.now();
+    _lastRefreshAt = widget.clock();
     try {
       await ref.read(authRepositoryProvider).refreshSession();
     } catch (_) {
@@ -287,7 +375,9 @@ class _LockScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
+    // Its own Material: this sits above the Navigator (MaterialApp `builder`), so there is no
+    // ancestor Material/Overlay to lean on, and text would otherwise lose the default text style.
+    return Material(
       // Opaque, and dark under both themes like the other full-bleed surfaces. Anything
       // translucent would leave the data legible behind the lock, which is the whole point.
       color: AppColors.punchGround,
