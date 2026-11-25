@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/app_info_provider.dart';
 import '../../core/config/env.dart';
+import '../../core/update/update_required_state.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/i_auth_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
@@ -49,6 +50,17 @@ final dioProvider = Provider<Dio>((ref) {
   dio.interceptors.add(
     AppVersionInterceptor(
       () async => (await ref.read(appInfoProvider.future)).displayVersion,
+    ),
+  );
+
+  // Read the server's version gate (X-App-Update-Required header / 426 app_update_required) into
+  // app-wide state. Observation only: errors still propagate so the queues keep their items.
+  dio.interceptors.add(
+    AppUpdateGateInterceptor(
+      onUpdateRequired: () =>
+          ref.read(updateRequiredProvider.notifier).markRequired(),
+      onUpdateAvailable: () =>
+          ref.read(updateAvailableProvider.notifier).markAvailable(),
     ),
   );
 
