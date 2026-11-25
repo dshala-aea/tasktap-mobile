@@ -33,6 +33,7 @@ import 'core/widgets/startup_watchdog.dart';
 import 'core/widgets/suspended_banner.dart';
 import 'data/entitlements/entitlement_providers.dart';
 import 'presentation/providers/auth_providers.dart';
+import 'presentation/screens/update/update_gate.dart';
 import 'features/altro/impostazioni_provider.dart';
 
 Future<void> main() async {
@@ -382,7 +383,11 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
                   : Column(
                       children: [
                         const SuspendedBanner(),
-                        Expanded(child: child ?? const SizedBox.shrink()),
+                        // The version gate wraps the router's navigator: a banner above it, or
+                        // the blocking screen over it, never a redirect (login stays reachable).
+                        Expanded(
+                          child: UpdateGate(child: child ?? const SizedBox.shrink()),
+                        ),
                       ],
                     ),
             ),
