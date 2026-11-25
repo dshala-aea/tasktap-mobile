@@ -299,14 +299,19 @@ void main() {
     testWidgets('available banner renders, is labelled for screen readers, and dismisses', (
       tester,
     ) async {
-      // find.bySemanticsLabel needs the semantics tree, which is off by default in widget tests.
-      final handle = tester.ensureSemantics();
-      addTearDown(handle.dispose);
       final h = _Harness(status: _availableStatus, isAvailable: true);
       await pumpBuilder(tester, h);
 
       expect(find.byKey(availableBannerKey), findsOneWidget);
-      expect(find.bySemanticsLabel('Nascondi per 7 giorni'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.label == 'Nascondi per 7 giorni' &&
+              (w.properties.button ?? false),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('updateAvailableDismiss')));
       await tester.pump();
       expect(h.fake.dismissCalls, 1);
