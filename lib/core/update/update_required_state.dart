@@ -22,6 +22,11 @@ class UpdateRequiredNotifier extends StateNotifier<bool> {
   void markRequired() {
     if (!state) state = true;
   }
+
+  /// Lowers the state, for a policy refresh that finds the server no longer requires an update.
+  void clear() {
+    if (state) state = false;
+  }
 }
 
 final updateRequiredProvider =
@@ -35,6 +40,10 @@ class UpdateAvailableNotifier extends StateNotifier<bool> {
 
   void markAvailable() {
     if (!state) state = true;
+  }
+
+  void clear() {
+    if (state) state = false;
   }
 }
 
@@ -52,18 +61,22 @@ bool hasUpdateAvailableHeader(Response<dynamic> response) =>
     response.headers.value(updateAvailableHeader)?.toLowerCase() == 'true';
 
 /// True when [response] is the server's "update the app" answer: HTTP 426 whose body names the
-/// `app_update_required` code. A 426 from anything else (a proxy) is not it.
+/// `app_update_required` code; a body that cannot be read (bytes/stream response types) is
+/// accepted on the status alone.
 bool isUpdateRequiredResponse(Response<dynamic>? response) {
   if (response == null || response.statusCode != 426) return false;
   var body = response.data;
-  if (body is String) {
-    try {
-      body = jsonDecode(body);
-    } catch (_) {
-      return false;
-    }
+  try {
+    if (body is List<int>) body = utf8.decode(body, allowMalformed: true);
+    if (body is String) body = jsonDecode(body);
+  } catch (_) {
+    // Readable text that is not our JSON (a proxy's plain-text 426): not the update answer.
+    return false;
   }
-  return body is Map && body['code'] == appUpdateRequiredCode;
+  if (body is Map) return body['code'] == appUpdateRequiredCode;
+  // Stream bodies (ResponseType.stream) and other unreadable shapes: the API is the only 426
+  // source this app talks to, so the status alone is taken as the update-required answer.
+  return true;
 }
 
 /// True when [error] is a [DioException] carrying the update-required answer. For the offline

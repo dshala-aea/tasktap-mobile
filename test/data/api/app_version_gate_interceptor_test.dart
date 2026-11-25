@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/update/update_required_state.dart';
@@ -212,7 +215,50 @@ void main() {
     });
   });
 
+  group('byte and stream bodies', () {
+    Response<dynamic> r(int code, Object? data) => Response<dynamic>(
+      requestOptions: RequestOptions(path: '/'),
+      statusCode: code,
+      data: data,
+    );
+
+    test('a 426 bytes body carrying the code is recognised', () {
+      final bytes = Uint8List.fromList(
+        utf8.encode('{"code":"app_update_required"}'),
+      );
+      expect(isUpdateRequiredResponse(r(426, bytes)), isTrue);
+      expect(isUpdateRequiredResponse(r(426, bytes.toList())), isTrue);
+    });
+
+    test('a 426 bytes body with another code is not', () {
+      final bytes = utf8.encode('{"code":"other"}');
+      expect(isUpdateRequiredResponse(r(426, bytes)), isFalse);
+    });
+
+    test('a 426 stream body is accepted on the status alone', () {
+      final stream = ResponseBody(const Stream<Uint8List>.empty(), 426);
+      expect(isUpdateRequiredResponse(r(426, stream)), isTrue);
+      expect(isUpdateRequiredResponse(r(426, null)), isTrue);
+    });
+
+    test('malformed bytes never throw and never signal', () {
+      final bad = <int>[0xff, 0xfe, 0x7b, 0x00];
+      expect(isUpdateRequiredResponse(r(426, bad)), isFalse);
+      expect(isUpdateRequiredResponse(r(500, bad)), isFalse);
+      expect(isUpdateRequiredResponse(r(500, ResponseBody(const Stream<Uint8List>.empty(), 500))), isFalse);
+    });
+  });
+
   group('notifier', () {
+    test('clear lowers the state', () {
+      final n = UpdateRequiredNotifier()..markRequired();
+      n.clear();
+      expect(n.state, isFalse);
+      final a = UpdateAvailableNotifier()..markAvailable();
+      a.clear();
+      expect(a.state, isFalse);
+    });
+
     test('markRequired is sticky', () {
       final n = UpdateRequiredNotifier();
       expect(n.state, isFalse);

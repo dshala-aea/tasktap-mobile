@@ -55,6 +55,8 @@ final dioProvider = Provider<Dio>((ref) {
 
   // Read the server's version gate (X-App-Update-Required header / 426 app_update_required) into
   // app-wide state. Observation only: errors still propagate so the queues keep their items.
+  // Only this client is gated: the other Dio clients (notification_service, kiosk_api_client,
+  // reachability) never send X-App-Version, and the server never blocks a request without it.
   dio.interceptors.add(
     AppUpdateGateInterceptor(
       onUpdateRequired: () =>
