@@ -36,6 +36,7 @@ import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../../core/crash_reporting/crash_reporter.dart';
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart';
+import '../../core/update/update_required_state.dart';
 import '../api/dio_client.dart';
 import '../local/app_database.dart' show WorkSession;
 import '../worklogs/active_tracker_api_client.dart';
@@ -73,6 +74,8 @@ final Provider<TimbraSyncService> timbraSyncServiceProvider = Provider<TimbraSyn
         ref.read(timbraClockDisagreementProvider.notifier).record(seconds),
     punchPipelineEnabled: ref.read(punchPipelineEnabledReaderProvider),
     onPunchState: (snapshot) => ref.read(punchSnapshotProvider.notifier).replace(snapshot),
+    onUpdateRequired: () => ref.read(updateRequiredProvider.notifier).markRequired(),
+    isUpdateRequired: () => ref.read(updateRequiredProvider),
   );
 });
 
@@ -120,7 +123,13 @@ class TimbraSyncService {
     BusinessTime? businessTime,
     Future<bool> Function()? punchPipelineEnabled,
     void Function(PunchSnapshot snapshot)? onPunchState,
-  }) : _punchPipelineEnabled = punchPipelineEnabled,
+    void Function()? onUpdateRequired,
+    bool Function()? isUpdateRequired,
+  }) : _updateLatch = UpdateRequiredLatch(
+         markRequired: onUpdateRequired,
+         isRequired: isUpdateRequired,
+       ),
+       _punchPipelineEnabled = punchPipelineEnabled,
        _onPunchState = onPunchState,
        _repo = repo,
        _apiClient = apiClient,
@@ -175,6 +184,11 @@ class TimbraSyncService {
   DateTime? _batchRetryAt;
   final Set<String> _noticeKinds = {};
 
+  /// Trips on a 426 (this build is below the minimum). Such an answer refuses the BUILD, not the
+  /// punches: nothing is retired (`markSyncFailed`), no notice is shown, and sending stops until
+  /// the app restarts, the app-wide state clears, or a manual sync.
+  final UpdateRequiredLatch _updateLatch;
+
   /// Syncs every work interval this device still owes the server.
   ///
   /// - The queue is NOT day-scoped: today's events plus EVERY pending event from any earlier day
@@ -200,6 +214,9 @@ class TimbraSyncService {
     if (manual) {
       _batchFailures = 0;
       _batchRetryAt = null;
+      _updateLatch.release();
+    } else if (_updateLatch.blocked) {
+      return;
     }
     if (_running) {
       _rerun = true;
@@ -272,6 +289,8 @@ class TimbraSyncService {
 
       final remote = analyseRemoteShifts(allSessions);
       await _runRemoteCommands(remote);
+      // A 426 on a remote command: the batch below would be refused the same way.
+      if (_updateLatch.blocked) return;
 
       // Resurrection guard — see class doc comment above. Remote-shift events never go through
       // the batch: it matches by clientId and would create a duplicate row for that shift.
@@ -360,7 +379,9 @@ class TimbraSyncService {
       _batchFailures = 0;
       _batchRetryAt = null;
     } catch (e) {
-      if (!_isTransient(e) && e is DioException && e.response != null) {
+      if (_updateLatch.trip(e)) {
+        // A 426 refuses the build, not these events: they stay pending, nothing is retired.
+      } else if (!_isTransient(e) && e is DioException && e.response != null) {
         await _handleRefusedBatch(day, e);
       } else if (e is! DioException) {
         // Not a transport or HTTP failure at all: the request may well have been committed and the
@@ -514,7 +535,9 @@ class TimbraSyncService {
               ),
         ]);
       } catch (e) {
-        if (e is DioException && e.response != null && !_isTransient(e)) {
+        if (_updateLatch.trip(e)) {
+          // A 426 refuses the build, not these taps: they stay pending, nothing is retired.
+        } else if (e is DioException && e.response != null && !_isTransient(e)) {
           await _handleRefusedBatch(chunk, e);
         } else if (e is! DioException) {
           unawaited(
@@ -656,6 +679,8 @@ class TimbraSyncService {
             await _apiClient.endBreak(occurredAtUtc: e.eventTime);
         }
       } catch (err) {
+        // A 426 is not a refusal of this tap: keep it queued (and later taps behind it).
+        if (_updateLatch.trip(err)) break;
         if (_isTransient(err)) {
           CrashReporter.instance.addBreadcrumb(
             'timbra remote command transient: ${e.eventType} '

@@ -83,6 +83,36 @@ void main() {
     });
   });
 
+  // ── anonymous (noAuth) requests ───────────────────────────────────────
+
+  group('noAuth requests (version-policy probe)', () {
+    test('no Authorization header even when signed in', () {
+      when(() => repo.currentUser).thenReturn(_fakeUser(token: 'my-token'));
+      final options = RequestOptions(path: '/api/app/version-policy', extra: {'noAuth': true});
+      final handler = MockRequestInterceptorHandler();
+
+      interceptor.onRequest(options, handler);
+
+      expect(options.headers.containsKey('Authorization'), isFalse);
+      verify(() => handler.next(options)).called(1);
+    });
+
+    test('a 401 does not refresh the session nor end it', () async {
+      var ended = false;
+      interceptor.onForcedSignOut = () async => ended = true;
+      final options = RequestOptions(path: '/api/app/version-policy', extra: {'noAuth': true});
+      final err = _make401(options);
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(err, handler);
+
+      verify(() => handler.next(err)).called(1);
+      verifyNever(() => repo.refreshSession());
+      verifyNever(() => repo.signOut());
+      expect(ended, isFalse);
+    });
+  });
+
   // ── onError: non-401 pass-through ─────────────────────────────────────
 
   group('onError — non-401 pass-through', () {

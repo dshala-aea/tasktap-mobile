@@ -45,6 +45,14 @@ abstract final class Env {
     defaultValue: 'com.advantedge.tasktap.tasktapmobile://callback',
   );
 
+  /// Extra EXACT hosts (comma-separated, e.g. `id.example.com,idp.example.org`) a server-provided
+  /// OIDC issuer may use, on top of the compiled list and the compile-time issuer's own host. No
+  /// subdomain matching. See `issuer_allowlist.dart`.
+  static const String oidcIssuerAllowedHosts = String.fromEnvironment(
+    'OIDC_ISSUER_ALLOWED_HOSTS',
+    defaultValue: '',
+  );
+
   /// TaskTap backend REST API base URL — e.g. https://api.tasktap.io
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',

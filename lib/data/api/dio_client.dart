@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/app_info_provider.dart';
 import '../../core/config/env.dart';
+import '../../core/update/update_required_state.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/i_auth_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
@@ -49,6 +50,19 @@ final dioProvider = Provider<Dio>((ref) {
   dio.interceptors.add(
     AppVersionInterceptor(
       () async => (await ref.read(appInfoProvider.future)).displayVersion,
+    ),
+  );
+
+  // Read the server's version gate (X-App-Update-Required header / 426 app_update_required) into
+  // app-wide state. Observation only: errors still propagate so the queues keep their items.
+  // Only this client is gated: the other Dio clients (notification_service, kiosk_api_client,
+  // reachability) never send X-App-Version, and the server never blocks a request without it.
+  dio.interceptors.add(
+    AppUpdateGateInterceptor(
+      onUpdateRequired: () =>
+          ref.read(updateRequiredProvider.notifier).markRequired(),
+      onUpdateAvailable: () =>
+          ref.read(updateAvailableProvider.notifier).markAvailable(),
     ),
   );
 
@@ -108,6 +122,9 @@ final dioProvider = Provider<Dio>((ref) {
 class AuthInterceptor extends Interceptor {
   AuthInterceptor({required this.dio, required this.authRepo});
 
+  /// `RequestOptions.extra` key marking a request as anonymous (no bearer, no refresh on 401).
+  static const noAuthExtra = noAuthExtraKey;
+
   final Dio dio;
   final IAuthRepository authRepo;
 
@@ -119,6 +136,9 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    // Requests marked `extra: {'noAuth': true}` (the anonymous version-policy probe) never carry
+    // the bearer token.
+    if (options.extra[noAuthExtra] == true) return handler.next(options);
     final user = authRepo.currentUser;
     if (user != null) {
       options.headers['Authorization'] = 'Bearer ${user.accessToken}';
@@ -132,6 +152,10 @@ class AuthInterceptor extends Interceptor {
     ErrorInterceptorHandler handler,
   ) async {
     final response = err.response;
+
+    // An anonymous request cannot say anything about the session: a 401 on it must never refresh
+    // the token or end the session.
+    if (err.requestOptions.extra[noAuthExtra] == true) return handler.next(err);
 
     // Only handle 401 Unauthorized — and only once (not on retry).
     if (response?.statusCode == 401 &&

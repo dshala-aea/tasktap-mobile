@@ -19,6 +19,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tasktap_mobile/data/api/app_version_policy_api.dart';
+import 'package:tasktap_mobile/data/auth/auth_config_source.dart';
 import 'package:tasktap_mobile/data/auth/zitadel_auth_repository.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 
@@ -883,5 +885,216 @@ void main() {
         verifyNever(() => appAuth.token(any()));
       },
     );
+  });
+
+  // ── server-provided OIDC config ────────────────────────────────────────────
+  group('server-provided OIDC config', () {
+    const issuerKey = 'tt.oidc.issuer';
+    const oldCfg = AuthConfig(
+      issuer: 'https://old.test',
+      clientId: 'client-old',
+      redirectUri: 'app.tasktap://callback',
+    );
+
+    AuthConfigSource sourceWith(ServerAuthConfig? server) => AuthConfigSource(
+      compileTime: oldCfg,
+      readPolicy: () async => AppVersionPolicy(auth: server),
+    );
+
+    const newServer = ServerAuthConfig(
+      issuer: 'https://id.advantedgeautomation.com',
+      clientId: 'client-new',
+      redirectUri: 'app.tasktap://callback',
+    );
+
+    ZitadelAuthRepository repoWith(ServerAuthConfig? server, {Dio? dio, bool restore = false}) =>
+        ZitadelAuthRepository(
+          appAuth: appAuth,
+          storage: storage,
+          revocationHttpClient: dio,
+          configSource: sourceWith(server),
+          restore: restore,
+        );
+
+    MockDio reachableDio({required bool reachable}) {
+      final dio = MockDio();
+      when(
+        () => dio.get<void>(any(), options: any(named: 'options')),
+      ).thenAnswer((_) async {
+        if (!reachable) {
+          throw DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.connectionError,
+          );
+        }
+        return Response<void>(requestOptions: RequestOptions(path: '/'), statusCode: 200);
+      });
+      return dio;
+    }
+
+    Future<void> settle() async {
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    setUp(() {
+      store[_refreshTokenKey] = 'rt-1';
+      store[_cachedIdentityKey] = jsonEncode({'id': 'u1', 'email': 'tech@tasktap.io'});
+    });
+
+    test('signIn uses the server issuer and client id and stores the issuer with the token',
+        () async {
+      when(() => appAuth.authorizeAndExchangeCode(any())).thenAnswer(
+        (_) async => AuthorizationTokenResponse(
+          'access-1',
+          'refresh-new',
+          DateTime.now().toUtc().add(const Duration(hours: 1)),
+          _fakeIdToken(),
+          'Bearer',
+          null,
+          null,
+          null,
+        ),
+      );
+
+      final result = await repoWith(newServer).signIn();
+
+      expect(result.user, isNotNull);
+      final req = verify(() => appAuth.authorizeAndExchangeCode(captureAny())).captured.single
+          as AuthorizationTokenRequest;
+      expect(req.issuer, 'https://id.advantedgeautomation.com');
+      expect(req.clientId, 'client-new');
+      expect(store[issuerKey], 'https://id.advantedgeautomation.com');
+      expect(store[_refreshTokenKey], 'refresh-new');
+    });
+
+    test('refresh uses the server config when the stored session was minted by that issuer',
+        () async {
+      store[issuerKey] = 'https://id.advantedgeautomation.com';
+      when(() => appAuth.token(any())).thenAnswer(
+        (_) async => TokenResponse(
+          'access-2',
+          'rt-2',
+          DateTime.now().add(const Duration(hours: 1)),
+          _fakeIdToken(),
+          null,
+          null,
+          null,
+        ),
+      );
+
+      final result = await repoWith(newServer).refreshSession();
+
+      expect(result.user, isNotNull);
+      final req = verify(() => appAuth.token(captureAny())).captured.single as TokenRequest;
+      expect(req.issuer, 'https://id.advantedgeautomation.com');
+      expect(req.clientId, 'client-new');
+    });
+
+    test('a session stored WITHOUT an issuer is read as the dart-define issuer (no mismatch)',
+        () async {
+      // No server block: config == dart-defines == the legacy session's issuer.
+      when(() => appAuth.token(any())).thenAnswer(
+        (_) async => TokenResponse(
+          'access-2',
+          'rt-2',
+          DateTime.now().add(const Duration(hours: 1)),
+          _fakeIdToken(),
+          null,
+          null,
+          null,
+        ),
+      );
+
+      final result = await repoWith(null).refreshSession();
+
+      expect(result.failure, isNull);
+      final req = verify(() => appAuth.token(captureAny())).captured.single as TokenRequest;
+      expect(req.issuer, 'https://old.test');
+      // The issuer is persisted from now on.
+      expect(store[issuerKey], 'https://old.test');
+    });
+
+    test('a session stored WITHOUT an issuer is expired when the server moves the issuer',
+        () async {
+      final result = await repoWith(newServer, dio: reachableDio(reachable: true)).refreshSession();
+
+      expect(result.user, isNull);
+      expect(result.failure, isA<SessionExpired>());
+      verifyNever(() => appAuth.token(any()));
+    });
+
+    test('changed issuer: the stored session is never presented to the new issuer', () async {
+      store[issuerKey] = 'https://old.test';
+
+      final result = await repoWith(newServer, dio: reachableDio(reachable: true)).refreshSession();
+
+      expect(result.failure, isA<SessionExpired>());
+      verifyNever(() => appAuth.token(any()));
+    });
+
+    test('changed issuer on cold start keeps the cached session and never probes or refreshes',
+        () async {
+      store[issuerKey] = 'https://old.test';
+      final dio = reachableDio(reachable: true);
+
+      final repo = repoWith(newServer, dio: dio, restore: true);
+      await settle();
+
+      expect(repo.currentUser, isNotNull);
+      expect(repo.currentUser!.id, 'u1');
+      expect(store[_refreshTokenKey], 'rt-1');
+      verifyNever(() => appAuth.token(any()));
+      verifyNever(() => dio.get<void>(any(), options: any(named: 'options')));
+
+      // The next refresh (reconnect / 401) probes the new issuer and decides.
+      final result = await repo.refreshSession();
+      expect(result.failure, isA<SessionExpired>());
+    });
+
+    test('changed issuer: sign-out does not send the old token to a revoke endpoint', () async {
+      store[issuerKey] = 'https://old.test';
+      final dio = MockDio();
+      final repo = repoWith(newServer, dio: dio, restore: true);
+      await settle();
+      await repo.signOut();
+
+      verifyNever(
+        () => dio.post<void>(any(), data: any(named: 'data'), options: any(named: 'options')),
+      );
+      expect(store.containsKey(_refreshTokenKey), isFalse);
+    });
+
+    test('changed issuer while OFFLINE never signs the user out and keeps the token', () async {
+      store[issuerKey] = 'https://old.test';
+
+      final repo = repoWith(newServer, dio: reachableDio(reachable: false), restore: true);
+      await settle();
+
+      expect(repo.currentUser, isNotNull);
+      expect(repo.currentUser!.id, 'u1');
+      expect(store[_refreshTokenKey], 'rt-1');
+      verifyNever(() => appAuth.token(any()));
+    });
+
+    test('an offline refresh error is a NetworkError and keeps the session', () async {
+      store[issuerKey] = 'https://id.advantedgeautomation.com';
+      when(() => appAuth.token(any())).thenThrow(Exception('SocketException: Failed host lookup'));
+
+      final result = await repoWith(newServer).refreshSession();
+
+      expect(result.failure, isA<NetworkError>());
+      expect(store[_refreshTokenKey], 'rt-1');
+      expect(store[issuerKey], 'https://id.advantedgeautomation.com');
+    });
+
+    test('signOut also drops the stored issuer', () async {
+      store[issuerKey] = 'https://old.test';
+
+      await repoWith(null).signOut();
+
+      expect(store.containsKey(issuerKey), isFalse);
+    });
   });
 }

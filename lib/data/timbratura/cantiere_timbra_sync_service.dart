@@ -41,6 +41,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
+import '../../core/update/update_required_state.dart';
 import '../../core/utils/error_message.dart';
 import '../../presentation/providers/clock_disagreement_provider.dart'
     show cantiereClockDisagreementProvider;
@@ -68,6 +69,8 @@ final cantiereTimbraSyncServiceProvider = Provider<CantiereTimbraSyncService>((r
     businessTime: ref.watch(businessTimeProvider),
     onClockDisagreement: (seconds) =>
         ref.read(cantiereClockDisagreementProvider.notifier).record(seconds),
+    onUpdateRequired: () => ref.read(updateRequiredProvider.notifier).markRequired(),
+    isUpdateRequired: () => ref.read(updateRequiredProvider),
   );
 });
 
@@ -80,7 +83,13 @@ class CantiereTimbraSyncService {
     DateTime Function()? clock,
     BusinessTime? businessTime,
     void Function(int seconds)? onClockDisagreement,
-  }) : _repo = repo,
+    void Function()? onUpdateRequired,
+    bool Function()? isUpdateRequired,
+  }) : _updateLatch = UpdateRequiredLatch(
+         markRequired: onUpdateRequired,
+         isRequired: isUpdateRequired,
+       ),
+       _repo = repo,
        _apiClient = apiClient,
        _clock = clock ?? DateTime.now,
        _businessTime = businessTime ?? BusinessTime.fallback(clock: clock),
@@ -109,6 +118,11 @@ class CantiereTimbraSyncService {
   int _batchFailures = 0;
   DateTime? _batchRetryAt;
 
+  /// Trips on a 426 (this build is below the minimum). A 426 is the server refusing the BUILD, not
+  /// the punches: nothing is marked refused, no backoff slot is spent, and sending stops until the
+  /// app restarts, the app-wide state clears, or a manual sync.
+  final UpdateRequiredLatch _updateLatch;
+
   /// Pushes every cantiere event this device still owes the server.
   ///
   /// [manual] (a user-initiated sync) clears the backoff and releases the rows held back by a
@@ -117,6 +131,9 @@ class CantiereTimbraSyncService {
     if (manual) {
       _batchFailures = 0;
       _batchRetryAt = null;
+      _updateLatch.release();
+    } else if (_updateLatch.blocked) {
+      return;
     }
     try {
       if (manual) await _clearSyncErrors();
@@ -242,6 +259,9 @@ class CantiereTimbraSyncService {
         _batchFailures = 0;
         _batchRetryAt = null;
       } catch (e) {
+        // Before the permanent branch: a 426 is not a refusal of these events. They stay pending,
+        // unmarked, and the run stops without touching the backoff counters.
+        if (_updateLatch.trip(e)) return false;
         if (_isPermanent(e)) {
           await _handleRefusedBatch(day, e);
           return false;
@@ -322,7 +342,9 @@ class CantiereTimbraSyncService {
         _onClockDisagreement?.call(clockDisagreement);
       }
     } catch (e) {
-      if (e is DioException && e.response?.statusCode == 404) {
+      if (_updateLatch.trip(e)) {
+        return false; // the close stays queued and unmarked (see the batch catch above)
+      } else if (e is DioException && e.response?.statusCode == 404) {
         // Nothing open on the server any more — the visit is closed either way.
       } else if (_isPermanent(e)) {
         await _repo.markSyncError(

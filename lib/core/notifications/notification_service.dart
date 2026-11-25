@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/env.dart';
+import '../../core/update/update_required_state.dart';
 import '../router/app_router.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -313,6 +314,11 @@ class NotificationService {
         onceKey: 'registered:${maskToken(token)}',
       );
     } on DioException catch (e, st) {
+      // A 426 means this build is below the minimum, not that the registration is broken: the app
+      // shows its own update screen, and the token is registered again on the next login / token
+      // refresh of an updated build. Nothing was stored or discarded; reporting it as a push
+      // failure would only be noise.
+      if (isUpdateRequiredError(e)) return;
       // The backend's own words are usually the answer — a 400 naming the rejected field, a 401
       // from an expired access token — and Dio's message drops the body, so it is carried here.
       final status = e.response?.statusCode;

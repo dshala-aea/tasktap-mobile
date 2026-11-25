@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
+import '../../core/update/update_required_state.dart';
 import '../../core/utils/error_message.dart';
 import '../../presentation/providers/clock_disagreement_provider.dart';
 import '../local/app_database.dart' show TicketTimer;
@@ -51,6 +52,8 @@ final ticketTimerSyncServiceProvider = Provider<TicketTimerSyncService>((ref) {
     // is handed to the screen that shows the clock rather than dropped with the response.
     onClockDisagreement: (ticketId, seconds) =>
         ref.read(clockDisagreementProvider.notifier).record(ticketId, seconds),
+    onUpdateRequired: () => ref.read(updateRequiredProvider.notifier).markRequired(),
+    isUpdateRequired: () => ref.read(updateRequiredProvider),
   );
 });
 
@@ -66,7 +69,13 @@ class TicketTimerSyncService {
     DateTime Function()? clock,
     BusinessTime? businessTime,
     void Function(String ticketId, int seconds)? onClockDisagreement,
-  }) : _repo = repo,
+    void Function()? onUpdateRequired,
+    bool Function()? isUpdateRequired,
+  }) : _updateLatch = UpdateRequiredLatch(
+         markRequired: onUpdateRequired,
+         isRequired: isUpdateRequired,
+       ),
+       _repo = repo,
        _apiClient = apiClient,
        _clock = clock ?? DateTime.now,
        _businessTime = businessTime ?? BusinessTime.fallback(clock: clock),
@@ -85,6 +94,10 @@ class TicketTimerSyncService {
   int _batchFailures = 0;
   DateTime? _batchRetryAt;
 
+  /// Trips on a 426 (this build is below the minimum): not a refusal of the sessions, so they stay
+  /// pending and unmarked and sending stops until restart, the state clearing, or a manual sync.
+  final UpdateRequiredLatch _updateLatch;
+
   /// Pushes every session this device still owes the server.
   ///
   /// [manual] (a user-initiated sync) clears the backoff and releases rows held by a permanent
@@ -93,7 +106,10 @@ class TicketTimerSyncService {
     if (manual) {
       _batchFailures = 0;
       _batchRetryAt = null;
+      _updateLatch.release();
       await _clearSyncErrors();
+    } else if (_updateLatch.blocked) {
+      return;
     }
     if (_batchHeld()) return;
 
@@ -120,6 +136,8 @@ class TicketTimerSyncService {
           _onClockDisagreement?.call(result.ticketId, seconds);
       }
     } catch (e) {
+      // Before the permanent branch, and without touching the backoff counters.
+      if (_updateLatch.trip(e)) return;
       if (_isPermanent(e)) {
         await _handleRefusedBatch(rows, e);
         return;

@@ -82,6 +82,20 @@ DioException _status(int status) {
   );
 }
 
+/// The API's "update the app" answer: HTTP 426 with the flat `app_update_required` body.
+DioException _updateRequired() {
+  final options = RequestOptions(path: '/api/reports/submit');
+  return DioException(
+    requestOptions: options,
+    type: DioExceptionType.badResponse,
+    response: Response(
+      requestOptions: options,
+      statusCode: 426,
+      data: {'code': 'app_update_required'},
+    ),
+  );
+}
+
 void main() {
   setUpAll(() => registerFallbackValue(FakeSubmitReportRequest()));
 
@@ -300,6 +314,189 @@ void main() {
       expect(draft.submissionState, 'failed');
       expect(draft.submissionErrorTransient, isFalse);
       expect(draft.submissionError, isNotNull);
+      expect(await repo.getRetryableFailedDrafts(maxAttempts: 5), isEmpty);
+    });
+  });
+
+  group('version gate — a 426 keeps the row waiting', () {
+    void stub426() {
+      when(
+        () => api.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenThrow(_updateRequired());
+    }
+
+    test('426 leaves the row readyToSubmit: attempts unchanged, no error, not failed, not '
+        'deleted, and the app-wide state is told', () async {
+      await _insertReadyDraft(db, attempts: 2);
+      stub426();
+      var told = 0;
+      final queue = SubmissionQueue(
+        repo: repo,
+        apiClient: api,
+        isOnline: () => true,
+        recheckOnline: () async => true,
+        onUpdateRequired: () => told++,
+      );
+
+      await queue.processAll(force: true);
+
+      final draft = (await repo.getDraft(_reportId))!;
+      expect(draft.submissionState, 'readyToSubmit');
+      expect(draft.submissionAttempts, 2, reason: 'a 426 must not spend the retry budget');
+      expect(draft.submissionError, isNull);
+      expect(draft.submissionErrorTransient, isFalse);
+      expect(told, 1);
+      expect(await repo.getDraftsReadyToSubmit(), hasLength(1));
+    });
+
+    test('after a 426 the unattended flush stops sending; a manual attempt goes through '
+        'again', () async {
+      await _insertReadyDraft(db);
+      stub426();
+      final queue = SubmissionQueue(
+        repo: repo,
+        apiClient: api,
+        isOnline: () => true,
+        recheckOnline: () async => true,
+      );
+
+      await queue.processAll();
+      await queue.processAll();
+      await queue.processAll();
+
+      verify(
+        () => api.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).called(1);
+
+      await queue.processAll(force: true);
+
+      // mocktail does not recount invocations an earlier verify already matched, so this sees
+      // only the forced attempt: exactly one new call reached the API (2 in total).
+      verify(
+        () => api.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).called(1);
+      expect((await repo.getDraft(_reportId))!.submissionState, 'readyToSubmit');
+    });
+
+    test('the latch releases once the app-wide state clears', () async {
+      await _insertReadyDraft(db);
+      stub426();
+      var required = false;
+      final queue = SubmissionQueue(
+        repo: repo,
+        apiClient: api,
+        isOnline: () => true,
+        recheckOnline: () async => true,
+        onUpdateRequired: () => required = true,
+        isUpdateRequired: () => required,
+      );
+
+      await queue.processAll();
+      required = false; // the policy refresh found the server no longer requires an update
+      await queue.processAll();
+
+      verify(
+        () => api.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).called(2);
+    });
+
+    test('a 426 on an attachment upload keeps the row queued with the allegato still pending',
+        () async {
+      await _insertReadyDraft(db);
+      await db
+          .into(db.reportAllegati)
+          .insert(
+            ReportAllegatiCompanion.insert(
+              id: 'allegato-426',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              fileName: 'foto.jpg',
+              contentType: 'image/jpeg',
+              sizeBytes: 1024,
+              storagePath: '/app/captures/foto.jpg',
+              url: '/app/captures/foto.jpg',
+              entityType: 1,
+              entityId: _reportId,
+              uploadedByUserId: 'user-1',
+              isPendingUpload: const Value(true),
+            ),
+          );
+      when(
+        () => api.uploadAttachment(
+          reportId: any(named: 'reportId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+          kind: any(named: 'kind'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      ).thenThrow(_updateRequired());
+      final queue = SubmissionQueue(
+        repo: repo,
+        apiClient: api,
+        isOnline: () => true,
+        recheckOnline: () async => true,
+      );
+
+      await queue.processAll(force: true);
+
+      await expectQueued();
+      expect(await repo.getPendingAllegati(_reportId), hasLength(1));
+    });
+
+    test('a 426 on a retryable failed row keeps its attempts and returns it to waiting', () async {
+      await _insertReadyDraft(db, attempts: 3, submissionState: 'failed');
+      stub426();
+      final queue = SubmissionQueue(
+        repo: repo,
+        apiClient: api,
+        isOnline: () => true,
+        recheckOnline: () async => true,
+      );
+
+      await queue.processAll(force: true);
+
+      final draft = (await repo.getDraft(_reportId))!;
+      expect(draft.submissionState, 'readyToSubmit');
+      expect(draft.submissionAttempts, 3);
+      expect(draft.submissionError, isNull);
+    });
+
+    test('a 400 is unchanged by the gate: still failed, permanent, never auto-retried', () async {
+      await _insertReadyDraft(db);
+      when(
+        () => api.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenThrow(_status(400));
+      final queue = SubmissionQueue(
+        repo: repo,
+        apiClient: api,
+        isOnline: () => true,
+        recheckOnline: () async => true,
+        onUpdateRequired: () => fail('a 400 must not mark the app update-required'),
+      );
+
+      await queue.processAll(force: true);
+
+      final draft = (await repo.getDraft(_reportId))!;
+      expect(draft.submissionState, 'failed');
+      expect(draft.submissionErrorTransient, isFalse);
       expect(await repo.getRetryableFailedDrafts(maxAttempts: 5), isEmpty);
     });
   });

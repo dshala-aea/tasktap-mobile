@@ -7,11 +7,15 @@ class AppInfo {
     required this.appName,
     required this.version,
     required this.buildNumber,
+    this.packageName = '',
   });
 
   final String appName;
   final String version;
   final String buildNumber;
+
+  /// Android application id / iOS bundle id; empty when unknown (tests).
+  final String packageName;
 
   String get displayVersion => '$version+$buildNumber';
 }
@@ -24,5 +28,6 @@ final appInfoProvider = FutureProvider<AppInfo>((ref) async {
     appName: info.appName,
     version: info.version,
     buildNumber: info.buildNumber,
+    packageName: info.packageName,
   );
 });

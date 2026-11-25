@@ -19,6 +19,7 @@ import '../../core/startup/startup_report.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
+import 'auth_config_source.dart';
 import 'passkey_options.dart';
 import 'pkce.dart';
 import 'retained_owner.dart';
@@ -43,8 +44,10 @@ class ZitadelAuthRepository implements IAuthRepository {
     FlutterSecureStorage? storage,
     Dio? revocationHttpClient,
     PasskeyAuthenticator? passkeyAuthenticator,
+    AuthConfigSource? configSource,
     bool restore = true,
-  }) : _appAuth = appAuth ?? FlutterAppAuth(),
+  }) : _configSource = configSource ?? AuthConfigSource(),
+       _appAuth = appAuth ?? FlutterAppAuth(),
        _storage = storage ?? const FlutterSecureStorage(),
        _revocationHttpClient = revocationHttpClient ?? Dio(),
        _passkeyAuthenticator = passkeyAuthenticator ?? PasskeyAuthenticator() {
@@ -53,10 +56,18 @@ class ZitadelAuthRepository implements IAuthRepository {
 
   static const _refreshTokenKey = 'tt.oidc.refresh_token';
   static const _cachedIdentityKey = 'tt.oidc.cached_identity';
+
+  /// The issuer the stored refresh token was minted by. Absent on sessions stored before the issuer
+  /// could change: those are read as the compile-time issuer (see [_issuerMismatch]).
+  static const _issuerKey = 'tt.oidc.issuer';
   static const _scopes = ['openid', 'profile', 'email', 'offline_access'];
 
   final FlutterAppAuth _appAuth;
   final FlutterSecureStorage _storage;
+
+  /// Issuer / client id / redirect URI, read fresh at every sign-in and refresh (the cached server
+  /// config when valid, else the dart-defines; never a network call, so it works offline).
+  final AuthConfigSource _configSource;
 
   /// Plain HTTP client for calls that must not go through `dioProvider`'s `AuthInterceptor` —
   /// revoking the refresh token at sign-out (see [_revokeRefreshToken]), and the native-login
@@ -83,11 +94,12 @@ class ZitadelAuthRepository implements IAuthRepository {
   @override
   Future<({AuthUser? user, AuthFailure? failure})> signIn() async {
     try {
+      final cfg = await _configSource.load();
       final result = await _appAuth.authorizeAndExchangeCode(
         AuthorizationTokenRequest(
-          Env.oidcClientId,
-          Env.oidcRedirectUri,
-          issuer: Env.oidcIssuer,
+          cfg.clientId,
+          cfg.redirectUri,
+          issuer: cfg.issuer,
           scopes: _scopes,
         ),
       );
@@ -103,7 +115,7 @@ class ZitadelAuthRepository implements IAuthRepository {
           failure: const UnknownAuthError('No tokens returned'),
         );
       }
-      await _persistRefreshToken(result.refreshToken);
+      await _persistRefreshToken(result.refreshToken, cfg.issuer);
       await _persistCachedIdentity(user);
       _emit(user);
       return (user: user, failure: null);
@@ -118,10 +130,11 @@ class ZitadelAuthRepository implements IAuthRepository {
     String password,
   ) async {
     final pkce = Pkce.generate();
+    final cfg = await _configSource.load();
 
     final String authRequestId;
     try {
-      authRequestId = await _captureAuthRequestId(pkce.challenge);
+      authRequestId = await _captureAuthRequestId(pkce.challenge, cfg);
     } catch (e) {
       // _captureAuthRequestId throws typed AuthFailure values (e.g. UnknownAuthError), not Dart
       // Exceptions — pass those straight through instead of re-mapping via _mapError, which does
@@ -170,9 +183,9 @@ class ZitadelAuthRepository implements IAuthRepository {
     try {
       final result = await _appAuth.token(
         TokenRequest(
-          Env.oidcClientId,
-          Env.oidcRedirectUri,
-          issuer: Env.oidcIssuer,
+          cfg.clientId,
+          cfg.redirectUri,
+          issuer: cfg.issuer,
           authorizationCode: code,
           codeVerifier: pkce.verifier,
         ),
@@ -189,7 +202,7 @@ class ZitadelAuthRepository implements IAuthRepository {
           failure: const UnknownAuthError('No tokens returned'),
         );
       }
-      await _persistRefreshToken(result.refreshToken);
+      await _persistRefreshToken(result.refreshToken, cfg.issuer);
       await _persistCachedIdentity(user);
       _emit(user);
       return (user: user, failure: null);
@@ -212,10 +225,11 @@ class ZitadelAuthRepository implements IAuthRepository {
     String loginName,
   ) async {
     final pkce = Pkce.generate();
+    final cfg = await _configSource.load();
 
     final String authRequestId;
     try {
-      authRequestId = await _captureAuthRequestId(pkce.challenge);
+      authRequestId = await _captureAuthRequestId(pkce.challenge, cfg);
     } catch (e) {
       if (e is AuthFailure) return (user: null, failure: e);
       return (user: null, failure: _mapError(e));
@@ -336,9 +350,9 @@ class ZitadelAuthRepository implements IAuthRepository {
     try {
       final result = await _appAuth.token(
         TokenRequest(
-          Env.oidcClientId,
-          Env.oidcRedirectUri,
-          issuer: Env.oidcIssuer,
+          cfg.clientId,
+          cfg.redirectUri,
+          issuer: cfg.issuer,
           authorizationCode: code,
           codeVerifier: pkce.verifier,
         ),
@@ -355,7 +369,7 @@ class ZitadelAuthRepository implements IAuthRepository {
           failure: const UnknownAuthError('No tokens returned'),
         );
       }
-      await _persistRefreshToken(result.refreshToken);
+      await _persistRefreshToken(result.refreshToken, cfg.issuer);
       await _persistCachedIdentity(user);
       _emit(user);
       return (user: user, failure: null);
@@ -393,13 +407,26 @@ class ZitadelAuthRepository implements IAuthRepository {
       return (user: null, failure: const SessionExpired());
     }
 
+    final cfg = await _configSource.load();
+
+    // A refresh token is only good at the issuer that minted it. If the issuer moved (server
+    // config), never present it to the new one and never keep using the old session: the user
+    // signs in again. Local data is untouched either way (see [_issuerMismatch]).
+    if (await _issuerMismatch(cfg)) {
+      // Offline, a changed config alone must not sign anybody out: only demand the re-login once
+      // the new issuer actually answers (we could not sign in there otherwise). Until then the
+      // session stays as the cached/offline one and the reconnect watcher retries.
+      if (!await _issuerReachable(cfg.issuer)) return (user: null, failure: const NetworkError());
+      return (user: null, failure: const SessionExpired());
+    }
+
     try {
       final result = await _appAuth
           .token(
             TokenRequest(
-              Env.oidcClientId,
-              Env.oidcRedirectUri,
-              issuer: Env.oidcIssuer,
+              cfg.clientId,
+              cfg.redirectUri,
+              issuer: cfg.issuer,
               refreshToken: refreshToken,
               scopes: _scopes,
               grantType: 'refresh_token',
@@ -424,7 +451,7 @@ class ZitadelAuthRepository implements IAuthRepository {
           ? inMemory
           : _cachedAsUser(await _readCachedIdentity().catchError((_) => null));
       final user = withKnownIdentity(fresh, known);
-      await _persistRefreshToken(user.refreshToken);
+      await _persistRefreshToken(user.refreshToken, cfg.issuer);
       await _persistCachedIdentity(user);
       _emit(user);
       return (user: user, failure: null);
@@ -446,6 +473,7 @@ class ZitadelAuthRepository implements IAuthRepository {
     await _revokeRefreshToken();
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _cachedIdentityKey);
+    await _deleteIssuer();
     _emit(null);
   }
 
@@ -456,12 +484,15 @@ class ZitadelAuthRepository implements IAuthRepository {
   /// otherwise open a full browser to render. Never rendered here; only the header is read. The
   /// query parameter is named `authRequest` on this deployment's Zitadel Login V2 configuration,
   /// with `authRequestId` accepted as a fallback name — see the comment at the read site below.
-  Future<String> _captureAuthRequestId(String codeChallenge) async {
-    final uri = Uri.parse('${Env.oidcIssuer}/oauth/v2/authorize').replace(
+  Future<String> _captureAuthRequestId(
+    String codeChallenge,
+    AuthConfig cfg,
+  ) async {
+    final uri = Uri.parse('${cfg.issuer}/oauth/v2/authorize').replace(
       queryParameters: {
         'response_type': 'code',
-        'client_id': Env.oidcClientId,
-        'redirect_uri': Env.oidcRedirectUri,
+        'client_id': cfg.clientId,
+        'redirect_uri': cfg.redirectUri,
         'scope': _scopes.join(' '),
         'code_challenge': codeChallenge,
         'code_challenge_method': 'S256',
@@ -517,12 +548,18 @@ class ZitadelAuthRepository implements IAuthRepository {
     if (refreshToken == null || refreshToken.isEmpty) return;
 
     try {
+      // Only revoke at the issuer (and with the client id) that minted the token. After an issuer
+      // move the stored token belongs to another issuer: skip rather than send it, with a client id
+      // from the new config, to the wrong place.
+      final cfg = await _configSource.load();
+      if (await _issuerMismatch(cfg)) return;
+      final issuer = cfg.issuer;
       await _revocationHttpClient.post<void>(
-        '${Env.oidcIssuer}/oauth/v2/revoke',
+        '$issuer/oauth/v2/revoke',
         data: <String, dynamic>{
           'token': refreshToken,
           'token_type_hint': 'refresh_token',
-          'client_id': Env.oidcClientId,
+          'client_id': cfg.clientId,
         },
         options: Options(
           contentType: Headers.formUrlEncodedContentType,
@@ -620,10 +657,21 @@ class ZitadelAuthRepository implements IAuthRepository {
       return;
     }
 
-    final result = await refreshSession().timeout(
-      _refreshTimeout,
-      onTimeout: () => (user: null, failure: const NetworkError()),
-    );
+    // Issuer moved (server config): do NOT probe or decide here, that would hold the splash for
+    // several seconds. Keep the cached identity exactly as for an unreachable provider; the next
+    // refresh (reconnect watcher / 401 path) probes the new issuer and, if it answers, returns
+    // SessionExpired. The stored token is never presented to the wrong issuer meanwhile
+    // (`_doRefreshSession` checks again).
+    final cfg = await _configSource.load();
+    final ({AuthUser? user, AuthFailure? failure}) result;
+    if (await _issuerMismatch(cfg)) {
+      result = (user: null, failure: const NetworkError());
+    } else {
+      result = await refreshSession().timeout(
+        _refreshTimeout,
+        onTimeout: () => (user: null, failure: const NetworkError()),
+      );
+    }
     if (result.user != null) {
       // refreshSession() already persisted + emitted the fresh session.
       return;
@@ -658,12 +706,61 @@ class ZitadelAuthRepository implements IAuthRepository {
 
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _cachedIdentityKey);
+    await _deleteIssuer();
     _emit(null);
   }
 
-  Future<void> _persistRefreshToken(String? refreshToken) async {
+  /// Stores the refresh token together with the issuer that minted it. The two writes are not
+  /// atomic; that fails closed: a crash between them leaves the old (or no) issuer next to the new
+  /// token, which at worst reads as a mismatch and asks the user to sign in again.
+  Future<void> _persistRefreshToken(String? refreshToken, String issuer) async {
     if (refreshToken != null && refreshToken.isNotEmpty) {
       await _storage.write(key: _refreshTokenKey, value: refreshToken);
+      await _storage.write(key: _issuerKey, value: AuthConfig.normalizeIssuer(issuer));
+    }
+  }
+
+  Future<void> _deleteIssuer() async {
+    try {
+      await _storage.delete(key: _issuerKey);
+    } catch (_) {
+      // Best-effort: a leftover issuer is only ever compared, never trusted as a credential.
+    }
+  }
+
+  /// True when the stored session was minted by a different issuer than [cfg]'s. A session stored
+  /// before the issuer was persisted has no stored value and is read as the compile-time issuer. An
+  /// unreadable keychain says nothing, so it is never a mismatch.
+  Future<bool> _issuerMismatch(AuthConfig cfg) async {
+    final String? stored;
+    try {
+      stored = await _storage.read(key: _issuerKey).timeout(_storageTimeout);
+    } catch (_) {
+      return false;
+    }
+    final sessionIssuer = (stored == null || stored.isEmpty)
+        ? _configSource.compileTime.issuer
+        : stored;
+    return AuthConfig.normalizeIssuer(sessionIssuer) != AuthConfig.normalizeIssuer(cfg.issuer);
+  }
+
+  /// Whether [issuer] answers at all (any HTTP status counts). Used only to tell "offline" from
+  /// "online with a moved issuer"; never throws.
+  Future<bool> _issuerReachable(String issuer) async {
+    try {
+      await _revocationHttpClient
+          .get<void>(
+            '${AuthConfig.normalizeIssuer(issuer)}/.well-known/openid-configuration',
+            options: Options(
+              validateStatus: (_) => true,
+              sendTimeout: const Duration(seconds: 5),
+              receiveTimeout: const Duration(seconds: 5),
+            ),
+          )
+          .timeout(const Duration(seconds: 6));
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

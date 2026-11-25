@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/update/update_required_state.dart';
 import '../../core/utils/error_message.dart';
 import '../../domain/reports/customer_signature_absence_reason.dart';
 import '../../domain/reports/strumenti_selection.dart';
@@ -88,7 +89,13 @@ class SubmissionQueue {
     Future<List<String>> Function(String cantiereId)? claimedCantiereWorkLogClientIds,
     Future<String?> Function(String reportId)? customerCopyRecipient,
     this.maxAutoRetries = 5,
-  }) : _repo = repo,
+    void Function()? onUpdateRequired,
+    bool Function()? isUpdateRequired,
+  }) : _updateLatch = UpdateRequiredLatch(
+         markRequired: onUpdateRequired,
+         isRequired: isUpdateRequired,
+       ),
+       _repo = repo,
        _apiClient = apiClient,
        _isOnline = isOnline ?? (() => true),
        _recheckOnline = recheckOnline,
@@ -117,6 +124,10 @@ class SubmissionQueue {
   final int maxAutoRetries;
 
   bool _running = false;
+
+  /// Trips on a 426 (this build is below the minimum): the queue then stops sending until the app
+  /// restarts, the app-wide state clears, or a manual [force] attempt. Rows are left untouched.
+  final UpdateRequiredLatch _updateLatch;
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -166,6 +177,11 @@ class SubmissionQueue {
   /// the gate, but confirm "offline" with a real probe before skipping.
   Future<void> processAll({bool force = false}) async {
     if (_running) return; // prevent re-entrant calls
+    if (force) {
+      _updateLatch.release();
+    } else if (_updateLatch.blocked) {
+      return; // a 426 already answered: every send would be refused the same way
+    }
     if (!force && !await _confirmedOnline()) return;
     if (_running) return; // another caller got in while probing
     _running = true;
@@ -176,6 +192,7 @@ class SubmissionQueue {
       ];
       for (final draft in ready) {
         await _processDraft(draft);
+        if (_updateLatch.blocked) break; // the rest would be refused too
       }
     } finally {
       _running = false;
@@ -323,6 +340,21 @@ class SubmissionQueue {
       //
       // Only a failure the server actually ANSWERED with a retryable status (5xx/408/429/401) is
       // allowed to consume the budget — see [_isServerAnsweredTransient].
+      // A 426 is the same kind of non-event: the server refused this BUILD, not the rapportino.
+      // Checked before every status classification below, so it can neither spend the retry
+      // budget (_isServerAnsweredTransient) nor land in the permanent branch (`failed`, message,
+      // manual Riprova). The row waits exactly as it did before this attempt.
+      if (_updateLatch.trip(e)) {
+        await _repo.updateSubmissionState(
+          reportId: draft.id,
+          state: DraftSubmissionState.readyToSubmit,
+          error: null,
+          errorTransient: false,
+          attempts: draft.submissionAttempts,
+        );
+        return;
+      }
+
       if (_hasNoResponse(e) && !await _networkReachable()) {
         await _repo.updateSubmissionState(
           reportId: draft.id,

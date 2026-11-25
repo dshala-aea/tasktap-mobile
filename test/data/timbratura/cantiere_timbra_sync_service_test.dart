@@ -638,6 +638,53 @@ void main() {
       expect(api.calls.length, 1);
     });
 
+    test('a 426 keeps the events pending and unmarked, tells the app, and stops sending until '
+        'a manual sync', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final repo = _FakeRepo([
+        _cp('id-1', 'ingresso', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+      ]);
+      final api = _FakeApiClient()..errorToThrow = _updateRequired();
+      var told = 0;
+      final svc = CantiereTimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        onUpdateRequired: () => told++,
+      );
+
+      await svc.syncNow();
+
+      expect(told, 1);
+      expect(repo.syncErrors, isEmpty, reason: 'a 426 is not a refusal of the punches');
+      expect(repo.markedSynced, isEmpty);
+      expect((await repo.getTodayEvents()).single.isPendingSync, isTrue);
+
+      // Latched: the next automatic run does not even try.
+      api.errorToThrow = null;
+      await svc.syncNow();
+      expect(api.calls, isEmpty);
+
+      // A manual sync releases the latch and sends.
+      await svc.syncNow(manual: true);
+      expect(api.calls.length, 1);
+      expect(repo.markedSynced, contains('id-1'));
+    });
+
+    test('a 426 on an orphan close keeps the close queued and unmarked', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 17);
+      final repo = _FakeRepo([
+        _cp('close-1', 'uscita', t1, cantiereId: 'cant-1', customerId: 'cust-1'),
+      ]);
+      final api = _FakeApiClient()..endErrorToThrow = _updateRequired();
+      final svc = CantiereTimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(repo.syncErrors, isEmpty);
+      expect(repo.markedSynced, isEmpty);
+      expect((await repo.getTodayEvents()).single.isPendingSync, isTrue);
+    });
+
     test('a manual sync releases events held by a permanent refusal', () async {
       final t1 = DateTime.utc(2026, 6, 23, 8);
       final repo = _FakeRepo([
@@ -666,6 +713,17 @@ DioException _serverRefusal(int status) => DioException(
     requestOptions: RequestOptions(path: '/api/cantiereworklog/mobile/sessions'),
     statusCode: status,
     data: {'title': 'Refused', 'code': 'invalid_request'},
+  ),
+  type: DioExceptionType.badResponse,
+);
+
+/// The API's "update the app" answer: HTTP 426 with the flat `app_update_required` body.
+DioException _updateRequired() => DioException(
+  requestOptions: RequestOptions(path: '/api/cantiereworklog/mobile/sessions'),
+  response: Response<Map<String, dynamic>>(
+    requestOptions: RequestOptions(path: '/api/cantiereworklog/mobile/sessions'),
+    statusCode: 426,
+    data: {'code': 'app_update_required'},
   ),
   type: DioExceptionType.badResponse,
 );

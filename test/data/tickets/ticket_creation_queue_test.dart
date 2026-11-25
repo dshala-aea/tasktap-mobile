@@ -63,6 +63,16 @@ DioException _notFound(Map<String, dynamic> body) => DioException(
   ),
 );
 
+/// The API's "update the app" answer: HTTP 426 with the flat `app_update_required` body.
+DioException _updateRequired() => DioException(
+  requestOptions: RequestOptions(path: '/api/tickets'),
+  response: Response(
+    requestOptions: RequestOptions(path: '/api/tickets'),
+    statusCode: 426,
+    data: {'code': 'app_update_required'},
+  ),
+);
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Tests
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1280,6 +1290,128 @@ void main() {
       final row = (await repo.getById(outcome.localId))!;
       expect(row.maintenanceTemplateId, 'tpl-9');
       expect(row.repairableField, isNull);
+    });
+  });
+
+  group('TicketCreationQueue — a 426 (build below the minimum) keeps the ticket waiting', () {
+    test('create: the row goes back to pendingSync with no error text, is never failed or deleted, '
+        'and the app is told', () async {
+      _stubCreateTicket(mockApiClient, (_) async => throw _updateRequired());
+      var told = 0;
+      final gated = TicketCreationQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        onSubmitted: () => onSubmittedCalls++,
+        onUpdateRequired: () => told++,
+      );
+
+      final outcome = await gated.create(
+        title: 'Perdita idrica',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        isOnline: true,
+      );
+
+      expect(outcome.isFailed, isFalse);
+      expect(outcome.isQueuedOffline, isTrue);
+      expect(told, 1);
+      final row = await repo.getById(outcome.localId);
+      expect(row, isNotNull, reason: 'nothing is ever deleted');
+      expect(row!.state, 'pendingSync');
+      expect(row.error, isNull);
+      expect(row.repairableField, isNull);
+      expect(onSubmittedCalls, 0);
+    });
+
+    test('processAll stops after the first 426 and does not loop; a manual retry goes through '
+        'again', () async {
+      final a = await queue.create(
+        title: 'Ticket A',
+        customerId: 'c-1',
+        locationId: 'l-1',
+        statusId: 1,
+        typeId: 1,
+        isOnline: false,
+      );
+      final b = await queue.create(
+        title: 'Ticket B',
+        customerId: 'c-2',
+        locationId: 'l-2',
+        statusId: 1,
+        typeId: 1,
+        isOnline: false,
+      );
+      _stubCreateTicket(mockApiClient, (_) async => throw _updateRequired());
+      final gated = TicketCreationQueue(repo: repo, apiClient: mockApiClient);
+
+      await gated.processAll();
+      await gated.processAll();
+      await gated.processAll();
+
+      // One attempt in total: the first row's 426 latched the queue before the second row or any
+      // later sweep was tried.
+      verify(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
+          dueDate: any(named: 'dueDate'),
+          technicianNotes: any(named: 'technicianNotes'),
+          agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
+          tags: any(named: 'tags'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).called(1);
+      expect((await repo.getById(a.localId))!.state, 'pendingSync');
+      expect((await repo.getById(b.localId))!.state, 'pendingSync');
+
+      // The technician taps Riprova: the latch is released and the server is asked again.
+      _stubCreateTicket(mockApiClient, (_) async => 'server-1');
+      final outcome = await gated.retry(a.localId);
+      expect(outcome.isSubmitted, isTrue);
+    });
+
+    test('a 400 is unchanged by the gate: still failed, and the app is not told', () async {
+      _stubCreateTicket(
+        mockApiClient,
+        (_) async => throw DioException(
+          requestOptions: RequestOptions(path: '/api/tickets'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/tickets'),
+            statusCode: 400,
+            data: {'code': 'validation_error'},
+          ),
+        ),
+      );
+      final gated = TicketCreationQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        onUpdateRequired: () => fail('a 400 must not mark the app update-required'),
+      );
+
+      final outcome = await gated.create(
+        title: 'T',
+        customerId: 'c',
+        locationId: 'l',
+        statusId: 1,
+        typeId: 1,
+        isOnline: true,
+      );
+
+      expect(outcome.isFailed, isTrue);
+      expect((await repo.getById(outcome.localId))!.state, 'failed');
     });
   });
 }

@@ -525,4 +525,137 @@ void main() {
       expect(ids, {'p1', 'p2'});
     });
   });
+
+  group('TicketAttachmentUploadQueue — a 426 (build below the minimum) keeps the file waiting', () {
+    DioException updateRequired() => DioException(
+      requestOptions: RequestOptions(path: '/api/tickets/ticket-a/attachments'),
+      type: DioExceptionType.badResponse,
+      response: Response(
+        requestOptions: RequestOptions(path: '/api/tickets/ticket-a/attachments'),
+        statusCode: 426,
+        data: {'code': 'app_update_required'},
+      ),
+    );
+
+    void stubUpload(Object error) {
+      when(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenThrow(error);
+    }
+
+    test('upload: the row goes back to pendingSync with no error text, never failed or deleted, '
+        'and the app is told', () async {
+      stubUpload(updateRequired());
+      var told = 0;
+      final gated = TicketAttachmentUploadQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        onUploaded: (ticketId) => uploadedForTicket.add(ticketId),
+        onUpdateRequired: () => told++,
+      );
+
+      final outcome = await gated.upload(
+        ticketId: 'ticket-a',
+        localPath: '/tmp/a.jpg',
+        fileName: 'a.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 100,
+        isOnline: true,
+      );
+
+      expect(outcome.isFailed, isFalse);
+      expect(outcome.isQueuedOffline, isTrue);
+      expect(told, 1);
+      final row = await repo.getById(outcome.localId);
+      expect(row, isNotNull, reason: 'nothing is ever deleted');
+      expect(row!.state, 'pendingSync');
+      expect(row.error, isNull);
+      expect(uploadedForTicket, isEmpty);
+    });
+
+    test('processAll stops after the first 426 and does not loop; a manual retry goes through '
+        'again', () async {
+      final a = await queue.upload(
+        ticketId: 'ticket-a',
+        localPath: '/tmp/a.jpg',
+        fileName: 'a.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 100,
+        isOnline: false,
+      );
+      final b = await queue.upload(
+        ticketId: 'ticket-b',
+        localPath: '/tmp/b.jpg',
+        fileName: 'b.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 200,
+        isOnline: false,
+      );
+      stubUpload(updateRequired());
+      final gated = TicketAttachmentUploadQueue(repo: repo, apiClient: mockApiClient);
+
+      await gated.processAll();
+      await gated.processAll();
+      await gated.processAll();
+
+      verify(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).called(1);
+      expect((await repo.getById(a.localId))!.state, 'pendingSync');
+      expect((await repo.getById(b.localId))!.state, 'pendingSync');
+
+      when(
+        () => mockApiClient.uploadAttachment(
+          ticketId: any(named: 'ticketId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenAnswer(
+        (_) async => TicketAttachmentUploadResponse(allegatoId: 'srv-a', contentUrl: '/x'),
+      );
+      final outcome = await gated.retry(a.localId);
+      expect(outcome.isSubmitted, isTrue);
+    });
+
+    test('a 400 is unchanged by the gate: still failed, and the app is not told', () async {
+      stubUpload(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/tickets/ticket-a/attachments'),
+          type: DioExceptionType.badResponse,
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/tickets/ticket-a/attachments'),
+            statusCode: 400,
+          ),
+        ),
+      );
+      final gated = TicketAttachmentUploadQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        onUpdateRequired: () => fail('a 400 must not mark the app update-required'),
+      );
+
+      final outcome = await gated.upload(
+        ticketId: 'ticket-a',
+        localPath: '/tmp/a.jpg',
+        fileName: 'a.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 100,
+        isOnline: true,
+      );
+
+      expect(outcome.isFailed, isTrue);
+      expect((await repo.getById(outcome.localId))!.state, 'failed');
+    });
+  });
 }

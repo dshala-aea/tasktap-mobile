@@ -10,6 +10,8 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart'
     show appDatabaseProvider;
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart'
     show reconciledOrphanMarker;
+import 'package:tasktap_mobile/data/timbratura/cantiere_session_repository.dart'
+    show cantiereReconciledOrphanMarker;
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
@@ -143,5 +145,48 @@ void main() {
     // r1 (readyToSubmit) + p1 (pendingSync) + tt1 + ws1 (personal punch)
     expect(result.pending, 4);
     expect(result.failed, 2); // r3 + tt2
+  });
+
+  test('counts pending cantiere punches, not the reconciler display-only rows or synced ones', () async {
+    await db
+        .into(db.cantierePunches)
+        .insert(
+          CantierePunchesCompanion.insert(
+            id: 'cp1',
+            eventTime: DateTime.now().toUtc(),
+            eventType: 'ingresso',
+          ),
+        );
+    await db
+        .into(db.cantierePunches)
+        .insert(
+          CantierePunchesCompanion.insert(
+            id: 'cp2',
+            eventTime: DateTime.now().toUtc(),
+            eventType: 'uscita',
+            notes: const Value(cantiereReconciledOrphanMarker),
+          ),
+        );
+    await db
+        .into(db.cantierePunches)
+        .insert(
+          CantierePunchesCompanion.insert(
+            id: 'cp3',
+            eventTime: DateTime.now().toUtc(),
+            eventType: 'ingresso',
+            isPendingSync: const Value(false),
+          ),
+        );
+
+    final container = ProviderContainer(
+      retry: (_, _) => null,
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
+    );
+    addTearDown(container.dispose);
+    container.listen(pendingSyncCountProvider, (_, _) {});
+    final result = await container.read(pendingSyncCountProvider.future);
+
+    expect(result.pending, 1); // cp1 only
+    expect(result.failed, 0);
   });
 }
