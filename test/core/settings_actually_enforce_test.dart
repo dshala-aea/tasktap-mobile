@@ -28,8 +28,7 @@ class _FakeBiometrics implements IBiometricService {
   bool succeeds;
   int prompts = 0;
 
-  // The lock never asks — availability is checked once in Impostazioni, before the setting may be
-  // switched on, so by the time the lock exists the device is known to be capable.
+  // Capable by default; the lock itself now re-checks (see biometric_lock_test.dart).
   @override
   Future<bool> isAvailable() async => true;
 
@@ -64,6 +63,14 @@ class _FakeStore implements LockActivityStore {
   Future<void> markActive(DateTime at) async => written = at;
 }
 
+final _user = AuthUser(
+  id: 'u1',
+  email: 'a@b.it',
+  accessToken: 't',
+  refreshToken: 'r',
+  expiresAt: DateTime.utc(2100),
+);
+
 class _FakeAuth implements IAuthRepository {
   _FakeAuth({this.throws = false});
 
@@ -77,26 +84,16 @@ class _FakeAuth implements IAuthRepository {
     return (user: null, failure: null);
   }
 
+  // A signed-in session: the lock only applies when there is one.
   @override
-  AuthUser? get currentUser => null;
+  AuthUser? get currentUser => _user;
 
   @override
-  Stream<AuthUser?> get authStateChanges => const Stream.empty();
+  Stream<AuthUser?> get authStateChanges => Stream.value(_user);
 
   @override
-  Future<({AuthFailure? failure, AuthUser? user})> signIn() async =>
+  Future<({AuthFailure? failure, AuthUser? user})> signIn({String? loginHint}) async =>
       (user: null, failure: null);
-
-  @override
-  Future<({AuthFailure? failure, AuthUser? user})> signInWithPassword(
-    String loginName,
-    String password,
-  ) async => (user: null, failure: null);
-
-  @override
-  Future<({AuthFailure? failure, AuthUser? user})> signInWithPasskey(
-    String loginName,
-  ) async => (user: null, failure: null);
 
   @override
   Future<void> signOut() async {}

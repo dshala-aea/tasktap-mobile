@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,8 +8,10 @@ import '../../core/config/app_info_provider.dart';
 import '../../core/config/env.dart';
 import '../../core/update/update_required_state.dart';
 import '../../domain/auth/auth_failure.dart';
+import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
+import '../sync/connectivity_provider.dart' show isOnlineProvider;
 import 'app_version_interceptor.dart';
 
 // ── Dio provider ───────────────────────────────────────────────────────────
@@ -33,7 +37,13 @@ final dioProvider = Provider<Dio>((ref) {
   // Share the single repository instance so the interceptor sees the same
   // session (access token) that the login flow established.
   final authRepo = ref.watch(authRepositoryProvider);
-  final interceptor = AuthInterceptor(dio: dio, authRepo: authRepo);
+  // `isOnline` is read lazily, only when a request is about to leave with an expired (or nearly
+  // expired) access token: it gates the proactive refresh (see [AuthInterceptor.onRequest]).
+  final interceptor = AuthInterceptor(
+    dio: dio,
+    authRepo: authRepo,
+    isOnline: () => ref.read(isOnlineProvider),
+  );
   // A forced sign-out is NOT a logout, and must not wipe like one: it fires after a long offline
   // period precisely while the queues are full of unsent work (audit F1). `endForced` drops only
   // the credentials and marks the local data's owner; `SessionRecoveryController` decides at the
@@ -120,13 +130,45 @@ final dioProvider = Provider<Dio>((ref) {
 /// 4. Only a confirmed [SessionExpired] (the identity provider positively said `invalid_grant`)
 ///    calls [AuthInterceptor.onForcedSignOut] so the app can route to /login.
 class AuthInterceptor extends Interceptor {
-  AuthInterceptor({required this.dio, required this.authRepo});
+  AuthInterceptor({
+    required this.dio,
+    required this.authRepo,
+    this.isOnline,
+    this.preflightMargin = const Duration(seconds: 60),
+    this.preflightBackoff = const Duration(seconds: 45),
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  final DateTime Function() _clock;
+
+  /// After a proactive refresh failed for a reason that is not a dead token (identity provider
+  /// unreachable behind a captive portal, 5xx, malformed answer) the proactive step is skipped for
+  /// this long, so a flush of many calls does not queue up one slow refresh attempt per request.
+  /// The normal 401 path still decides meanwhile.
+  final Duration preflightBackoff;
+
+  DateTime? _preflightBlockedUntil;
 
   /// `RequestOptions.extra` key marking a request as anonymous (no bearer, no refresh on 401).
   static const noAuthExtra = noAuthExtraKey;
 
+  /// Set on a request whose proactive refresh already failed: carries that [AuthFailure] so the
+  /// 401 that follows is judged on it instead of redeeming the refresh token a second time.
+  static const _preflightFailureExtra = '_preflightRefreshFailure';
+
+  /// Set on a request that went through the proactive refresh (never done twice for one request).
+  static const _preflightDoneExtra = '_preflightDone';
+
   final Dio dio;
   final IAuthRepository authRepo;
+
+  /// Whether the backend is reachable right now. Null means "unknown": no proactive refresh is ever
+  /// attempted (the 401 path below still recovers). Offline it must stay false: nothing is
+  /// attempted and nothing is prompted, the request just fails like any offline request.
+  final bool Function()? isOnline;
+
+  /// A request leaving with an access token that expires within this margin refreshes it first.
+  final Duration preflightMargin;
 
   /// Observable — set this callback to react to forced sign-out. `dioProvider` points it at the
   /// shared [SessionEnder] (`sessionEnderProvider`), so the forced path ends the session exactly the
@@ -140,9 +182,64 @@ class AuthInterceptor extends Interceptor {
     // the bearer token.
     if (options.extra[noAuthExtra] == true) return handler.next(options);
     final user = authRepo.currentUser;
+    if (user != null && _needsPreflight(user, options)) {
+      // Not awaited: the handler is completed when the refresh settles. Every path inside
+      // completes it, so a request can never hang here.
+      unawaited(_refreshThenSend(options, handler));
+      return;
+    }
+    _attachBearer(options, user);
+    handler.next(options);
+  }
+
+  void _attachBearer(RequestOptions options, AuthUser? user) {
     if (user != null) {
       options.headers['Authorization'] = 'Bearer ${user.accessToken}';
     }
+  }
+
+  /// True when this request would leave with an access token that is expired (or empty: the
+  /// offline-restored session) or about to be, while the device is online and a refresh token
+  /// exists. Sending it anyway would burn the first request, and a queue's retry budget with it,
+  /// on a 401 that was predictable.
+  bool _needsPreflight(AuthUser user, RequestOptions options) {
+    if (options.extra['_retried'] == true || options.extra[_preflightDoneExtra] == true) {
+      return false;
+    }
+    if (user.refreshToken.isEmpty) return false;
+    final online = isOnline;
+    if (online == null) return false;
+    final now = _clock().toUtc();
+    final blocked = _preflightBlockedUntil;
+    if (blocked != null && now.isBefore(blocked)) return false;
+    final soon = now.add(preflightMargin);
+    final stale = user.accessToken.isEmpty || user.expiresAt.isBefore(soon);
+    // Checked last: the connectivity read is only needed when the token is actually stale.
+    return stale && online();
+  }
+
+  Future<void> _refreshThenSend(RequestOptions options, RequestInterceptorHandler handler) async {
+    options.extra[_preflightDoneExtra] = true;
+    try {
+      // Concurrent requests coalesce onto ONE token exchange inside the repository
+      // (single-flight), so a flush of many calls costs one refresh.
+      final result = await authRepo.refreshSession();
+      final failure = result.failure;
+      if (result.user == null && failure != null) {
+        options.extra[_preflightFailureExtra] = failure;
+        // Back off only for "not a verdict on the token". SessionExpired is handled by the 401
+        // that follows (forced end); success reopens the proactive step.
+        _preflightBlockedUntil = failure is SessionExpired
+            ? null
+            : _clock().toUtc().add(preflightBackoff);
+      } else if (result.user != null) {
+        _preflightBlockedUntil = null;
+      }
+    } catch (_) {
+      // A refresh that throws is no reason to fail the request here: it goes out as it would
+      // have without the proactive step and the 401 path decides.
+    }
+    _attachBearer(options, authRepo.currentUser);
     handler.next(options);
   }
 
@@ -160,8 +257,14 @@ class AuthInterceptor extends Interceptor {
     // Only handle 401 Unauthorized — and only once (not on retry).
     if (response?.statusCode == 401 &&
         err.requestOptions.extra['_retried'] != true) {
-      // Attempt silent refresh.
-      final refreshResult = await authRepo.refreshSession();
+      final ({AuthUser? user, AuthFailure? failure}) refreshResult;
+      try {
+        refreshResult = await _refreshForRetry(err.requestOptions);
+      } catch (_) {
+        // A storage/keychain exception from the refresh must not replace the original 401, and is
+        // no proof the session is dead: the call fails as it would have, the session is kept.
+        return handler.next(err);
+      }
 
       if (refreshResult.user != null) {
         // Token refreshed — retry the original request.
@@ -197,6 +300,30 @@ class AuthInterceptor extends Interceptor {
     }
 
     handler.next(err);
+  }
+
+  /// The session to retry a 401'd request with.
+  ///
+  /// Not always a new token exchange: if the proactive step already failed for this request its
+  /// failure is reused, and if another caller has refreshed in the meantime (the bearer this request
+  /// carried is no longer the current one) the current session is used as is. Either way the refresh
+  /// token is redeemed at most once for a burst of failing requests.
+  Future<({AuthUser? user, AuthFailure? failure})> _refreshForRetry(
+    RequestOptions request,
+  ) async {
+    final earlier = request.extra[_preflightFailureExtra];
+    if (earlier is AuthFailure) return (user: null, failure: earlier);
+
+    final current = authRepo.currentUser;
+    final sent = request.headers['Authorization'];
+    if (current != null &&
+        current.accessToken.isNotEmpty &&
+        !current.isExpired &&
+        sent != null &&
+        sent != 'Bearer ${current.accessToken}') {
+      return (user: current, failure: null);
+    }
+    return authRepo.refreshSession();
   }
 
   /// End the session after a confirmed [SessionExpired].

@@ -145,6 +145,8 @@ void main() {
     test('initial state is not loading, no failure', () {
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
@@ -157,6 +159,8 @@ void main() {
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
@@ -165,19 +169,83 @@ void main() {
       expect(state.failure, isNull);
     });
 
-    test('signIn sets failure on InvalidCredentials', () async {
+    test('a cancelled browser sign-in is a calm failure, not an error state', () async {
       when(() => repo.signIn()).thenAnswer(
-        (_) async => (user: null, failure: const InvalidCredentials()),
+        (_) async => (user: null, failure: const SignInCancelled()),
       );
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
-      expect(state.failure, isA<InvalidCredentials>());
+      expect(state.failure, isA<SignInCancelled>());
+      // Nothing is torn down by a cancelled attempt.
+      verifyNever(() => repo.signOut());
+    });
+
+    test('signIn passes the last used email as loginHint', () async {
+      SharedPreferences.setMockInitialValues({lastLoginEmailPrefsKey: 'saved@tasktap.io'});
+      when(() => repo.signIn(loginHint: any(named: 'loginHint')))
+          .thenAnswer((_) async => (user: null, failure: const SignInCancelled()));
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
+
+      await container.read(loginProvider.notifier).signIn();
+
+      verify(() => repo.signIn(loginHint: 'saved@tasktap.io')).called(1);
+    });
+
+    test('signIn sends no loginHint when no email was stored', () async {
+      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
+
+      await container.read(loginProvider.notifier).signIn();
+
+      verify(() => repo.signIn()).called(1);
+      verifyNever(() => repo.signIn(loginHint: any(named: 'loginHint')));
+    });
+
+    test('a successful sign-in stores the signed-in email for the next loginHint', () async {
+      when(() => repo.signIn())
+          .thenAnswer((_) async => (user: _fakeUser(), failure: null));
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
+
+      await container.read(loginProvider.notifier).signIn();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(lastLoginEmailPrefsKey), 'tech@tasktap.io');
+    });
+
+    test('a failed sign-in does not overwrite the stored email', () async {
+      SharedPreferences.setMockInitialValues({lastLoginEmailPrefsKey: 'saved@tasktap.io'});
+      when(() => repo.signIn(loginHint: any(named: 'loginHint')))
+          .thenAnswer((_) async => (user: null, failure: const NetworkError()));
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
+
+      await container.read(loginProvider.notifier).signIn();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString(lastLoginEmailPrefsKey), 'saved@tasktap.io');
     });
 
     test('clearError resets failure to null', () async {
@@ -186,6 +254,8 @@ void main() {
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signIn();
 
@@ -202,6 +272,8 @@ void main() {
       addTearDown(db.close);
       final container = _makeContainer(repo, db: db);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signOut();
 
@@ -235,6 +307,8 @@ void main() {
 
         final container = _makeContainer(repo, db: db);
         addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
         await container.read(loginProvider.notifier).signOut();
 
@@ -250,6 +324,8 @@ void main() {
       addTearDown(db.close);
       final container = _makeContainer(repo, db: db);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(businessZoneIdProvider.notifier).set('Asia/Tokyo');
       expect(container.read(businessZoneIdProvider), 'Asia/Tokyo');
@@ -279,127 +355,12 @@ void main() {
       addTearDown(db.close);
       final container = _makeContainer(repo, db: db);
       addTearDown(container.dispose);
+      // autoDispose: hold the notifier so it is not disposed during the awaited prefs call.
+      container.listen(loginProvider, (_, _) {});
 
       await container.read(loginProvider.notifier).signOut();
 
       verify(() => repo.signOut()).called(1);
-    });
-
-    test(
-      'signInWithPassword success clears loading and failure state',
-      () async {
-        final user = _fakeUser();
-        when(() => repo.signInWithPassword('tech@tasktap.io', 'correct'))
-            .thenAnswer((_) async => (user: user, failure: null));
-
-        final container = _makeContainer(repo);
-        addTearDown(container.dispose);
-
-        await container
-            .read(loginProvider.notifier)
-            .signInWithPassword('tech@tasktap.io', 'correct');
-
-        final state = container.read(loginProvider);
-        expect(state.isLoading, isFalse);
-        expect(state.failure, isNull);
-      },
-    );
-
-    test('signInWithPassword wrong credentials surfaces InvalidCredentials, does not call signIn', () async {
-      when(() => repo.signInWithPassword('tech@tasktap.io', 'wrong'))
-          .thenAnswer(
-            (_) async => (user: null, failure: const InvalidCredentials()),
-          );
-
-      final container = _makeContainer(repo);
-      addTearDown(container.dispose);
-
-      await container
-          .read(loginProvider.notifier)
-          .signInWithPassword('tech@tasktap.io', 'wrong');
-
-      final state = container.read(loginProvider);
-      expect(state.failure, isA<InvalidCredentials>());
-      verifyNever(() => repo.signIn());
-    });
-
-    test(
-      'a cancelled passkey attempt clears the spinner and shows no error',
-      () async {
-        when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
-          (_) async => (user: null, failure: const PasskeyCancelled()),
-        );
-
-        final container = _makeContainer(repo);
-        addTearDown(container.dispose);
-
-        await container
-            .read(loginProvider.notifier)
-            .signInWithPasskey('tech@tasktap.io');
-
-        final state = container.read(loginProvider);
-        expect(state.isLoading, isFalse);
-        expect(state.failure, isNull);
-      },
-    );
-
-    test('PasskeyNotRegistered is surfaced as a failure', () async {
-      when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
-        (_) async => (user: null, failure: const PasskeyNotRegistered()),
-      );
-
-      final container = _makeContainer(repo);
-      addTearDown(container.dispose);
-
-      await container
-          .read(loginProvider.notifier)
-          .signInWithPasskey('tech@tasktap.io');
-
-      final state = container.read(loginProvider);
-      expect(state.isLoading, isFalse);
-      expect(state.failure, isA<PasskeyNotRegistered>());
-    });
-
-    test('signInWithPasskey AdditionalFactorRequired falls back to signIn() automatically', () async {
-      when(() => repo.signInWithPasskey('tech@tasktap.io')).thenAnswer(
-        (_) async => (user: null, failure: const AdditionalFactorRequired()),
-      );
-      when(() => repo.signIn())
-          .thenAnswer((_) async => (user: null, failure: null));
-
-      final container = _makeContainer(repo);
-      addTearDown(container.dispose);
-
-      await container
-          .read(loginProvider.notifier)
-          .signInWithPasskey('tech@tasktap.io');
-
-      verify(() => repo.signIn()).called(1);
-      // The browser hand-off is a transition, not an error: no stale failure may remain.
-      expect(container.read(loginProvider).failure, isNull);
-      expect(container.read(loginProvider).isLoading, isFalse);
-    });
-
-    test('signInWithPassword AdditionalFactorRequired falls back to signIn() automatically', () async {
-      when(() => repo.signInWithPassword('tech@tasktap.io', 'correct'))
-          .thenAnswer(
-            (_) async =>
-                (user: null, failure: const AdditionalFactorRequired()),
-          );
-      when(() => repo.signIn())
-          .thenAnswer((_) async => (user: null, failure: null));
-
-      final container = _makeContainer(repo);
-      addTearDown(container.dispose);
-
-      await container
-          .read(loginProvider.notifier)
-          .signInWithPassword('tech@tasktap.io', 'correct');
-
-      verify(() => repo.signIn()).called(1);
-      // Verify that the fallback successfully clears the failure state,
-      // not leaving the stale AdditionalFactorRequired behind.
-      expect(container.read(loginProvider).failure, isNull);
     });
   });
 

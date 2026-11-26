@@ -16,9 +16,9 @@ import '../../core/widgets/widgets.dart';
 import '../../data/sync/sync_service.dart' show lastSyncProvider;
 import '../../presentation/providers/auth_providers.dart';
 import 'biometric_setup.dart';
+import 'identity_portal.dart';
 import 'impostazioni_provider.dart';
 import 'logout_action.dart';
-import 'passkey_settings_section.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -250,15 +250,33 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
-            // ── Accesso con passkey ───────────────────────────────────────
+            // ── Passkey e account ─────────────────────────────────────────
             //
-            // Sits next to the biometric switch: both protect this handset, and both are
-            // opt-in per device. Passkeys also let the technician sign in without a password,
-            // so the card states the device-lock warning before offering the action.
-            const SliverToBoxAdapter(
+            // Passkeys and the account are managed at the identity service, in the browser: the
+            // app has no passkey list/register/delete of its own (see identity_portal.dart).
+            SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.only(top: AppSpacing.md),
-                child: PasskeySettingsSection(),
+                padding: const EdgeInsets.only(top: AppSpacing.md),
+                child: _SettingsGroup(
+                  children: [
+                    _LinkRow(
+                      icon: LucideIcons.fingerprint,
+                      title: 'Gestisci passkey e account',
+                      subtitle: 'Si apre nel browser',
+                      showDivider: false,
+                      onTap: () async {
+                        final opened = await openIdentityPortalFrom(ref);
+                        if (!opened && context.mounted) {
+                          showAppToast(
+                            context,
+                            message: 'Impossibile aprire il browser. Riprova tra poco.',
+                            tone: ToastTone.warning,
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
 
